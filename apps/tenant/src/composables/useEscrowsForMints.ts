@@ -3,11 +3,12 @@
  * Prefers API when apiUrl and slug available (no client RPC needed); falls back to client RPC.
  * Only includes escrows where BOTH sides are in scope and have meaningful remaining (not completed).
  */
-import { Connection, PublicKey } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
+import { watch } from 'vue'
 import { API_V1 } from '~/utils/apiBase'
 import BN from 'bn.js'
 import { escrowPriceToHuman } from '@decentraguild/display'
-import { fetchAllEscrows } from '@decentraguild/web3'
+import { createConnection, fetchAllEscrows } from '@decentraguild/web3'
 import type { EscrowWithAddress } from '@decentraguild/web3'
 
 const MIN_REMAINING_HUMAN = 0.0000001
@@ -73,9 +74,43 @@ function apiEscrowToFull(e: EscrowApiShape): EscrowWithAddress {
 export function useEscrowsForMints(
   mints: Ref<Set<string>>,
   rpcUrl: Ref<string>,
-  options?: { apiUrl?: Ref<string>; slug?: Ref<string | null> }
+  options?: { apiUrl?: Ref<string>; slug?: Ref<string | null>; wallet?: Ref<string | null> }
 ) {
-  const escrows = ref<EscrowWithAddress[]>([])
+  const rawEscrows = ref<EscrowWithAddress[]>([])
+  const whitelistAllowedLists = ref<Set<string>>(new Set())
+  const escrows = computed(() => {
+    const list = rawEscrows.value
+    const wallet = options?.wallet?.value
+    const slug = options?.slug?.value
+    if (!wallet?.trim() || !slug?.trim()) return list
+    const allowed = whitelistAllowedLists.value
+    return list.filter((e) => {
+      if (!e.account.onlyWhitelist) return true
+      return allowed.has(e.account.whitelist.toBase58())
+    })
+  })
+
+  async function fetchWhitelistChecks(listAddresses: string[], wallet: string, slug: string) {
+    const apiBase = options?.apiUrl?.value ?? ''
+    if (!apiBase) return new Set<string>()
+    const allowed = new Set<string>()
+    for (const listAddr of listAddresses) {
+      try {
+        const res = await fetch(
+          `${apiBase}${API_V1}/tenant/${encodeURIComponent(slug)}/whitelist/check?wallet=${encodeURIComponent(wallet)}&list=${encodeURIComponent(listAddr)}`,
+          { credentials: 'include' }
+        )
+        if (res.ok) {
+          const data = (await res.json()) as { listed?: boolean }
+          if (data.listed) allowed.add(listAddr)
+        }
+      } catch {
+        // skip
+      }
+    }
+    return allowed
+  }
+
   const byMint = computed(() => {
     const map = new Map<string, TradesByMint>()
     const list = escrows.value
@@ -108,6 +143,26 @@ export function useEscrowsForMints(
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  watch(
+    () => [rawEscrows.value, options?.wallet?.value, options?.slug?.value] as const,
+    async ([list, w, s]) => {
+      if (!w?.trim() || !s?.trim() || !list.length) {
+        whitelistAllowedLists.value = new Set()
+        return
+      }
+      const withWhitelist = list.filter((e) => e.account.onlyWhitelist)
+      const uniqueLists = [...new Set(withWhitelist.map((e) => e.account.whitelist.toBase58()))]
+      if (uniqueLists.length === 0) {
+        whitelistAllowedLists.value = new Set()
+        return
+      }
+      const apiBase = options?.apiUrl?.value ?? ''
+      if (!apiBase) return
+      whitelistAllowedLists.value = await fetchWhitelistChecks(uniqueLists, w, s)
+    },
+    { immediate: true }
+  )
+
   async function load() {
     const apiBase = options?.apiUrl?.value ?? ''
     const slug = options?.slug?.value
@@ -121,10 +176,10 @@ export function useEscrowsForMints(
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = (await res.json()) as { escrows?: EscrowApiShape[] }
         const raw = Array.isArray(data.escrows) ? data.escrows : []
-        escrows.value = raw.map(apiEscrowToFull)
+        rawEscrows.value = raw.map(apiEscrowToFull)
       } catch (e) {
         error.value = e instanceof Error ? e.message : 'Failed to load escrows'
-        escrows.value = []
+        rawEscrows.value = []
       } finally {
         loading.value = false
       }
@@ -138,10 +193,10 @@ export function useEscrowsForMints(
     loading.value = true
     error.value = null
     try {
-      const connection = new Connection(rpcUrl.value)
+      const connection = createConnection(rpcUrl.value)
       const all = await fetchAllEscrows(connection)
       const m = mints.value
-      escrows.value = all.filter((e) => {
+      rawEscrows.value = all.filter((e) => {
         const dep = e.account.depositToken.toBase58()
         const req = e.account.requestToken.toBase58()
         const bothInScope = m.has(dep) && m.has(req)
@@ -153,7 +208,7 @@ export function useEscrowsForMints(
       })
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load escrows'
-      escrows.value = []
+      rawEscrows.value = []
     } finally {
       loading.value = false
     }

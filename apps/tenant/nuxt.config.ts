@@ -41,6 +41,9 @@ export default defineNuxtConfig({
     },
   },
   vite: {
+    server: {
+      hmr: { port: 3002, clientPort: 3002 },
+    },
     resolve: {
       alias: { '@coral-xyz/anchor': anchorBrowser },
     },
@@ -83,6 +86,7 @@ export default defineNuxtConfig({
       explorerAccountUrl: process.env.NUXT_PUBLIC_EXPLORER_ACCOUNT_URL ?? 'https://solscan.io/account',
       explorerTokenUrl: process.env.NUXT_PUBLIC_EXPLORER_TOKEN_URL ?? 'https://solscan.io/token',
       platformDocsUrl: process.env.NUXT_PUBLIC_PLATFORM_DOCS_URL ?? 'https://dguild.org/docs',
+      platformBaseUrl: process.env.NUXT_PUBLIC_PLATFORM_BASE_URL ?? (process.env.NODE_ENV === 'production' ? 'https://dguild.org' : 'http://localhost:3000'),
     },
   },
 })

@@ -9,6 +9,7 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({ title: 'Verify' })
 import { PageSection } from '@decentraguild/ui/components'
 
 const route = useRoute()

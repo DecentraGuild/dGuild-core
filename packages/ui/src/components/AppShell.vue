@@ -78,6 +78,9 @@ defineEmits<{
 .app-shell__nav {
   flex-shrink: 0;
   align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background-color: var(--theme-bg-secondary);
   border-right: var(--theme-border-thin) solid var(--theme-border);
   padding: var(--theme-space-md);

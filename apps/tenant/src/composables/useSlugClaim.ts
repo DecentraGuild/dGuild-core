@@ -3,14 +3,14 @@
  */
 
 import type { BillingPeriod } from '@decentraguild/billing'
-import { Connection, PublicKey } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import {
   buildBillingTransfer,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
 import { useTenantStore } from '~/stores/tenant'
-import { useRpc } from '~/composables/useRpc'
+import { useSolanaConnection } from '~/composables/useSolanaConnection'
 import { API_V1 } from '~/utils/apiBase'
 import type { Ref } from 'vue'
 
@@ -34,7 +34,7 @@ export function useSlugClaim(opts: {
   } = opts
   const tenantStore = useTenantStore()
   const apiBase = useApiBase()
-  const { rpcUrl } = useRpc()
+  const { connection } = useSolanaConnection()
 
   const showSlugUnlock = ref(false)
   const desiredSlug = ref('')
@@ -132,20 +132,19 @@ export function useSlugClaim(opts: {
       ) {
         throw new Error('Invalid extension intent response')
       }
-      if (!rpcUrl.value) throw new Error('Solana RPC not configured')
+      if (!connection.value) throw new Error('Solana RPC not configured')
       const wallet = getEscrowWalletFromConnector()
       if (!wallet?.publicKey) throw new Error('Wallet not connected')
 
-      const connection = new Connection(rpcUrl.value)
       const tx = buildBillingTransfer({
         payer: wallet.publicKey,
         amountUsdc: intent.amountUsdc,
         recipientAta: new PublicKey(intent.recipientAta),
         memo: intent.memo,
-        connection,
+        connection: connection.value,
       })
       const txSignature = await sendAndConfirmTransaction(
-        connection,
+        connection.value,
         tx,
         wallet,
         wallet.publicKey,

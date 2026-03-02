@@ -95,7 +95,8 @@ export async function runMigrations(log: MigrationLog): Promise<void> {
       } catch (e) {
         const err = e as NodeJS.ErrnoException
         if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.message?.includes('Connection terminated')) {
-          throw new Error(`Database connection failed during migration (${err.code ?? err.message}). Check DATABASE_URL and network.`)
+          // Preserve original connection error so callers can see full context.
+          throw err
         }
         log.warn({ err: e, file, statementIndex: s }, 'Migration statement skipped (table/column may exist)')
       }

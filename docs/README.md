@@ -22,5 +22,7 @@ Essential reference so we don't make mistakes. For repo layout and running local
 | [Adding a new module](adding-a-new-module.md) | End-to-end guide: scope, catalog, nav, pricing, API, Admin, activation |
 | [Environments](environments.md) | Env vars by app, run locally, deploy (API/Tenant/Platform), migrations, Discord reference |
 | [DB restore](db-restore.md) | Restore Postgres from R2 backup (disaster recovery, migration) |
+| [Core logic flow](core-logic-flow.md) | Tenant to catalog to conditions to billing to DB to web3; entry points and design rules. |
+| [Config layout](config-layout.md) | Tenant config source of truth (DB vs file), module catalog, and config paths. |
 | [Architecture (agent)](../.cursor/memory/) | Flows, tenant resolution, API routes, DB tables. See `.cursor/index.md` and `memory/` quick refs. |
 | [Security notes](security-audit.md) | What was fixed (tenant takeover, path traversal), rate limits, debug off in prod |

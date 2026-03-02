@@ -8,7 +8,6 @@ import { expandAndSaveScope } from '../marketplace/expand-collections.js'
 import { getMintMetadataBatch } from '../db/marketplace-metadata.js'
 import { resolveMarketplace } from '../db/marketplace-settings.js'
 import { resolveTenant } from '../db/tenant.js'
-import { getPool } from '../db/client.js'
 import { normalizeTenantIdentifier } from '../validate-slug.js'
 import { apiError, ErrorCode } from '../api-errors.js'
 

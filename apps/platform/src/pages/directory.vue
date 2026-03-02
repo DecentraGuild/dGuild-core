@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Directory">
+  <PageSection>
     <div v-if="loading" class="directory__loading">Loading...</div>
     <div v-else-if="error" class="directory__error">{{ error }}</div>
     <div v-else class="directory__grid">
@@ -25,6 +25,7 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({ title: 'Directory' })
 import { PageSection, Card, Button } from '@decentraguild/ui/components'
 import type { TenantConfig } from '@decentraguild/core'
 

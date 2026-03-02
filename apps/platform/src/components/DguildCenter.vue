@@ -48,12 +48,12 @@ const emit = defineEmits<{
 }>()
 
 const intro =
-  'dGuild is your organisation on DecentraGuild. Build your community hub with your own subdomain, branding, and modules.'
+  'Your modular community hub on Solana. Pick the modules your community needs and launch your own space.'
 
 const keyPoints = [
-  'Own your branding, subdomain, and settings',
-  'Enable modules per your needs (marketplace, Discord, and more)',
-  'Build Your Own offering for your community',
+  'Build Your Own: communities design their hub',
+  'Add marketplace, Discord roles, and more as you grow',
+  'One platform, your subdomain, your way',
 ]
 </script>
 

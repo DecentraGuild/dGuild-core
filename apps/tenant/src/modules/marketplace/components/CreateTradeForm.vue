@@ -91,12 +91,17 @@
             placeholder="Enter Solana wallet address"
           />
         </div>
-        <div class="create-trade-form__settings-row create-trade-form__settings-row--disabled">
+        <div class="create-trade-form__settings-row">
           <div class="create-trade-form__settings-label">
             <p class="create-trade-form__settings-title">Whitelist</p>
-            <p class="create-trade-form__settings-hint">Coming soon – only addresses on whitelist can fill.</p>
+            <p class="create-trade-form__settings-hint">Only addresses on this list can fill the trade. Use default, public, or pick a list.</p>
           </div>
-          <Toggle :model-value="false" disabled />
+          <WhitelistSelect
+            :slug="tenantSlugRef"
+            :model-value="settingsWhitelist"
+            show-use-default
+            @update:model-value="settingsWhitelist = $event"
+          />
         </div>
         <div class="create-trade-form__settings-row">
           <div class="create-trade-form__settings-label">
@@ -163,6 +168,7 @@ import NftInstanceSelectorModal from './NftInstanceSelectorModal.vue'
 import { storeToRefs } from 'pinia'
 import { useAuth } from '@decentraguild/auth'
 import { useTenantStore } from '~/stores/tenant'
+import { getEffectiveWhitelist } from '@decentraguild/core'
 import {
   buildInitializeTransaction,
   sendAndConfirmTransaction,
@@ -171,11 +177,10 @@ import {
 } from '@decentraguild/web3'
 import { ESCROW_PROGRAM_ID, SLIPPAGE_DIVISOR } from '@decentraguild/contracts'
 import { toRawUnits, sanitizeTokenLabel } from '@decentraguild/display'
-import { Connection } from '@solana/web3.js'
 import { PublicKey } from '@solana/web3.js'
 import BN from 'bn.js'
 import { fetchWalletTokenBalances, type TokenBalance } from '~/composables/useWalletTokenBalances'
-import { useRpc } from '~/composables/useRpc'
+import { useSolanaConnection } from '~/composables/useSolanaConnection'
 import { useMintMetadata } from '~/composables/useMintMetadata'
 import { useMarketplaceScope } from '~/composables/useMarketplaceScope'
 
@@ -199,7 +204,7 @@ const router = useRouter()
 
 const { entries: scopeEntries, loading: scopeLoading } = useMarketplaceScope(tenantSlugRef)
 const auth = useAuth()
-const { rpcUrl, hasRpc, rpcError } = useRpc()
+const { connection, rpcUrl, hasRpc, rpcError } = useSolanaConnection()
 const { fetchMetadata } = useMintMetadata()
 
 const walletAddress = computed(() => auth.connectorState.value?.account ?? null)
@@ -249,6 +254,7 @@ const createError = ref<string | null>(null)
 const settingsExpanded = ref(true)
 const settingsDirect = ref(false)
 const settingsDirectAddress = ref('')
+const settingsWhitelist = ref<{ programId: string; account: string } | null | 'use-default'>(null)
 const settingsExpire = ref(false)
 const settingsExpireDate = ref('')
 const settingsPartialFill = ref(false)
@@ -517,11 +523,23 @@ async function create() {
     const depositRaw = toRawUnits(daNum, depDecimals)
     const requestRaw = toRawUnits(raNum, reqDecimals)
 
-    const connection = new Connection(rpcUrl.value)
+    if (!connection.value) {
+      createError.value = 'Solana RPC not configured'
+      creating.value = false
+      return
+    }
     const seed = new BN(Date.now())
     const shopFee = tenantStore.marketplaceSettings?.shopFee
-    const whitelist = tenantStore.marketplaceSettings?.whitelist
-    const hasWhitelist = false
+    const tenant = tenantStore.tenant
+    const marketplaceSettings = tenantStore.marketplaceSettings
+    let resolvedWhitelist: { programId: string; account: string } | null = null
+    if (settingsWhitelist.value === 'use-default') {
+      resolvedWhitelist = getEffectiveWhitelist(tenant?.defaultWhitelist ?? null, marketplaceSettings?.whitelist)
+    } else if (settingsWhitelist.value && typeof settingsWhitelist.value === 'object' && settingsWhitelist.value.account?.trim()) {
+      resolvedWhitelist = settingsWhitelist.value
+    }
+    const hasWhitelist = Boolean(resolvedWhitelist?.account?.trim())
+    const whitelist = resolvedWhitelist
 
     let recipientAddr: string | null = null
     if (settingsDirect.value && settingsDirectAddress.value.trim()) {
@@ -548,14 +566,14 @@ async function create() {
       onlyWhitelist: hasWhitelist,
       slippage: slippageDecimal,
       recipient: recipientAddr,
-      connection,
+      connection: connection.value,
       wallet,
       shopFee: shopFee ?? null,
-      whitelistProgram: whitelist?.programId ?? null,
-      whitelist: hasWhitelist ? whitelist!.account : null,
+      whitelistProgram: (hasWhitelist && whitelist?.programId) ? whitelist.programId : null,
+      whitelist: hasWhitelist && whitelist?.account ? whitelist.account : null,
     })
 
-    await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
+    await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
 
     const programId = new PublicKey(ESCROW_PROGRAM_ID)
     const { escrow } = deriveEscrowAccounts(wallet.publicKey, seed, programId)

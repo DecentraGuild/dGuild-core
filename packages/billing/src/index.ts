@@ -7,6 +7,7 @@ export type {
   AddonDefinition,
   TieredAddonsPricing,
   OneTimePerUnitPricing,
+  AddUnitPricing,
   FlatRecurringPricing,
   FlatOneTimePricing,
   PricingModel,

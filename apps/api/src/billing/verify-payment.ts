@@ -1,6 +1,6 @@
-import { Connection, PublicKey } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
-import { getDasRpcUrl } from '@decentraguild/web3'
+import { getSolanaConnection } from '../solana-connection.js'
 
 const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const BILLING_WALLET = new PublicKey('4CJYmVAcBrgYL6iX4gUKSMeJxTm4hK3eNAzuzaYBZMCv')
@@ -28,14 +28,12 @@ export async function verifyBillingPayment(params: {
 }): Promise<VerifyResult> {
   const { txSignature, expectedAmountUsdc, expectedMemo } = params
 
-  let rpcUrl: string
+  let connection
   try {
-    rpcUrl = getDasRpcUrl()
+    connection = getSolanaConnection()
   } catch {
     return { valid: false, error: 'RPC not configured' }
   }
-
-  const connection = new Connection(rpcUrl)
   const tx = await connection.getParsedTransaction(txSignature, {
     commitment: 'confirmed',
     maxSupportedTransactionVersion: 0,

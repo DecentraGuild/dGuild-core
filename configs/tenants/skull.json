@@ -141,10 +141,17 @@
       "deactivatedate": null,
       "deactivatingUntil": null,
       "settingsjson": {}
+    },
+    "whitelist": {
+      "state": "active",
+      "deactivatedate": null,
+      "deactivatingUntil": null,
+      "settingsjson": {}
     }
   },
   "admins": [
-    "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q"
+    "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
+    "adm1rpWxyo8u9y2Q2wxxfqaVDLE2gD1N9PbZbbhokTP"
   ],
   "createdAt": "2025-02-10T00:00:00.000Z",
   "updatedAt": "2025-02-10T00:00:00.000Z"

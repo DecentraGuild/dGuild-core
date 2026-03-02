@@ -158,6 +158,29 @@ function computeOneTimePerUnit(
 }
 
 /* ------------------------------------------------------------------ */
+/*  add_unit: price for adding one unit (e.g. create list)            */
+/* ------------------------------------------------------------------ */
+
+function computeAddUnit(
+  moduleId: string,
+  pricing: { name: string; pricePerUnit: number },
+): PriceResult {
+  const amount = pricing.pricePerUnit
+  return {
+    moduleId,
+    billable: amount > 0,
+    components: amount > 0
+      ? [{ type: 'one-time', name: pricing.name, quantity: 1, unitPrice: amount, amount }]
+      : [],
+    oneTimeTotal: amount,
+    recurringMonthly: 0,
+    recurringYearly: 0,
+    appliedYearlyDiscount: null,
+    selectedTierId: null,
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  flat_recurring                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -240,6 +263,8 @@ export function computePrice(
       return computeTieredAddons(moduleId, conditions, pricingModel, billingPeriod)
     case 'one_time_per_unit':
       return computeOneTimePerUnit(moduleId, conditions, pricingModel)
+    case 'add_unit':
+      return computeAddUnit(moduleId, pricingModel)
     case 'flat_recurring':
       return computeFlatRecurring(moduleId, pricingModel, billingPeriod)
     case 'flat_one_time':

@@ -1,4 +1,4 @@
-import { query, getPool } from './client.js'
+import { query, getPool, withTransaction } from './client.js'
 import type { ConditionSet, PriceResult, BillingPeriod } from '@decentraguild/billing'
 
 /* ------------------------------------------------------------------ */
@@ -6,7 +6,7 @@ import type { ConditionSet, PriceResult, BillingPeriod } from '@decentraguild/bi
 /* ------------------------------------------------------------------ */
 
 export type PaymentStatus = 'pending' | 'confirmed' | 'failed' | 'expired'
-export type PaymentType = 'initial' | 'upgrade_prorate' | 'renewal' | 'extend' | 'registration'
+export type PaymentType = 'initial' | 'upgrade_prorate' | 'renewal' | 'extend' | 'registration' | 'add_unit'
 
 export interface BillingSubscription {
   id: string
@@ -274,6 +274,30 @@ export async function listPayments(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Confirm payment only (no subscription/tenant update, e.g. add_unit) */
+/* ------------------------------------------------------------------ */
+
+export async function confirmPaymentOnly(params: {
+  paymentId: string
+  txSignature: string
+}): Promise<BillingPayment> {
+  const pool = getPool()
+  if (!pool) throw new Error('Database not initialized')
+
+  const payRes = await pool.query(
+    `UPDATE billing_payments
+     SET status = 'confirmed', tx_signature = $2, confirmed_at = NOW()
+     WHERE id = $1 AND status = 'pending'
+     RETURNING *`,
+    [params.paymentId, params.txSignature],
+  )
+  if (payRes.rows.length === 0) {
+    throw new Error('Payment not found or already processed')
+  }
+  return mapPayment(payRes.rows[0] as PaymentRow)
+}
+
+/* ------------------------------------------------------------------ */
 /*  Atomic confirm: payment + subscription + module state in one tx    */
 /* ------------------------------------------------------------------ */
 
@@ -292,10 +316,7 @@ export async function confirmPaymentAndActivate(params: {
   const pool = getPool()
   if (!pool) throw new Error('Database not initialized')
 
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-
+  return withTransaction(pool, async (client) => {
     const payRes = await client.query(
       `UPDATE billing_payments
        SET status = 'confirmed', tx_signature = $2, confirmed_at = NOW()
@@ -350,18 +371,11 @@ export async function confirmPaymentAndActivate(params: {
       [params.moduleId, params.periodEnd.toISOString(), params.tenantSlug],
     )
 
-    await client.query('COMMIT')
-
     return {
       payment: mapPayment(payRes.rows[0] as PaymentRow),
       subscription: mapSubscription(subRes.rows[0] as SubscriptionRow),
     }
-  } catch (err) {
-    await client.query('ROLLBACK')
-    throw err
-  } finally {
-    client.release()
-  }
+  })
 }
 
 /** Same as confirmPaymentAndActivate but for slug claim: updates tenant slug instead of modules. */
@@ -380,10 +394,7 @@ export async function confirmSlugClaimPayment(params: {
   const pool = getPool()
   if (!pool) throw new Error('Database not initialized')
 
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-
+  return withTransaction(pool, async (client) => {
     const payRes = await client.query(
       `UPDATE billing_payments
        SET status = 'confirmed', tx_signature = $2, confirmed_at = NOW()
@@ -426,16 +437,9 @@ export async function confirmSlugClaimPayment(params: {
       ],
     )
 
-    await client.query('COMMIT')
-
     return {
       payment: mapPayment(payRes.rows[0] as PaymentRow),
       subscription: mapSubscription(subRes.rows[0] as SubscriptionRow),
     }
-  } catch (err) {
-    await client.query('ROLLBACK')
-    throw err
-  } finally {
-    client.release()
-  }
+  })
 }

@@ -82,6 +82,14 @@
         @reactivate="(p: BillingPeriod) => reactivateModule('discord', p)"
       />
 
+      <AdminWhitelistTab
+        v-else-if="tab === 'whitelist'"
+        :slug="slug ?? ''"
+        :module-state="whitelistModuleState"
+        :deploying="deploying"
+        @deploy="(p: BillingPeriod) => deployModule('whitelist', p)"
+      />
+
       <AdminBillingTab
         v-else-if="tab === 'billing'"
         :slug="slug"
@@ -129,7 +137,6 @@
 
 <script setup lang="ts">
 definePageMeta({ middleware: 'admin-auth' })
-import type { ModuleState } from '@decentraguild/core'
 import type { BillingPeriod } from '@decentraguild/billing'
 import { getModuleState } from '@decentraguild/core'
 import { getModuleCatalogEntry } from '@decentraguild/config'
@@ -142,6 +149,7 @@ import AdminThemingTab from '~/components/admin/AdminThemingTab.vue'
 import AdminModulesTab from '~/components/admin/AdminModulesTab.vue'
 import AdminMarketplaceTab from '~/components/admin/AdminMarketplaceTab.vue'
 import AdminDiscordTab from '~/components/admin/AdminDiscordTab.vue'
+import AdminWhitelistTab from '~/components/admin/AdminWhitelistTab.vue'
 import AdminBillingTab from '~/components/admin/AdminBillingTab.vue'
 import AdminModuleActivationModal from '~/components/AdminModuleActivationModal.vue'
 import AdminPricingWidget from '~/components/AdminPricingWidget.vue'
@@ -210,6 +218,7 @@ const marketplaceSettings = computed(() => {
 
 const marketplaceModuleState = computed(() => getModuleState(tenant.value?.modules?.marketplace))
 const discordModuleState = computed(() => getModuleState(tenant.value?.modules?.discord))
+const whitelistModuleState = computed(() => getModuleState(tenant.value?.modules?.whitelist))
 
 const slugModuleState = computed((): 'off' | 'staging' | 'active' | 'deactivating' => {
   if (tenant.value?.slug) return 'active'
@@ -218,7 +227,7 @@ const slugModuleState = computed((): 'off' | 'staging' | 'active' | 'deactivatin
 
 const showSlugPricingWidget = computed(() => Boolean(tenant.value))
 
-const WIDGET_TABS = new Set(['marketplace', 'discord'])
+const WIDGET_TABS = new Set(['marketplace', 'discord', 'whitelist'])
 const tab = computed(() => {
   const q = route.query.tab
   return typeof q === 'string' && VALID_TABS.has(q) ? q : 'general'
@@ -245,8 +254,9 @@ const pendingDeactivateModuleId = ref<string | null>(null)
 
 function onModuleToggle(id: string, on: boolean) {
   if (on) {
-    form.modulesById[id] = 'staging'
-    if (getModuleCatalogEntry(id)?.pricing) {
+    const entry = getModuleCatalogEntry(id)
+    form.modulesById[id] = entry?.goActiveImmediately === true ? 'active' : 'staging'
+    if (!entry?.goActiveImmediately && entry?.pricing) {
       activationModalModuleId.value = id
       showActivationModal.value = true
     }

@@ -236,16 +236,13 @@
 
     <Card>
       <h3>Whitelist</h3>
-      <p class="marketplace-settings__hint">Escrow program uses these for whitelist-protected trades. Empty account = no whitelist.</p>
-      <TextInput
-        v-model="form.whitelist.programId"
-        label="Whitelist program ID"
-        placeholder="whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn"
-      />
-      <TextInput
-        v-model="form.whitelist.account"
-        label="Whitelist account (optional)"
-        placeholder="Leave empty for public escrows"
+      <p class="marketplace-settings__hint">Escrow program uses these for whitelist-protected trades. Use dGuild default, public, or a specific list.</p>
+      <WhitelistSelect
+        :slug="slug"
+        :model-value="marketplaceWhitelistSelectValue"
+        label="Whitelist"
+        show-use-default
+        @update:model-value="onWhitelistSelectUpdate"
       />
     </Card>
 
@@ -331,12 +328,14 @@ const DEFAULT_WHITELIST: WhitelistSettings = {
   account: '',
 }
 
+type WhitelistFormValue = WhitelistSettings | 'use-default'
+
 interface MarketplaceForm {
   collectionMints: CollectionMint[]
   splAssetMints: SplAssetMint[]
   currencyMints: CurrencyMint[]
   shopFee: ShopFee
-  whitelist: WhitelistSettings
+  whitelist: WhitelistFormValue
 }
 
 const props = defineProps<{
@@ -361,7 +360,7 @@ const form = reactive<MarketplaceForm>({
     makerPercentFee: 0,
     takerPercentFee: 0,
   },
-  whitelist: { ...DEFAULT_WHITELIST },
+  whitelist: 'use-default' as WhitelistFormValue,
 })
 
 const customCurrencies = computed(() => {
@@ -384,6 +383,25 @@ const anyError = computed(() => {
 })
 
 const canSave = computed(() => !anyLoading.value && !anyError.value)
+
+const marketplaceWhitelistSelectValue = computed(() => {
+  const w = form.whitelist
+  if (w === 'use-default') return 'use-default' as const
+  if (!w || (w.account && w.account.trim() === '')) return null
+  return w
+})
+
+function onWhitelistSelectUpdate(value: WhitelistSettings | null | 'use-default') {
+  if (value === 'use-default') {
+    form.whitelist = 'use-default'
+    return
+  }
+  if (value === null) {
+    form.whitelist = { ...DEFAULT_WHITELIST }
+    return
+  }
+  form.whitelist = value
+}
 
 const newCollectionMint = ref('')
 const addCollectionError = ref('')
@@ -437,9 +455,15 @@ watch(
       form.shopFee.makerPercentFee = Number(sf.makerPercentFee) || 0
       form.shopFee.takerPercentFee = Number(sf.takerPercentFee) || 0
     }
-    const wl = (s.whitelist ?? {}) as Partial<WhitelistSettings>
-    form.whitelist.programId = (wl.programId as string) || DEFAULT_WHITELIST.programId
-    form.whitelist.account = (wl.account as string) ?? ''
+    const wl = s.whitelist as Partial<WhitelistSettings> | undefined | null
+    if (wl === undefined || wl === null) {
+      form.whitelist = 'use-default'
+    } else {
+      form.whitelist = {
+        programId: (wl.programId as string) || DEFAULT_WHITELIST.programId,
+        account: (wl.account as string) ?? '',
+      }
+    }
     nextTick(() => fillMissingCollectionCounts())
   },
   { immediate: true }
@@ -640,7 +664,7 @@ function buildPayload(): Record<string, unknown> {
       .filter((c) => !('_error' in c && c._error))
       .map((c) => ({ mint: c.mint, name: c.name ?? '', symbol: c.symbol ?? '', decimals: c.decimals, image: c.image, sellerFeeBasisPoints: c.sellerFeeBasisPoints })),
     shopFee: form.shopFee,
-    whitelist: form.whitelist,
+    whitelist: form.whitelist === 'use-default' ? null : form.whitelist,
   }
 }
 

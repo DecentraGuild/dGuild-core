@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { getPool } from '../db/client.js'
 import { getDiscordServerByTenantSlug, type DiscordServerRow } from '../db/discord-servers.js'
 import { getTenantBySlug, resolveTenant, updateTenant, type TenantSettingsPatch } from '../db/tenant.js'
-import { resolveMarketplace, upsertMarketplace } from '../db/marketplace-settings.js'
+import { upsertMarketplace } from '../db/marketplace-settings.js'
 import type { TenantConfig, ModuleState } from '@decentraguild/core'
 import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
 import { getWalletFromRequest } from './auth.js'
@@ -98,10 +98,16 @@ function normalizeToMarketplaceConfig(
     takerPercentFee: Number(sf.takerPercentFee) || 0,
   }
 
-  const wl = (body.whitelist ?? {}) as Record<string, unknown>
-  const whitelist = {
-    programId: (wl.programId as string) || DEFAULT_WHITELIST.programId,
-    account: (wl.account as string) || '',
+  const wlRaw = body.whitelist
+  let whitelist: MarketplaceConfig['whitelist']
+  if (wlRaw === undefined || wlRaw === null) {
+    whitelist = undefined
+  } else {
+    const wl = wlRaw as Record<string, unknown>
+    whitelist = {
+      programId: (wl.programId as string) || DEFAULT_WHITELIST.programId,
+      account: (wl.account as string) ?? '',
+    }
   }
 
   return { tenantSlug, tenantId, collectionMints, currencyMints, splAssetMints, whitelist, shopFee }
@@ -194,12 +200,22 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
   }>('/api/v1/tenant/:slug/settings', { preHandler: [adminWriteRateLimit] }, async (request, reply) => {
     const result = await requireTenantAdmin(request, reply, request.params.slug)
     if (!result) return
-    const tenantId = result.tenant.id
     const body = (request.body ?? {}) as Record<string, unknown>
-    const ALLOWED_KEYS = ['name', 'description', 'discordServerInviteLink', 'branding', 'modules'] as const
+    const ALLOWED_KEYS = ['name', 'description', 'discordServerInviteLink', 'defaultWhitelist', 'branding', 'modules'] as const
     const patch: TenantSettingsPatch = {}
     for (const k of ALLOWED_KEYS) {
       if (k in body && body[k] !== undefined) patch[k] = body[k] as TenantSettingsPatch[typeof k]
+    }
+    if (patch.defaultWhitelist !== undefined) {
+      const wl = patch.defaultWhitelist as Record<string, unknown> | null
+      if (wl === null || (typeof wl === 'object' && (wl.account as string)?.trim() === '')) {
+        patch.defaultWhitelist = undefined
+      } else if (typeof wl === 'object' && wl && typeof (wl.account as string) === 'string' && (wl.account as string).trim()) {
+        patch.defaultWhitelist = {
+          programId: ((wl.programId as string)?.trim()) || 'whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn',
+          account: (wl.account as string).trim(),
+        }
+      }
     }
     if (patch.modules && typeof patch.modules === 'object' && (patch.modules as Record<string, { state?: ModuleState }>).admin?.state === 'off') {
       return reply.status(400).send(apiError('Admin module cannot be turned off', ErrorCode.BAD_REQUEST))
@@ -226,7 +242,7 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
           collectionMints: config.collectionMints,
           currencyMints: config.currencyMints,
           splAssetMints: config.splAssetMints ?? [],
-          whitelist: config.whitelist ?? { programId: DEFAULT_WHITELIST.programId, account: '' },
+          whitelist: config.whitelist,
           shopFee: config.shopFee,
         }
       : {}
@@ -270,7 +286,7 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
               collectionMints: updated.collectionMints,
               currencyMints: updated.currencyMints,
               splAssetMints: updated.splAssetMints ?? [],
-              whitelist: updated.whitelist ?? { programId: DEFAULT_WHITELIST.programId, account: '' },
+              whitelist: updated.whitelist,
               shopFee: updated.shopFee,
             }
           : {},

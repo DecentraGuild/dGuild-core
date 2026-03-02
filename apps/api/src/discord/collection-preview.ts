@@ -82,8 +82,8 @@ export async function buildCollectionPreview(
 
   const traitKeysSet = new Set<string>()
   const traitOptionsMap = new Map<string, Set<string>>()
-  let name: string | null = asset.content?.metadata?.name ?? null
-  let image: string | null = asset.content?.links?.image ?? null
+  const name: string | null = asset.content?.metadata?.name ?? null
+  const image: string | null = asset.content?.links?.image ?? null
   let itemsLoaded = 0
   const pool = getPool()
 

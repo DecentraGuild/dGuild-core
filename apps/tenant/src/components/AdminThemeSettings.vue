@@ -135,6 +135,7 @@
 </template>
 
 <script setup lang="ts">
+/* eslint-disable vue/no-mutating-props */
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { TextInput, ColorInput, Select } from '@decentraguild/ui/components'
 import { themeToCssVars } from '@decentraguild/ui'

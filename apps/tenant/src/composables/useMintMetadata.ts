@@ -1,7 +1,6 @@
 /**
  * Fetch mint metadata from API (cached). If API returns 404, falls back to client-side RPC fetch.
  */
-import { Connection } from '@solana/web3.js'
 import { API_V1 } from '~/utils/apiBase'
 import { fetchMintMetadataFromChain } from '@decentraguild/web3'
 
@@ -47,11 +46,10 @@ export function useMintMetadata() {
       }
     }
 
-    const { rpcUrl } = useRpc()
-    if (!rpcUrl.value) return null
+    const { connection } = useSolanaConnection()
+    if (!connection.value) return null
     try {
-      const connection = new Connection(rpcUrl.value)
-      const fetched = await fetchMintMetadataFromChain(connection, mint)
+      const fetched = await fetchMintMetadataFromChain(connection.value, mint)
       const data = fromFetched(fetched)
       cache.set(key, data)
       return data

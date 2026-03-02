@@ -1,12 +1,9 @@
 import type { FastifyInstance } from 'fastify'
 import type { ConditionSet, BillingPeriod } from '@decentraguild/billing'
-import { computePrice } from '@decentraguild/billing'
-import { getModuleCatalogEntry } from '@decentraguild/config'
-import { getConditions } from '../billing/conditions.js'
+import { getModuleCatalogEntry, VALID_BILLING_PERIODS } from '@decentraguild/config'
 import { requireTenantAdmin } from './tenant-settings.js'
 import { apiError, ErrorCode } from '../api-errors.js'
-
-const VALID_BILLING_PERIODS: ReadonlySet<string> = new Set(['monthly', 'yearly'])
+import { previewPrice } from '../billing/service.js'
 
 export async function registerBillingRoutes(app: FastifyInstance) {
   app.get<{
@@ -31,13 +28,16 @@ export async function registerBillingRoutes(app: FastifyInstance) {
       return reply.status(400).send(apiError('billingPeriod must be "monthly" or "yearly"', ErrorCode.BAD_REQUEST))
     }
 
-    const tenantId = result.tenant.id
-    const conditions = await getConditions(moduleId, tenantId)
-    const price = computePrice(moduleId, conditions, catalogEntry.pricing, {
-      billingPeriod: (billingPeriod as BillingPeriod) ?? 'monthly',
-    })
-
-    return { conditions, price }
+    try {
+      const { conditions, price } = await previewPrice({
+        tenantId: result.tenant.id,
+        moduleId,
+        billingPeriod: (billingPeriod as BillingPeriod) ?? 'monthly',
+      })
+      return { conditions, price }
+    } catch {
+      return reply.status(400).send(apiError('Module not found or not billable', ErrorCode.BAD_REQUEST))
+    }
   })
 
   app.post<{
@@ -47,7 +47,7 @@ export async function registerBillingRoutes(app: FastifyInstance) {
     const result = await requireTenantAdmin(request, reply, request.params.slug)
     if (!result) return
 
-    const body = request.body ?? {} as Record<string, unknown>
+    const body = request.body ?? ({} as Record<string, unknown>)
     const moduleId = body.moduleId
     if (!moduleId || typeof moduleId !== 'string') {
       return reply.status(400).send(apiError('moduleId is required', ErrorCode.BAD_REQUEST))
@@ -63,15 +63,16 @@ export async function registerBillingRoutes(app: FastifyInstance) {
       return reply.status(400).send(apiError('billingPeriod must be "monthly" or "yearly"', ErrorCode.BAD_REQUEST))
     }
 
-    const tenantId = result.tenant.id
-    const conditions: ConditionSet = body.conditions && typeof body.conditions === 'object'
-      ? body.conditions
-      : await getConditions(moduleId, tenantId)
-
-    const price = computePrice(moduleId, conditions, catalogEntry.pricing, {
-      billingPeriod: billingPeriod ?? 'monthly',
-    })
-
-    return { conditions, price }
+    try {
+      const { conditions, price } = await previewPrice({
+        tenantId: result.tenant.id,
+        moduleId,
+        billingPeriod: billingPeriod ?? 'monthly',
+        conditions: body.conditions && typeof body.conditions === 'object' ? body.conditions : undefined,
+      })
+      return { conditions, price }
+    } catch {
+      return reply.status(400).send(apiError('Module not found or not billable', ErrorCode.BAD_REQUEST))
+    }
   })
 }

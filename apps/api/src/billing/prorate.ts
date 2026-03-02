@@ -23,14 +23,16 @@ function periodEndFromStart(start: Date, period: BillingPeriod): Date {
 /**
  * Resolve the USDC amount for the billing period from a PriceResult.
  * Yearly = recurringYearly (already discounted); monthly = recurringMonthly.
+ * For one-time (e.g. add_unit), uses oneTimeTotal.
  */
 function periodAmount(price: PriceResult, period: BillingPeriod): number {
+  if (price.oneTimeTotal > 0) return price.oneTimeTotal
   return period === 'yearly' ? price.recurringYearly : price.recurringMonthly
 }
 
 export interface ChargeCalculation {
   amountUsdc: number
-  paymentType: 'initial' | 'upgrade_prorate'
+  paymentType: 'initial' | 'upgrade_prorate' | 'add_unit'
   periodStart: Date
   periodEnd: Date
   noPaymentRequired: boolean
@@ -48,6 +50,17 @@ export function calculateCharge(
   now: Date = new Date(),
 ): ChargeCalculation {
   const newAmount = periodAmount(newPrice, billingPeriod)
+
+  if (newPrice.oneTimeTotal > 0 && newPrice.recurringMonthly === 0 && newPrice.recurringYearly === 0) {
+    const nowDate = now
+    return {
+      amountUsdc: roundUsdc(newAmount),
+      paymentType: 'add_unit',
+      periodStart: nowDate,
+      periodEnd: periodEndFromStart(nowDate, billingPeriod),
+      noPaymentRequired: newAmount <= 0,
+    }
+  }
 
   if (!existing || existing.periodEnd <= now) {
     const periodStart = now

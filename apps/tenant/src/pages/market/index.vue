@@ -117,6 +117,7 @@ const tenant = computed(() => tenantStore.tenant)
 const marketplaceState = computed(() => getModuleState(tenant.value?.modules?.marketplace))
 const marketplaceActive = computed(() => isModuleVisibleToMembers(marketplaceState.value))
 const marketplaceDeactivating = computed(() => marketplaceState.value === 'deactivating')
+/** Create trade disabled when: (1) global feature flag off, or (2) this dGuild's marketplace is deactivating (e.g. after paid period ends). Module state comes from tenant context (API). */
 const createDisabled = computed(() => !FEATURES.marketplace.createTrade || marketplaceDeactivating.value)
 const activeTab = computed(() => (route.query.tab === 'open-trades' ? 'open-trades' : 'browse'))
 

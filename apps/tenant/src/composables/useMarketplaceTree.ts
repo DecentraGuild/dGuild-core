@@ -84,7 +84,7 @@ function buildTree(input: MarketplaceTreeInput): TreeNode[] {
     }
 
     let parent: TreeNode = typeNode
-    let currentPath = [...typeNode.path]
+    const currentPath = [...typeNode.path]
 
     for (let i = 0; i < groupPath.length; i++) {
       const seg = groupPath[i]

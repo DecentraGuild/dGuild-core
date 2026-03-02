@@ -34,6 +34,7 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({ title: 'Create org' })
 import { Connection, PublicKey } from '@solana/web3.js'
 import { useAuth } from '@decentraguild/auth'
 import {

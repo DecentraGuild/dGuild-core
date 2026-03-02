@@ -31,7 +31,7 @@ import { BASE_CURRENCY_MINT_ADDRESSES } from '@decentraguild/core'
 import AdminMarketplaceSettings from '~/components/AdminMarketplaceSettings.vue'
 import AdminPricingWidget from '~/components/AdminPricingWidget.vue'
 
-const props = defineProps<{
+defineProps<{
   slug: string
   settings: MarketplaceSettingsComputed | null
   moduleState: ModuleState

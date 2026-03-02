@@ -90,6 +90,14 @@
       </div>
     </template>
 
+    <template v-else-if="price?.billable && isAddUnit">
+      <div class="pricing-widget__tier">
+        <span class="pricing-widget__tier-name">{{ addUnitName }}</span>
+        <span class="pricing-widget__tier-price">{{ formatUsdc(price.oneTimeTotal) }} USDC</span>
+      </div>
+      <p class="pricing-widget__add-unit-hint">One-time fee per new list.</p>
+    </template>
+
     <template v-else-if="price?.billable && moduleId === 'slug'">
       <div class="pricing-widget__tier">
         <span class="pricing-widget__tier-name">Custom slug</span>
@@ -119,7 +127,7 @@
     <div v-if="error" class="pricing-widget__error">{{ error }}</div>
 
     <div class="pricing-widget__actions">
-      <div v-if="price?.billable && !periodLocked && !yearlyOnly" class="pricing-widget__period-toggle">
+      <div v-if="price?.billable && !periodLocked && !yearlyOnly && !isAddUnit" class="pricing-widget__period-toggle">
         <button
           class="pricing-widget__period-btn"
           :class="{ 'pricing-widget__period-btn--active': selectedPeriod === 'monthly' }"
@@ -139,7 +147,10 @@
         </button>
       </div>
 
-      <p v-if="moduleState === 'staging'" class="pricing-widget__hint">
+      <p v-if="moduleState === 'staging' && isAddUnit" class="pricing-widget__hint">
+        Deploy to activate. Create lists from the form (25 USDC each).
+      </p>
+      <p v-else-if="moduleState === 'staging'" class="pricing-widget__hint">
         {{ moduleId === 'slug' ? 'Enter your desired slug in the form, then click Claim slug.' : 'Configure the module, then deploy to make it active for members.' }}
       </p>
       <p v-else-if="moduleState === 'deactivating'" class="pricing-widget__hint">
@@ -155,6 +166,10 @@
         <Icon v-if="deploying" icon="mdi:loading" class="pricing-widget__spinner" />
         {{ deployLabel }}
       </Button>
+
+      <p v-else-if="moduleState === 'active' && isAddUnit" class="pricing-widget__hint">
+        Create new lists from the form above ({{ formatUsdc(chargeAmount) }} USDC each).
+      </p>
 
       <Button
         v-else-if="moduleState === 'deactivating'"
@@ -174,7 +189,7 @@
         {{ saving ? 'Extending...' : 'Extend' }}
       </Button>
       <Button
-        v-else-if="moduleState === 'active'"
+        v-else-if="moduleState === 'active' && !isAddUnit"
         variant="primary"
         :disabled="saving"
         @click="$emit('save', selectedPeriod)"
@@ -325,6 +340,7 @@ const yearlyDiscountLabel = computed(() => {
 
 const chargeAmount = computed(() => {
   if (!price.value?.billable) return 0
+  if (isAddUnit.value) return price.value.oneTimeTotal
   return selectedPeriod.value === 'yearly'
     ? price.value.recurringYearly
     : price.value.recurringMonthly
@@ -389,6 +405,17 @@ const usageRows = computed((): UsageRow[] => {
 const addonComponents = computed(() => {
   if (!price.value) return []
   return price.value.components.filter((c) => c.type === 'recurring' && c.quantity > 0 && price.value?.selectedTierId && c.name !== selectedTier.value?.name)
+})
+
+const isAddUnit = computed(() => {
+  const p = catalogEntry.value?.pricing
+  return p != null && 'modelType' in p && p.modelType === 'add_unit'
+})
+
+const addUnitName = computed(() => {
+  const p = catalogEntry.value?.pricing
+  if (p && 'modelType' in p && p.modelType === 'add_unit' && 'name' in p) return p.name as string
+  return 'Add unit'
 })
 </script>
 

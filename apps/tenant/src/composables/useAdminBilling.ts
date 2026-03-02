@@ -5,14 +5,15 @@
 
 import type { ModuleState } from '@decentraguild/core'
 import type { BillingPeriod } from '@decentraguild/billing'
-import { Connection, PublicKey } from '@solana/web3.js'
+import { getModuleCatalogEntry } from '@decentraguild/config'
+import { PublicKey } from '@solana/web3.js'
 import {
   buildBillingTransfer,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
 import { useTenantStore } from '~/stores/tenant'
-import { useRpc } from '~/composables/useRpc'
+import { useSolanaConnection } from '~/composables/useSolanaConnection'
 import { API_V1 } from '~/utils/apiBase'
 import type { Ref } from 'vue'
 
@@ -39,7 +40,7 @@ export function useAdminBilling(opts: {
   const { saveError, saving, deploying, extending, fetchSubscription } = opts
   const tenantStore = useTenantStore()
   const apiBase = useApiBase()
-  const { rpcUrl } = useRpc()
+  const { connection } = useSolanaConnection()
   const slug = computed(() => tenantStore.slug)
 
   async function handleBillingPayment(
@@ -79,22 +80,21 @@ export function useAdminBilling(opts: {
       throw new Error('Invalid payment intent response')
     }
 
-    if (!rpcUrl.value) throw new Error('Solana RPC not configured')
+    if (!connection.value) throw new Error('Solana RPC not configured')
 
     const wallet = getEscrowWalletFromConnector()
     if (!wallet?.publicKey) throw new Error('Wallet not connected')
 
-    const connection = new Connection(rpcUrl.value)
     const tx = buildBillingTransfer({
       payer: wallet.publicKey,
       amountUsdc: intent.amountUsdc,
       recipientAta: new PublicKey(intent.recipientAta),
       memo: intent.memo,
-      connection,
+      connection: connection.value,
     })
 
     const txSignature = await sendAndConfirmTransaction(
-      connection,
+      connection.value,
       tx,
       wallet,
       wallet.publicKey,
@@ -130,8 +130,14 @@ export function useAdminBilling(opts: {
     deploying.value = true
     saveError.value = null
     try {
-      const paid = await handleBillingPayment(moduleId, billingPeriod)
-      if (!paid) throw new Error('Payment was not completed')
+      const catalogEntry = getModuleCatalogEntry(moduleId)
+      const isAddUnitOnly =
+        catalogEntry?.pricing &&
+        (catalogEntry.pricing as { modelType?: string }).modelType === 'add_unit'
+      if (!isAddUnitOnly) {
+        const paid = await handleBillingPayment(moduleId, billingPeriod)
+        if (!paid) throw new Error('Payment was not completed')
+      }
 
       const freshTenant = tenantStore.tenant
       const moduleEntry = freshTenant?.modules?.[moduleId] as
@@ -183,8 +189,14 @@ export function useAdminBilling(opts: {
     saving.value = true
     saveError.value = null
     try {
-      const paid = await handleBillingPayment(moduleId, billingPeriod)
-      if (!paid) throw new Error('Payment was not completed')
+      const catalogEntry = getModuleCatalogEntry(moduleId)
+      const isAddUnitOnly =
+        catalogEntry?.pricing &&
+        (catalogEntry.pricing as { modelType?: string }).modelType === 'add_unit'
+      if (!isAddUnitOnly) {
+        const paid = await handleBillingPayment(moduleId, billingPeriod)
+        if (!paid) throw new Error('Payment was not completed')
+      }
 
       const freshTenant = tenantStore.tenant
       const moduleEntry = freshTenant?.modules?.[moduleId] as
@@ -264,20 +276,19 @@ export function useAdminBilling(opts: {
       ) {
         throw new Error('Invalid extension intent response')
       }
-      if (!rpcUrl.value) throw new Error('Solana RPC not configured')
+      if (!connection.value) throw new Error('Solana RPC not configured')
       const wallet = getEscrowWalletFromConnector()
       if (!wallet?.publicKey) throw new Error('Wallet not connected')
 
-      const connection = new Connection(rpcUrl.value)
       const tx = buildBillingTransfer({
         payer: wallet.publicKey,
         amountUsdc: intent.amountUsdc,
         recipientAta: new PublicKey(intent.recipientAta),
         memo: intent.memo,
-        connection,
+        connection: connection.value,
       })
       const txSignature = await sendAndConfirmTransaction(
-        connection,
+        connection.value,
         tx,
         wallet,
         wallet.publicKey,

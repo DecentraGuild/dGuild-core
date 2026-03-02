@@ -29,20 +29,20 @@
         "trade": {
           "buy": "#00ff00",
           "sell": "#ff0000",
-          "swap": "#00951a",
+          "swap": "#8a8aff",
           "trade": "#ffaa00",
           "buyHover": "#00e600",
           "buyLight": "#26ff26",
           "sellHover": "#e60000",
           "sellLight": "#ff2626",
-          "swapHover": "#008617",
-          "swapLight": "#33aa48",
+          "swapHover": "#7c7ce6",
+          "swapLight": "#a1a1ff",
           "tradeHover": "#e69900",
           "tradeLight": "#ffb726"
         },
         "accent": {
-          "main": "#00951a",
-          "hover": "#008617"
+          "main": "#8a8aff",
+          "hover": "#7c7ce6"
         },
         "border": {
           "light": "#9696ff",
@@ -60,16 +60,16 @@
           "background": "#16161b"
         },
         "primary": {
-          "dark": "#007f16",
-          "main": "#00951a",
-          "hover": "#008918",
-          "light": "#33aa48"
+          "dark": "#7575d9",
+          "main": "#8a8aff",
+          "hover": "#7f7feb",
+          "light": "#a1a1ff"
         },
         "secondary": {
-          "dark": "#005f11",
-          "main": "#007014",
-          "hover": "#006712",
-          "light": "#338d43"
+          "dark": "#5858a2",
+          "main": "#6868bf",
+          "hover": "#6060b0",
+          "light": "#8686cc"
         },
         "background": {
           "card": "#16161b",
@@ -128,13 +128,19 @@
       "deactivatingUntil": null,
       "settingsjson": {}
     },
+    "marketplace": {
+      "state": "active",
+      "deactivatedate": null,
+      "deactivatingUntil": null,
+      "settingsjson": {}
+    },
     "discord": {
       "state": "active",
       "deactivatedate": null,
       "deactivatingUntil": null,
       "settingsjson": {}
     },
-    "marketplace": {
+    "whitelist": {
       "state": "active",
       "deactivatedate": null,
       "deactivatingUntil": null,
@@ -145,5 +151,5 @@
     "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q"
   ],
   "createdAt": "2026-03-01T03:25:26.781Z",
-  "updatedAt": "2026-03-01T16:24:02.223Z"
+  "updatedAt": "2026-03-02T17:01:56.861Z"
 }

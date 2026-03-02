@@ -59,7 +59,6 @@ const flipped = ref(false)
 
 const display = computed(() => data.value)
 const depositMint = computed(() => props.escrow?.account.depositToken.toBase58() ?? '')
-const requestMint = computed(() => props.escrow?.account.requestToken.toBase58() ?? '')
 
 /** Human requested amount from display (deposit converted with deposit decimals, then * price). No raw units. */
 const requestedDisplay = computed(() => {

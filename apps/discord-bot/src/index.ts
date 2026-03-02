@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { Client, Events, GatewayIntentBits } from 'discord.js'
 import { registerCommands } from './commands.js'
 import { handleVerify } from './handlers/verify.js'
-import { runRoleSyncForGuild, syncLinkedGuild } from './handlers/sync.js'
+import { syncLinkedGuild } from './handlers/sync.js'
 import { waitForApi } from './api-client.js'
 import {
   DISCORD_BOT_TOKEN,

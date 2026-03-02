@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/no-mutating-props -->
 <template>
   <div class="admin__split">
     <div class="admin__panel">
@@ -88,6 +89,12 @@
           v-model="form.discordServerInviteLink"
           label="Invite link to Discord"
           placeholder="https://discord.gg/..."
+        />
+        <WhitelistSelect
+          :slug="tenant?.slug ?? tenant?.id ?? null"
+          :model-value="form.defaultWhitelist"
+          label="Default whitelist"
+          @update:model-value="form.defaultWhitelist = ($event === 'use-default' ? null : $event)"
         />
       </Card>
     </div>

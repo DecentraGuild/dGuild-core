@@ -85,7 +85,7 @@ export async function syncHoldersForAsset(
   assetId: string,
   type: 'SPL' | 'NFT',
   connection: Connection,
-  log?: SyncLog
+  _log?: SyncLog
 ): Promise<string[] | Array<{ wallet: string; amount: string }>> {
   if (type === 'SPL') {
     return fetchSplHolders(assetId, connection)

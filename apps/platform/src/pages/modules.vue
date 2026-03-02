@@ -1,6 +1,9 @@
 <template>
-  <PageSection title="Modules">
-    <div class="modules">
+  <PageSection>
+    <div
+      class="modules"
+      :class="{ 'modules--two-rings': hasTwoRings }"
+    >
       <div
         v-if="expandedId === 'dguild'"
         class="modules__overlay"
@@ -47,6 +50,7 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({ title: 'Modules' })
 import { PageSection } from '@decentraguild/ui/components'
 import { getModuleCatalogList } from '@decentraguild/config'
 import type { ModuleCatalogEntry } from '@decentraguild/config'
@@ -71,9 +75,12 @@ const displayModules = computed(() =>
   getModuleCatalogList().filter((m) => DISPLAY_STATUSES.has(m.status as 'available' | 'coming_soon'))
 )
 
-const INNER_RADIUS_VMIN = 20
-const OUTER_RADIUS_VMIN = 30
+/** Radii as % of viewport width. Layout scales with width. */
+const INNER_RADIUS_VW = 7
+const OUTER_RADIUS_VW = 17
 const TWO_RING_THRESHOLD = 6
+
+const hasTwoRings = computed(() => displayModules.value.length >= TWO_RING_THRESHOLD)
 
 const positionedModules = computed(() => {
   const modules = displayModules.value
@@ -83,8 +90,8 @@ const positionedModules = computed(() => {
   if (n < TWO_RING_THRESHOLD) {
     return modules.map((entry, index) => {
       const angle = (index / n) * 2 * Math.PI - Math.PI / 2
-      const x = Math.cos(angle) * OUTER_RADIUS_VMIN
-      const y = Math.sin(angle) * OUTER_RADIUS_VMIN
+      const x = Math.cos(angle) * OUTER_RADIUS_VW
+      const y = Math.sin(angle) * OUTER_RADIUS_VW
       return { entry, x, y }
     })
   }
@@ -97,16 +104,16 @@ const positionedModules = computed(() => {
     const angle = (i / innerCount) * 2 * Math.PI - Math.PI / 2
     result.push({
       entry: modules[i],
-      x: Math.cos(angle) * INNER_RADIUS_VMIN,
-      y: Math.sin(angle) * INNER_RADIUS_VMIN,
+      x: Math.cos(angle) * INNER_RADIUS_VW,
+      y: Math.sin(angle) * INNER_RADIUS_VW,
     })
   }
   for (let i = 0; i < outerCount; i++) {
     const angle = (i / outerCount) * 2 * Math.PI - Math.PI / 2
     result.push({
       entry: modules[innerCount + i],
-      x: Math.cos(angle) * OUTER_RADIUS_VMIN,
-      y: Math.sin(angle) * OUTER_RADIUS_VMIN,
+      x: Math.cos(angle) * OUTER_RADIUS_VW,
+      y: Math.sin(angle) * OUTER_RADIUS_VW,
     })
   }
   return result
@@ -114,8 +121,8 @@ const positionedModules = computed(() => {
 
 function blobStyle(item: { entry: ModuleCatalogEntry; x: number; y: number }) {
   return {
-    '--blob-x': `${item.x}vmin`,
-    '--blob-y': `${item.y}vmin`,
+    '--blob-x': `${item.x}vw`,
+    '--blob-y': `${item.y}vw`,
   }
 }
 </script>
@@ -123,14 +130,18 @@ function blobStyle(item: { entry: ModuleCatalogEntry; x: number; y: number }) {
 <style scoped>
 .modules {
   position: relative;
-  min-height: min(80vh, 640px);
-  max-height: 90vh;
+  min-height: 55vw;
+  max-height: 80vh;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 5vmin;
+  padding: 4vw;
   box-sizing: border-box;
+}
+
+.modules--two-rings {
+  min-height: 65vw;
 }
 
 .modules__center {

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import BN from 'bn.js'
-import { Connection } from '@solana/web3.js'
-import { fetchAllEscrows, fetchEscrowByAddress, getDasRpcUrl } from '@decentraguild/web3'
+import { fetchAllEscrows, fetchEscrowByAddress } from '@decentraguild/web3'
+import { getSolanaConnection } from '../solana-connection.js'
 import { getScopeEntriesForTenant } from '../marketplace/scope.js'
 import { resolveTenant } from '../db/tenant.js'
 import { normalizeTenantIdentifier } from '../validate-slug.js'
@@ -57,13 +57,12 @@ export async function registerMarketplaceEscrowsRoutes(app: FastifyInstance) {
         return cached.data
       }
 
-      let rpcUrl: string
+      let connection
       try {
-        rpcUrl = getDasRpcUrl()
+        connection = getSolanaConnection()
       } catch {
         return reply.status(503).send(apiError('HELIUS_RPC not configured', ErrorCode.CONFIG_REQUIRED))
       }
-      const connection = new Connection(rpcUrl)
 
       try {
         const all = await fetchAllEscrows(connection, makerFilter)
@@ -131,13 +130,12 @@ export async function registerMarketplaceEscrowsRoutes(app: FastifyInstance) {
         return reply.status(404).send(apiError('Tenant or scope not found', ErrorCode.TENANT_NOT_FOUND))
       }
 
-      let rpcUrl: string
+      let connection
       try {
-        rpcUrl = getDasRpcUrl()
+        connection = getSolanaConnection()
       } catch {
         return reply.status(503).send(apiError('HELIUS_RPC not configured', ErrorCode.CONFIG_REQUIRED))
       }
-      const connection = new Connection(rpcUrl)
 
       try {
         const e = await fetchEscrowByAddress(connection, escrowId)

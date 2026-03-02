@@ -73,7 +73,6 @@
 import { computed, ref, watch, onMounted } from 'vue'
 import { PublicKey } from '@solana/web3.js'
 import BN from 'bn.js'
-import { Connection } from '@solana/web3.js'
 import {
   buildCancelTransaction,
   sendAndConfirmTransaction,
@@ -88,7 +87,7 @@ import { useMarketplaceEscrowLinks } from '~/composables/useMarketplaceEscrowLin
 import { API_V1 } from '~/utils/apiBase'
 import { useApiBase } from '~/composables/useApiBase'
 import { useAuth } from '@decentraguild/auth'
-import { useRpc } from '~/composables/useRpc'
+import { useSolanaConnection } from '~/composables/useSolanaConnection'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 import type { EscrowWithAddress } from '@decentraguild/web3'
 import type { EscrowApiShape } from '~/composables/useEscrowsForMints'
@@ -106,7 +105,7 @@ function myTradesEscrowLink(id: string) {
 
 const tenantStore = useTenantStore()
 const auth = useAuth()
-const { rpcUrl } = useRpc()
+const { connection } = useSolanaConnection()
 const txNotifications = useTransactionNotificationsStore()
 
 const apiBase = useApiBase()
@@ -214,16 +213,16 @@ async function handleQuickCancel(escrow: EscrowWithAddress) {
   const txId = `cancel-${id}-${Date.now()}`
   txNotifications.add(txId, { status: 'pending', message: 'Cancelling escrow...' })
   try {
-    const connection = new Connection(rpcUrl.value)
+    if (!connection.value) return
     const tx = await buildCancelTransaction({
       maker: escrow.account.maker,
       depositTokenMint: escrow.account.depositToken,
       requestTokenMint: escrow.account.requestToken,
       seed: escrow.account.seed,
-      connection,
+      connection: connection.value,
       wallet,
     })
-    const sig = await sendAndConfirmTransaction(connection, tx, wallet, escrow.account.maker)
+    const sig = await sendAndConfirmTransaction(connection.value, tx, wallet, escrow.account.maker)
     txNotifications.update(txId, { status: 'success', message: 'Escrow cancelled', signature: sig })
     escrows.value = escrows.value.filter((e) => e.publicKey.toBase58() !== id)
   } catch (e) {

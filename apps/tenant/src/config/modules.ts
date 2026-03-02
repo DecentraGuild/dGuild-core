@@ -41,6 +41,7 @@ export const MODULE_SUBNAV: Record<string, ModuleSubnavTab[]> = {
     { id: 'theming', label: 'Theming' },
     { id: 'marketplace', label: 'Marketplace' },
     { id: 'discord', label: 'Discord' },
+    { id: 'whitelist', label: 'Whitelist' },
     { id: 'billing', label: 'Billing' },
   ],
   marketplace: [
@@ -68,9 +69,11 @@ export function getModuleSubnavForPath(
   if (!tabs || moduleId !== 'admin' || !tenant?.modules) return tabs
   const marketplaceVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.marketplace))
   const discordVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.discord))
+  const whitelistVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.whitelist))
   return tabs.filter((t) => {
     if (t.id === 'marketplace' && !marketplaceVisible) return false
     if (t.id === 'discord' && !discordVisible) return false
+    if (t.id === 'whitelist' && !whitelistVisible) return false
     return true
   })
 }

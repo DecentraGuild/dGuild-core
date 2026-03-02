@@ -33,4 +33,7 @@ export function ensureConfigPaths(): void {
       // not in monorepo or configs missing
     }
   }
+  if (!process.env.WHITELIST_CONFIG_PATH) {
+    process.env.WHITELIST_CONFIG_PATH = path.join(repoRoot, 'configs/whitelist')
+  }
 }

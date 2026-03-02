@@ -40,6 +40,8 @@ export interface ModuleCatalogEntry {
     steps: string[]
     note?: string
   }
+  /** When true, enabling the module sets state to active immediately (no staging/deploy step). */
+  goActiveImmediately?: boolean
 }
 
 /** Statuses where the module code exists and can appear in tenant nav. */

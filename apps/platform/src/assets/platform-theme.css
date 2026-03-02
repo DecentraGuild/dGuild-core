@@ -1,0 +1,14 @@
+/**
+ * Platform app theme overrides.
+ * Darker cyan blue primary (only for platform app).
+ */
+:root {
+  --theme-primary: #8a8aff;
+  --theme-primary-hover: #0d9488;
+  --theme-primary-light: #22d3ee;
+  --theme-primary-dark: #6c6cce;
+  --theme-success: #0e7490;
+  --theme-shadow-glow: 0 0 20px rgba(14, 116, 144, 0.3);
+  --theme-shadow-glow-hover: 0 0 40px rgba(14, 116, 144, 0.5);
+  --theme-gradient-primary: linear-gradient(135deg, #0e7490 0%, #22d3ee 50%, #0c4a6e 100%);
+}

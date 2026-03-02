@@ -264,18 +264,6 @@ interface RuleCondition {
   logic_to_next?: 'AND' | 'OR' | null
   amount?: number | null
 }
-interface MintPreview {
-  mint: string
-  name: string | null
-  symbol: string | null
-  image: string | null
-  decimals: number | null
-  holder_count: number | null
-}
-interface TraitOptions {
-  trait_keys: string[]
-  trait_options: Record<string, string[]>
-}
 interface Rule {
   id: number
   discord_role_id: string

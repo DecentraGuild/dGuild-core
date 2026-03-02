@@ -4,7 +4,7 @@ import { getSolanaConnection } from '../solana-connection.js'
 import { getPool } from '../db/client.js'
 import { isValidDiscordSnowflake, isValidMintOrGroup } from '../validate-discord.js'
 import { getDiscordServerByTenantSlug } from '../db/discord-servers.js'
-import { getRolesByGuildId, upsertGuildRoles } from '../db/discord-guild-roles.js'
+import { getRolesByGuildId } from '../db/discord-guild-roles.js'
 import {
   getRoleRulesByGuildId,
   getRoleRuleById,
@@ -17,7 +17,6 @@ import {
   deleteRoleCondition,
   getConfiguredMintsByGuildId,
   DISCORD_CONDITION_TYPES,
-  type DiscordRoleConditionRow,
   type DISCORDPayload,
 } from '../db/discord-rules.js'
 import {
@@ -201,7 +200,7 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
           return r ? { name: r.name } : undefined
         },
       }
-      let eligibleByRoleId = new Map<string, boolean>()
+      const eligibleByRoleId = new Map<string, boolean>()
       const wallet = await getWalletFromRequest(request)
       if (wallet) {
         const link = await getLinkByWallet(wallet)

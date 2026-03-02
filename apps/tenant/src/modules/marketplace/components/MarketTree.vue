@@ -35,7 +35,7 @@ import TreeNodeRow from './TreeNodeRow.vue'
 import { Icon } from '@iconify/vue'
 import type { TreeNode } from '~/composables/useMarketplaceTree'
 
-const props = defineProps<{
+defineProps<{
   tree: TreeNode[]
   selectedNodeId: string | null
 }>()

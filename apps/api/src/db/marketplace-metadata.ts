@@ -1,4 +1,5 @@
 import { query, getPool } from './client.js'
+import { sanitizeTokenLabel } from '@decentraguild/display'
 
 /**
  * Mint metadata (including traits) is the single source of truth for asset display and filtering.
@@ -6,10 +7,10 @@ import { query, getPool } from './client.js'
  * not stored twice. Trait extraction from chain is centralised in marketplace/das-traits.ts.
  */
 
-/** Strip null bytes so PostgreSQL UTF-8 text columns accept the value. */
-function sanitizeText(s: string | null | undefined): string | null {
+/** Sanitize token label for storage so reads are display-safe; empty result becomes null. */
+function sanitizeForStorage(s: string | null | undefined): string | null {
   if (s == null || typeof s !== 'string') return null
-  const out = s.replace(/\0/g, '')
+  const out = sanitizeTokenLabel(s).trim()
   return out.length ? out : null
 }
 
@@ -88,9 +89,9 @@ export async function upsertMintMetadata(
   mint: string,
   data: MintMetadataUpsert & { traits?: MintTrait[] | null }
 ): Promise<void> {
-  const name = sanitizeText(data.name ?? null)
-  const symbol = sanitizeText(data.symbol ?? null)
-  const image = sanitizeText(data.image ?? null)
+  const name = sanitizeForStorage(data.name ?? null)
+  const symbol = sanitizeForStorage(data.symbol ?? null)
+  const image = sanitizeForStorage(data.image ?? null)
   const traitsJson = data.traits ? JSON.stringify(data.traits).replace(/\0/g, '') : null
   await query(
     `INSERT INTO mint_metadata (mint, name, symbol, image, decimals, traits, seller_fee_basis_points, updated_at)

@@ -10,7 +10,7 @@
       </div>
       <template #fallback />
     </ClientOnly>
-    <template #header>
+    <template v-if="!showTenantGatedMessage" #header>
       <AppHeader
         :logo="headerLogo"
         :name="headerName"
@@ -43,20 +43,34 @@
         </template>
       </AppHeader>
     </template>
-    <template #nav>
-      <AppNav>
-        <NavLink :to="linkTo('/')" icon="mdi:home">Home</NavLink>
-        <NavLink
-          v-for="mod in navModules"
-          :key="mod.id"
-          :to="linkTo(mod.path)"
-          :icon="mod.icon"
+    <template v-if="!showTenantGatedMessage" #nav>
+      <div class="layout-nav">
+        <AppNav>
+          <NavLink :to="linkTo('/')" icon="mdi:home">Home</NavLink>
+          <NavLink
+            v-for="mod in navModules"
+            :key="mod.id"
+            :to="linkTo(mod.path)"
+            :icon="mod.icon"
+          >
+            {{ mod.label }}
+          </NavLink>
+        </AppNav>
+        <a
+          :href="discoverUrl"
+          target="_blank"
+          rel="noopener"
+          class="layout-nav__discover"
         >
-          {{ mod.label }}
-        </NavLink>
-      </AppNav>
+          <Icon icon="mdi:compass-outline" class="layout-nav__discover-icon" />
+          <span>Discover</span>
+        </a>
+      </div>
     </template>
-    <slot />
+    <div v-if="showTenantGatedMessage" class="tenant-gated">
+      <p class="tenant-gated__message">This community is gated. You need to be on the whitelist to access it.</p>
+    </div>
+    <slot v-else />
     <ClientOnly>
       <TransactionToastContainer />
     </ClientOnly>
@@ -75,8 +89,13 @@ import {
 import TransactionToastContainer from '~/components/TransactionToastContainer.vue'
 import { useThemeStore } from '@decentraguild/ui'
 import { useTenantStore } from '~/stores/tenant'
-import { isModuleVisibleToMembers, getModuleState } from '@decentraguild/core'
+import { isModuleVisibleToMembers, getModuleState, getEffectiveWhitelist } from '@decentraguild/core'
 import { MODULE_NAV, IMPLEMENTED_MODULES, NAV_ORDER, getModuleSubnavForPath } from '~/config/modules'
+import { useWhitelistListed } from '~/composables/useWhitelistListed'
+import { useWalletOnList } from '~/composables/useWalletOnList'
+
+const config = useRuntimeConfig()
+const discoverUrl = `${(config.public.platformBaseUrl as string).replace(/\/$/, '')}/directory`
 
 const route = useRoute()
 const tenantStore = useTenantStore()
@@ -119,11 +138,46 @@ const navReady = ref(false)
 onMounted(() => { navReady.value = true })
 const isAdminForNav = computed(() => navReady.value && isAdmin.value)
 
+const slug = computed(() => tenantStore.slug ?? null)
+const wallet = computed(() => auth.wallet.value ?? null)
+const { listed: whitelistListed } = useWhitelistListed(slug, wallet)
+
+const tenantDefaultListAddress = computed(() => {
+  const acc = tenant.value?.defaultWhitelist?.account
+  return (acc && acc.trim()) || null
+})
+const { listed: isOnTenantDefaultList } = useWalletOnList(slug, tenantDefaultListAddress, wallet)
+
+const marketplaceSettings = computed(() => tenantStore.marketplaceSettings)
+const effectiveMarketplaceWhitelist = computed(() =>
+  getEffectiveWhitelist(tenant.value?.defaultWhitelist ?? null, marketplaceSettings.value?.whitelist)
+)
+const marketplaceListAddress = computed(() => effectiveMarketplaceWhitelist.value?.account?.trim() || null)
+const { listed: isOnMarketplaceList } = useWalletOnList(slug, marketplaceListAddress, wallet)
+
+const hasAnyPublicModule = computed(() => {
+  if (!tenant.value?.modules?.marketplace) return false
+  if (!isModuleVisibleToMembers(getModuleState(tenant.value.modules.marketplace))) return false
+  return effectiveMarketplaceWhitelist.value === null
+})
+
+const showTenantGatedMessage = computed(() => {
+  if (!tenantDefaultListAddress.value) return false
+  if (isOnTenantDefaultList.value === true) return false
+  if (hasAnyPublicModule.value) return false
+  return true
+})
+
 const navModules = computed(() => {
   const mods = tenant.value?.modules ?? {}
   const entries = Object.entries(mods)
     .filter(([id, e]) => isModuleVisibleToMembers(getModuleState(e)) && IMPLEMENTED_MODULES.has(id))
     .filter(([id]) => id !== 'admin' || isAdminForNav.value)
+    .filter(([id]) => {
+      if (id === 'whitelist') return whitelistListed.value === true
+      if (id === 'marketplace' && effectiveMarketplaceWhitelist.value && !isOnMarketplaceList.value) return false
+      return true
+    })
     .map(([id]) => {
       const entry = MODULE_NAV[id]
       return {
@@ -231,5 +285,45 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   .layout-nav-toggle {
     display: flex;
   }
+}
+
+.layout-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.layout-nav__discover {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-sm);
+  margin-top: auto;
+  padding: var(--theme-space-sm) var(--theme-space-md);
+  color: var(--theme-text-secondary);
+  text-decoration: none;
+  border-radius: var(--theme-radius-md);
+  font-size: var(--theme-font-sm);
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.layout-nav__discover:hover {
+  color: var(--theme-primary);
+  background-color: var(--theme-bg-card);
+}
+
+.layout-nav__discover-icon {
+  font-size: 1.25rem;
+}
+
+.tenant-gated {
+  padding: var(--theme-space-xl);
+  text-align: center;
+}
+
+.tenant-gated__message {
+  margin: 0;
+  font-size: var(--theme-font-md);
+  color: var(--theme-text-secondary);
 }
 </style>

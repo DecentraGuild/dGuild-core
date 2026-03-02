@@ -13,6 +13,8 @@ export default [
       parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
     },
     rules: {
+      // TypeScript handles undefined variables; disable core rule for TS files.
+      'no-undef': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-useless-assignment': 'off',
     },
@@ -31,6 +33,13 @@ export default [
         defineNuxtPlugin: 'readonly',
         definePageMeta: 'readonly',
         useRuntimeConfig: 'readonly',
+        // Nuxt composables and app-wide helpers (auto-imported)
+        useAsyncData: 'readonly',
+        useSeoMeta: 'readonly',
+        useDocsNav: 'readonly',
+        useDocMarkdown: 'readonly',
+        useApiBase: 'readonly',
+        useRpc: 'readonly',
         useAuth: 'readonly',
         useRouter: 'readonly',
         useRoute: 'readonly',
@@ -42,11 +51,14 @@ export default [
         onUnmounted: 'readonly',
         fetch: 'readonly',
         navigateTo: 'readonly',
+        // Browser env
         window: 'readonly',
         navigator: 'readonly',
       },
     },
     rules: {
+      // Let TypeScript type-check undefineds in Vue SFCs.
+      'no-undef': 'off',
       'vue/multi-word-component-names': 'off',
       'vue/max-attributes-per-line': 'off',
       'vue/singleline-html-element-content-newline': 'off',

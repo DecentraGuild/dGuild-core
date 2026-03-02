@@ -19,6 +19,7 @@ export {
   isModuleVisibleToMembers,
   isModuleVisibleInAdmin,
   getModuleState,
+  getEffectiveWhitelist,
 } from './types.js'
 export { TENANT_DOMAIN, getTenantSlugFromHost } from './resolver.js'
 export { loadTenantConfig } from './loader.js'

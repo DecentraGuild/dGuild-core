@@ -57,6 +57,14 @@ export interface OneTimePerUnitPricing {
   pricePerUnit: number
 }
 
+/** Price for adding one unit (e.g. creating a new whitelist). Used when adding, not for total. */
+export interface AddUnitPricing {
+  modelType: 'add_unit'
+  conditionKey: string
+  name: string
+  pricePerUnit: number
+}
+
 export interface FlatRecurringPricing {
   modelType: 'flat_recurring'
   name: string
@@ -76,5 +84,6 @@ export interface FlatOneTimePricing {
 export type PricingModel =
   | TieredAddonsPricing
   | OneTimePerUnitPricing
+  | AddUnitPricing
   | FlatRecurringPricing
   | FlatOneTimePricing

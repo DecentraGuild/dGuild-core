@@ -11,7 +11,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-02-10',
   experimental: { clientNodeCompat: true },
   modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
-  css: [uiVarsCss],
+  css: [uiVarsCss, '~/assets/platform-theme.css'],
   plugins: ['~/plugins/buffer.server', '~/plugins/buffer.client', '@decentraguild/auth/plugin.client'],
   routeRules:
     process.env.NODE_ENV === 'development'
@@ -58,6 +58,9 @@ export default defineNuxtConfig({
     },
   },
   vite: {
+    server: {
+      hmr: { port: 3000, clientPort: 3000 },
+    },
     resolve: {
       alias: { '@coral-xyz/anchor': anchorBrowser },
     },

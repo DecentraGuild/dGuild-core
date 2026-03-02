@@ -75,7 +75,7 @@ export interface RoleCard {
   eligible?: boolean
 }
 
-const props = defineProps<{
+defineProps<{
   roleCards: RoleCard[]
 }>()
 

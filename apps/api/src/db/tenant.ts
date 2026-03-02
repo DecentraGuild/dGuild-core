@@ -1,9 +1,15 @@
 import { type TenantConfig, normalizeModules } from '@decentraguild/core'
-import { loadTenantBySlug, loadTenantById, loadTenantByIdOrSlug, writeTenantBySlug, writeTenantByIdOrSlug, getTenantConfigDir } from '../config/registry.js'
+import { loadTenantByIdOrSlug, writeTenantByIdOrSlug, getTenantConfigDir } from '../config/registry.js'
 import { getPool, query } from './client.js'
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production'
+}
+
+function defaultWhitelistToDb(val: TenantConfig['defaultWhitelist']): string | null {
+  if (val === undefined || val === null) return null
+  if (typeof val.account === 'string' && val.account.trim() === '') return null
+  return JSON.stringify({ programId: val.programId || 'whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn', account: val.account || '' })
 }
 
 const toDbRow = (t: TenantConfig) => {
@@ -15,6 +21,7 @@ const toDbRow = (t: TenantConfig) => {
     name: t.name,
     description: t.description ?? null,
     discordServerInviteLink: t.discordServerInviteLink?.trim() || null,
+    defaultWhitelist: defaultWhitelistToDb(t.defaultWhitelist),
     branding: JSON.stringify(branding),
     modules: JSON.stringify(t.modules ?? {}),
     admins: JSON.stringify(t.admins ?? []),
@@ -25,6 +32,18 @@ const toDbRow = (t: TenantConfig) => {
 function parseJsonField<T>(val: unknown): T {
   if (typeof val === 'string') return JSON.parse(val) as T
   return (val ?? null) as T
+}
+
+function parseDefaultWhitelist(val: unknown): TenantConfig['defaultWhitelist'] {
+  if (val === null || val === undefined) return undefined
+  const parsed = typeof val === 'string' ? (JSON.parse(val) as Record<string, unknown>) : (val as Record<string, unknown>)
+  if (!parsed || typeof parsed !== 'object') return undefined
+  const account = (parsed.account as string)?.trim()
+  if (!account) return undefined
+  return {
+    programId: (parsed.programId as string)?.trim() || 'whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn',
+    account,
+  }
 }
 
 /** Map a tenant_config row (JSONB as string or object) to TenantConfig. */
@@ -41,6 +60,7 @@ export function rowToTenantConfig(row: Record<string, unknown>): TenantConfig {
     name: row.name as string,
     description: (row.description as string) ?? undefined,
     discordServerInviteLink,
+    defaultWhitelist: parseDefaultWhitelist(row.default_whitelist),
     branding,
     modules: normalizeModules(rawModules),
     admins: parseJsonField<string[]>(row.admins) ?? [],
@@ -107,19 +127,20 @@ export async function getAllTenantSlugs(): Promise<string[]> {
 export async function upsertTenant(config: TenantConfig): Promise<void> {
   const r = toDbRow(config)
   await query(
-    `INSERT INTO tenant_config (id, slug, name, description, discord_server_invite_link, branding, modules, admins, treasury, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, COALESCE((SELECT created_at FROM tenant_config WHERE id = $1), NOW()), NOW())
+    `INSERT INTO tenant_config (id, slug, name, description, discord_server_invite_link, default_whitelist, branding, modules, admins, treasury, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10, COALESCE((SELECT created_at FROM tenant_config WHERE id = $1), NOW()), NOW())
      ON CONFLICT (id) DO UPDATE SET
        slug = EXCLUDED.slug,
        name = EXCLUDED.name,
        description = EXCLUDED.description,
        discord_server_invite_link = EXCLUDED.discord_server_invite_link,
+       default_whitelist = EXCLUDED.default_whitelist,
        branding = EXCLUDED.branding,
        modules = EXCLUDED.modules,
        admins = EXCLUDED.admins,
        treasury = EXCLUDED.treasury,
        updated_at = NOW()`,
-    [r.id, r.slug, r.name, r.description, r.discordServerInviteLink, r.branding, r.modules, r.admins, r.treasury]
+    [r.id, r.slug, r.name, r.description, r.discordServerInviteLink, r.defaultWhitelist, r.branding, r.modules, r.admins, r.treasury]
   )
 }
 
@@ -128,6 +149,7 @@ export type TenantSettingsPatch = Partial<{
   description: string
   slug: string | null
   discordServerInviteLink: string | null
+  defaultWhitelist: TenantConfig['defaultWhitelist']
   branding: Partial<TenantConfig['branding']>
   modules: TenantConfig['modules']
 }>
@@ -142,6 +164,7 @@ export function mergeTenantPatch(existing: TenantConfig, patch: TenantSettingsPa
     discordServerInviteLink: patch.discordServerInviteLink !== undefined
       ? (patch.discordServerInviteLink?.trim() || undefined)
       : existing.discordServerInviteLink,
+    defaultWhitelist: patch.defaultWhitelist !== undefined ? patch.defaultWhitelist : existing.defaultWhitelist,
   }
   if (patch.branding) {
     merged.branding = { ...existing.branding, ...patch.branding }

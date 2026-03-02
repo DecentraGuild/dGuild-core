@@ -136,6 +136,8 @@ export interface TenantConfig {
   description?: string
   /** Discord server invite link (for users to join the community). General setting, editable in Admin > General. */
   discordServerInviteLink?: string
+  /** Default whitelist for the tenant. When set, becomes base for transactions unless module/transaction overrides. Empty account = no default. */
+  defaultWhitelist?: MarketplaceWhitelistSettings | null
   branding: TenantBranding
   /** Modules keyed by id. Use normalizeModules() when reading from JSON that may be legacy array. */
   modules: TenantModulesMap
@@ -198,4 +200,18 @@ export interface MarketplaceSettings {
   currencyMints: MarketplaceCurrencyMint[]
   whitelist?: MarketplaceWhitelistSettings
   shopFee: MarketplaceShopFee
+}
+
+/** Effective whitelist for a module: module override ?? tenant default. Returns null when public (no list). */
+export function getEffectiveWhitelist(
+  tenantDefault: MarketplaceWhitelistSettings | null | undefined,
+  moduleWhitelist: MarketplaceWhitelistSettings | null | undefined
+): MarketplaceWhitelistSettings | null {
+  if (moduleWhitelist !== undefined && moduleWhitelist !== null) {
+    return moduleWhitelist.account === '' ? null : moduleWhitelist
+  }
+  if (tenantDefault !== undefined && tenantDefault !== null && tenantDefault.account !== '') {
+    return tenantDefault
+  }
+  return null
 }

@@ -35,7 +35,7 @@ async function fetchMemberRolesAndMap(guild: Guild): Promise<{
 export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
   if (!hasBotSecret()) return
 
-  const syncResult = await syncHoldersForGuild(API_BASE_URL, DISCORD_BOT_API_SECRET!, guild.id)
+  await syncHoldersForGuild(API_BASE_URL, DISCORD_BOT_API_SECRET!, guild.id)
   const { memberRoles, memberMap } = await fetchMemberRolesAndMap(guild)
   const { eligible } = await getEligible(API_BASE_URL, DISCORD_BOT_API_SECRET!, guild.id, memberRoles)
   if (eligible.length === 0) return

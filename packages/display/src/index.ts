@@ -51,7 +51,8 @@ export function sanitizeTokenLabel(value: string | null | undefined): string {
   return s
     .replace(/\uFFFD/g, '') // Unicode replacement character (often shows as box)
     .replace(/[\u200B-\u200D\uFEFF]/g, '') // Zero-width space, joiners, BOM
-    .replace(/[\x00-\x1F\x7F]/g, '') // Control characters
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001F\u007F]/g, '') // Control characters
     .trim()
 }
 

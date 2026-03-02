@@ -31,7 +31,8 @@
           />
           <span v-if="form.modulesById[id] === 'staging'" class="admin__module-staging-label">Staging</span>
           <template v-else-if="form.modulesById[id] === 'active' && isModuleBillable(id)">
-            <div v-if="extendingModuleId === id" class="admin__extend-inline">
+            <span v-if="isAddUnitOnly(id)" class="admin__module-always-on">Always on</span>
+            <div v-else-if="extendingModuleId === id" class="admin__extend-inline">
               <div class="pricing-widget__period-toggle">
                 <button
                   class="pricing-widget__period-btn"
@@ -56,7 +57,7 @@
             </Button>
           </template>
         </div>
-        <span v-else class="admin__module-always-on">Always on</span>
+        <span v-else-if="id === 'admin'" class="admin__module-always-on">Always on</span>
       </div>
     </Card>
 
@@ -152,5 +153,10 @@ function isModuleOn(moduleId: string): boolean {
 
 function isModuleBillable(moduleId: string): boolean {
   return getModuleCatalogEntry(moduleId)?.pricing != null
+}
+
+function isAddUnitOnly(moduleId: string): boolean {
+  const pricing = getModuleCatalogEntry(moduleId)?.pricing as { modelType?: string } | undefined
+  return pricing?.modelType === 'add_unit'
 }
 </script>

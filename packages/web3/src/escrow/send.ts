@@ -44,12 +44,14 @@ export async function sendAndConfirmTransaction(
     await connection.confirmTransaction(sig)
     return sig
   } catch (sendErr: unknown) {
-    const base = sendErr instanceof Error ? sendErr.message : String(sendErr)
-    const errObj = sendErr as { logs?: string[]; data?: { logs?: string[] } }
-    const logs = errObj.logs ?? errObj.data?.logs
-    const withLogs = Array.isArray(logs) && logs.length
-      ? `${base}\n${logs.join('\n')}`
-      : base
-    throw new Error(withLogs)
+    if (sendErr instanceof Error) {
+      const errObj = sendErr as Error & { logs?: string[]; data?: { logs?: string[] } }
+      const logs = errObj.logs ?? errObj.data?.logs
+      if (Array.isArray(logs) && logs.length) {
+        errObj.message = `${errObj.message}\n${logs.join('\n')}`
+      }
+      throw errObj
+    }
+    throw sendErr
   }
 }

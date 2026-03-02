@@ -3,11 +3,13 @@ import type { ModuleCatalogEntry, ModuleCatalogAddon } from './module-catalog-ty
 import admin from '../module-catalog/admin.json'
 import marketplace from '../module-catalog/marketplace.json'
 import discord from '../module-catalog/discord.json'
+import whitelist from '../module-catalog/whitelist.json'
 
 const entries: ModuleCatalogEntry[] = [
   admin as ModuleCatalogEntry,
   marketplace as ModuleCatalogEntry,
   discord as ModuleCatalogEntry,
+  whitelist as ModuleCatalogEntry,
 ]
 
 const catalog: Record<string, ModuleCatalogEntry> = Object.fromEntries(
@@ -50,4 +52,13 @@ export function getModuleCatalogEntry(id: string): ModuleCatalogEntry | undefine
 /** All catalog entries sorted by order. */
 export function getModuleCatalogList(): ModuleCatalogEntry[] {
   return [...entries].sort((a, b) => a.order - b.order)
+}
+
+/** Billing period values accepted by the pricing engine and API. */
+export const VALID_BILLING_PERIODS: ReadonlySet<string> = new Set(['monthly', 'yearly'])
+
+/** Display name for a module (e.g. for invoices). Uses catalog name; falls back to module id. */
+export function getModuleDisplayName(moduleId: string): string {
+  const entry = getModuleCatalogEntry(moduleId)
+  return entry?.name ?? moduleId
 }

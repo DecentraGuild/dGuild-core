@@ -1,5 +1,5 @@
 import pg from 'pg'
-import type { Pool } from 'pg'
+import type { Pool, PoolClient } from 'pg'
 import { DEFAULT_DB_POOL_MAX, DEFAULT_DB_IDLE_TIMEOUT_MS } from '../config/constants.js'
 
 let pool: Pool | null = null
@@ -44,4 +44,26 @@ export async function query<T = unknown>(
   }
   const res = await p.query(sql, params)
   return { rows: res.rows as T[], rowCount: res.rowCount ?? 0 }
+}
+
+/**
+ * Run a function inside a database transaction. On success the transaction is committed;
+ * on throw, it is rolled back. The client is always released.
+ */
+export async function withTransaction<T>(
+  p: Pool,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await p.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await fn(client)
+    await client.query('COMMIT')
+    return result
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw err
+  } finally {
+    client.release()
+  }
 }

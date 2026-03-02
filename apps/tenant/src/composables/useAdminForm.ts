@@ -8,12 +8,13 @@ import { useThemeStore, mergeTheme, DEFAULT_TENANT_THEME } from '@decentraguild/
 import { useTenantStore } from '~/stores/tenant'
 import { API_V1 } from '~/utils/apiBase'
 import { MODULE_NAV } from '~/config/modules'
-import type { TenantConfig } from '@decentraguild/core'
+import type { TenantConfig, MarketplaceWhitelistSettings } from '@decentraguild/core'
 
 export interface AdminForm {
   name: string
   description: string
   discordServerInviteLink: string
+  defaultWhitelist: MarketplaceWhitelistSettings | null
   branding: {
     logo: string
     theme: ReturnType<typeof mergeTheme>
@@ -46,6 +47,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
     name: '',
     description: '',
     discordServerInviteLink: '',
+    defaultWhitelist: null,
     branding: buildBrandingForm(null),
     modulesById: {},
   })
@@ -64,6 +66,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
       form.name = t.name ?? ''
       form.description = t.description ?? ''
       form.discordServerInviteLink = t.discordServerInviteLink ?? ''
+      form.defaultWhitelist = t.defaultWhitelist ?? null
       form.branding = buildBrandingForm(t)
       const mods = t.modules ?? {}
       form.modulesById = Object.fromEntries(
@@ -114,6 +117,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
           name: form.name,
           description: form.description,
           discordServerInviteLink: form.discordServerInviteLink || undefined,
+          defaultWhitelist: form.defaultWhitelist ?? undefined,
           branding: {
             logo: form.branding.logo,
             theme: form.branding.theme,

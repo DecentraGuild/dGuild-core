@@ -6,9 +6,9 @@
   >
     <span class="module-blob__icon-wrap">
       <Icon :icon="entry.icon" class="module-blob__icon" />
+      <span v-if="entry.status === 'coming_soon'" class="module-blob__badge">Coming soon</span>
     </span>
     <span class="module-blob__name">{{ entry.name }}</span>
-    <span v-if="entry.status === 'coming_soon'" class="module-blob__badge">Coming soon</span>
   </button>
 </template>
 
@@ -52,6 +52,7 @@ const emit = defineEmits<{
 }
 
 .module-blob__icon-wrap {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -72,10 +73,16 @@ const emit = defineEmits<{
 }
 
 .module-blob__badge {
-  font-size: var(--theme-font-xs);
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 0.6rem;
+  line-height: 1.2;
   color: var(--theme-text-muted);
-  background: var(--theme-bg-secondary);
-  padding: var(--theme-space-xs) var(--theme-space-sm);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  padding: 2px 4px;
   border-radius: var(--theme-radius-sm);
+  white-space: nowrap;
 }
 </style>

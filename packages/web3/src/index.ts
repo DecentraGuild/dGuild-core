@@ -44,6 +44,7 @@ export type {
   EscrowWithAddress,
 } from './escrow/index.js'
 
+export { createConnection } from './connection.js'
 export {
   getDasRpcUrl,
   dasRequest,
@@ -61,3 +62,28 @@ export {
   USDC_DECIMALS,
 } from './billing/transfer.js'
 export type { BuildBillingTransferParams } from './billing/transfer.js'
+
+export {
+  deriveWhitelistPda,
+  deriveWhitelistEntryPda,
+  getWhitelistProgram,
+  getWhitelistProgramReadOnly,
+  fetchWhitelist,
+  fetchAllWhitelistsByAuthority,
+  fetchWhitelistEntries,
+  isWalletOnWhitelist,
+  buildInitializeWhitelistTransaction,
+  buildAddToWhitelistTransaction,
+  buildRemoveFromWhitelistTransaction,
+  buildDeleteWhitelistTransaction,
+} from './whitelist/index.js'
+export type {
+  WhitelistAccount,
+  WhitelistEntryAccount,
+  WhitelistWithAddress,
+  WhitelistEntryWithAddress,
+  BuildInitializeWhitelistParams,
+  BuildAddToWhitelistParams,
+  BuildRemoveFromWhitelistParams,
+  BuildDeleteWhitelistParams,
+} from './whitelist/index.js'

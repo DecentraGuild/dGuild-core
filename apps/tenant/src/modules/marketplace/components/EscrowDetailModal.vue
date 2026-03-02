@@ -74,16 +74,16 @@
                         @click="ratioFlipped = !ratioFlipped"
                       >
                         <template v-if="!ratioFlipped">
-                          1 {{ sanitizedDepositSymbol }}
+                          1 {{ depositSymbolDisplay }}
                           <span class="escrow-modal__rate-approx">≈</span>
                           {{ chainPrice }}
-                          {{ sanitizedPriceSymbol }}
+                          {{ priceSymbolDisplay }}
                         </template>
                         <template v-else>
-                          1 {{ sanitizedPriceSymbol }}
+                          1 {{ priceSymbolDisplay }}
                           <span class="escrow-modal__rate-approx">≈</span>
                           {{ chainPrice ? (1 / chainPrice) : '–' }}
-                          {{ sanitizedDepositSymbol }}
+                          {{ depositSymbolDisplay }}
                         </template>
                         <Icon icon="mdi:swap-horizontal" class="escrow-modal__rate-icon" />
                       </button>
@@ -93,14 +93,14 @@
                         <span class="escrow-modal__pay-receive-label">You pay</span>
                         <span class="escrow-modal__pay-receive-value">
                           {{ fillRequestAmountDisplay }}
-                          <span class="escrow-modal__pay-receive-token">({{ sanitizedPriceSymbol }}) {{ sanitizedRequestName }}</span>
+                          <span class="escrow-modal__pay-receive-token">({{ priceSymbolDisplay }}) {{ requestNameDisplay }}</span>
                         </span>
                       </div>
                       <div class="escrow-modal__pay-receive-row">
                         <span class="escrow-modal__pay-receive-label">You receive</span>
                         <span class="escrow-modal__pay-receive-value">
                           {{ fillDepositAmountDisplay }}
-                          <span class="escrow-modal__pay-receive-token">({{ sanitizedDepositSymbol }}) {{ sanitizedDepositName }}</span>
+                          <span class="escrow-modal__pay-receive-token">({{ depositSymbolDisplay }}) {{ depositNameDisplay }}</span>
                         </span>
                       </div>
                     </div>
@@ -205,16 +205,16 @@
                     @click="ratioFlipped = !ratioFlipped"
                   >
                     <template v-if="!ratioFlipped">
-                      1 {{ sanitizedDepositSymbol }}
+                      1 {{ depositSymbolDisplay }}
                       <span class="escrow-modal__rate-approx">≈</span>
                       {{ chainPrice }}
-                      {{ sanitizedPriceSymbol }}
+                      {{ priceSymbolDisplay }}
                     </template>
                     <template v-else>
-                      1 {{ sanitizedPriceSymbol }}
+                      1 {{ priceSymbolDisplay }}
                       <span class="escrow-modal__rate-approx">≈</span>
                       {{ chainPrice ? (1 / chainPrice) : '–' }}
-                      {{ sanitizedDepositSymbol }}
+                      {{ depositSymbolDisplay }}
                     </template>
                     <Icon icon="mdi:swap-horizontal" class="escrow-modal__rate-icon" />
                   </button>
@@ -262,7 +262,7 @@
                       @blur="fillAmountInputFocused = false; syncFillAmountInputFromPercent()"
                     />
                     <span class="escrow-modal__fill-amount-token">
-                      ({{ sanitizedDepositSymbol }}) {{ sanitizedDepositName }}
+                      ({{ depositSymbolDisplay }}) {{ depositNameDisplay }}
                     </span>
                   </div>
                 </div>
@@ -272,14 +272,14 @@
                     <span class="escrow-modal__pay-receive-label">You pay</span>
                     <span class="escrow-modal__pay-receive-value">
                       {{ fillRequestAmountDisplay }}
-                      <span class="escrow-modal__pay-receive-token">({{ sanitizedPriceSymbol }}) {{ sanitizedRequestName }}</span>
+                      <span class="escrow-modal__pay-receive-token">({{ priceSymbolDisplay }}) {{ requestNameDisplay }}</span>
                     </span>
                   </div>
                   <div class="escrow-modal__pay-receive-row">
                     <span class="escrow-modal__pay-receive-label">You receive</span>
                     <span class="escrow-modal__pay-receive-value">
                       {{ fillDepositAmountDisplay }}
-                      <span class="escrow-modal__pay-receive-token">({{ sanitizedDepositSymbol }}) {{ sanitizedDepositName }}</span>
+                      <span class="escrow-modal__pay-receive-token">({{ depositSymbolDisplay }}) {{ depositNameDisplay }}</span>
                     </span>
                   </div>
                 </div>
@@ -309,7 +309,7 @@
                     </Button>
                   </template>
                   <p v-else-if="walletAddress && !canFill" class="escrow-modal__cannot-fill">
-                    You cannot fill this trade (restrictions or expired).
+                    {{ escrow?.account.onlyWhitelist && isOnEscrowWhitelist !== true ? 'Only whitelisted members can fill this trade.' : 'You cannot fill this trade (restrictions or expired).' }}
                   </p>
                   <Button
                     v-else
@@ -406,7 +406,7 @@ import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { Icon } from '@iconify/vue'
 import { Button, TokenAmountWithLabel, StatusBanner } from '@decentraguild/ui/components'
-import { truncateAddress, toRawUnits, sanitizeTokenLabel, escrowPriceToHuman } from '@decentraguild/display'
+import { truncateAddress, toRawUnits, escrowPriceToHuman } from '@decentraguild/display'
 import { useEscrowDisplay } from '~/composables/useEscrowDisplay'
 import { useTenantStore } from '~/stores/tenant'
 import { API_V1 } from '~/utils/apiBase'
@@ -421,12 +421,13 @@ import {
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
 import { ESCROW_PROGRAM_ID } from '@decentraguild/contracts'
-import { Connection, SystemProgram, PublicKey } from '@solana/web3.js'
+import { SystemProgram, PublicKey } from '@solana/web3.js'
 import BN from 'bn.js'
-import { useRpc } from '~/composables/useRpc'
+import { useSolanaConnection } from '~/composables/useSolanaConnection'
 import { useExplorerLinks } from '~/composables/useExplorerLinks'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 import { fetchWalletTokenBalances, type TokenBalance } from '~/composables/useWalletTokenBalances'
+import { useWalletOnList } from '~/composables/useWalletOnList'
 
 const props = withDefaults(
   defineProps<{
@@ -446,7 +447,7 @@ const { slug } = storeToRefs(tenantStore)
 const { shareUrl: getShareUrl } = useMarketplaceEscrowLinks(slug)
 const auth = useAuth()
 const openConnectModal = auth.openConnectModal
-const { rpcUrl, rpcError } = useRpc()
+const { connection, rpcUrl, rpcError } = useSolanaConnection()
 const txNotifications = useTransactionNotificationsStore()
 const apiBase = useApiBase()
 const explorerLinks = useExplorerLinks()
@@ -532,6 +533,12 @@ function apiEscrowToFull(e: EscrowApiShape) {
 }
 
 const walletAddress = computed(() => auth.connectorState.value?.account ?? null)
+
+const escrowWhitelistAddress = computed(() =>
+  escrow.value?.account.onlyWhitelist ? escrow.value.account.whitelist.toBase58() : null
+)
+const { listed: isOnEscrowWhitelist } = useWalletOnList(slug, escrowWhitelistAddress, walletAddress)
+
 /** True only when the connector can actually sign transactions (not just "connected"). Re-runs when connectorState changes. */
 const canSignTransactions = computed(() => {
   const _ = auth.connectorState.value
@@ -562,7 +569,7 @@ const canFill = computed(() => {
   if (!escrow.value || !walletAddress.value) return false
   if (escrow.value.account.maker.toBase58() === walletAddress.value) return false
   if ((escrow.value.account.tokensDepositRemaining?.toNumber() ?? 0) <= 0) return false
-  if (escrow.value.account.onlyWhitelist) return false
+  if (escrow.value.account.onlyWhitelist && isOnEscrowWhitelist.value !== true) return false
   if (escrow.value.account.onlyRecipient) {
     const rec = escrow.value.account.recipient.toBase58()
     if (rec !== SYSTEM_PROGRAM && rec !== walletAddress.value) return false
@@ -581,17 +588,18 @@ const chainPrice = computed(() => {
   return p != null && Number.isFinite(p) ? Number(p) : 0
 })
 
-const sanitizedDepositSymbol = computed(() =>
-  display.value ? sanitizeTokenLabel(display.value.depositSymbol ?? display.value.depositMintShort) || display.value.depositMintShort : ''
+/** Display labels; values are already sanitized when stored in mint_metadata. */
+const depositSymbolDisplay = computed(() =>
+  display.value ? (display.value.depositSymbol ?? display.value.depositMintShort ?? '') : ''
 )
-const sanitizedPriceSymbol = computed(() =>
-  display.value ? sanitizeTokenLabel(display.value.priceSymbol ?? display.value.requestMintShort) || display.value.requestMintShort : ''
+const priceSymbolDisplay = computed(() =>
+  display.value ? (display.value.priceSymbol ?? display.value.requestMintShort ?? '') : ''
 )
-const sanitizedDepositName = computed(() =>
-  display.value ? sanitizeTokenLabel(display.value.depositName ?? display.value.depositSymbol) || 'Deposit' : 'Deposit'
+const depositNameDisplay = computed(() =>
+  display.value ? (display.value.depositName ?? display.value.depositSymbol ?? 'Deposit') : 'Deposit'
 )
-const sanitizedRequestName = computed(() =>
-  display.value ? sanitizeTokenLabel(display.value.requestName ?? display.value.priceSymbol) || 'Request' : 'Request'
+const requestNameDisplay = computed(() =>
+  display.value ? (display.value.requestName ?? display.value.priceSymbol ?? 'Request') : 'Request'
 )
 
 const fillDepositAmount = computed(() => {
@@ -701,7 +709,7 @@ async function handleFill() {
   const txId = `fill-${props.escrowId}-${Date.now()}`
   txNotifications.add(txId, { status: 'pending', message: 'Filling escrow...' })
   try {
-    const connection = new Connection(rpcUrl.value)
+    if (!connection.value) throw new Error('RPC not configured')
     const whitelistKey = escrow.value.account.whitelist
     const escrowProgramId = new PublicKey(ESCROW_PROGRAM_ID)
     const hasWhitelist =
@@ -715,11 +723,11 @@ async function handleFill() {
       requestTokenMint: escrow.value.account.requestToken,
       amount: amountBN,
       seed: escrow.value.account.seed,
-      connection,
+      connection: connection.value,
       wallet,
       whitelist: hasWhitelist ? whitelistKey.toBase58() : null,
     })
-    const sig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
+    const sig = await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
     txNotifications.update(txId, { status: 'success', message: 'Escrow filled', signature: sig })
     escrow.value = null
     close()
@@ -741,17 +749,17 @@ async function handleCancel() {
   const txId = `cancel-${props.escrowId}-${Date.now()}`
   txNotifications.add(txId, { status: 'pending', message: 'Cancelling escrow...' })
   try {
-    const connection = new Connection(rpcUrl.value)
+    if (!connection.value) throw new Error('RPC not configured')
     const tx = await buildCancelTransaction({
       maker: escrow.value.account.maker,
       depositTokenMint: escrow.value.account.depositToken,
       requestTokenMint: escrow.value.account.requestToken,
       seed: escrow.value.account.seed,
-      connection,
+      connection: connection.value,
       wallet,
     })
     const sig = await sendAndConfirmTransaction(
-      connection,
+      connection.value,
       tx,
       wallet,
       escrow.value.account.maker
@@ -785,9 +793,8 @@ async function loadEscrow(id: string) {
         if (json.escrow) escrow.value = apiEscrowToFull(json.escrow)
       }
     }
-    if (!escrow.value && rpcUrl.value) {
-      const connection = new Connection(rpcUrl.value)
-      const fromChain = await fetchEscrowByAddress(connection, id)
+    if (!escrow.value && connection.value) {
+      const fromChain = await fetchEscrowByAddress(connection.value, id)
       escrow.value = fromChain
     }
   } finally {

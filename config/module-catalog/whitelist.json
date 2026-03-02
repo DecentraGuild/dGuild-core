@@ -1,0 +1,33 @@
+{
+  "id": "whitelist",
+  "status": "available",
+  "name": "Whitelist",
+  "icon": "mdi:format-list-bulleted",
+  "image": null,
+  "shortDescription": "On-chain whitelist management. Admins create lists and add wallets; listed members can view their memberships.",
+  "longDescription": "The Whitelist module lets admins create and manage on-chain lists of wallet addresses. Create multiple lists per dGuild, add or remove wallets manually. Listed members can view which lists they are on. Integrates with other modules (marketplace, raffle) for eligibility checks.",
+  "keyInfo": [
+    "Create and manage on-chain whitelists",
+    "Add or remove wallets manually",
+    "50 USDC one-time fee per list",
+    "Listed members view their memberships"
+  ],
+  "routePath": "/whitelist",
+  "order": 5,
+  "activationInstructions": {
+    "intro": "Create whitelists to gate access or offer benefits to specific members.",
+    "steps": [
+      "Create a new list (50 USDC per list)",
+      "Add wallet addresses to each list",
+      "Listed members can view their memberships"
+    ],
+    "note": "Module is active immediately; billing is per list when you create one."
+  },
+  "goActiveImmediately": true,
+  "pricing": {
+    "modelType": "add_unit",
+    "conditionKey": "listsCount",
+    "name": "Whitelist",
+    "pricePerUnit": 0.0005
+  }
+}

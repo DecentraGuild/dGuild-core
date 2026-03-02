@@ -1,4 +1,4 @@
-import { query, getPool } from './client.js'
+import { query } from './client.js'
 
 export type DiscordGuildMintKind = 'SPL' | 'NFT'
 

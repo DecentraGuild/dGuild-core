@@ -1,48 +1,22 @@
 import type { FastifyInstance } from 'fastify'
 import type { BillingPeriod, ConditionSet } from '@decentraguild/billing'
-import { computePrice } from '@decentraguild/billing'
-import { getModuleCatalogEntry } from '@decentraguild/config'
+import { getModuleCatalogEntry, getModuleDisplayName, VALID_BILLING_PERIODS } from '@decentraguild/config'
 import { requireTenantAdmin } from './tenant-settings.js'
 import { getWalletFromRequest } from './auth.js'
 import { apiError, ErrorCode } from '../api-errors.js'
 import { adminWriteRateLimit } from '../rate-limit-strict.js'
 import { getPool } from '../db/client.js'
-import { getConditions } from '../billing/conditions.js'
-import { calculateCharge, calculateExtension } from '../billing/prorate.js'
-import { verifyBillingPayment, BILLING_WALLET, BILLING_WALLET_ATA } from '../billing/verify-payment.js'
+import { verifyBillingPayment, BILLING_WALLET } from '../billing/verify-payment.js'
 import {
-  getSubscription,
-  insertPaymentIntent,
-  getPaymentById,
-  confirmPaymentAndActivate,
-  confirmSlugClaimPayment,
-  failPayment,
-  expireStalePendingPayments,
-  listPayments,
-} from '../db/billing.js'
-import { getTenantBySlug, resolveTenant } from '../db/tenant.js'
-import { loadTenantByIdOrSlug } from '../config/registry.js'
-import { normalizeTenantSlug } from '../validate-slug.js'
-
-const VALID_BILLING_PERIODS: ReadonlySet<string> = new Set(['monthly', 'yearly'])
-
-const MODULE_NAV: Record<string, string> = {
-  marketplace: 'Marketplace',
-  discord: 'Discord',
-  raffles: 'Raffle',
-  whitelist: 'Whitelist',
-  minting: 'Mint',
-  slug: 'Custom slug',
-}
+  createPaymentIntent,
+  confirmPayment,
+  extendSubscription,
+  tenantBillingKey,
+} from '../billing/service.js'
+import { getPaymentById, listPayments } from '../db/billing.js'
+import { getSubscription } from '../db/billing.js'
 
 export async function registerBillingPaymentRoutes(app: FastifyInstance) {
-  /* ---------------------------------------------------------------- */
-  /*  POST /billing/payment-intent                                     */
-  /* ---------------------------------------------------------------- */
-
-  /** Billing always uses tenant id (permanent); slug can change. */
-  const tenantBillingKey = (tenant: { id: string }) => tenant.id
-
   app.post<{
     Params: { slug: string }
     Body: { moduleId: string; billingPeriod?: string; conditions?: ConditionSet; slug?: string }
@@ -68,27 +42,11 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
         return reply.status(400).send(apiError('Module is not billable', ErrorCode.BAD_REQUEST))
       }
 
-      let billingPeriod = (body.billingPeriod ?? 'monthly') as string
-      if (moduleId === 'slug') {
-        billingPeriod = 'yearly'
-        const desiredSlug = body.slug
-        if (!desiredSlug || typeof desiredSlug !== 'string') {
-          return reply.status(400).send(apiError('slug is required when claiming custom slug', ErrorCode.BAD_REQUEST))
+      if (moduleId !== 'slug') {
+        const billingPeriod = (body.billingPeriod ?? 'monthly') as string
+        if (!VALID_BILLING_PERIODS.has(billingPeriod)) {
+          return reply.status(400).send(apiError('billingPeriod must be "monthly" or "yearly"', ErrorCode.BAD_REQUEST))
         }
-        const normalized = normalizeTenantSlug(desiredSlug.trim())
-        if (!normalized) {
-          return reply.status(400).send(apiError('Invalid slug: use only lowercase letters, numbers, and hyphens (1–64 chars)', ErrorCode.INVALID_SLUG))
-        }
-        if (result.tenant.slug) {
-          return reply.status(400).send(apiError('Tenant already has a custom slug', ErrorCode.BAD_REQUEST))
-        }
-        const existingDb = await getTenantBySlug(normalized)
-        const existingFile = await loadTenantByIdOrSlug(normalized)
-        if (existingDb || existingFile) {
-          return reply.status(400).send(apiError('Slug is not available', ErrorCode.BAD_REQUEST))
-        }
-      } else if (!VALID_BILLING_PERIODS.has(billingPeriod)) {
-        return reply.status(400).send(apiError('billingPeriod must be "monthly" or "yearly"', ErrorCode.BAD_REQUEST))
       }
 
       const wallet = await getWalletFromRequest(request)
@@ -96,77 +54,25 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
         return reply.status(401).send(apiError('Authentication required', ErrorCode.UNAUTHORIZED))
       }
 
-      const billingKey = tenantBillingKey(result.tenant)
-      const conditionsLookupId = result.tenant.id
-      const conditions: ConditionSet =
-        body.conditions && typeof body.conditions === 'object'
-          ? body.conditions
-          : await getConditions(moduleId, conditionsLookupId)
-      if (moduleId === 'slug') {
-        const desiredSlug = normalizeTenantSlug((body.slug as string)?.trim())
-        if (desiredSlug) (conditions as Record<string, unknown>).slugToClaim = desiredSlug
-      }
-
-      const price = computePrice(moduleId, conditions, catalogEntry.pricing, {
-        billingPeriod: billingPeriod as BillingPeriod,
-      })
-
-      await expireStalePendingPayments().catch(() => {})
-
-      const existing = await getSubscription(billingKey, moduleId)
-      const charge = calculateCharge(price, billingPeriod as BillingPeriod, existing)
-
-      if (charge.noPaymentRequired) {
-        return {
-          noPaymentRequired: true,
-          amountUsdc: 0,
-          billingPeriod,
-          periodStart: charge.periodStart.toISOString(),
-          periodEnd: charge.periodEnd.toISOString(),
+      try {
+        const intent = await createPaymentIntent({
+          tenant: result.tenant,
+          moduleId,
+          billingPeriod: body.billingPeriod as BillingPeriod | undefined,
+          conditions: body.conditions && typeof body.conditions === 'object' ? body.conditions : undefined,
+          slug: typeof body.slug === 'string' ? body.slug : undefined,
+          payerWallet: wallet,
+        })
+        return intent
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (message.includes('slug') && (message.includes('required') || message.includes('Invalid') || message.includes('available') || message.includes('already'))) {
+          return reply.status(400).send(apiError(message, ErrorCode.INVALID_SLUG))
         }
-      }
-
-      const enrichedSnapshot: Record<string, unknown> = { ...price }
-      if (charge.paymentType === 'upgrade_prorate' && existing && catalogEntry.pricing?.modelType === 'tiered_addons') {
-        const tiers = (catalogEntry.pricing as { tiers?: Array<{ id: string; name: string }> }).tiers
-        const prevTierId = (existing.priceSnapshot as { selectedTierId?: string })?.selectedTierId
-        const prevTier = prevTierId && tiers ? tiers.find((t) => t.id === prevTierId) : null
-        const newTier = price.selectedTierId && tiers ? tiers.find((t) => t.id === price.selectedTierId) : null
-        if (prevTier) enrichedSnapshot.previousTierName = prevTier.name
-        if (newTier) enrichedSnapshot.newTierName = newTier.name
-        if (charge.remainingDays != null) enrichedSnapshot.remainingDays = charge.remainingDays
-      }
-
-      const payment = await insertPaymentIntent({
-        tenantSlug: billingKey,
-        moduleId,
-        paymentType: charge.paymentType,
-        amountUsdc: charge.amountUsdc,
-        billingPeriod: billingPeriod as BillingPeriod,
-        periodStart: charge.periodStart,
-        periodEnd: charge.periodEnd,
-        payerWallet: wallet,
-        conditionsSnapshot: conditions,
-        priceSnapshot: enrichedSnapshot as unknown as typeof price,
-      })
-
-      return {
-        noPaymentRequired: false,
-        paymentId: payment.id,
-        amountUsdc: payment.amountUsdc,
-        memo: payment.memo,
-        recipientWallet: BILLING_WALLET.toBase58(),
-        recipientAta: BILLING_WALLET_ATA.toBase58(),
-        billingPeriod,
-        periodStart: charge.periodStart.toISOString(),
-        periodEnd: charge.periodEnd.toISOString(),
+        return reply.status(400).send(apiError(message, ErrorCode.BAD_REQUEST))
       }
     },
   )
-
-  /* ---------------------------------------------------------------- */
-  /*  POST /billing/confirm-payment                                    */
-  /* ---------------------------------------------------------------- */
 
   app.post<{
     Params: { slug: string }
@@ -195,96 +101,53 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
       if (!payment) {
         return reply.status(404).send(apiError('Payment not found', ErrorCode.NOT_FOUND))
       }
-      const billingKey = tenantBillingKey(result.tenant)
-      if (payment.tenantSlug !== billingKey) {
+      if (payment.tenantSlug !== tenantBillingKey(result.tenant)) {
         return reply.status(403).send(apiError('Payment does not belong to this tenant', ErrorCode.FORBIDDEN))
       }
 
-      const resolveBy = result.tenant.id
-      if (payment.status === 'confirmed') {
-        const tenant = await resolveTenant(resolveBy)
-        return { success: true, alreadyConfirmed: true, tenant }
-      }
-
-      if (payment.status !== 'pending') {
+      if (payment.status !== 'pending' && payment.status !== 'confirmed') {
         return reply.status(400).send(apiError(`Payment is ${payment.status}`, ErrorCode.BAD_REQUEST))
       }
 
-      if (payment.expiresAt < new Date()) {
+      if (payment.status === 'pending' && payment.expiresAt < new Date()) {
+        const { failPayment } = await import('../db/billing.js')
         await failPayment(paymentId)
         return reply.status(400).send(apiError('Payment intent has expired', ErrorCode.BAD_REQUEST))
       }
 
-      const verification = await verifyBillingPayment({
-        txSignature,
-        expectedAmountUsdc: payment.amountUsdc,
-        expectedMemo: payment.memo,
-      })
-
-      if (!verification.valid) {
-        await failPayment(paymentId)
-        return reply.status(400).send(
-          apiError(
-            verification.error ?? 'Transaction verification failed',
-            ErrorCode.BAD_REQUEST,
-          ),
-        )
-      }
-
-      const conditions = payment.conditionsSnapshot ?? {}
-      const priceSnapshot = payment.priceSnapshot ?? ({} as never)
-      const recurringAmountUsdc = payment.priceSnapshot
-        ? payment.billingPeriod === 'yearly'
-          ? payment.priceSnapshot.recurringYearly
-          : payment.priceSnapshot.recurringMonthly
-        : payment.amountUsdc
-
-      let subscription
-      let tenant = await resolveTenant(resolveBy)
-      if (payment.moduleId === 'slug') {
-        const slugToClaim = (conditions as Record<string, unknown>).slugToClaim
-        if (typeof slugToClaim !== 'string' || !slugToClaim) {
+      if (payment.status === 'pending') {
+        const verification = await verifyBillingPayment({
+          txSignature,
+          expectedAmountUsdc: payment.amountUsdc,
+          expectedMemo: payment.memo,
+        })
+        if (!verification.valid) {
+          const { failPayment } = await import('../db/billing.js')
           await failPayment(paymentId)
-          return reply.status(400).send(apiError('Slug claim payment missing slug', ErrorCode.BAD_REQUEST))
+          return reply.status(400).send(
+            apiError(verification.error ?? 'Transaction verification failed', ErrorCode.BAD_REQUEST),
+          )
         }
-        const { subscription: sub } = await confirmSlugClaimPayment({
-          paymentId,
-          txSignature,
-          tenantId: result.tenant.id,
-          newSlug: slugToClaim,
-          billingPeriod: payment.billingPeriod,
-          recurringAmountUsdc,
-          periodStart: payment.periodStart,
-          periodEnd: payment.periodEnd,
-          conditionsSnapshot: conditions,
-          priceSnapshot,
-        })
-        subscription = sub
-        const updated = await resolveTenant(slugToClaim)
-        tenant = updated ?? tenant
-      } else {
-        const result2 = await confirmPaymentAndActivate({
-          paymentId,
-          txSignature,
-          tenantSlug: billingKey,
-          moduleId: payment.moduleId,
-          billingPeriod: payment.billingPeriod,
-          recurringAmountUsdc,
-          periodStart: payment.periodStart,
-          periodEnd: payment.periodEnd,
-          conditionsSnapshot: conditions,
-          priceSnapshot,
-        })
-        subscription = result2.subscription
       }
 
-      return { success: true, subscription, tenant }
+      try {
+        const confirmResult = await confirmPayment({
+          tenant: result.tenant,
+          paymentId,
+          txSignature,
+        })
+        return {
+          success: true,
+          alreadyConfirmed: confirmResult.alreadyConfirmed ?? false,
+          subscription: confirmResult.subscription,
+          tenant: confirmResult.tenant,
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return reply.status(400).send(apiError(message, ErrorCode.BAD_REQUEST))
+      }
     },
   )
-
-  /* ---------------------------------------------------------------- */
-  /*  GET /billing/payments                                            */
-  /* ---------------------------------------------------------------- */
 
   app.get<{
     Params: { slug: string }
@@ -303,10 +166,6 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
     const payments = await listPayments(tenantBillingKey(result.tenant), { limit, offset })
     return { payments }
   })
-
-  /* ---------------------------------------------------------------- */
-  /*  GET /billing/payments/:paymentId/invoice                         */
-  /* ---------------------------------------------------------------- */
 
   app.get<{
     Params: { slug: string; paymentId: string }
@@ -337,7 +196,7 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
         },
         module: {
           id: payment.moduleId,
-          name: MODULE_NAV[payment.moduleId] ?? payment.moduleId,
+          name: getModuleDisplayName(payment.moduleId),
         },
         amountUsdc: payment.amountUsdc,
         billingPeriod: payment.billingPeriod,
@@ -354,10 +213,6 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
       },
     }
   })
-
-  /* ---------------------------------------------------------------- */
-  /*  GET /billing/subscription/:moduleId                              */
-  /* ---------------------------------------------------------------- */
 
   app.get<{
     Params: { slug: string; moduleId: string }
@@ -384,10 +239,6 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
     }
   })
 
-  /* ---------------------------------------------------------------- */
-  /*  POST /billing/extend                                             */
-  /* ---------------------------------------------------------------- */
-
   app.post<{
     Params: { slug: string }
     Body: { moduleId: string; billingPeriod?: string }
@@ -413,7 +264,7 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
         return reply.status(400).send(apiError('Module is not billable', ErrorCode.BAD_REQUEST))
       }
 
-      const billingPeriod = body.billingPeriod ?? 'monthly'
+      const billingPeriod = (body.billingPeriod ?? 'monthly') as string
       if (!VALID_BILLING_PERIODS.has(billingPeriod)) {
         return reply.status(400).send(apiError('billingPeriod must be "monthly" or "yearly"', ErrorCode.BAD_REQUEST))
       }
@@ -423,44 +274,17 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
         return reply.status(401).send(apiError('Authentication required', ErrorCode.UNAUTHORIZED))
       }
 
-      const existing = await getSubscription(tenantBillingKey(result.tenant), moduleId)
-      if (!existing) {
-        return reply.status(400).send(apiError('No active subscription to extend', ErrorCode.BAD_REQUEST))
-      }
-
-      const conditionsLookupId = result.tenant.id
-      const conditions = await getConditions(moduleId, conditionsLookupId)
-      const price = computePrice(moduleId, conditions, catalogEntry.pricing, {
-        billingPeriod: billingPeriod as BillingPeriod,
-      })
-
-      const ext = calculateExtension(price, billingPeriod as BillingPeriod, existing)
-
-      await expireStalePendingPayments().catch(() => {})
-
-      const payment = await insertPaymentIntent({
-        tenantSlug: tenantBillingKey(result.tenant),
-        moduleId,
-        paymentType: 'extend',
-        amountUsdc: ext.amountUsdc,
-        billingPeriod: billingPeriod as BillingPeriod,
-        periodStart: ext.periodStart,
-        periodEnd: ext.periodEnd,
-        payerWallet: wallet,
-        conditionsSnapshot: conditions,
-        priceSnapshot: price,
-      })
-
-      return {
-        noPaymentRequired: false,
-        paymentId: payment.id,
-        amountUsdc: payment.amountUsdc,
-        memo: payment.memo,
-        recipientWallet: BILLING_WALLET.toBase58(),
-        recipientAta: BILLING_WALLET_ATA.toBase58(),
-        billingPeriod,
-        periodStart: ext.periodStart.toISOString(),
-        periodEnd: ext.periodEnd.toISOString(),
+      try {
+        const intent = await extendSubscription({
+          tenant: result.tenant,
+          moduleId,
+          billingPeriod: billingPeriod as BillingPeriod,
+          payerWallet: wallet,
+        })
+        return intent
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        return reply.status(400).send(apiError(message, ErrorCode.BAD_REQUEST))
       }
     },
   )

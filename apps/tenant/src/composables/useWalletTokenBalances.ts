@@ -3,8 +3,9 @@
  * Uses getParsedTokenAccountsByOwner (Token + Token-2022) like C2C - RPC is reliable for USDC, USDT.
  * Adds native SOL when WSOL is in allowed mints (user can wrap). Client cache: 60s.
  */
-import { Connection, PublicKey } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token'
+import { createConnection } from '@decentraguild/web3'
 
 const NATIVE_SOL_MINT = 'So11111111111111111111111111111111111111112'
 const BALANCE_CACHE_TTL_MS = 60_000
@@ -56,7 +57,7 @@ export async function fetchWalletTokenBalances(
     if (cached) return cached
   }
 
-  const connection = new Connection(rpcUrl)
+  const connection = createConnection(rpcUrl)
   const owner = new PublicKey(ownerAddress)
   const result: TokenBalance[] = []
 

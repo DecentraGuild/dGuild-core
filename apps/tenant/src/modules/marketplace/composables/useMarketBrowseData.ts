@@ -10,6 +10,7 @@ import { useApiBase } from '~/composables/useApiBase'
 import { useRpc } from '~/composables/useRpc'
 import { useMarketplaceScope } from '~/composables/useMarketplaceScope'
 import { useMarketplaceAssets } from '~/composables/useMarketplaceAssets'
+import { useAuth } from '@decentraguild/auth'
 import { useEscrowsForMints } from '~/composables/useEscrowsForMints'
 import { assetWithCounts } from '~/composables/useAssetWithCounts'
 import { useMarketBrowseFilters } from './useMarketBrowseFilters'
@@ -63,9 +64,12 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
   })
 
   const rpcUrlRef = computed(() => rpcUrl)
+  const auth = useAuth()
+  const walletRef = computed(() => auth.wallet.value ?? null)
   const { byMint, retry: escrowsRetry } = useEscrowsForMints(scopeMintsSet, rpcUrlRef, {
     apiUrl: apiBase,
     slug,
+    wallet: walletRef,
   })
 
   onMounted(() => {
