@@ -4,8 +4,11 @@ import { getPool, query } from '../db/client.js'
 import { rowToTenantConfig } from '../db/tenant.js'
 import { listTenantSlugs, loadTenantByIdOrSlug } from '../config/registry.js'
 
+const isProduction = (): boolean => process.env.NODE_ENV === 'production'
+
 export async function registerTenantsRoutes(app: FastifyInstance) {
   // Public for discovery (e.g. platform app directory). No auth required.
+  // Production: DB only. Non-production: DB first, then file registry if DB empty.
   app.get('/api/v1/tenants', async (_request, _reply) => {
     let tenants: TenantConfig[] = []
 
@@ -14,7 +17,7 @@ export async function registerTenantsRoutes(app: FastifyInstance) {
       tenants = rows.map((row) => rowToTenantConfig(row))
     }
 
-    if (tenants.length === 0) {
+    if (tenants.length === 0 && !isProduction()) {
       const ids = await listTenantSlugs()
       for (const idOrSlug of ids) {
         const t = await loadTenantByIdOrSlug(idOrSlug)

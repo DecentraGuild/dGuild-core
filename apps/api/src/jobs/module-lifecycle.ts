@@ -84,13 +84,13 @@ function applyLifecycleTransitions(
 
 export async function runModuleLifecycle(log: { info: (o: unknown, msg?: string) => void; warn: (o: unknown, msg?: string) => void }): Promise<void> {
   const pool = getPool()
-  let slugs = pool ? await getAllTenantSlugs() : await listTenantSlugs()
-  if (pool && slugs.length === 0) {
-    slugs = await listTenantSlugs()
-    if (slugs.length > 0) {
-      log.info({ slugs }, 'Module lifecycle: DB had no tenants; using file config slugs')
-    }
-  }
+  const isProduction = process.env.NODE_ENV === 'production'
+  const slugs =
+    pool
+      ? await getAllTenantSlugs()
+      : isProduction
+        ? []
+        : await listTenantSlugs()
   if (slugs.length === 0) return
 
   const now = new Date()

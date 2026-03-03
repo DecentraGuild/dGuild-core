@@ -11,7 +11,8 @@
     "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:clear": "tsx scripts/clear-db.ts"
+    "db:clear": "tsx scripts/clear-db.ts",
+    "seed:tenants": "tsx scripts/seed-tenants-from-config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1000.0",

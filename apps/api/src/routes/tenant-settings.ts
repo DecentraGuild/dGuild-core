@@ -6,7 +6,7 @@ import { upsertMarketplace } from '../db/marketplace-settings.js'
 import type { TenantConfig, ModuleState } from '@decentraguild/core'
 import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
 import { getWalletFromRequest } from './auth.js'
-import { getTenantConfigDir, loadTenantByIdOrSlug } from '../config/registry.js'
+import { getTenantConfigDir } from '../config/registry.js'
 import {
   writeMarketplaceBySlug,
   getMarketplaceConfigDir,
@@ -182,9 +182,8 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
     if (result.tenant.slug === normalized) {
       return { available: true }
     }
-    const existingDb = await getTenantBySlug(normalized)
-    const existingFile = await loadTenantByIdOrSlug(normalized)
-    return { available: !existingDb && !existingFile }
+    const existing = await resolveTenant(normalized)
+    return { available: !existing }
   })
 
   app.get<{ Params: { slug: string } }>('/api/v1/tenant/:slug/settings', async (request, reply) => {
@@ -221,8 +220,13 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
       return reply.status(400).send(apiError('Admin module cannot be turned off', ErrorCode.BAD_REQUEST))
     }
 
-    if (!getPool() && !getTenantConfigDir()) {
-      return reply.status(503).send(apiError('Database not configured and TENANT_CONFIG_PATH not set', ErrorCode.CONFIG_REQUIRED))
+    if (!getPool()) {
+      if (process.env.NODE_ENV === 'production') {
+        return reply.status(503).send(apiError('Database required in production', ErrorCode.CONFIG_REQUIRED))
+      }
+      if (!getTenantConfigDir()) {
+        return reply.status(503).send(apiError('Database not configured and TENANT_CONFIG_PATH not set', ErrorCode.CONFIG_REQUIRED))
+      }
     }
 
     const updated = await updateTenant(result.tenant.id, patch)

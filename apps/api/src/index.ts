@@ -22,7 +22,6 @@ import { registerRaffleRoutes } from './routes/raffle.js'
 import { initPool } from './db/client.js'
 import { apiError, ErrorCode } from './api-errors.js'
 import { runMigrations } from './db/run-migrations.js'
-import { upsertTenant } from './db/tenant.js'
 import { normalizeTenantIdentifier } from './validate-slug.js'
 import { getTenantConfigDir, loadTenantByIdOrSlug, loadTenantBySlugDiagnostic, listTenantSlugs } from './config/registry.js'
 import { loadMarketplaceBySlug, listMarketplaceSlugs } from './config/marketplace-registry.js'
@@ -32,11 +31,8 @@ import {
   DEFAULT_RATE_LIMIT_MAX,
   DEFAULT_RATE_LIMIT_WINDOW,
 } from './config/constants.js'
-import { upsertMarketplace } from './db/marketplace-settings.js'
-import { upsertMintMetadata } from './db/marketplace-metadata.js'
-import { expandAndSaveScope } from './marketplace/expand-collections.js'
 import { setSeedCompleted, isSeedPending } from './seed-state.js'
-import type { MarketplaceConfig } from './config/marketplace-registry.js'
+import { runSeedFromRegistry, seedMintMetadataFromConfig } from './seed-from-registry.js'
 
 ensureConfigPaths()
 
@@ -52,86 +48,6 @@ app.setErrorHandler((err: unknown, request, reply) => {
   }
   return reply.status(500).send(body)
 })
-
-/** Known decimals for common currency mints (local seed fallback) */
-const KNOWN_DECIMALS: Record<string, number> = {
-  So11111111111111111111111111111111111111112: 9,
-  '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh': 8,
-  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: 6,
-  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: 6,
-  ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx: 8,
-  poLisWXnNRwC6oBu1vHiuKQzFjGL4XDSu4g9qjz9qVk: 6,
-}
-
-type SeedLog = { warn: (obj: unknown, msg?: string) => void }
-
-async function seedMintMetadataFromConfig(
-  config: MarketplaceConfig,
-  log?: SeedLog
-): Promise<void> {
-  const onUpsertFail = (err: unknown, mint: string) => {
-    if (log) log.warn({ err, mint }, 'Mint metadata upsert skipped')
-  }
-  for (const { mint, name, image, sellerFeeBasisPoints } of config.collectionMints) {
-    if (!mint?.trim()) continue
-    await upsertMintMetadata(mint.trim(), {
-      name: name ?? null,
-      symbol: null,
-      image: image ?? null,
-      sellerFeeBasisPoints: sellerFeeBasisPoints ?? null,
-    }).catch((e) => onUpsertFail(e, mint.trim()))
-  }
-  for (const c of config.currencyMints) {
-    const { mint, name, symbol, image, decimals, sellerFeeBasisPoints } = c
-    if (!mint?.trim()) continue
-    await upsertMintMetadata(mint.trim(), {
-      name: name ?? null,
-      symbol: symbol ?? null,
-      image: image ?? null,
-      decimals: decimals ?? KNOWN_DECIMALS[mint] ?? null,
-      sellerFeeBasisPoints: sellerFeeBasisPoints ?? null,
-    }).catch((e) => onUpsertFail(e, mint.trim()))
-  }
-  for (const s of config.splAssetMints ?? []) {
-    const { mint, name, symbol, image, decimals, sellerFeeBasisPoints } = s
-    if (!mint?.trim()) continue
-    await upsertMintMetadata(mint.trim(), {
-      name: name ?? null,
-      symbol: symbol ?? null,
-      image: image ?? null,
-      decimals: decimals ?? null,
-      sellerFeeBasisPoints: sellerFeeBasisPoints ?? null,
-    }).catch((e) => onUpsertFail(e, mint.trim()))
-  }
-}
-
-/** Seed all tenants and marketplace configs from registry (DB + metadata + scope). */
-async function seedDefaultTenants(app: { log: { warn: (obj: unknown, msg?: string) => void } }) {
-  const tenantIds = await listTenantSlugs()
-  for (const idOrSlug of tenantIds) {
-    const tenant = await loadTenantByIdOrSlug(idOrSlug)
-    if (tenant) await upsertTenant(tenant)
-  }
-  const marketplaceIds = await listMarketplaceSlugs()
-  for (const idOrSlug of marketplaceIds) {
-    const config = await loadMarketplaceBySlug(idOrSlug)
-    if (!config) continue
-    const tenant = await loadTenantByIdOrSlug(idOrSlug)
-    if (tenant) await upsertTenant(tenant)
-    const tenantId = tenant?.id ?? config.tenantId ?? idOrSlug
-    await upsertMarketplace(tenantId, config.tenantId ?? tenantId, config)
-    try {
-      await seedMintMetadataFromConfig(config, app.log)
-    } catch (e) {
-      app.log.warn({ err: e, tenantId }, 'Mint metadata seed failed')
-    }
-    try {
-      await expandAndSaveScope(tenantId, config, app.log)
-    } catch (e) {
-      app.log.warn({ err: e, tenantId }, 'Scope expansion failed during seed')
-    }
-  }
-}
 
 async function main() {
   if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
@@ -158,14 +74,19 @@ async function main() {
   if (databaseUrl) {
     initPool(databaseUrl)
     await runMigrations(app.log)
-    // Fire-and-forget: server is ready immediately; first requests may see empty scope until seed completes.
-    // If the process exits before seed finishes (e.g. short-lived deploy), scope stays empty until next start.
-    void seedDefaultTenants(app)
-      .then(() => setSeedCompleted())
-      .catch((e) => {
-        app.log.warn({ err: e }, 'Seed failed (scope may be empty)')
-        setSeedCompleted()
-      })
+    // Seed from file registry only when TENANT_CONFIG_PATH is set (local dev or one-off migration).
+    // Production: DB is source of truth; populate via pnpm run seed:tenants or registration flow.
+    const tenantConfigDir = getTenantConfigDir()
+    if (tenantConfigDir) {
+      void runSeedFromRegistry(app.log)
+        .then(() => setSeedCompleted())
+        .catch((e) => {
+          app.log.warn({ err: e }, 'Seed failed (scope may be empty)')
+          setSeedCompleted()
+        })
+    } else {
+      setSeedCompleted()
+    }
   }
 
   app.get('/', async (_req, reply) => {
