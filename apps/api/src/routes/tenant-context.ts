@@ -13,11 +13,14 @@ const CACHE_MAX_AGE_SECONDS = 60
 
 export async function registerTenantContextRoutes(app: FastifyInstance) {
   app.get('/api/v1/tenant-context', async (request, reply) => {
-    const { searchParams } = new URL(request.url, 'http://localhost')
-    const slugParam = searchParams.get('slug')
     const host = request.headers.host ?? ''
-    const debug = searchParams.get('debug') === '1' || searchParams.get('debug') === 'true'
+    const query = request.query as { slug?: string; debug?: string }
+    const urlSearchParams = new URL(request.url, 'http://localhost').searchParams
+    // Prefer Fastify's parsed query (works behind proxies that strip query from request.url)
+    const slugParam = query.slug?.trim() || urlSearchParams.get('slug') || null
+    const debug = query.debug === '1' || query.debug === 'true' || urlSearchParams.get('debug') === '1' || urlSearchParams.get('debug') === 'true'
 
+    const searchParams = urlSearchParams
     const slugFromHost = getTenantSlugFromHost(host, searchParams) ?? null
     // In production, prefer Host-based resolution; fall back to explicit slug when Host does not encode tenant.
     const rawSlug =
@@ -32,6 +35,7 @@ export async function registerTenantContextRoutes(app: FastifyInstance) {
 
     const tenant = await resolveTenant(slug)
     if (!tenant) {
+      request.log.warn({ slug, slugParam, slugFromHost }, 'Tenant not found')
       const body = apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND)
       if (debug && process.env.NODE_ENV !== 'production') {
         (body as { diagnostic?: TenantConfigDiagnostic }).diagnostic = await loadTenantBySlugDiagnostic(slug)

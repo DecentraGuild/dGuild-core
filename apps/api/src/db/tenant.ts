@@ -101,8 +101,8 @@ export async function resolveTenant(idOrSlug: string): Promise<TenantConfig | nu
       if (bySlug) return bySlug
       const byId = await getTenantById(idOrSlug)
       if (byId) return byId
-    } catch {
-      // DB query failed
+    } catch (err) {
+      console.error('[resolveTenant] DB lookup failed:', idOrSlug, err)
     }
     return null
   }
