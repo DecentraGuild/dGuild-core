@@ -23,11 +23,15 @@
     <main class="platform-main">
       <slot />
     </main>
+    <ClientOnly>
+      <TransactionToastContainer />
+    </ClientOnly>
   </div>
 </template>
 
 <script setup lang="ts">
 import { AuthWidget } from '@decentraguild/auth'
+import TransactionToastContainer from '~/components/TransactionToastContainer.vue'
 </script>
 
 <style scoped>

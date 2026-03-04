@@ -15,12 +15,18 @@ export async function registerTenantContextRoutes(app: FastifyInstance) {
   app.get('/api/v1/tenant-context', async (request, reply) => {
     const { searchParams } = new URL(request.url, 'http://localhost')
     const slugParam = searchParams.get('slug')
-    const host = request.headers.host ?? ''
+    const host = (request.headers.host ?? '') as string
     const debug = searchParams.get('debug') === '1' || searchParams.get('debug') === 'true'
 
-    // In production, use Host only (no ?slug=) to avoid enumerating tenant configs by slug.
+    // In production, use Host-only resolution on normal tenant subdomains to avoid
+    // enumerating tenant configs by slug. For a dedicated single-host entrypoint
+    // (e.g. dapp.dguild.org), allow the ?slug=/?tenant= identifier to select the tenant.
+    const singleHost = process.env.TENANT_SINGLE_HOST?.toLowerCase()
+    const hostLower = host.toLowerCase()
+    const isSingleHost = singleHost && hostLower === singleHost
+
     const rawSlug =
-      process.env.NODE_ENV === 'production'
+      process.env.NODE_ENV === 'production' && !isSingleHost
         ? getTenantSlugFromHost(host) ?? null
         : (slugParam ?? getTenantSlugFromHost(host, searchParams))
     const slug = rawSlug ? normalizeTenantIdentifier(rawSlug) : null
