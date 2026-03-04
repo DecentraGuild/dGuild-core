@@ -4,23 +4,28 @@
   "name": "Discord",
   "icon": "mdi:discord",
   "image": null,
-  "shortDescription": "Link wallets to Discord and automate role assignments based on holdings.",
-  "longDescription": "The Discord module connects your community's Discord server to on-chain data. Members link their wallets to their Discord identity, and role rules automatically assign or revoke Discord roles based on token holdings, NFT ownership, or other on-chain criteria.",
+  "shortDescription": "Automate Discord roles using on-chain asset and whitelist conditions.",
+  "longDescription": "The Discord Roles module connects your dGuild to Discord via the DecentraGuild bot. Track mints and automate role assignments using advanced AND/OR logic across SPL tokens, NFTs, traits, Discord roles, and whitelists.",
+  "detailedDescription": "Features include mint catalog tracking, up to 5 logical conditions per role, AND/OR rule composition, NFT trait filtering, SPL token balance checks, whitelist integration, multi-wallet linking per Discord user, and multi-dGuild support. Members verify once and can link multiple wallets across multiple dGuilds.",
   "keyInfo": [
-    "Wallet-to-Discord identity linking",
-    "Automated role assignment based on holdings",
-    "Configurable role rules per collection or token",
-    "Periodic sync to keep roles up to date"
+    "- Discord bot integration",
+    "- Up to 5 rule conditions per role",
+    "- AND/OR logic support",
+    "- NFT trait filtering",
+    "- Multi-wallet linking",
+    "- Cross-dGuild compatibility"
   ],
   "routePath": "/discord",
   "order": 3,
   "activationInstructions": {
-    "intro": "Automate Discord role assignment based on token and NFT holdings on Solana.",
+    "intro": "Bridge your guildhall and your Discord keep. Let roles be earned, not granted.",
     "steps": [
-      "Invite the bot to your Discord server",
-      "Select the tokens you want to track",
-      "Create rules with up to 5 conditions per role",
-      "Use SPL, NFTs, traits, Discord roles, or whitelists in your conditions"
+      "Connect Discord server",
+      "Invite DecentraGuild bot",
+      "Add tracked mints",
+      "Create role rules",
+      "Combine conditions (AND/OR)",
+      "Deploy automation"
     ],
     "note": "Sync interval depends on holder count: 15 minutes to 6 hours."
   },

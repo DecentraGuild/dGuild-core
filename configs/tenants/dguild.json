@@ -121,6 +121,7 @@
     },
     "discordInviteLink": "https://discord.gg/huRYtt63sM"
   },
+  "defaultWhitelist": null,
   "modules": {
     "admin": {
       "state": "active",

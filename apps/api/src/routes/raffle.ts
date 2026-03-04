@@ -19,7 +19,8 @@ import {
   type RaffleSettings,
 } from '../db/raffle.js'
 import { normalizeTenantIdentifier } from '../validate-slug.js'
-import { resolveTenant } from '../db/tenant.js'
+import { resolveTenant, updateTenant } from '../db/tenant.js'
+import type { TenantConfig, TenantModulesMap } from '@decentraguild/core'
 
 const DEFAULT_WHITELIST_PROGRAM = 'whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn'
 
@@ -259,7 +260,28 @@ export async function registerRaffleRoutes(app: FastifyInstance) {
 
       const settings: RaffleSettings = { defaultWhitelist }
       await upsertRaffleSettings(result.tenant.id, result.tenant.id, settings)
+      await syncRaffleWhitelistToTenant(result.tenant, defaultWhitelist)
       return { settings }
     },
   )
+}
+
+/** Update tenant.modules.raffles.settingsjson.defaultWhitelist so it is available at first fetch (tenant-context). */
+async function syncRaffleWhitelistToTenant(
+  tenant: TenantConfig,
+  defaultWhitelist: RaffleSettings['defaultWhitelist']
+): Promise<void> {
+  const existing = tenant.modules ?? {}
+  const entry = existing.raffles ?? {
+    state: 'off',
+    deactivatedate: null,
+    deactivatingUntil: null,
+    settingsjson: {},
+  }
+  const settingsjson = { ...(entry.settingsjson ?? {}), defaultWhitelist }
+  const nextModules: TenantModulesMap = {
+    ...existing,
+    raffles: { ...entry, settingsjson },
+  }
+  await updateTenant(tenant.id, { modules: nextModules })
 }

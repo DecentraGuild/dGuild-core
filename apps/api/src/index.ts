@@ -158,14 +158,20 @@ async function main() {
   if (databaseUrl) {
     initPool(databaseUrl)
     await runMigrations(app.log)
-    // Fire-and-forget: server is ready immediately; first requests may see empty scope until seed completes.
-    // If the process exits before seed finishes (e.g. short-lived deploy), scope stays empty until next start.
-    void seedDefaultTenants(app)
-      .then(() => setSeedCompleted())
-      .catch((e) => {
-        app.log.warn({ err: e }, 'Seed failed (scope may be empty)')
-        setSeedCompleted()
-      })
+
+    // In non-production environments, seed DB from local JSON configs on boot.
+    // Production should treat the database as the only source of truth and not
+    // read or mirror from TENANT_CONFIG_PATH / MARKETPLACE_CONFIG_PATH.
+    if (process.env.NODE_ENV !== 'production') {
+      // Fire-and-forget: server is ready immediately; first requests may see empty scope until seed completes.
+      // If the process exits before seed finishes (e.g. short-lived deploy), scope stays empty until next start.
+      void seedDefaultTenants(app)
+        .then(() => setSeedCompleted())
+        .catch((e) => {
+          app.log.warn({ err: e }, 'Seed failed (scope may be empty)')
+          setSeedCompleted()
+        })
+    }
   }
 
   app.get('/', async (_req, reply) => {

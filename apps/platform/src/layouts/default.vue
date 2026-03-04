@@ -11,9 +11,9 @@
           <span class="platform-header__brand-text">DecentraGuild</span>
         </NuxtLink>
         <nav class="platform-header__nav">
+          <NuxtLink to="/">Discover</NuxtLink>
           <NuxtLink to="/modules" :prefetch="false">Modules</NuxtLink>
-          <NuxtLink to="/directory">Discover</NuxtLink>
-          <NuxtLink to="/onboard">Create org</NuxtLink>
+          <NuxtLink to="/onboard">Create</NuxtLink>
         </nav>
       </div>
       <div class="platform-header__right">

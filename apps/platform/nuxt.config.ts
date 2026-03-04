@@ -81,6 +81,8 @@ export default defineNuxtConfig({
       heliusRpc: process.env.NUXT_PUBLIC_HELIUS_RPC ?? '',
       // Base domain for tenant subdomains (e.g. dguild.org -> https://skull.dguild.org). Override via NUXT_PUBLIC_TENANT_BASE_DOMAIN for staging/white-label.
       tenantBaseDomain: process.env.NUXT_PUBLIC_TENANT_BASE_DOMAIN ?? 'dguild.org',
+      // Single host for the tenant app when not using subdomains (e.g. dapp.dguild.org). Visit links use this + ?tenant= so all orgs work without Netlify Pro wildcard. Override via NUXT_PUBLIC_TENANT_APP_HOST.
+      tenantAppHost: process.env.NUXT_PUBLIC_TENANT_APP_HOST ?? 'dapp.dguild.org',
       platformDocsUrl: process.env.NUXT_PUBLIC_PLATFORM_DOCS_URL ?? 'https://dguild.org/docs',
     },
   },

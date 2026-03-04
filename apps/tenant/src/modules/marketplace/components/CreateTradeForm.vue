@@ -94,14 +94,21 @@
         <div class="create-trade-form__settings-row">
           <div class="create-trade-form__settings-label">
             <p class="create-trade-form__settings-title">Whitelist</p>
-            <p class="create-trade-form__settings-hint">Only addresses on this list can fill the trade. Use default, public, or pick a list.</p>
+            <p v-if="effectiveModuleWhitelist" class="create-trade-form__settings-hint">
+              This community requires a whitelist. Only listed addresses can fill this trade.
+            </p>
+            <p v-else class="create-trade-form__settings-hint">
+              Only addresses on this list can fill the trade. Use default, public, or pick a list.
+            </p>
           </div>
           <WhitelistSelect
+            v-if="!effectiveModuleWhitelist"
             :slug="tenantSlugRef"
             :model-value="settingsWhitelist"
             show-use-default
             @update:model-value="settingsWhitelist = $event"
           />
+          <p v-else class="create-trade-form__settings-fixed">Whitelist is set by the community (dGuild or module).</p>
         </div>
         <div class="create-trade-form__settings-row">
           <div class="create-trade-form__settings-label">
@@ -168,7 +175,7 @@ import NftInstanceSelectorModal from './NftInstanceSelectorModal.vue'
 import { storeToRefs } from 'pinia'
 import { useAuth } from '@decentraguild/auth'
 import { useTenantStore } from '~/stores/tenant'
-import { getEffectiveWhitelist } from '@decentraguild/core'
+import { getEffectiveWhitelist, getModuleWhitelistFromTenant } from '@decentraguild/core'
 import {
   buildInitializeTransaction,
   sendAndConfirmTransaction,
@@ -274,6 +281,13 @@ const minExpireDateTime = computed(() => {
   const now = new Date()
   const min = new Date(now.getTime() + 5 * 60 * 1000)
   return min.toISOString().slice(0, 16)
+})
+
+/** Effective whitelist for this module (tenant only). */
+const effectiveModuleWhitelist = computed(() => {
+  const tenant = tenantStore.tenant
+  const moduleWhitelist = getModuleWhitelistFromTenant(tenant, 'marketplace')
+  return getEffectiveWhitelist(tenant?.defaultWhitelist ?? null, moduleWhitelist)
 })
 
 function applyExpirePreset(minutes: number) {
@@ -531,10 +545,13 @@ async function create() {
     const seed = new BN(Date.now())
     const shopFee = tenantStore.marketplaceSettings?.shopFee
     const tenant = tenantStore.tenant
-    const marketplaceSettings = tenantStore.marketplaceSettings
+    const effective = effectiveModuleWhitelist.value
     let resolvedWhitelist: { programId: string; account: string } | null = null
-    if (settingsWhitelist.value === 'use-default') {
-      resolvedWhitelist = getEffectiveWhitelist(tenant?.defaultWhitelist ?? null, marketplaceSettings?.whitelist)
+    if (effective) {
+      resolvedWhitelist = effective
+    } else if (settingsWhitelist.value === 'use-default') {
+      const moduleWl = getModuleWhitelistFromTenant(tenant, 'marketplace')
+      resolvedWhitelist = getEffectiveWhitelist(tenant?.defaultWhitelist ?? null, moduleWl)
     } else if (settingsWhitelist.value && typeof settingsWhitelist.value === 'object' && settingsWhitelist.value.account?.trim()) {
       resolvedWhitelist = settingsWhitelist.value
     }
@@ -577,10 +594,9 @@ async function create() {
 
     const programId = new PublicKey(ESCROW_PROGRAM_ID)
     const { escrow } = deriveEscrowAccounts(wallet.publicKey, seed, programId)
-    const slug = tenantStore.slug
-    const query: Record<string, string> = slug
-      ? { tenant: slug, tab: 'open-trades', escrow: escrow.toBase58() }
-      : { tab: 'open-trades', escrow: escrow.toBase58() }
+    const { shouldAppendTenantToLinks } = useTenantInLinks()
+    const query: Record<string, string> = { tab: 'open-trades', escrow: escrow.toBase58() }
+    if (tenantStore.slug && shouldAppendTenantToLinks.value) query.tenant = tenantStore.slug
     await router.replace({ path: '/market', query })
     emit('success')
   } catch (e) {
@@ -679,6 +695,12 @@ async function create() {
 .create-trade-form__settings-hint {
   margin: 2px 0 0;
   font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+}
+
+.create-trade-form__settings-fixed {
+  margin: 0;
+  font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
 }
 

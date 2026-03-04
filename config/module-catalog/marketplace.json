@@ -4,24 +4,28 @@
   "name": "Market",
   "icon": "mdi:store",
   "image": null,
-  "shortDescription": "A peer-to-peer marketplace for trading digital assets within your community.",
-  "longDescription": "The Market module powers a community-driven P2P storefront. Members can list, browse, and trade NFTs and digital assets using on-chain escrow. Supports collection-based browsing, trade management, and later configurable shop fees.",
+  "shortDescription": "Launch a peer-to-peer marketplace with on-chain escrow inside your guild.",
+  "longDescription": "The Marketplace module enables guilds to create their own trading hub. Members can list, browse, and trade NFTs and digital assets securely using on-chain escrow. Guilds define which collections can be traded and which tokens function as store currency.",
+  "detailedDescription": "Marketplace configuration includes approved NFT collections, accepted SPL tokens, currency tokens for royalties and store fees, optional whitelist gating, and monetization options on the Pro tier. Transactions are secured via decentralized escrow logic. Pricing: Base – 19 USDC/month with 5 mints and base currencies (SOL, USDC, USDT, WBTC); Grow – 29 USDC/month with 50 mints and 1 custom currency; Pro – 39 USDC/month with 250 mints, 2 custom currencies, and enabled marketplace fees. Add-ons: 5 USDC/month per 50 additional mints and 5 USDC/month per custom currency.",
   "keyInfo": [
-    "Peer-to-peer NFT and digital asset trading",
-    "On-chain escrow for secure transactions",
-    "Collection-based browsing and filtering",
-    "Soon also configurable shop fees"
+    "- P2P NFT and asset trading",
+    "- On-chain escrow",
+    "- Collection-based filtering",
+    "- Configurable currencies",
+    "- Optional whitelist gating",
+    "- Monetization options (Pro)"
   ],
   "routePath": "/market",
   "order": 2,
   "activationInstructions": {
-    "intro": "Your marketplace. Choose which assets your community can trade.",
+    "intro": "Raise your merchant banners. Open your gates to trade.",
     "steps": [
-      "Add the NFT collections you want to trade",
-      "Add the SPL tokens you want to accept",
-      "Select tokens for royalty and store fees (currency)",
-      "Optional: set up a whitelist",
-      "Deploy your marketplace within minutes"
+      "Add NFT collections",
+      "Add accepted SPL tokens",
+      "Select currency tokens",
+      "Configure royalties and fees (if applicable)",
+      "Apply optional whitelist",
+      "Deploy marketplace"
     ]
   },
   "pricing": {

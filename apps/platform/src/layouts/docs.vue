@@ -3,9 +3,9 @@
     <header class="platform-header">
       <NuxtLink to="/" class="platform-header__brand">DecentraGuild</NuxtLink>
       <nav class="platform-header__nav">
+        <NuxtLink to="/">Discover</NuxtLink>
         <NuxtLink to="/docs" :prefetch="false">Docs</NuxtLink>
-        <NuxtLink to="/directory">Discover</NuxtLink>
-        <NuxtLink to="/onboard">Create org</NuxtLink>
+        <NuxtLink to="/onboard">Create</NuxtLink>
         <AuthWidget />
       </nav>
     </header>

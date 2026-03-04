@@ -361,7 +361,7 @@ export type CreateRafflePaymentIntentResult =
 /**
  * Create a payment intent for the one-time "per raffle" fee when creating a new raffle.
  * Uses getOneTimePerUnitForTier from subscription; if no subscription, treats as base tier.
- * Returns noPaymentRequired if amount is 0 (Grow/Pro) or slot limit would be exceeded.
+ * Returns noPaymentRequired if amount is 0 (Grow/Pro).
  */
 export async function createRafflePaymentIntent(
   params: CreateRafflePaymentIntentParams,
@@ -380,13 +380,6 @@ export async function createRafflePaymentIntent(
   const subscription = await getSubscription(billingKey, 'raffles')
   const selectedTierId = subscription?.priceSnapshot?.selectedTierId ?? price.selectedTierId ?? 'base'
   const oneTimeAmount = getOneTimePerUnitForTier(pricing, selectedTierId)
-
-  const tier = pricing.tiers.find((t) => t.id === selectedTierId)
-  const slotLimit = tier ? (tier.included?.raffleSlotsUsed as number) ?? 1 : 1
-  const currentSlots = (conditions.raffleSlotsUsed as number) ?? 0
-  if (currentSlots >= slotLimit) {
-    throw new Error('Raffle slot limit reached. Close an existing raffle to create a new one.')
-  }
 
   if (oneTimeAmount <= 0) {
     return { noPaymentRequired: true }

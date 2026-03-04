@@ -7,6 +7,7 @@ import { API_V1 } from '~/utils/apiBase'
 export interface WhitelistListPublic {
   address: string
   name: string
+  imageUrl?: string | null
 }
 
 export function useWhitelistListsPublic(slug: Ref<string | null>) {

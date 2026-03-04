@@ -90,7 +90,7 @@ export async function getTenantById(id: string): Promise<TenantConfig | null> {
 
 /**
  * Resolve tenant by id or slug. Tries slug first (for existing tenants), then id.
- * Production: DB first, then file fallback.
+ * Production: DB only (no file fallback).
  * Local (non-production): file first (when TENANT_CONFIG_PATH set), then DB.
  */
 export async function resolveTenant(idOrSlug: string): Promise<TenantConfig | null> {
@@ -109,9 +109,7 @@ export async function resolveTenant(idOrSlug: string): Promise<TenantConfig | nu
   const fromFile = async () => loadTenantByIdOrSlug(idOrSlug)
 
   if (isProduction()) {
-    const t = await fromDb()
-    if (t) return t
-    return fromFile()
+    return fromDb()
   }
   const t = await fromFile()
   if (t) return t

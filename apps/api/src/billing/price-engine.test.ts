@@ -69,9 +69,16 @@ describe('computePrice', () => {
       tiers: [
         { id: 'base', name: 'Base', recurringPrice: 0, included: { raffleSlotsUsed: 1 }, oneTimePerUnit: 5 },
         { id: 'grow', name: 'Grow', recurringPrice: 15, included: { raffleSlotsUsed: 3 }, oneTimePerUnit: 0 },
-        { id: 'pro', name: 'Pro', recurringPrice: 25, included: { raffleSlotsUsed: 999 }, oneTimePerUnit: 0 },
+        { id: 'pro', name: 'Pro', recurringPrice: 25, included: { raffleSlotsUsed: 10 }, oneTimePerUnit: 0 },
       ],
-      addons: [],
+      addons: [
+        {
+          conditionKey: 'raffleSlotsUsed',
+          name: 'Extra raffle slot',
+          unitSize: 1,
+          recurringPricePerUnit: 5,
+        },
+      ],
       yearlyDiscountPercent: 25,
       oneTimeUnitName: 'Per raffle',
     }
@@ -88,6 +95,16 @@ describe('computePrice', () => {
     expect(resultGrow.recurringMonthly).toBe(15)
     expect(resultGrow.oneTimePerUnitForSelectedTier).toBe(0)
     expect(resultGrow.oneTimeUnitName).toBe('Per raffle')
+
+    const resultProWithAddons = computePrice(
+      'raffles',
+      { raffleSlotsUsed: 12 },
+      pricing,
+      { billingPeriod: 'monthly' },
+    )
+    expect(resultProWithAddons.selectedTierId).toBe('pro')
+    expect(resultProWithAddons.recurringMonthly).toBe(25 + 2 * 5)
+    expect(resultProWithAddons.oneTimePerUnitForSelectedTier).toBe(0)
 
     const resultPro = computePrice('raffles', { raffleSlotsUsed: 5 }, pricing, { billingPeriod: 'monthly' })
     expect(resultPro.selectedTierId).toBe('pro')

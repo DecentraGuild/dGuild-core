@@ -123,6 +123,7 @@
       }
     }
   },
+  "defaultWhitelist": null,
   "modules": {
     "admin": {
       "state": "active",
@@ -134,7 +135,12 @@
       "state": "active",
       "deactivatedate": null,
       "deactivatingUntil": null,
-      "settingsjson": {}
+      "settingsjson": {
+        "whitelist": {
+          "programId": "whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn",
+          "account": "9Ypa4Gzb7umK96LFoB2dyHqQWvCuXSXqhwzavHvrzQXt"
+        }
+      }
     },
     "discord": {
       "state": "active",
@@ -146,7 +152,12 @@
       "state": "active",
       "deactivatedate": null,
       "deactivatingUntil": null,
-      "settingsjson": {}
+      "settingsjson": {
+        "whitelist": {
+          "programId": "whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn",
+          "account": "9Ypa4Gzb7umK96LFoB2dyHqQWvCuXSXqhwzavHvrzQXt"
+        }
+      }
     },
     "whitelist": {
       "state": "active",

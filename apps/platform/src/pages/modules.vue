@@ -1,72 +1,146 @@
 <template>
   <PageSection>
-    <div
-      class="modules"
-      :class="{ 'modules--two-rings': hasTwoRings }"
-    >
-      <div
-        v-if="expandedId === 'dguild'"
-        class="modules__overlay"
-        aria-hidden="true"
-        @click="setExpanded('dguild')"
-      />
-      <div
-        class="modules__center"
-        :class="{ 'modules__center--expanded': expandedId === 'dguild' }"
-      >
-        <DguildCenter
-          :expanded="expandedId === 'dguild'"
-          @toggle="setExpanded('dguild')"
-        />
+    <div class="modules">
+      <div class="modules__intro">
+        <DguildCenter />
       </div>
 
-      <div class="modules__ring">
-        <ModuleBlob
-          v-for="item in positionedModules"
-          :key="item.entry.id"
-          :entry="item.entry"
-          class="modules__blob"
-          :style="blobStyle(item)"
-          @click="openModule(item.entry)"
-        />
-      </div>
+      <section class="modules__section" aria-label="Module list">
+        <h2 class="modules__heading">Modules</h2>
+        <div class="modules__grid">
+          <div
+            v-for="entry in displayModules"
+            :key="entry.id"
+            class="modules__card"
+            :class="{ 'modules__card--expanded': expandedModuleId === entry.id }"
+          >
+            <button
+              type="button"
+              class="modules__card-trigger"
+              :aria-expanded="expandedModuleId === entry.id"
+              :aria-controls="`module-detail-${entry.id}`"
+              :id="`module-trigger-${entry.id}`"
+              @click="toggleModule(entry.id)"
+            >
+              <span class="modules__card-header">
+                <span class="modules__card-icon-wrap" aria-hidden="true">
+                  <span class="modules__card-icon-bg">
+                    <Icon :icon="entry.icon" class="modules__card-icon modules__card-icon--background" />
+                  </span>
+                  <Icon :icon="entry.icon" class="modules__card-icon modules__card-icon--foreground" />
+                  <span v-if="entry.status === 'coming_soon'" class="modules__card-badge">Coming soon</span>
+                </span>
+                <span class="modules__card-heading">
+                  <span class="modules__card-name">{{ entry.name }}</span>
+                  <span v-if="getFromPrice(entry)" class="modules__card-pill">
+                    From {{ getFromPrice(entry) }}
+                  </span>
+                </span>
+              </span>
+              <p v-if="entry.shortDescription && expandedModuleId !== entry.id" class="modules__card-preview">
+                {{ entry.shortDescription }}
+              </p>
+              <span class="modules__card-chevron" aria-hidden="true">
+                <Icon icon="mdi:chevron-down" class="modules__card-chevron-icon" />
+              </span>
+            </button>
 
-      <div class="modules__carousel" aria-label="Module list">
-        <ModuleBlob
-          v-for="entry in displayModules"
-          :key="`carousel-${entry.id}`"
-          :entry="entry"
-          class="modules__carousel-item"
-          @click="openModule(entry)"
-        />
-      </div>
+            <div
+              :id="`module-detail-${entry.id}`"
+              class="modules__card-detail"
+              role="region"
+              :aria-labelledby="`module-trigger-${entry.id}`"
+              :hidden="expandedModuleId !== entry.id"
+            >
+              <p class="modules__card-desc">
+                {{ entry.detailedDescription || entry.longDescription || entry.shortDescription }}
+              </p>
+              <ul v-if="entry.keyInfo?.length" class="modules__card-key-info">
+                <li v-for="(item, i) in entry.keyInfo" :key="i">{{ item }}</li>
+              </ul>
+              <div v-if="getFromPrice(entry)" class="modules__card-pricing">
+                <span class="modules__card-pricing-label">From</span>
+                {{ getFromPrice(entry) }}
+              </div>
+              <p v-else-if="entry.status === 'coming_soon'" class="modules__card-coming-soon">Coming soon</p>
+              <a
+                :href="docsUrl(entry)"
+                target="_blank"
+                rel="noopener"
+                class="modules__card-learn-more"
+                @click.stop
+              >
+                Learn more
+                <Icon icon="mdi:open-in-new" class="modules__card-learn-more-icon" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
-
-    <ModuleDetailModal
-      :entry="modalModule"
-      @close="modalModule = null"
-    />
   </PageSection>
 </template>
 
 <script setup lang="ts">
 definePageMeta({ title: 'Modules' })
+import { Icon } from '@iconify/vue'
 import { PageSection } from '@decentraguild/ui/components'
 import { getModuleCatalogList } from '@decentraguild/config'
 import type { ModuleCatalogEntry } from '@decentraguild/config'
+import type { PricingModel } from '@decentraguild/billing'
 import DguildCenter from '~/components/DguildCenter.vue'
-import ModuleBlob from '~/components/ModuleBlob.vue'
-import ModuleDetailModal from '~/components/ModuleDetailModal.vue'
 
-const expandedId = ref<string | null>('dguild')
-const modalModule = ref<ModuleCatalogEntry | null>(null)
+const config = useRuntimeConfig()
+const platformDocsBase = (config.public.platformDocsUrl as string) ?? 'https://dguild.org/docs'
 
-function setExpanded(id: string) {
-  expandedId.value = expandedId.value === id ? null : id
+const expandedModuleId = ref<string | null>(null)
+
+function toggleModule(id: string) {
+  expandedModuleId.value = expandedModuleId.value === id ? null : id
 }
 
-function openModule(entry: ModuleCatalogEntry) {
-  modalModule.value = entry
+function docsUrl(entry: ModuleCatalogEntry) {
+  return `${platformDocsBase.replace(/\/$/, '')}/modules/${entry.id}`
+}
+
+function formatUsdc(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+}
+
+function getFromPrice(entry: ModuleCatalogEntry): string | null {
+  const p = entry.pricing
+  if (!p) return null
+  if (p.modelType === 'flat_one_time') {
+    return `${formatUsdc(p.amount)} USDC one-time`
+  }
+  if (p.modelType === 'flat_recurring') {
+    const yearly = p.recurringYearly ?? (p.recurringPrice ?? 0) * 12
+    return `${formatUsdc(yearly)} USDC/yr`
+  }
+  if (p.modelType === 'tiered_addons' && p.tiers?.length) {
+    const minPrice = Math.min(...p.tiers.map((t) => t.recurringPrice))
+    return `${formatUsdc(minPrice)} USDC/mo`
+  }
+  if (p.modelType === 'tiered_with_one_time_per_unit' && p.tiers?.length) {
+    const baseTier = p.tiers[0]
+    const unitLabel = (p.oneTimeUnitName ?? 'unit').toLowerCase()
+    if (baseTier.oneTimePerUnit) {
+      return `${formatUsdc(baseTier.oneTimePerUnit)} USDC ${unitLabel}`
+    }
+    if (baseTier.recurringPrice) {
+      return `${formatUsdc(baseTier.recurringPrice)} USDC/mo`
+    }
+    return null
+  }
+  if (p.modelType === 'add_unit') {
+    const isWhitelist = p.conditionKey === 'listsCount'
+    const unitLabel = isWhitelist ? 'per list' : 'per unit'
+    if (p.pricePerUnit) {
+      return `${formatUsdc(p.pricePerUnit)} USDC ${unitLabel}`
+    }
+    return null
+  }
+  return null
 }
 
 const DISPLAY_STATUSES = new Set<'available' | 'coming_soon'>(['available', 'coming_soon'])
@@ -74,152 +148,256 @@ const DISPLAY_STATUSES = new Set<'available' | 'coming_soon'>(['available', 'com
 const displayModules = computed(() =>
   getModuleCatalogList().filter((m) => DISPLAY_STATUSES.has(m.status as 'available' | 'coming_soon'))
 )
-
-/** Radii as % of viewport width. Layout scales with width. */
-const INNER_RADIUS_VW = 7
-const OUTER_RADIUS_VW = 17
-const TWO_RING_THRESHOLD = 6
-
-const hasTwoRings = computed(() => displayModules.value.length >= TWO_RING_THRESHOLD)
-
-const positionedModules = computed(() => {
-  const modules = displayModules.value
-  const n = modules.length
-  if (n === 0) return []
-
-  if (n < TWO_RING_THRESHOLD) {
-    return modules.map((entry, index) => {
-      const angle = (index / n) * 2 * Math.PI - Math.PI / 2
-      const x = Math.cos(angle) * OUTER_RADIUS_VW
-      const y = Math.sin(angle) * OUTER_RADIUS_VW
-      return { entry, x, y }
-    })
-  }
-
-  const innerCount = Math.min(4, Math.ceil(n / 2))
-  const outerCount = n - innerCount
-  const result: Array<{ entry: ModuleCatalogEntry; x: number; y: number }> = []
-
-  for (let i = 0; i < innerCount; i++) {
-    const angle = (i / innerCount) * 2 * Math.PI - Math.PI / 2
-    result.push({
-      entry: modules[i],
-      x: Math.cos(angle) * INNER_RADIUS_VW,
-      y: Math.sin(angle) * INNER_RADIUS_VW,
-    })
-  }
-  for (let i = 0; i < outerCount; i++) {
-    const angle = (i / outerCount) * 2 * Math.PI - Math.PI / 2
-    result.push({
-      entry: modules[innerCount + i],
-      x: Math.cos(angle) * OUTER_RADIUS_VW,
-      y: Math.sin(angle) * OUTER_RADIUS_VW,
-    })
-  }
-  return result
-})
-
-function blobStyle(item: { entry: ModuleCatalogEntry; x: number; y: number }) {
-  return {
-    '--blob-x': `${item.x}vw`,
-    '--blob-y': `${item.y}vw`,
-  }
-}
 </script>
 
 <style scoped>
 .modules {
-  position: relative;
-  min-height: 55vw;
-  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-xl);
+  padding-bottom: var(--theme-space-lg);
+}
+
+.modules__intro {
+  flex-shrink: 0;
+}
+
+.modules__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-md);
+}
+
+.modules__heading {
+  margin: 0;
+  font-size: var(--theme-font-lg);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.modules__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--theme-space-md);
+}
+
+@media (min-width: var(--theme-breakpoint-sm)) {
+  .modules__grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: var(--theme-breakpoint-lg)) {
+  .modules__grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--theme-space-lg);
+  }
+}
+
+.modules__card {
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 55%),
+    var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.modules__card--expanded {
+  border-color: var(--theme-primary);
+}
+
+.modules__card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modules__card-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  padding: var(--theme-space-md);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--theme-text-primary);
+  transition: background-color 0.15s ease;
+}
+
+.modules__card-trigger:hover {
+  background: var(--theme-bg-secondary);
+}
+
+.modules__card-trigger[aria-expanded="true"] .modules__card-chevron-icon {
+  transform: rotate(180deg);
+}
+
+.modules__card-header {
   display: flex;
   align-items: center;
+  gap: var(--theme-space-sm);
+  width: 100%;
+}
+
+.modules__card-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.modules__card-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  flex-shrink: 0;
   overflow: hidden;
-  padding: 4vw;
-  box-sizing: border-box;
 }
 
-.modules--two-rings {
-  min-height: 65vw;
-}
-
-.modules__center {
+.modules__card-badge {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  top: -4px;
+  right: -4px;
+  font-size: 0.6rem;
+  line-height: 1.2;
+  color: var(--theme-text-muted);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  padding: 2px 4px;
+  border-radius: var(--theme-radius-sm);
+  white-space: nowrap;
+}
+
+.modules__card-icon-bg {
+  position: absolute;
+  inset: -12px;
+  opacity: 0.25;
+  filter: blur(4px);
+}
+
+.modules__card-icon {
+  position: relative;
   z-index: 1;
 }
 
-.modules__center--expanded {
-  z-index: 3;
+.modules__card-icon--background {
+  font-size: 2.75rem;
+  color: var(--theme-primary);
 }
 
-.modules__ring {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
+.modules__card-icon--foreground {
+  font-size: 1.5rem;
+  color: var(--theme-primary);
 }
 
-.modules__ring .modules__blob {
-  position: absolute;
-  left: 0;
-  top: 0;
-  pointer-events: auto;
-  transform: translate(
-    calc(-50% + var(--blob-x, 0)),
-    calc(-50% + var(--blob-y, 0))
-  );
+.modules__card-name {
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  margin: 0;
 }
 
-.modules__overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 2;
-  cursor: pointer;
+.modules__card-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--theme-text-muted);
 }
 
-.modules__carousel {
+.modules__card-preview {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.modules__card-chevron {
+  display: inline-flex;
+  align-items: center;
+  margin-top: var(--theme-space-xs);
+  color: var(--theme-text-muted);
+}
+
+.modules__card-chevron-icon {
+  font-size: 1.25rem;
+  transition: transform 0.2s ease;
+}
+
+.modules__card-detail {
+  padding: 0 var(--theme-space-md) var(--theme-space-md);
+  border-top: 1px solid var(--theme-border);
+}
+
+.modules__card-detail[hidden] {
   display: none;
-  position: relative;
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
-  .modules {
-    min-height: auto;
-    flex-direction: column;
-    gap: var(--theme-space-xl);
-    padding-bottom: var(--theme-space-lg);
-  }
+.modules__card-desc {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+  margin: 0 0 var(--theme-space-sm);
+  line-height: 1.5;
+}
 
-  .modules__center {
-    position: static;
-    transform: none;
-  }
+.modules__card-key-info {
+  margin: 0 0 var(--theme-space-sm);
+  padding-left: var(--theme-space-lg);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+}
 
-  .modules__ring {
-    display: none;
-  }
+.modules__card-key-info li {
+  margin-bottom: var(--theme-space-xs);
+}
 
-  .modules__carousel {
-    display: flex;
-    position: relative;
-    width: 100%;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    gap: var(--theme-space-md);
-    padding: var(--theme-space-sm) 0;
-    -webkit-overflow-scrolling: touch;
-  }
+.modules__card-pricing,
+.modules__card-coming-soon {
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  color: var(--theme-primary);
+  margin: 0 0 var(--theme-space-sm);
+}
 
-  .modules__carousel-item {
-    scroll-snap-align: center;
-    flex: 0 0 min(280px, 85vw);
-  }
+.modules__card-pricing-label {
+  font-weight: 400;
+  color: var(--theme-text-muted);
+  margin-right: var(--theme-space-xs);
+}
+
+.modules__card-learn-more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-primary);
+  text-decoration: none;
+}
+
+.modules__card-learn-more:hover {
+  color: var(--theme-primary-hover);
+}
+
+.modules__card-learn-more-icon {
+  font-size: 0.875rem;
 }
 </style>

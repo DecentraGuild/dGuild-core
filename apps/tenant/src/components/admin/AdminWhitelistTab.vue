@@ -42,6 +42,24 @@
       </div>
 
       <div v-if="selectedList" class="whitelist-tab__entries">
+        <h4>List details</h4>
+        <div class="whitelist-tab__image-row">
+          <TextInput
+            v-model="editImageUrl"
+            placeholder="Image URL for this whitelist (used for cards)"
+            :disabled="updatingImage"
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            :disabled="updatingImage"
+            @click="saveImage"
+          >
+            <Icon v-if="updatingImage" icon="mdi:loading" class="whitelist-tab__spinner" />
+            Save image
+          </Button>
+        </div>
+
         <h4>Entries</h4>
         <div class="whitelist-tab__add-wallet">
           <TextInput
@@ -99,7 +117,7 @@
   <Modal
     :model-value="showCreateModal"
     title="Create whitelist"
-    @update:model-value="(v: boolean) => { showCreateModal = v; if (!v) createError = null; createListName = '' }"
+    @update:model-value="(v: boolean) => { showCreateModal = v; if (!v) { createError = null; createListName = ''; createListImageUrl = '' } }"
   >
     <div class="whitelist-tab__create-modal">
       <p class="whitelist-tab__create-hint">
@@ -109,6 +127,11 @@
         v-model="createListName"
         placeholder="List name (e.g. founders)"
         :error="createError"
+        :disabled="creating"
+      />
+      <TextInput
+        v-model="createListImageUrl"
+        placeholder="Optional image URL for this whitelist (used for cards)"
         :disabled="creating"
       />
       <div class="whitelist-tab__create-actions">
@@ -172,6 +195,7 @@ interface WhitelistEntry {
   address: string
   name: string
   authority: string
+  imageUrl?: string | null
 }
 
 interface ListEntry {
@@ -204,6 +228,7 @@ const removing = ref<string | null>(null)
 
 const showCreateModal = ref(false)
 const createListName = ref('')
+const createListImageUrl = ref('')
 const createError = ref<string | null>(null)
 const creating = ref(false)
 
@@ -214,6 +239,9 @@ const deleting = ref(false)
 const selectedList = computed(() =>
   lists.value.find((l) => l.address === selectedListAddress.value)
 )
+
+const editImageUrl = ref('')
+const updatingImage = ref(false)
 
 function shortenAddress(addr: string): string {
   if (addr.length < 12) return addr
@@ -269,6 +297,10 @@ async function fetchEntries() {
 }
 
 watch(selectedListAddress, () => fetchEntries(), { immediate: true })
+
+watch(selectedList, (list) => {
+  editImageUrl.value = list?.imageUrl ?? ''
+})
 
 async function createList() {
   if (!createListName.value.trim() || !props.slug || !connection.value) return
@@ -354,6 +386,7 @@ async function createList() {
           address: whitelistPda.toBase58(),
           name,
           authority: authority.toBase58(),
+          imageUrl: createListImageUrl.value.trim() || null,
         }),
       }
     )
@@ -367,10 +400,37 @@ async function createList() {
     selectedListAddress.value = whitelistPda.toBase58()
     showCreateModal.value = false
     createListName.value = ''
+    createListImageUrl.value = ''
   } catch (e) {
     createError.value = e instanceof Error ? e.message : 'Failed to create list'
   } finally {
     creating.value = false
+  }
+}
+
+async function saveImage() {
+  if (!props.slug || !selectedList.value) return
+  updatingImage.value = true
+  try {
+    const res = await fetch(
+      `${apiBase.value}${API_V1}/tenant/${props.slug}/whitelist/lists/${selectedList.value.address}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ imageUrl: editImageUrl.value.trim() || null }),
+      }
+    )
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new Error(data.error ?? 'Failed to update image')
+    }
+    const data = (await res.json()) as { lists: WhitelistEntry[] }
+    lists.value = data.lists ?? []
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Failed to update image'
+  } finally {
+    updatingImage.value = false
   }
 }
 

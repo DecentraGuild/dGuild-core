@@ -29,6 +29,12 @@ export interface WhitelistCreateListBody {
   address: string
   name: string
   authority: string
+  imageUrl?: string | null
+}
+
+/** PATCH /whitelist/lists/:address body */
+export interface WhitelistUpdateListBody {
+  imageUrl?: string | null
 }
 
 /** GET /whitelist/my-memberships query */

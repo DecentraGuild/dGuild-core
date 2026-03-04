@@ -84,8 +84,17 @@ function applyLifecycleTransitions(
 
 export async function runModuleLifecycle(log: { info: (o: unknown, msg?: string) => void; warn: (o: unknown, msg?: string) => void }): Promise<void> {
   const pool = getPool()
+  const isProd = process.env.NODE_ENV === 'production'
+
   let slugs = pool ? await getAllTenantSlugs() : await listTenantSlugs()
-  if (pool && slugs.length === 0) {
+
+  // In production, do not fall back to file-based tenant configs.
+  if (isProd && pool && slugs.length === 0) {
+    log.warn({}, 'Module lifecycle: no tenants found in DB; skipping run')
+    return
+  }
+
+  if (!isProd && pool && slugs.length === 0) {
     slugs = await listTenantSlugs()
     if (slugs.length > 0) {
       log.info({ slugs }, 'Module lifecycle: DB had no tenants; using file config slugs')

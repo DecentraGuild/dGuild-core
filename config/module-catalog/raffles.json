@@ -4,25 +4,32 @@
   "name": "Raffle",
   "icon": "mdi:ticket-percent",
   "image": null,
-  "shortDescription": "On-chain raffles for your community. Create raffles, add prizes, sell tickets, reveal winners.",
-  "longDescription": "The Raffle module lets admins create and run on-chain raffles. Set ticket price and max entrants, add prizes, start selling, and reveal winners. Members buy tickets with the configured token. Optional whitelist for eligibility per raffle.",
+  "shortDescription": "Host provably fair on-chain raffles within your guild.",
+  "longDescription": "The Raffle module allows dGuilds to organize secure, on-chain raffles with configurable ticket supply, pricing, and optional whitelist gating. Once launched, a raffle must sell out before a winner can be drawn — ensuring transparency and commitment.",
+  "detailedDescription": "Guild admins configure the ticket mint, ticket price, total ticket supply, optional whitelist, reward mint and token amount, and optional reward image. After initialization, the raffle cannot be cancelled and must sell out before drawing a winner. A random winner is selected on-chain, rewards are distributed, and proceeds are claimable. Pricing: Base — 0 USDC monthly, 5 USDC per raffle, 1 concurrent raffle; Grow — 15 USDC monthly, 0 USDC per raffle, 3 concurrent raffles; Pro — 25 USDC monthly, 0 USDC per raffle, 10 concurrent raffles included, then 5 USDC per additional active raffle slot per month.",
   "keyInfo": [
-    "Create raffles with configurable ticket price and max entrants",
-    "Add prizes (multiple tokens). Start, pause, reveal winner",
-    "Base tier: 5 USDC per raffle; Grow/Pro: 0 USDC",
-    "Optional whitelist per raffle for eligibility"
+    "- On-chain raffle system",
+    "- Optional whitelist gating",
+    "- Fixed ticket pricing",
+    "- Mandatory sell-out before draw",
+    "- Transparent reward distribution",
+    "- Tier-based concurrency limits"
   ],
   "routePath": "/raffle",
   "order": 4,
   "goActiveImmediately": true,
   "activationInstructions": {
-    "intro": "Run raffles for your community. Create raffles, add prizes, sell tickets, reveal winners.",
+    "intro": "Summon your community. Announce the prize. Let fate decide the victor.",
     "steps": [
-      "Set default whitelist for raffles (optional)",
-      "Create a raffle (5 USDC on Base tier; 0 on Grow/Pro)",
-      "Add prizes, start, and sell tickets"
+      "Select ticket mint",
+      "Set ticket price and supply",
+      "Apply optional whitelist",
+      "Add reward mint and amount",
+      "Start raffle (irreversible)",
+      "Wait for sell-out",
+      "Draw winner and distribute rewards"
     ],
-    "note": "Module is active immediately; billing is per raffle when you create one on Base tier."
+    "note": "Module is active immediately; billing is per raffle when you create one on the Base tier."
   },
   "pricing": {
     "modelType": "tiered_with_one_time_per_unit",
@@ -46,11 +53,18 @@
         "id": "pro",
         "name": "Pro",
         "recurringPrice": 0.0025,
-        "included": { "raffleSlotsUsed": 999 },
+        "included": { "raffleSlotsUsed": 10 },
         "oneTimePerUnit": 0
       }
     ],
-    "addons": [],
+    "addons": [
+      {
+        "conditionKey": "raffleSlotsUsed",
+        "name": "Extra raffle slot",
+        "unitSize": 1,
+        "recurringPricePerUnit": 0.0005
+      }
+    ],
     "yearlyDiscountPercent": 25,
     "oneTimeUnitName": "Per raffle"
   }

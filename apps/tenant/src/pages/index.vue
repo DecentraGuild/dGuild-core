@@ -47,11 +47,12 @@ function applyTenant() {
 onMounted(applyTenant)
 watch([tenant, () => themeStore.branding], applyTenant)
 
-const adminLink = computed(() =>
-  tenantStore.slug
-    ? { path: '/admin', query: { tenant: tenantStore.slug, tab: 'general' } }
-    : { path: '/admin', query: { tab: 'general' } }
-)
+const { shouldAppendTenantToLinks } = useTenantInLinks()
+const adminLink = computed(() => {
+  const query: Record<string, string> = { tab: 'general' }
+  if (tenantStore.slug && shouldAppendTenantToLinks.value) query.tenant = tenantStore.slug
+  return { path: '/admin', query }
+})
 </script>
 
 <style scoped>
