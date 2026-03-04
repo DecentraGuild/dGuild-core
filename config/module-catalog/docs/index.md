@@ -7,7 +7,7 @@ description: DecentraGuild platform and module documentation
 
 Build your dGuild. Run your community.
 
-DecentraGuild is Web3 infrastructure as a service. You use our tech and UI to create a dGuild Custom: your organisation with your branding, treasury, and modules. Your community gets a dedicated hub tailored to your setup. We provide the infrastructure; you own and operate your dGuild. DecentraGuild does not hold custody or control over your environment, now or in the future. 
+A dGuild is a Web3-native organisation built for modern digital communities – your guildhall in the decentralized realm, governed by wallet, powered by modules, and deployed in minutes. Every dGuild begins with the Admin module and can be extended with additional modules from the catalog to shape your economy, access control, rewards, and trading systems. DecentraGuild provides the Web3 infrastructure and UI that lets you create a dGuild Custom: your organisation on the platform with its own branding, treasury, and active modules. We provide the infrastructure; you own and operate your dGuild. DecentraGuild does not hold custody or control over your environment, now or in the future.
 
 ## General
 

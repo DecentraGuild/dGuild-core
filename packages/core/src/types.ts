@@ -26,7 +26,7 @@ function toState(value: unknown): ModuleState {
   return 'off'
 }
 
-/** Normalize raw modules to TenantModulesMap. Accepts object keyed by id or legacy array. Default state 'off'. */
+/** Normalize raw modules to TenantModulesMap. Accepts object keyed by id or a legacy array. Default state 'off'. */
 export function normalizeModules(
   raw:
     | TenantModulesMap
@@ -139,7 +139,7 @@ export interface TenantConfig {
   /** Default whitelist for the tenant. When set, becomes base for transactions unless module/transaction overrides. Empty account = no default. */
   defaultWhitelist?: MarketplaceWhitelistSettings | null
   branding: TenantBranding
-  /** Modules keyed by id. Use normalizeModules() when reading from JSON that may be legacy array. */
+  /** Modules keyed by id. Use normalizeModules() when reading from JSON that may be a legacy array. */
   modules: TenantModulesMap
   admins: string[]
   treasury?: string
@@ -198,20 +198,53 @@ export interface MarketplaceSettings {
   collectionMints: MarketplaceCollectionMint[]
   splAssetMints?: MarketplaceSplAsset[]
   currencyMints: MarketplaceCurrencyMint[]
-  whitelist?: MarketplaceWhitelistSettings
+  /** undefined = use dGuild default, null = public (no list), object = specific list */
+  whitelist?: MarketplaceWhitelistSettings | null
   shopFee: MarketplaceShopFee
 }
 
-/** Effective whitelist for a module: module override ?? tenant default. Returns null when public (no list). */
+/**
+ * Effective whitelist for a module. Three-way:
+ * - moduleWhitelist === null → Public (no list), returns null
+ * - moduleWhitelist === undefined (or 'use-default') → follow dGuild setting, returns tenantDefault or null
+ * - moduleWhitelist === { programId, account } → use that list (or null if account is empty)
+ */
 export function getEffectiveWhitelist(
   tenantDefault: MarketplaceWhitelistSettings | null | undefined,
   moduleWhitelist: MarketplaceWhitelistSettings | null | undefined
 ): MarketplaceWhitelistSettings | null {
-  if (moduleWhitelist !== undefined && moduleWhitelist !== null) {
-    return moduleWhitelist.account === '' ? null : moduleWhitelist
+  if (moduleWhitelist === null) return null
+  if (moduleWhitelist !== undefined && typeof moduleWhitelist === 'object') {
+    return moduleWhitelist.account?.trim() ? moduleWhitelist : null
   }
-  if (tenantDefault !== undefined && tenantDefault !== null && tenantDefault.account !== '') {
+  if (tenantDefault !== undefined && tenantDefault !== null && tenantDefault.account?.trim()) {
     return tenantDefault
   }
   return null
+}
+
+/** Module id that stores whitelist in tenant.modules[].settingsjson. */
+export type ModuleWhitelistModuleId = 'marketplace' | 'raffles'
+
+/**
+ * Read module whitelist setting from tenant (available at first fetch).
+ * Marketplace: tenant.modules.marketplace.settingsjson.whitelist
+ * Raffles: tenant.modules.raffles.settingsjson.defaultWhitelist ('use-default' → undefined for effective)
+ */
+export function getModuleWhitelistFromTenant(
+  tenant: { modules?: TenantModulesMap } | null | undefined,
+  moduleId: ModuleWhitelistModuleId
+): MarketplaceWhitelistSettings | null | undefined {
+  const entry = tenant?.modules?.[moduleId]
+  const sj = entry?.settingsjson as Record<string, unknown> | undefined
+  if (!sj) return undefined
+  if (moduleId === 'marketplace') {
+    return sj.whitelist as MarketplaceWhitelistSettings | null | undefined
+  }
+  if (moduleId === 'raffles') {
+    const v = sj.defaultWhitelist
+    if (v === 'use-default') return undefined
+    return v as MarketplaceWhitelistSettings | null | undefined
+  }
+  return undefined
 }

@@ -89,7 +89,7 @@ import {
 import TransactionToastContainer from '~/components/TransactionToastContainer.vue'
 import { useThemeStore } from '@decentraguild/ui'
 import { useTenantStore } from '~/stores/tenant'
-import { isModuleVisibleToMembers, getModuleState, getEffectiveWhitelist } from '@decentraguild/core'
+import { isModuleVisibleToMembers, getModuleState, getEffectiveWhitelist, getModuleWhitelistFromTenant } from '@decentraguild/core'
 import { MODULE_NAV, IMPLEMENTED_MODULES, NAV_ORDER, getModuleSubnavForPath } from '~/config/modules'
 import { useWhitelistListed } from '~/composables/useWhitelistListed'
 import { useWalletOnList } from '~/composables/useWalletOnList'
@@ -148,20 +148,14 @@ const tenantDefaultListAddress = computed(() => {
 })
 const { listed: isOnTenantDefaultList } = useWalletOnList(slug, tenantDefaultListAddress, wallet)
 
-const marketplaceSettings = computed(() => tenantStore.marketplaceSettings)
-const effectiveMarketplaceWhitelist = computed(() =>
-  getEffectiveWhitelist(tenant.value?.defaultWhitelist ?? null, marketplaceSettings.value?.whitelist)
-)
+const effectiveMarketplaceWhitelist = computed(() => {
+  const moduleWhitelist = getModuleWhitelistFromTenant(tenant.value, 'marketplace')
+  return getEffectiveWhitelist(tenant.value?.defaultWhitelist ?? null, moduleWhitelist)
+})
 const marketplaceListAddress = computed(() => effectiveMarketplaceWhitelist.value?.account?.trim() || null)
 const { listed: isOnMarketplaceList } = useWalletOnList(slug, marketplaceListAddress, wallet)
 
-const raffleSettings = computed(() => tenantStore.raffleSettings)
-const raffleModuleWhitelistForEffective = computed(() => {
-  const rw = raffleSettings.value?.defaultWhitelist
-  if (rw === 'use-default' || rw === undefined) return undefined
-  if (rw === null) return { programId: '', account: '' }
-  return rw
-})
+const raffleModuleWhitelistForEffective = computed(() => getModuleWhitelistFromTenant(tenant.value, 'raffles'))
 const effectiveRaffleWhitelist = computed(() =>
   getEffectiveWhitelist(tenant.value?.defaultWhitelist ?? null, raffleModuleWhitelistForEffective.value)
 )
@@ -211,15 +205,17 @@ const navModules = computed(() => {
 
 const subnavTabs = computed(() => getModuleSubnavForPath(route.path, tenant.value) ?? [])
 
+const { shouldAppendTenantToLinks } = useTenantInLinks()
+
 function linkTo(path: string) {
   const slug = tenantStore.slug
-  return slug ? { path, query: { tenant: slug } } : path
+  return slug && shouldAppendTenantToLinks.value ? { path, query: { tenant: slug } } : path
 }
 
 function linkToWithTab(path: string, tabId: string) {
   const slug = tenantStore.slug
   const query: Record<string, string> = { tab: tabId }
-  if (slug) query.tenant = slug
+  if (slug && shouldAppendTenantToLinks.value) query.tenant = slug
   return { path, query }
 }
 

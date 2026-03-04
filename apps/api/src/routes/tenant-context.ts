@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { getTenantSlugFromHost, isModuleVisibleToMembers, getModuleState } from '@decentraguild/core'
+import { getTenantSlugFromHost, isModuleVisibleToMembers, getModuleState, getModuleWhitelistFromTenant } from '@decentraguild/core'
 import type { TenantConfigDiagnostic } from '../config/registry.js'
 import { normalizeTenantIdentifier } from '../validate-slug.js'
 import { loadTenantBySlugDiagnostic } from '../config/registry.js'
@@ -57,6 +57,19 @@ export async function registerTenantContextRoutes(app: FastifyInstance) {
       isRafflesVisible ? getRaffleSettings(tenant.id) : Promise.resolve(null),
     ])
 
-    return { tenant, marketplaceSettings: marketplaceSettings ?? undefined, raffleSettings: raffleSettings ?? undefined }
+    const marketplaceOut = marketplaceSettings
+      ? {
+          ...marketplaceSettings,
+          whitelist: getModuleWhitelistFromTenant(tenant, 'marketplace'),
+        }
+      : undefined
+    const raffleOut = raffleSettings
+      ? {
+          ...raffleSettings,
+          defaultWhitelist: (tenant.modules?.raffles?.settingsjson as Record<string, unknown> | undefined)?.defaultWhitelist,
+        }
+      : undefined
+
+    return { tenant, marketplaceSettings: marketplaceOut, raffleSettings: raffleOut }
   })
 }

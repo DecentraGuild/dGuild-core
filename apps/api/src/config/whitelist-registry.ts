@@ -12,6 +12,8 @@ export interface WhitelistListEntry {
   address: string
   name: string
   authority: string
+  /** Optional image URL for UI cards (not on-chain). */
+  imageUrl?: string | null
 }
 
 export interface WhitelistConfig {

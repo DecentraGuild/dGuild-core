@@ -3,7 +3,7 @@ import { getPool } from '../db/client.js'
 import { getDiscordServerByTenantSlug, type DiscordServerRow } from '../db/discord-servers.js'
 import { getTenantBySlug, resolveTenant, updateTenant, type TenantSettingsPatch } from '../db/tenant.js'
 import { upsertMarketplace } from '../db/marketplace-settings.js'
-import type { TenantConfig, ModuleState } from '@decentraguild/core'
+import type { TenantConfig, ModuleState, TenantModulesMap } from '@decentraguild/core'
 import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
 import { getWalletFromRequest } from './auth.js'
 import { getTenantConfigDir } from '../config/registry.js'
@@ -62,32 +62,16 @@ function normalizeToMarketplaceConfig(
       }))
     : []
 
-  let currencyMints: MarketplaceConfig['currencyMints'] = []
-  if (Array.isArray(body.currencyMints) && body.currencyMints.length > 0) {
-    currencyMints = (body.currencyMints as Array<{ mint: string; name?: string; symbol?: string; image?: string; decimals?: number; sellerFeeBasisPoints?: number }>).map((c) => ({
-      mint: c.mint ?? '',
-      name: c.name ?? '',
-      symbol: c.symbol ?? '',
-      image: c.image,
-      decimals: c.decimals,
-      sellerFeeBasisPoints: c.sellerFeeBasisPoints,
-    }))
-  } else {
-    const base = (body.baseCurrency as string[]) ?? ['SOL', 'USDC']
-    const custom = (body.customCurrencies as Array<{ mint: string; name?: string; symbol?: string }>) ?? []
-    const baseSymbols = new Set(base)
-    currencyMints = [...BASE_CURRENCY_MINTS.filter((b) => baseSymbols.has(b.symbol))]
-    currencyMints.push(
-      ...custom.filter((c) => c.mint?.trim()).map((c) => ({
-        mint: c.mint!,
+  const currencyMints: MarketplaceConfig['currencyMints'] = Array.isArray(body.currencyMints)
+    ? (body.currencyMints as Array<{ mint: string; name?: string; symbol?: string; image?: string; decimals?: number; sellerFeeBasisPoints?: number }>).map((c) => ({
+        mint: c.mint ?? '',
         name: c.name ?? '',
         symbol: c.symbol ?? '',
-        image: (c as { image?: string }).image,
-        decimals: (c as { decimals?: number }).decimals,
-        sellerFeeBasisPoints: (c as { sellerFeeBasisPoints?: number }).sellerFeeBasisPoints,
+        image: c.image,
+        decimals: c.decimals,
+        sellerFeeBasisPoints: c.sellerFeeBasisPoints,
       }))
-    )
-  }
+    : [...BASE_CURRENCY_MINTS]
 
   const sf = (body.shopFee ?? {}) as Record<string, unknown>
   const shopFee = {
@@ -100,14 +84,14 @@ function normalizeToMarketplaceConfig(
 
   const wlRaw = body.whitelist
   let whitelist: MarketplaceConfig['whitelist']
-  if (wlRaw === undefined || wlRaw === null) {
+  if (wlRaw === 'use-default' || wlRaw === undefined) {
     whitelist = undefined
+  } else if (wlRaw === null) {
+    whitelist = null
   } else {
     const wl = wlRaw as Record<string, unknown>
-    whitelist = {
-      programId: (wl.programId as string) || DEFAULT_WHITELIST.programId,
-      account: (wl.account as string) ?? '',
-    }
+    const account = (wl.account as string)?.trim() ?? ''
+    whitelist = account ? { programId: (wl.programId as string) || DEFAULT_WHITELIST.programId, account } : null
   }
 
   return { tenantSlug, tenantId, collectionMints, currencyMints, splAssetMints, whitelist, shopFee }
@@ -208,7 +192,7 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
     if (patch.defaultWhitelist !== undefined) {
       const wl = patch.defaultWhitelist as Record<string, unknown> | null
       if (wl === null || (typeof wl === 'object' && (wl.account as string)?.trim() === '')) {
-        patch.defaultWhitelist = undefined
+        patch.defaultWhitelist = null
       } else if (typeof wl === 'object' && wl && typeof (wl.account as string) === 'string' && (wl.account as string).trim()) {
         patch.defaultWhitelist = {
           programId: ((wl.programId as string)?.trim()) || 'whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn',
@@ -283,6 +267,12 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
       } catch (e) {
         request.log.warn({ err: e, tenantId }, 'Scope expansion failed; scope may be stale')
       }
+      await Promise.race([
+        syncMarketplaceWhitelistToTenant(result.tenant, config.whitelist),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('sync timeout')), 8000)),
+      ]).catch((e) => {
+        request.log.warn({ err: e, tenantId }, 'Marketplace whitelist sync to tenant failed or timed out')
+      })
       const updated = await resolveMarketplaceEnriched(tenantId)
       return {
         settings: updated
@@ -312,14 +302,40 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
       request.log.warn({ err: e, tenantId }, 'Failed to write marketplace config file')
       return reply.status(503).send(apiError('Failed to save marketplace settings', ErrorCode.SERVICE_UNAVAILABLE))
     }
+    await Promise.race([
+      syncMarketplaceWhitelistToTenant(result.tenant, config.whitelist),
+      new Promise<void>((_, reject) => setTimeout(() => reject(new Error('sync timeout')), 8000)),
+    ]).catch((e) => {
+      request.log.warn({ err: e, tenantId }, 'Marketplace whitelist sync to tenant failed or timed out')
+    })
     return {
-        settings: {
-          collectionMints: config.collectionMints,
-          currencyMints: config.currencyMints,
-          splAssetMints: config.splAssetMints ?? [],
-          whitelist: config.whitelist,
-          shopFee: config.shopFee,
-        },
+      settings: {
+        collectionMints: config.collectionMints,
+        currencyMints: config.currencyMints,
+        splAssetMints: config.splAssetMints ?? [],
+        whitelist: config.whitelist,
+        shopFee: config.shopFee,
+      },
     }
   })
+}
+
+/** Update tenant.modules.marketplace.settingsjson.whitelist so it is available at first fetch (tenant-context). */
+async function syncMarketplaceWhitelistToTenant(
+  tenant: TenantConfig,
+  whitelist: MarketplaceConfig['whitelist']
+): Promise<void> {
+  const existing = tenant.modules ?? {}
+  const entry = existing.marketplace ?? {
+    state: 'off',
+    deactivatedate: null,
+    deactivatingUntil: null,
+    settingsjson: {},
+  }
+  const settingsjson = { ...(entry.settingsjson ?? {}), whitelist }
+  const nextModules: TenantModulesMap = {
+    ...existing,
+    marketplace: { ...entry, settingsjson },
+  }
+  await updateTenant(tenant.id, { modules: nextModules })
 }

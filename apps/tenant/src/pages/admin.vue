@@ -325,7 +325,7 @@ function setExtendPeriod(v: BillingPeriod) {
   extendPeriod.value = v
 }
 
-function onMarketplaceSaved(settings: Record<string, unknown>) {
+async function onMarketplaceSaved(settings: Record<string, unknown>) {
   const s = settings as {
     collectionMints?: unknown[]
     splAssetMints?: unknown[]
@@ -350,6 +350,7 @@ function onMarketplaceSaved(settings: Record<string, unknown>) {
         }
       : null
   )
+  await tenantStore.refetchTenantContext()
 }
 onMounted(() => {
   const q = route.query.tab

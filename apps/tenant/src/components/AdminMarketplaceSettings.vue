@@ -197,38 +197,42 @@
         />
         <div class="marketplace-settings__fee-row">
           <TextInput
-            v-model.number="form.shopFee.makerFlatFee"
+            :model-value="String(form.shopFee.makerFlatFee ?? 0)"
             label="Maker flat fee (SOL)"
             type="number"
             min="0"
             step="0.000000001"
             disabled
+            @update:model-value="form.shopFee.makerFlatFee = Number($event) || 0"
           />
           <TextInput
-            v-model.number="form.shopFee.takerFlatFee"
+            :model-value="String(form.shopFee.takerFlatFee ?? 0)"
             label="Taker flat fee (SOL)"
             type="number"
             min="0"
             step="0.000000001"
             disabled
+            @update:model-value="form.shopFee.takerFlatFee = Number($event) || 0"
           />
         </div>
         <div class="marketplace-settings__fee-row">
           <TextInput
-            v-model.number="form.shopFee.makerPercentFee"
+            :model-value="String(form.shopFee.makerPercentFee ?? 0)"
             label="Maker fee (bps)"
             type="number"
             min="0"
             step="1"
             disabled
+            @update:model-value="form.shopFee.makerPercentFee = Number($event) || 0"
           />
           <TextInput
-            v-model.number="form.shopFee.takerPercentFee"
+            :model-value="String(form.shopFee.takerPercentFee ?? 0)"
             label="Taker fee (bps)"
             type="number"
             min="0"
             step="1"
             disabled
+            @update:model-value="form.shopFee.takerPercentFee = Number($event) || 0"
           />
         </div>
       </div>
@@ -328,7 +332,7 @@ const DEFAULT_WHITELIST: WhitelistSettings = {
   account: '',
 }
 
-type WhitelistFormValue = WhitelistSettings | 'use-default'
+type WhitelistFormValue = WhitelistSettings | null | 'use-default'
 
 interface MarketplaceForm {
   collectionMints: CollectionMint[]
@@ -386,9 +390,9 @@ const canSave = computed(() => !anyLoading.value && !anyError.value)
 
 const marketplaceWhitelistSelectValue = computed(() => {
   const w = form.whitelist
-  if (w === 'use-default') return 'use-default' as const
-  if (!w || (w.account && w.account.trim() === '')) return null
-  return w
+  if (w === 'use-default') return '__use_default__'
+  if (w === null || (typeof w === 'object' && !(w.account?.trim()))) return ''
+  return w.account
 })
 
 function onWhitelistSelectUpdate(value: WhitelistSettings | null | 'use-default') {
@@ -397,7 +401,7 @@ function onWhitelistSelectUpdate(value: WhitelistSettings | null | 'use-default'
     return
   }
   if (value === null) {
-    form.whitelist = { ...DEFAULT_WHITELIST }
+    form.whitelist = null
     return
   }
   form.whitelist = value
@@ -456,8 +460,10 @@ watch(
       form.shopFee.takerPercentFee = Number(sf.takerPercentFee) || 0
     }
     const wl = s.whitelist as Partial<WhitelistSettings> | undefined | null
-    if (wl === undefined || wl === null) {
+    if (wl === undefined) {
       form.whitelist = 'use-default'
+    } else if (wl === null || (typeof wl === 'object' && !(wl.account?.trim()))) {
+      form.whitelist = null
     } else {
       form.whitelist = {
         programId: (wl.programId as string) || DEFAULT_WHITELIST.programId,
@@ -664,9 +670,11 @@ function buildPayload(): Record<string, unknown> {
       .filter((c) => !('_error' in c && c._error))
       .map((c) => ({ mint: c.mint, name: c.name ?? '', symbol: c.symbol ?? '', decimals: c.decimals, image: c.image, sellerFeeBasisPoints: c.sellerFeeBasisPoints })),
     shopFee: form.shopFee,
-    whitelist: form.whitelist === 'use-default' ? null : form.whitelist,
+    whitelist: form.whitelist === 'use-default' ? 'use-default' : form.whitelist,
   }
 }
+
+const SAVE_TIMEOUT_MS = 30000
 
 async function save() {
   if (!props.slug || !canSave.value) return
@@ -674,12 +682,16 @@ async function save() {
   saveError.value = null
   saveSuccess.value = false
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS)
     const res = await fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/marketplace-settings`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(buildPayload()),
+      signal: controller.signal,
     })
+    clearTimeout(timeoutId)
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string }
       let msg = data.error ?? 'Failed to save'
@@ -692,7 +704,11 @@ async function save() {
     setTimeout(() => { saveSuccess.value = false }, 3000)
     emit('saved', data.settings ?? {})
   } catch (e) {
-    saveError.value = e instanceof Error ? e.message : 'Failed to save'
+    if ((e as Error)?.name === 'AbortError') {
+      saveError.value = 'Request timed out. Check the server and try again.'
+    } else {
+      saveError.value = e instanceof Error ? e.message : 'Failed to save'
+    }
   } finally {
     saving.value = false
   }

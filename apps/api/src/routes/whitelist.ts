@@ -5,7 +5,7 @@ import {
   type WhitelistConfig,
   type WhitelistListEntry,
 } from '../config/whitelist-registry.js'
-import type { WhitelistCreateListBody } from './types.js'
+import type { WhitelistCreateListBody, WhitelistUpdateListBody } from './types.js'
 import { requireTenantAdmin } from './tenant-settings.js'
 import { resolveTenant } from '../db/tenant.js'
 import { getSolanaConnection } from '../solana-connection.js'
@@ -27,7 +27,13 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
     }
     const config = await loadWhitelistByTenantId(tenant.id)
     const lists = config?.lists ?? []
-    return { lists: lists.map((l) => ({ address: l.address, name: l.name })) }
+    return {
+      lists: lists.map((l) => ({
+        address: l.address,
+        name: l.name,
+        imageUrl: l.imageUrl ?? null,
+      })),
+    }
   })
 
   app.get<{
@@ -49,8 +55,15 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
     if (!result) return
 
     const body = (request.body ?? {}) as Partial<WhitelistCreateListBody>
-    const { address, name, authority } = body
-    if (!address || !name || !authority || typeof address !== 'string' || typeof name !== 'string' || typeof authority !== 'string') {
+    const { address, name, authority, imageUrl } = body
+    if (
+      !address ||
+      !name ||
+      !authority ||
+      typeof address !== 'string' ||
+      typeof name !== 'string' ||
+      typeof authority !== 'string'
+    ) {
       return reply.status(400).send(
         apiError('address, name, and authority are required', ErrorCode.BAD_REQUEST)
       )
@@ -63,7 +76,12 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
       return reply.status(409).send(apiError('List already registered', ErrorCode.BAD_REQUEST))
     }
 
-    const entry: WhitelistListEntry = { address, name, authority }
+    const entry: WhitelistListEntry = {
+      address,
+      name,
+      authority,
+      imageUrl: typeof imageUrl === 'string' && imageUrl.trim() ? imageUrl.trim() : null,
+    }
     const updated: WhitelistConfig = { tenantId, lists: [...lists, entry] }
     await writeWhitelistByTenantId(tenantId, updated)
     return { lists: updated.lists }
@@ -88,6 +106,40 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
     return { lists: filtered }
   })
 
+  app.patch<{
+    Params: { slug: string; address: string }
+    Body: WhitelistUpdateListBody
+  }>('/api/v1/tenant/:slug/whitelist/lists/:address', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.slug)
+    if (!result) return
+
+    const tenantId = result.tenant.id
+    const address = request.params.address
+    const body = (request.body ?? {}) as Partial<WhitelistUpdateListBody>
+
+    const config = await loadWhitelistByTenantId(tenantId)
+    const lists = config?.lists ?? []
+    const index = lists.findIndex((l) => l.address === address)
+    if (index === -1) {
+      return reply.status(404).send(apiError('List not found', ErrorCode.NOT_FOUND))
+    }
+
+    const current = lists[index]
+    const nextImage =
+      typeof body.imageUrl === 'string' && body.imageUrl.trim() ? body.imageUrl.trim() : null
+
+    const updatedEntry: WhitelistListEntry = {
+      ...current,
+      imageUrl: body.imageUrl === undefined ? current.imageUrl ?? null : nextImage,
+    }
+    const updatedLists = [...lists]
+    updatedLists[index] = updatedEntry
+
+    const updated: WhitelistConfig = { tenantId, lists: updatedLists }
+    await writeWhitelistByTenantId(tenantId, updated)
+    return { lists: updated.lists }
+  })
+
   app.get<{
     Params: { slug: string }
     Querystring: { wallet?: string }
@@ -110,10 +162,16 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
       return { memberships: [] }
     }
     const connection = getSolanaConnection()
-    const memberships: Array<{ address: string; name: string }> = []
+    const memberships: Array<{ address: string; name: string; imageUrl: string | null }> = []
     for (const list of lists) {
       const onList = await isWalletOnWhitelist(connection, wallet, list.address)
-      if (onList) memberships.push({ address: list.address, name: list.name })
+      if (onList) {
+        memberships.push({
+          address: list.address,
+          name: list.name,
+          imageUrl: list.imageUrl ?? null,
+        })
+      }
     }
     return { memberships }
   })
@@ -197,6 +255,34 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
       list: { address: list.address, name: list.name, authority: list.authority },
       entries: entries.map((e) => ({
         publicKey: e.publicKey.toBase58(),
+        wallet: e.account.whitelisted.toBase58(),
+      })),
+    }
+  })
+
+  app.get<{
+    Params: { slug: string; address: string }
+  }>('/api/v1/tenant/:slug/whitelist/lists/:address/entries-public', async (request, reply) => {
+    const slug = normalizeTenantIdentifier(request.params.slug)
+    if (!slug) {
+      return reply.status(400).send(apiError('Invalid tenant', ErrorCode.INVALID_SLUG))
+    }
+    const tenant = await resolveTenant(slug)
+    if (!tenant) {
+      return reply.status(404).send(apiError('Tenant not found', ErrorCode.NOT_FOUND))
+    }
+    const { address } = request.params
+    const config = await loadWhitelistByTenantId(tenant.id)
+    const list = config?.lists?.find((l) => l.address === address)
+    if (!list) {
+      return reply.status(404).send(apiError('List not found', ErrorCode.NOT_FOUND))
+    }
+
+    const connection = getSolanaConnection()
+    const entries = await fetchWhitelistEntries(connection, address)
+    return {
+      list: { address: list.address, name: list.name, imageUrl: list.imageUrl ?? null },
+      entries: entries.map((e) => ({
         wallet: e.account.whitelisted.toBase58(),
       })),
     }

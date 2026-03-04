@@ -155,12 +155,12 @@ async function submit() {
     const tenant = confirmData.tenant
     if (!tenant) throw new Error('No tenant returned')
     const identifier = tenant.slug ?? tenant.id
-    const tenantBaseDomain = config.public.tenantBaseDomain as string
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     if (isLocal) {
       window.location.href = `http://localhost:3002/admin?tenant=${encodeURIComponent(identifier)}`
     } else {
-      window.location.href = `https://${identifier}.${tenantBaseDomain}/admin`
+      const tenantAppHost = config.public.tenantAppHost as string
+      window.location.href = `https://${tenantAppHost}/admin?tenant=${encodeURIComponent(identifier)}`
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to create org'

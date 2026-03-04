@@ -34,9 +34,19 @@ async function main(): Promise<void> {
   log.info({}, 'Worker migrations complete')
 
   const syncIntervalMinutes = Number(process.env.DISCORD_SYNC_INTERVAL_MINUTES ?? DEFAULT_DISCORD_SYNC_INTERVAL_MINUTES)
+  let syncRunning = false
   if (syncIntervalMinutes > 0) {
     const runSync = () => {
-      syncAllLinkedGuilds(log).catch((err) => log.error({ err }, 'Scheduled Discord holder sync failed'))
+      if (syncRunning) {
+        log.warn({}, 'Discord holder sync skipped; previous run still in progress')
+        return
+      }
+      syncRunning = true
+      syncAllLinkedGuilds(log)
+        .catch((err) => log.error({ err }, 'Scheduled Discord holder sync failed'))
+        .finally(() => {
+          syncRunning = false
+        })
     }
     runSync()
     setInterval(runSync, syncIntervalMinutes * 60 * 1000)
@@ -44,9 +54,19 @@ async function main(): Promise<void> {
   }
 
   const lifecycleIntervalMinutes = Number(process.env.MODULE_LIFECYCLE_INTERVAL_MINUTES ?? DEFAULT_MODULE_LIFECYCLE_INTERVAL_MINUTES)
+  let lifecycleRunning = false
   if (lifecycleIntervalMinutes > 0) {
     const runLifecycle = () => {
-      runModuleLifecycle(log).catch((err) => log.error({ err }, 'Module lifecycle job failed'))
+      if (lifecycleRunning) {
+        log.warn({}, 'Module lifecycle job skipped; previous run still in progress')
+        return
+      }
+      lifecycleRunning = true
+      runModuleLifecycle(log)
+        .catch((err) => log.error({ err }, 'Module lifecycle job failed'))
+        .finally(() => {
+          lifecycleRunning = false
+        })
     }
     runLifecycle()
     setInterval(runLifecycle, lifecycleIntervalMinutes * 60 * 1000)

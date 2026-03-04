@@ -59,11 +59,30 @@ function getFromPrice(p: PricingModel): string | null {
   }
   if (p.modelType === 'flat_recurring') {
     const yearly = p.recurringYearly ?? (p.recurringPrice ?? 0) * 12
-    return `From ${formatUsdc(yearly)} USDC/yr`
+    return `${formatUsdc(yearly)} USDC/yr`
   }
   if (p.modelType === 'tiered_addons' && p.tiers?.length) {
     const minPrice = Math.min(...p.tiers.map((t) => t.recurringPrice))
-    return `From ${formatUsdc(minPrice)} USDC/mo`
+    return `${formatUsdc(minPrice)} USDC/mo`
+  }
+  if (p.modelType === 'tiered_with_one_time_per_unit' && p.tiers?.length) {
+    const baseTier = p.tiers[0]
+    const unitLabel = (p.oneTimeUnitName ?? 'unit').toLowerCase()
+    if (baseTier.oneTimePerUnit) {
+      return `${formatUsdc(baseTier.oneTimePerUnit)} USDC ${unitLabel}`
+    }
+    if (baseTier.recurringPrice) {
+      return `${formatUsdc(baseTier.recurringPrice)} USDC/mo`
+    }
+    return null
+  }
+  if (p.modelType === 'add_unit') {
+    const isWhitelist = p.conditionKey === 'listsCount'
+    const unitLabel = isWhitelist ? 'per list' : 'per unit'
+    if (p.pricePerUnit) {
+      return `${formatUsdc(p.pricePerUnit)} USDC ${unitLabel}`
+    }
+    return null
   }
   return null
 }

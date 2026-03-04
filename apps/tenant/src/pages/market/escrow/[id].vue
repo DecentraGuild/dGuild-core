@@ -8,10 +8,12 @@
 definePageMeta({ layout: 'default' })
 
 const route = useRoute()
+const tenantStore = useTenantStore()
+const { shouldAppendTenantToLinks } = useTenantInLinks()
 
 const id = route.params.id as string
-const slug = route.query.tenant as string | undefined
-const query = slug ? { tenant: slug, escrow: id } : { escrow: id }
+const query: Record<string, string> = { escrow: id }
+if (tenantStore.slug && shouldAppendTenantToLinks.value) query.tenant = tenantStore.slug
 await navigateTo({ path: '/market', query }, { replace: true })
 </script>
 

@@ -1,36 +1,21 @@
 <template>
-  <article
-    class="dguild-center"
-    :class="{ 'dguild-center--expanded': expanded }"
-  >
-    <button
-      type="button"
-      class="dguild-center__trigger"
-      :aria-expanded="expanded"
-      :aria-controls="'dguild-center-content'"
-      id="dguild-center-trigger"
-      @click="emit('toggle')"
-    >
+  <article class="dguild-center">
+    <div class="dguild-center__left">
       <span class="dguild-center__icon-wrap">
         <Icon icon="mdi:home" class="dguild-center__icon" />
       </span>
       <span class="dguild-center__label">dGuild</span>
-    </button>
-    <div
-      id="dguild-center-content"
-      class="dguild-center__content"
-      role="region"
-      aria-labelledby="dguild-center-trigger"
-      :hidden="!expanded"
-      @click="expanded && emit('toggle')"
-    >
+      <NuxtLink to="/onboard" class="dguild-center__cta dguild-center__cta--left">
+        <Button variant="primary" size="sm">Create org</Button>
+      </NuxtLink>
+    </div>
+    <div class="dguild-center__right">
       <p class="dguild-center__desc">{{ intro }}</p>
       <ul class="dguild-center__key-info">
         <li v-for="(item, i) in keyPoints" :key="i">{{ item }}</li>
       </ul>
-      <NuxtLink to="/onboard" class="dguild-center__cta" @click.stop>
-        <Button variant="primary" size="sm">Create org</Button>
-      </NuxtLink>
+      <p class="dguild-center__desc">{{ designedFor }}</p>
+      <p class="dguild-center__desc">{{ protocolLayer }}</p>
     </div>
   </article>
 </template>
@@ -39,22 +24,21 @@
 import { Icon } from '@iconify/vue'
 import { Button } from '@decentraguild/ui/components'
 
-defineProps<{
-  expanded: boolean
-}>()
-
-const emit = defineEmits<{
-  toggle: []
-}>()
-
-const intro =
-  'Your modular community hub on Solana. Pick the modules your community needs and launch your own space.'
+const intro = 'With dGuild Custom, partners can:'
 
 const keyPoints = [
-  'Build Your Own: communities design their hub',
-  'Add marketplace, Discord roles, and more as you grow',
-  'One platform, your subdomain, your way',
+  'Select specific modules from the catalog',
+  'Define custom module combinations',
+  'Adjust logic parameters beyond standard tiers',
+  'Build branded guild environments',
+  'Integrate modules into external ecosystems',
 ]
+
+const designedFor =
+  'This solution is designed for DAOs, NFT ecosystems, gaming guilds, creator economies, and Web3 platforms seeking structured on-chain coordination without building everything from scratch.'
+
+const protocolLayer =
+  'It allows your project to use DecentraGuild as a modular protocol layer — while maintaining your identity and governance model.'
 </script>
 
 <style scoped>
@@ -68,7 +52,7 @@ const keyPoints = [
   flex-shrink: 0;
 }
 
-.dguild-center__trigger {
+.dguild-center__left {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -77,16 +61,9 @@ const keyPoints = [
   padding: var(--theme-space-xl);
   min-width: 120px;
   min-height: 120px;
-  background: none;
-  border: none;
-  cursor: pointer;
+  background: var(--theme-bg-card);
   color: var(--theme-text-primary);
   text-align: center;
-  transition: background-color 0.15s ease;
-}
-
-.dguild-center__trigger:hover {
-  background: var(--theme-bg-secondary);
 }
 
 .dguild-center__icon-wrap {
@@ -109,40 +86,36 @@ const keyPoints = [
   font-weight: 600;
 }
 
-.dguild-center__content {
+.dguild-center__right {
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: var(--theme-space-lg);
   border-left: 1px solid var(--theme-border);
   min-width: 0;
-  max-width: 280px;
-}
-
-.dguild-center__content[hidden] {
-  display: none;
-}
-
-.dguild-center--expanded .dguild-center__content {
-  cursor: pointer;
+  flex: 1;
 }
 
 .dguild-center__desc {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
-  margin: 0;
+  margin: 0 0 var(--theme-space-sm);
   line-height: 1.5;
 }
 
 .dguild-center__key-info {
-  margin: var(--theme-space-sm) 0 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--theme-space-xs);
+  margin: var(--theme-space-sm) 0 var(--theme-space-sm);
   padding-left: var(--theme-space-lg);
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
+  list-style: disc;
 }
 
 .dguild-center__key-info li {
-  margin-bottom: var(--theme-space-xs);
+  margin-bottom: 0;
 }
 
 .dguild-center__cta {
@@ -150,15 +123,18 @@ const keyPoints = [
   text-decoration: none;
 }
 
+.dguild-center__cta--left {
+  margin-top: var(--theme-space-lg);
+}
+
 @media (max-width: var(--theme-breakpoint-md)) {
   .dguild-center {
     flex-direction: column;
   }
 
-  .dguild-center__content {
+  .dguild-center__right {
     border-left: none;
     border-top: 1px solid var(--theme-border);
-    max-width: none;
   }
 }
 </style>

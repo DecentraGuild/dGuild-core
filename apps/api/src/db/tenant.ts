@@ -90,7 +90,7 @@ export async function getTenantById(id: string): Promise<TenantConfig | null> {
 
 /**
  * Resolve tenant by id or slug. Tries slug first (for existing tenants), then id.
- * Production: DB only (no file dependency; populate via seed script or registration).
+ * Production: DB only (no file fallback).
  * Local (non-production): file first (when TENANT_CONFIG_PATH set), then DB.
  */
 export async function resolveTenant(idOrSlug: string): Promise<TenantConfig | null> {

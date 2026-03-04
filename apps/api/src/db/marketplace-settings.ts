@@ -1,6 +1,10 @@
 import { getPool, query } from './client.js'
 import { loadMarketplaceBySlug, type MarketplaceConfig } from '../config/marketplace-registry.js'
 
+function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production'
+}
+
 function rowToMarketplaceConfig(row: Record<string, unknown>): MarketplaceConfig {
   const parseJson = (val: unknown): unknown => (typeof val === 'string' ? JSON.parse(val) : val ?? null)
   const settings = parseJson(row.settings) as Record<string, unknown>
@@ -10,7 +14,7 @@ function rowToMarketplaceConfig(row: Record<string, unknown>): MarketplaceConfig
     collectionMints: (settings.collectionMints as MarketplaceConfig['collectionMints']) ?? [],
     currencyMints: (settings.currencyMints as MarketplaceConfig['currencyMints']) ?? [],
     splAssetMints: (settings.splAssetMints as MarketplaceConfig['splAssetMints']) ?? [],
-    whitelist: (settings.whitelist as MarketplaceConfig['whitelist']) ?? undefined,
+    whitelist: Object.prototype.hasOwnProperty.call(settings, 'whitelist') ? (settings.whitelist as MarketplaceConfig['whitelist']) : undefined,
     shopFee: (settings.shopFee as MarketplaceConfig['shopFee']) ?? {
       wallet: '',
       makerFlatFee: 0,
@@ -30,15 +34,27 @@ export async function getMarketplaceBySlug(slug: string): Promise<MarketplaceCon
   return rowToMarketplaceConfig(rows[0])
 }
 
-/** Resolve marketplace config by tenant id: DB if available, else file. */
+/** Resolve marketplace config by tenant id.
+ * Production: DB only (no file fallback).
+ * Local (non-production): DB if available, else file.
+ */
 export async function resolveMarketplace(tenantId: string): Promise<MarketplaceConfig | null> {
-  if (!getPool()) return loadMarketplaceBySlug(tenantId)
+  const pool = getPool()
+  if (!pool) {
+    // In production, require DB; in local dev, fall back to file configs.
+    if (isProduction()) return null
+    return loadMarketplaceBySlug(tenantId)
+  }
+
   try {
     const c = await getMarketplaceBySlug(tenantId)
     if (c) return c
   } catch {
     /* DB query failed */
+    if (isProduction()) return null
   }
+
+  if (isProduction()) return null
   return loadMarketplaceBySlug(tenantId)
 }
 
