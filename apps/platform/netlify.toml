@@ -3,10 +3,10 @@
 # Publish path is relative to base (apps/platform).
 # Command runs from repo root so workspace deps (packages/* + config) are built before platform generate.
 
+
 [build]
-  base = "."
-  command = "cd ../.. && pnpm install && pnpm run build:platform"
-  publish = ".output/public"
+  command = "pnpm install && pnpm run build:platform"
+  publish = "apps/platform/.output/public"
 
 [build.environment]
   NODE_VERSION = "20"
