@@ -1,10 +1,11 @@
 # Platform app (www.dguild.org / dguild.org)
 # Netlify: set Base directory to "apps/platform" for this site so this file is used.
 # Publish path is relative to base (apps/platform).
+# Command runs from repo root so workspace deps (packages/* + config) are built before platform generate.
 
 [build]
   base = "."
-  command = "pnpm run build:platform"
+  command = "cd ../.. && pnpm install && pnpm run build:platform"
   publish = ".output/public"
 
 [build.environment]

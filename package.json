@@ -6,7 +6,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev --concurrency 15",
     "lint": "pnpm exec eslint apps packages",
-    "build:platform": "pnpm exec turbo run build --filter=./packages/* && pnpm --filter platform generate",
+    "build:platform": "pnpm exec turbo run build --filter=./packages/* --filter=@decentraguild/config && pnpm --filter platform generate",
     "build:tenant": "pnpm exec turbo run build --filter=./packages/* --filter=./config && pnpm --filter tenant generate"
   },
   "devDependencies": {
