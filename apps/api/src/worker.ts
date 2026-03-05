@@ -1,6 +1,6 @@
 /**
  * Standalone worker process: runs Discord holder sync and module lifecycle on a schedule.
- * Run one instance when scaling (e.g.  one container); API instances do not run these jobs.
+ * Run one instance when scaling (e.g. one container); API instances do not run these jobs.
  */
 
 import './worker-env.js'
