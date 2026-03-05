@@ -19,6 +19,11 @@ import { registerBillingPaymentRoutes } from './routes/billing-payments.js'
 import { registerRegisterRoutes } from './routes/register.js'
 import { registerWhitelistRoutes } from './routes/whitelist.js'
 import { registerRaffleRoutes } from './routes/raffle.js'
+import { registerPlatformAuthRoutes } from './routes/platform/auth.js'
+import { registerPlatformTenantsRoutes } from './routes/platform/tenants.js'
+import { registerPlatformTenantModulesRoutes } from './routes/platform/tenants-modules.js'
+import { registerPlatformBillingRoutes } from './routes/platform/billing.js'
+import { registerPlatformAuditRoutes } from './routes/platform/audit.js'
 import { initPool } from './db/client.js'
 import { apiError, ErrorCode } from './api-errors.js'
 import { runMigrations } from './db/run-migrations.js'
@@ -162,6 +167,11 @@ async function main() {
   await registerRegisterRoutes(app)
   await registerWhitelistRoutes(app)
   await registerRaffleRoutes(app)
+  await registerPlatformAuthRoutes(app)
+  await registerPlatformTenantsRoutes(app)
+  await registerPlatformTenantModulesRoutes(app)
+  await registerPlatformBillingRoutes(app)
+  await registerPlatformAuditRoutes(app)
 
   const port = Number(process.env.PORT) || DEFAULT_PORT
   await app.listen({ port, host: '0.0.0.0' })
