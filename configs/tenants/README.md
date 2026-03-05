@@ -7,4 +7,4 @@ Registry of dGuild configs. One file per tenant: `{id}.json`. Lookup by id or sl
 - `GET /api/v1/tenant-context?slug=...` – single tenant
 - `GET /api/v1/tenants` – list (from DB if present, else from this folder)
 
-The API resolves the folder via `TENANT_CONFIG_PATH` (set at startup when run from the monorepo). No DB is required for static config; the API serves from this directory when the DB is empty or a slug is not in the DB.
+The API resolves the folder via `TENANT_CONFIG_PATH` (set at startup when run from the monorepo). These files are for development only; the API never syncs them into the DB automatically. When `DATABASE_URL` is set, production uses the DB only. To load config from these files into the DB, run `pnpm run seed:tenants` explicitly (e.g. when moving config to production).

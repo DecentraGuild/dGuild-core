@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { getPool } from '../db/client.js'
 import { getDiscordServerByTenantSlug, type DiscordServerRow } from '../db/discord-servers.js'
-import { getTenantBySlug, resolveTenant, updateTenant, type TenantSettingsPatch } from '../db/tenant.js'
+import { getTenantById, resolveTenant, updateTenant, type TenantSettingsPatch } from '../db/tenant.js'
 import { upsertMarketplace } from '../db/marketplace-settings.js'
 import type { TenantConfig, ModuleState, TenantModulesMap } from '@decentraguild/core'
 import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
@@ -15,7 +15,7 @@ import {
 import { expandAndSaveScope } from '../marketplace/expand-collections.js'
 import { upsertMintMetadataBatch } from '../db/marketplace-metadata.js'
 import { resolveMarketplaceEnriched } from '../marketplace/enrich-config.js'
-import { normalizeTenantIdentifier, normalizeTenantSlug } from '../validate-slug.js'
+import { isValidTenantId, normalizeTenantSlug } from '../validate-slug.js'
 import { adminWriteRateLimit } from '../rate-limit-strict.js'
 import { apiError, ErrorCode } from '../api-errors.js'
 
@@ -97,14 +97,18 @@ function normalizeToMarketplaceConfig(
   return { tenantSlug, tenantId, collectionMints, currencyMints, splAssetMints, whitelist, shopFee }
 }
 
+/**
+ * Resolve tenant by id and require admin wallet. All tenant-scoped APIs use tenant id (primary key).
+ * Slug is display-only and can change; id is canonical.
+ */
 export async function requireTenantAdmin(
   request: FastifyRequest,
   reply: FastifyReply,
-  slugParam: string
+  tenantIdParam: string
 ): Promise<{ wallet: string; tenant: TenantConfig } | null> {
-  const slug = normalizeTenantIdentifier(slugParam)
-  if (!slug) {
-    reply.status(400).send(apiError('Invalid tenant identifier', ErrorCode.INVALID_SLUG))
+  const tenantId = tenantIdParam?.trim()
+  if (!tenantId || !isValidTenantId(tenantId)) {
+    reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
     return null
   }
   const wallet = await getWalletFromRequest(request)
@@ -112,7 +116,7 @@ export async function requireTenantAdmin(
     reply.status(401).send(apiError('Authentication required', ErrorCode.UNAUTHORIZED))
     return null
   }
-  const tenant = await resolveTenant(slug)
+  const tenant = await getTenantById(tenantId)
   if (!tenant) {
     reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
     return null
@@ -132,9 +136,9 @@ export async function requireTenantAdmin(
 export async function requireTenantAdminWithDiscordServer(
   request: FastifyRequest,
   reply: FastifyReply,
-  slugParam: string
+  tenantIdParam: string
 ): Promise<{ wallet: string; tenant: TenantConfig; server: DiscordServerRow } | null> {
-  const result = await requireTenantAdmin(request, reply, slugParam)
+  const result = await requireTenantAdmin(request, reply, tenantIdParam)
   if (!result) return null
   if (!getPool()) {
     reply.status(503).send(apiError('Database not available', ErrorCode.SERVICE_UNAVAILABLE))
@@ -150,10 +154,10 @@ export async function requireTenantAdminWithDiscordServer(
 
 export async function registerTenantSettingsRoutes(app: FastifyInstance) {
   app.get<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Querystring: { slug?: string }
-  }>('/api/v1/tenant/:slug/slug/check', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  }>('/api/v1/tenant/:tenantId/slug/check', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
     const desired = request.query.slug
     if (!desired || typeof desired !== 'string') {
@@ -170,24 +174,26 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
     return { available: !existing }
   })
 
-  app.get<{ Params: { slug: string } }>('/api/v1/tenant/:slug/settings', async (request, reply) => {
-    const { slug } = request.params
-    const result = await requireTenantAdmin(request, reply, slug)
+  app.get<{ Params: { tenantId: string } }>('/api/v1/tenant/:tenantId/settings', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
     return { tenant: result.tenant }
   })
 
   app.patch<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: TenantSettingsPatch
-  }>('/api/v1/tenant/:slug/settings', { preHandler: [adminWriteRateLimit] }, async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  }>('/api/v1/tenant/:tenantId/settings', { preHandler: [adminWriteRateLimit] }, async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
     const body = (request.body ?? {}) as Record<string, unknown>
     const ALLOWED_KEYS = ['name', 'description', 'discordServerInviteLink', 'defaultWhitelist', 'branding', 'modules'] as const
     const patch: TenantSettingsPatch = {}
     for (const k of ALLOWED_KEYS) {
-      if (k in body && body[k] !== undefined) patch[k] = body[k] as TenantSettingsPatch[typeof k]
+      if (k in body && body[k] !== undefined) {
+      const v = body[k] === null ? undefined : body[k]
+      ;(patch as Record<string, unknown>)[k] = v
+    }
     }
     if (patch.defaultWhitelist !== undefined) {
       const wl = patch.defaultWhitelist as Record<string, unknown> | null
@@ -220,8 +226,8 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
     return { tenant: updated }
   })
 
-  app.get<{ Params: { slug: string } }>('/api/v1/tenant/:slug/marketplace-settings', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  app.get<{ Params: { tenantId: string } }>('/api/v1/tenant/:tenantId/marketplace-settings', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
     const tenantId = result.tenant.id
     const config = await resolveMarketplaceEnriched(tenantId)
@@ -238,10 +244,10 @@ export async function registerTenantSettingsRoutes(app: FastifyInstance) {
   })
 
   app.patch<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: Record<string, unknown>
-  }>('/api/v1/tenant/:slug/marketplace-settings', { preHandler: [adminWriteRateLimit] }, async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  }>('/api/v1/tenant/:tenantId/marketplace-settings', { preHandler: [adminWriteRateLimit] }, async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
     const tenantId = result.tenant.id
     const body = (request.body ?? {}) as Record<string, unknown>

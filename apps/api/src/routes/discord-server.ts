@@ -10,17 +10,17 @@ import {
 import { logDiscordAudit } from '../db/discord-audit.js'
 import { requireTenantAdmin } from './tenant-settings.js'
 import { apiError, ErrorCode } from '../api-errors.js'
-import { resolveTenant } from '../db/tenant.js'
+import { getTenantById } from '../db/tenant.js'
 
 // Minimal permissions: Manage Roles (268435456) + Use Application Commands (2147483648) for /verify
 const DISCORD_INVITE_PERMISSIONS = '2415919104'
 const DISCORD_SCOPE = 'bot%20applications.commands'
 
 export async function registerDiscordServerRoutes(app: FastifyInstance) {
-  app.get<{ Params: { slug: string } }>(
-    '/api/v1/tenant/:slug/discord/invite-url',
+  app.get<{ Params: { tenantId: string } }>(
+    '/api/v1/tenant/:tenantId/discord/invite-url',
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
       const clientId = process.env.DISCORD_CLIENT_ID
       if (!clientId) {
@@ -31,10 +31,10 @@ export async function registerDiscordServerRoutes(app: FastifyInstance) {
     }
   )
 
-  app.get<{ Params: { slug: string } }>(
-    '/api/v1/tenant/:slug/discord/server',
+  app.get<{ Params: { tenantId: string } }>(
+    '/api/v1/tenant/:tenantId/discord/server',
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
       if (!getPool()) {
         return reply.send({ connected: false })
@@ -53,12 +53,12 @@ export async function registerDiscordServerRoutes(app: FastifyInstance) {
   )
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { discord_guild_id: string; guild_name?: string }
   }>(
-    '/api/v1/tenant/:slug/discord/server',
+    '/api/v1/tenant/:tenantId/discord/server',
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
       if (!getPool()) {
         return reply.status(503).send(apiError('Database not available', ErrorCode.SERVICE_UNAVAILABLE))
@@ -71,7 +71,7 @@ export async function registerDiscordServerRoutes(app: FastifyInstance) {
       try {
         const existing = await getDiscordServerByGuildId(discordGuildId)
         if (existing && existing.tenant_slug !== result.tenant.id) {
-          const existingTenant = await resolveTenant(existing.tenant_slug)
+          const existingTenant = await getTenantById(existing.tenant_slug)
           const existingTenantSlug = existingTenant?.slug ?? existingTenant?.id ?? existing.tenant_slug
           const existingTenantName = existingTenant?.name ?? null
           return reply.status(409).send(
@@ -105,10 +105,10 @@ export async function registerDiscordServerRoutes(app: FastifyInstance) {
     }
   )
 
-  app.delete<{ Params: { slug: string } }>(
-    '/api/v1/tenant/:slug/discord/server',
+  app.delete<{ Params: { tenantId: string } }>(
+    '/api/v1/tenant/:tenantId/discord/server',
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
       if (!getPool()) {
         return reply.status(503).send(apiError('Database not available', ErrorCode.SERVICE_UNAVAILABLE))

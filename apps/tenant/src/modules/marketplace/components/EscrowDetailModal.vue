@@ -443,7 +443,7 @@ const emit = defineEmits<{
 }>()
 
 const tenantStore = useTenantStore()
-const { slug } = storeToRefs(tenantStore)
+const { slug, tenantId } = storeToRefs(tenantStore)
 const { shareUrl: getShareUrl } = useMarketplaceEscrowLinks(slug)
 const auth = useAuth()
 const openConnectModal = auth.openConnectModal
@@ -784,9 +784,9 @@ async function loadEscrow(id: string) {
   fillPercent.value = 100
   try {
     const base = apiBase.value
-    const tenantSlug = slug.value
-    if (base && tenantSlug) {
-      const url = `${base}${API_V1}/tenant/${encodeURIComponent(tenantSlug)}/marketplace/escrows/${encodeURIComponent(id)}`
+    const idForApi = tenantId.value
+    if (base && idForApi) {
+      const url = `${base}${API_V1}/tenant/${encodeURIComponent(idForApi)}/marketplace/escrows/${encodeURIComponent(id)}`
       const res = await fetch(url)
       if (res.ok) {
         const json = (await res.json()) as { escrow?: EscrowApiShape }

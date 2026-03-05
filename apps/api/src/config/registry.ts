@@ -24,7 +24,9 @@ function parseAndValidate(raw: string, slugRequired = false): { config: TenantCo
     if (slugRequired && !config.slug) {
       return { config: null, error: 'Config missing slug' }
     }
-    config.modules = normalizeModules(config.modules as unknown)
+    config.modules = normalizeModules(
+      config.modules as Parameters<typeof normalizeModules>[0],
+    )
     if (!Array.isArray(config.admins)) config.admins = []
     if (!config.discordServerInviteLink && config.branding?.discordServerInviteLink) {
       config.discordServerInviteLink = config.branding.discordServerInviteLink

@@ -378,6 +378,7 @@ const createTicketMeta = useMintMetadataForInput(
 )
 
 const slugRef = computed(() => tenantStore.slug ?? '')
+const tenantIdRef = computed(() => tenantStore.tenantId)
 const { conditions: apiConditions, price, refresh } = usePricePreview(slugRef, ref('raffles'), ref('monthly'))
 
 const liveConditions = computed(() => upgradeConditionsOverride.value ?? conditions.value)
@@ -496,7 +497,7 @@ async function saveWhitelist() {
     const body: { defaultWhitelist?: { programId: string; account: string } | 'use-default' | null } = {
       defaultWhitelist: wl === 'use-default' ? 'use-default' : wl ?? null,
     }
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${slugRef.value}/raffle-settings`, {
+    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/raffle-settings`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -564,7 +565,7 @@ async function onCreateSubmit() {
   createSubmitting.value = true
   createError.value = null
   try {
-    const paymentRes = await fetch(`${apiBase.value}${API_V1}/tenant/${slugRef.value}/billing/create-raffle-payment`, {
+    const paymentRes = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/billing/create-raffle-payment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -632,7 +633,7 @@ async function onCreateSubmit() {
     if (!sig) throw new Error('Transaction failed')
 
     if (!skipPayment && !intent.noPaymentRequired && intent.paymentId) {
-      const confirmRes = await fetch(`${apiBase.value}${API_V1}/tenant/${slugRef.value}/billing/confirm-raffle-payment`, {
+      const confirmRes = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/billing/confirm-raffle-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -644,7 +645,7 @@ async function onCreateSubmit() {
       }
     }
 
-    const postRes = await fetch(`${apiBase.value}${API_V1}/tenant/${slugRef.value}/raffles`, {
+    const postRes = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/raffles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -670,10 +671,10 @@ async function onCreateSubmit() {
 }
 
 async function fetchRaffles() {
-  if (!slugRef.value) return
+  if (!tenantIdRef.value) return
   slotsLoading.value = true
   try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${slugRef.value}/raffles`, { credentials: 'include' })
+    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/raffles`, { credentials: 'include' })
     if (res.ok) {
       const data = (await res.json()) as { raffles: RaffleItem[] }
       raffles.value = data.raffles ?? []
@@ -866,7 +867,7 @@ async function onCloseRaffle(raffle: RaffleItem) {
       })
       const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
       if (!sig) throw new Error('Transaction failed')
-      const res = await fetch(`${apiBase.value}${API_V1}/tenant/${slugRef.value}/raffles/${encodeURIComponent(raffle.rafflePubkey)}/close`, {
+      const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/raffles/${encodeURIComponent(raffle.rafflePubkey)}/close`, {
         method: 'PATCH',
         credentials: 'include',
       })

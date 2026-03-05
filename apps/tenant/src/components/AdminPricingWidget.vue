@@ -156,6 +156,9 @@
       <p v-else-if="moduleState === 'staging'" class="pricing-widget__hint">
         {{ moduleId === 'slug' ? 'Enter your desired slug in the form, then click Claim slug.' : 'Configure the module, then deploy to make it active for members.' }}
       </p>
+      <p v-else-if="moduleState === 'deactivating' && canReactivateWithoutPayment" class="pricing-widget__hint">
+        Still within your paid period. Click Reactivate to turn the module back on without a new payment.
+      </p>
       <p v-else-if="moduleState === 'deactivating'" class="pricing-widget__hint">
         Module is deactivating.
       </p>
@@ -292,6 +295,17 @@ watch(
 const hasActiveSubscription = computed(() =>
   props.subscription != null && props.moduleState === 'active',
 )
+
+const canReactivateWithoutPayment = computed(() => {
+  if (props.moduleState !== 'deactivating') return false
+  const periodEnd = props.subscription?.periodEnd
+  if (!periodEnd) return false
+  try {
+    return new Date(periodEnd) > new Date()
+  } catch {
+    return false
+  }
+})
 
 const periodLocked = computed(() => hasActiveSubscription.value)
 

@@ -262,6 +262,7 @@ const props = defineProps<{
   slug: string
   catalogMints: CatalogMint[]
 }>()
+const tenantId = computed(() => useTenantStore().tenantId)
 const apiBase = useApiBase()
 
 interface DiscordRole {
@@ -447,10 +448,10 @@ async function fetchRules() {
   rulesError.value = null
   try {
     const [typesRes, rolesRes, rulesRes, whitelistRes] = await Promise.all([
-      fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/discord/condition-types`, { credentials: 'include' }),
-      fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/discord/roles`, { credentials: 'include' }),
-      fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/discord/rules`, { credentials: 'include' }),
-      fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/whitelist/lists/public`, { credentials: 'include' }),
+      fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/condition-types`, { credentials: 'include' }),
+      fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/roles`, { credentials: 'include' }),
+      fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/rules`, { credentials: 'include' }),
+      fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/whitelist/lists/public`, { credentials: 'include' }),
     ])
     if (typesRes.ok) {
       const d = (await typesRes.json()) as { types?: Array<{ id: string; label: string }> }
@@ -548,7 +549,7 @@ async function saveRule() {
     })
     if (editingRuleId.value != null) {
       const res = await fetch(
-        `${apiBase.value}${API_V1}/tenant/${props.slug}/discord/rules/${editingRuleId.value}`,
+        `${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/rules/${editingRuleId.value}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -563,7 +564,7 @@ async function saveRule() {
         ruleSaveError.value = errBody.error ?? `Failed to update rule (${res.status})`
       }
     } else {
-      const res = await fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/discord/rules`, {
+      const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/rules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -587,7 +588,7 @@ async function saveRule() {
 }
 
 async function deleteRule(id: number) {
-  const res = await fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/discord/rules/${id}`, {
+  const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/rules/${id}`, {
     method: 'DELETE',
     credentials: 'include',
   })
@@ -610,7 +611,7 @@ onMounted(() => {
 
 .discord-rules-card__hint {
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
   margin-bottom: var(--theme-space-md);
 }
 
@@ -636,16 +637,16 @@ onMounted(() => {
 .discord-rules-card__error {
   padding: var(--theme-space-md);
   margin-bottom: var(--theme-space-md);
-  background: var(--theme-surface-error, #fef2f2);
-  color: var(--theme-text-error, #b91c1c);
-  border-radius: var(--theme-radius-md, 4px);
+  background: var(--theme-surface-error);
+  color: var(--theme-text-error);
+  border-radius: var(--theme-radius-md);
   font-size: var(--theme-font-sm);
 }
 
 .discord-rules-card__error-hint {
   display: block;
   margin-top: var(--theme-space-sm);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
 }
 
 .discord-rules-card__error--inline {
@@ -664,7 +665,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: var(--theme-space-sm) 0;
-  border-bottom: 1px solid var(--theme-border, #eee);
+  border-bottom: var(--theme-border-thin) solid var(--theme-border);
   gap: var(--theme-space-md);
 }
 
@@ -683,12 +684,12 @@ onMounted(() => {
 
 .discord-rules-card__sep {
   margin: 0 var(--theme-space-xs);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
 }
 
 .discord-rules-card__conditions {
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
 }
 
 .discord-rules-card__actions {
@@ -698,7 +699,7 @@ onMounted(() => {
 
 .discord-rules-card__empty {
   margin-bottom: var(--theme-space-lg);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
 }
 
 .discord-rules-card__form h4 {
@@ -718,26 +719,28 @@ onMounted(() => {
 }
 
 .discord-rules-card__select {
-  padding: var(--theme-space-sm) var(--theme-space-md);
-  border: 1px solid var(--theme-border, #ccc);
+  height: var(--theme-input-height);
+  padding: 0 var(--theme-space-md);
+  border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
   min-width: 200px;
+  box-sizing: border-box;
 }
 
 .discord-rules-card__select--themed {
-  color: var(--theme-text-primary, #111);
-  background-color: var(--theme-bg-primary, #fff);
-  border-color: var(--theme-border, #ccc);
+  color: var(--theme-text-primary);
+  background-color: var(--theme-bg-primary);
+  border-color: var(--theme-border);
 }
 
 .discord-rules-card__select--themed option {
-  color: var(--theme-text-primary, #111);
-  background-color: var(--theme-bg-primary, #fff);
+  color: var(--theme-text-primary);
+  background-color: var(--theme-bg-primary);
 }
 
 .discord-rules-card__roles-hint {
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
   margin-top: var(--theme-space-xs);
   margin-bottom: 0;
 }
@@ -767,7 +770,7 @@ onMounted(() => {
 .discord-rules-card__condition-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
+  align-items: center;
   gap: var(--theme-space-sm);
   margin-bottom: var(--theme-space-xs);
 }
@@ -776,7 +779,7 @@ onMounted(() => {
 .discord-rules-card__condition-row .discord-rules-card__trait-input {
   display: flex;
   align-items: stretch;
-  height: 2.5rem;
+  height: var(--theme-input-height);
 }
 
 .discord-rules-card__condition-row .discord-rules-card__amount-input :deep(.text-input__field),
@@ -821,7 +824,7 @@ onMounted(() => {
 .discord-rules-card__trait-hint {
   flex-basis: 100%;
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
   margin-top: var(--theme-space-xs);
 }
 

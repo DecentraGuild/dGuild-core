@@ -5,7 +5,6 @@ import { getMintMetadata, upsertMintMetadata } from '../db/marketplace-metadata.
 import { fetchMintMetadataFromChain } from '@decentraguild/web3'
 import { fetchSplAssetPreview, fetchCollectionPreview } from '../marketplace/asset-preview.js'
 import { requireTenantAdmin } from './tenant-settings.js'
-import { normalizeTenantIdentifier } from '../validate-slug.js'
 import { apiError, ErrorCode } from '../api-errors.js'
 
 const MAX_MINTS_PER_REFRESH = 50
@@ -72,14 +71,10 @@ export async function registerMarketplaceMetadataRoutes(app: FastifyInstance) {
   })
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { mints: string[] }
-  }>('/api/v1/tenant/:slug/marketplace/metadata/refresh', async (request, reply) => {
-    const slug = normalizeTenantIdentifier(request.params.slug)
-    if (!slug) {
-      return reply.status(400).send(apiError('Invalid tenant slug', ErrorCode.INVALID_SLUG))
-    }
-    const auth = await requireTenantAdmin(request, reply, slug)
+  }>('/api/v1/tenant/:tenantId/marketplace/metadata/refresh', async (request, reply) => {
+    const auth = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!auth) return
 
     const body = (request.body ?? {}) as { mints?: string[] }

@@ -3,15 +3,18 @@
  * Used to conditionally show the Whitelist nav item (only when user is listed).
  */
 import { API_V1 } from '~/utils/apiBase'
+import { useTenantStore } from '~/stores/tenant'
 
 export function useWhitelistListed(slug: Ref<string | null>, wallet: Ref<string | null>) {
+  const tenantStore = useTenantStore()
+  const tenantId = computed(() => tenantStore.tenantId)
   const listed = ref<boolean | null>(null)
   const loading = ref(false)
 
   async function fetchListed() {
-    const s = slug.value
+    const id = tenantId.value
     const w = wallet.value
-    if (!s || !w) {
+    if (!id || !w) {
       listed.value = null
       return
     }
@@ -19,7 +22,7 @@ export function useWhitelistListed(slug: Ref<string | null>, wallet: Ref<string 
     try {
       const apiBase = useApiBase()
       const res = await fetch(
-        `${apiBase.value}${API_V1}/tenant/${s}/whitelist/is-listed?wallet=${encodeURIComponent(w)}`,
+        `${apiBase.value}${API_V1}/tenant/${id}/whitelist/is-listed?wallet=${encodeURIComponent(w)}`,
         { credentials: 'include' }
       )
       if (!res.ok) {

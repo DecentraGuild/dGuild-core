@@ -1,9 +1,13 @@
 import type { FastifyInstance } from 'fastify'
+import type { BillingPeriod } from '@decentraguild/billing'
 import type { BillingPayment, BillingSubscription } from '../../db/billing.js'
 import { query } from '../../db/client.js'
-import { getSubscription, listPayments, getPaymentById, confirmPayment as confirmPaymentRow } from '../../db/billing.js'
+import { getSubscription, listPayments, getPaymentById, confirmPayment as confirmPaymentRow, upsertSubscription } from '../../db/billing.js'
+import { upsertModuleBillingState } from '../../db/module-billing-state.js'
 import { tenantBillingKey } from '../../billing/service.js'
-import { resolveTenant } from '../../db/tenant.js'
+import { validatePeriodEnd } from '../../billing/validate-period-end.js'
+import { minimalPriceSnapshot } from '../../billing/minimal-price-snapshot.js'
+import { getTenantById, updateTenant } from '../../db/tenant.js'
 import { requirePlatformAdmin } from './common.js'
 import { insertPlatformAuditLog } from '../../db/platform-audit.js'
 import { apiError, ErrorCode } from '../../api-errors.js'
@@ -86,14 +90,14 @@ export async function registerPlatformBillingRoutes(app: FastifyInstance) {
   })
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { moduleId: string; billingPeriod?: string; periodEnd?: string }
-  }>('/api/v1/platform/tenants/:slug/billing/extend', async (request, reply) => {
+  }>('/api/v1/platform/tenants/:tenantId/billing/extend', async (request, reply) => {
     const admin = await requirePlatformAdmin(request, reply)
     if (!admin) return
 
-    const slug = request.params.slug.trim()
-    const tenant = await resolveTenant(slug)
+    const tenantId = request.params.tenantId.trim()
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
     }
@@ -116,16 +120,11 @@ export async function registerPlatformBillingRoutes(app: FastifyInstance) {
 
     let newEnd: Date
     if (body.periodEnd && typeof body.periodEnd === 'string') {
-      const parsed = new Date(body.periodEnd)
-      if (Number.isNaN(parsed.getTime())) {
-        return reply.status(400).send(apiError('Invalid periodEnd', ErrorCode.BAD_REQUEST))
+      const validation = validatePeriodEnd(body.periodEnd, { existingPeriodEnd: currentEnd })
+      if (!validation.ok) {
+        return reply.status(400).send(apiError(validation.error, ErrorCode.BAD_REQUEST))
       }
-      if (parsed <= currentEnd) {
-        return reply
-          .status(400)
-          .send(apiError('periodEnd must be after current period end', ErrorCode.BAD_REQUEST))
-      }
-      newEnd = parsed
+      newEnd = validation.date
     } else {
       const period = sub.billingPeriod
       newEnd = new Date(currentEnd)
@@ -170,6 +169,18 @@ export async function registerPlatformBillingRoutes(app: FastifyInstance) {
       updatedAt: updatedSubRow.updated_at,
     }
 
+    await upsertModuleBillingState(billingKey, moduleId, { periodEnd: newEnd })
+    const modules = { ...(tenant.modules ?? {}) }
+    const prevEntry = modules[moduleId] ?? {}
+    modules[moduleId] = {
+      ...prevEntry,
+      state: prevEntry.state ?? 'off',
+      deactivatedate: newEnd.toISOString(),
+      deactivatingUntil: prevEntry.deactivatingUntil ?? null,
+      settingsjson: prevEntry.settingsjson ?? {},
+    }
+    await updateTenant(tenant.id, { modules })
+
     await insertPlatformAuditLog({
       actorWallet: admin.wallet,
       action: 'billing_extend_subscription',
@@ -192,15 +203,106 @@ export async function registerPlatformBillingRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post<{
-    Params: { slug: string; paymentId: string }
-    Body: { txSignature?: string | null }
-  }>('/api/v1/platform/tenants/:slug/billing/payments/:paymentId/confirm', async (request, reply) => {
+  app.put<{
+    Params: { tenantId: string }
+    Body: { moduleId: string; periodEnd: string; billingPeriod?: string }
+  }>('/api/v1/platform/tenants/:tenantId/billing/set-period-end', async (request, reply) => {
     const admin = await requirePlatformAdmin(request, reply)
     if (!admin) return
 
-    const slug = request.params.slug.trim()
-    const tenant = await resolveTenant(slug)
+    const tenantId = request.params.tenantId.trim()
+    const tenant = await getTenantById(tenantId)
+    if (!tenant) {
+      return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
+    }
+    const billingKey = tenantBillingKey({ id: tenant.id, slug: tenant.slug ?? null })
+
+    const body = request.body ?? ({} as Record<string, unknown>)
+    const moduleId = body.moduleId
+    const periodEndInput = body.periodEnd
+    const billingPeriod = ((body.billingPeriod as BillingPeriod | undefined) ?? 'yearly') as BillingPeriod
+
+    if (!moduleId || typeof moduleId !== 'string') {
+      return reply.status(400).send(apiError('moduleId is required', ErrorCode.BAD_REQUEST))
+    }
+    if (!periodEndInput || typeof periodEndInput !== 'string') {
+      return reply.status(400).send(apiError('periodEnd is required', ErrorCode.BAD_REQUEST))
+    }
+
+    const existingSub = await getSubscription(billingKey, moduleId)
+    const validation = validatePeriodEnd(periodEndInput, {
+      forNewSubscription: !existingSub,
+      existingPeriodEnd: existingSub?.periodEnd,
+    })
+    if (!validation.ok) {
+      return reply.status(400).send(apiError(validation.error, ErrorCode.BAD_REQUEST))
+    }
+    const periodEndDate = validation.date
+    const now = new Date()
+
+    if (existingSub) {
+      await upsertSubscription({
+        tenantSlug: billingKey,
+        moduleId,
+        billingPeriod: existingSub.billingPeriod,
+        recurringAmountUsdc: existingSub.recurringAmountUsdc,
+        periodStart: existingSub.periodStart,
+        periodEnd: periodEndDate,
+        conditionsSnapshot: existingSub.conditionsSnapshot,
+        priceSnapshot: existingSub.priceSnapshot,
+      })
+    } else {
+      await upsertSubscription({
+        tenantSlug: billingKey,
+        moduleId,
+        billingPeriod,
+        recurringAmountUsdc: 0,
+        periodStart: now,
+        periodEnd: periodEndDate,
+        conditionsSnapshot: {},
+        priceSnapshot: minimalPriceSnapshot(moduleId),
+      })
+    }
+    await upsertModuleBillingState(billingKey, moduleId, { periodEnd: periodEndDate })
+
+    const modules = { ...(tenant.modules ?? {}) }
+    const prevEntry = modules[moduleId] ?? {}
+    modules[moduleId] = {
+      ...prevEntry,
+      state: prevEntry.state ?? 'off',
+      deactivatedate: periodEndDate.toISOString(),
+      deactivatingUntil: prevEntry.deactivatingUntil ?? null,
+      settingsjson: prevEntry.settingsjson ?? {},
+    }
+    await updateTenant(tenant.id, { modules })
+
+    await insertPlatformAuditLog({
+      actorWallet: admin.wallet,
+      action: 'billing_set_period_end',
+      targetType: 'tenant',
+      targetId: tenant.slug ?? tenant.id,
+      details: { moduleId, periodEnd: periodEndDate.toISOString() },
+    })
+
+    return {
+      subscription: {
+        billingPeriod: existingSub?.billingPeriod ?? billingPeriod,
+        periodStart: (existingSub?.periodStart ?? now).toISOString(),
+        periodEnd: periodEndDate.toISOString(),
+        recurringAmountUsdc: existingSub?.recurringAmountUsdc ?? 0,
+      },
+    }
+  })
+
+  app.post<{
+    Params: { tenantId: string; paymentId: string }
+    Body: { txSignature?: string | null }
+  }>('/api/v1/platform/tenants/:tenantId/billing/payments/:paymentId/confirm', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request, reply)
+    if (!admin) return
+
+    const tenantId = request.params.tenantId.trim()
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
     }

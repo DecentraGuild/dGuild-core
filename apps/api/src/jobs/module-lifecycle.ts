@@ -2,14 +2,19 @@
  * Module lifecycle job: transition active -> deactivating when deactivatedate reached,
  * and deactivating -> off when deactivatingUntil reached.
  * Run on an interval (e.g. every minute for testing, daily for production).
+ *
+ * Tenant list and module state are read from DB each run (getAllTenantIds + resolveTenant).
+ * We use tenant id (primary key) everywhere; billing and other tables key by tenant id.
+ * When ops activates a module via PATCH .../platform/tenants/:slug/modules, the DB is updated
+ * immediately; the next lifecycle run will see the new state. No need to notify or restart the worker.
  */
 
 import type { TenantConfig, TenantModuleEntry, TenantModulesMap } from '@decentraguild/core'
 import { normalizeModules } from '@decentraguild/core'
 import { DEFAULT_MODULE_LIFECYCLE_DEACTIVATING_MINUTES } from '../config/constants.js'
 import { getPool } from '../db/client.js'
-import { resolveTenant, updateTenant, getAllTenantSlugs } from '../db/tenant.js'
-import { listTenantSlugs, writeTenantBySlug } from '../config/registry.js'
+import { resolveTenant, updateTenant, getAllTenantIds } from '../db/tenant.js'
+import { listTenantSlugs, writeTenantByIdOrSlug } from '../config/registry.js'
 
 const DEACTIVATING_MINUTES = Number(process.env.MODULE_LIFECYCLE_DEACTIVATING_MINUTES ?? DEFAULT_MODULE_LIFECYCLE_DEACTIVATING_MINUTES)
 
@@ -86,51 +91,51 @@ export async function runModuleLifecycle(log: { info: (o: unknown, msg?: string)
   const pool = getPool()
   const isProd = process.env.NODE_ENV === 'production'
 
-  let slugs = pool ? await getAllTenantSlugs() : await listTenantSlugs()
+  let ids: string[] = pool ? await getAllTenantIds() : await listTenantSlugs()
 
   // In production, do not fall back to file-based tenant configs.
-  if (isProd && pool && slugs.length === 0) {
+  if (isProd && pool && ids.length === 0) {
     log.warn({}, 'Module lifecycle: no tenants found in DB; skipping run')
     return
   }
 
-  if (!isProd && pool && slugs.length === 0) {
-    slugs = await listTenantSlugs()
-    if (slugs.length > 0) {
-      log.info({ slugs }, 'Module lifecycle: DB had no tenants; using file config slugs')
+  if (!isProd && pool && ids.length === 0) {
+    ids = await listTenantSlugs()
+    if (ids.length > 0) {
+      log.info({ ids }, 'Module lifecycle: DB had no tenants; using file config')
     }
   }
-  if (slugs.length === 0) return
+  if (ids.length === 0) return
 
   const now = new Date()
-  log.info({ tenantCount: slugs.length, slugs, now: now.toISOString() }, 'Module lifecycle run')
-  for (const slug of slugs) {
-    const tenant = await resolveTenant(slug)
+  log.info({ tenantCount: ids.length, ids, now: now.toISOString() }, 'Module lifecycle run')
+  for (const idOrSlug of ids) {
+    const tenant = await resolveTenant(idOrSlug)
     if (!tenant) continue
 
-    const logDebug = (data: unknown) => log.info({ slug, ...(data as object) }, 'Module lifecycle check')
+    const logDebug = (data: unknown) => log.info({ tenantId: tenant.id, ...(data as object) }, 'Module lifecycle check')
     const { modules: nextModules, changed } = applyLifecycleTransitions(tenant.modules ?? {}, now, logDebug)
     if (!changed) continue
 
     const updated: TenantConfig = { ...tenant, modules: nextModules }
     try {
       if (pool) {
-        const result = await updateTenant(slug, { modules: nextModules })
+        const result = await updateTenant(tenant.id, { modules: nextModules })
         if (result) {
           log.info(
-            { slug, states: Object.fromEntries(Object.entries(nextModules).map(([k, v]) => [k, (v as TenantModuleEntry).state])) },
+            { tenantId: tenant.id, states: Object.fromEntries(Object.entries(nextModules).map(([k, v]) => [k, (v as TenantModuleEntry).state])) },
             'Module lifecycle updated (DB)'
           )
         }
       } else {
-        await writeTenantBySlug(slug, updated)
+        await writeTenantByIdOrSlug(idOrSlug, updated)
         log.info(
-          { slug, states: Object.fromEntries(Object.entries(nextModules).map(([k, v]) => [k, (v as TenantModuleEntry).state])) },
+          { tenantId: tenant.id, states: Object.fromEntries(Object.entries(nextModules).map(([k, v]) => [k, (v as TenantModuleEntry).state])) },
           'Module lifecycle updated (file)'
         )
       }
     } catch (err) {
-      log.warn({ err, slug }, 'Module lifecycle update failed')
+      log.warn({ err, tenantId: tenant.id }, 'Module lifecycle update failed')
     }
   }
 }

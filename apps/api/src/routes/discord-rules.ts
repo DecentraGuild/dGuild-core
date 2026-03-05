@@ -32,8 +32,8 @@ import { getMintMetadata, upsertMintMetadata } from '../db/marketplace-metadata.
 import { getHolderSnapshot, getHolderWalletsFromSnapshot } from '../db/discord-holder-snapshots.js'
 import { logDiscordAudit } from '../db/discord-audit.js'
 import { loadWhitelistByTenantId } from '../config/whitelist-registry.js'
-import { normalizeTenantIdentifier } from '../validate-slug.js'
-import { resolveTenant } from '../db/tenant.js'
+import { isValidTenantId } from '../validate-slug.js'
+import { getTenantById } from '../db/tenant.js'
 import { requireTenantAdmin, requireTenantAdminWithDiscordServer } from './tenant-settings.js'
 import { adminWriteRateLimit } from '../rate-limit-strict.js'
 import { apiError, ErrorCode } from '../api-errors.js'
@@ -70,10 +70,10 @@ function parseMintQuery(
 }
 
 export async function registerDiscordRulesRoutes(app: FastifyInstance) {
-  app.get<{ Params: { slug: string }; Querystring: { mint?: string; fetch?: string } }>(
-    '/api/v1/tenant/:slug/discord/mint-preview',
+  app.get<{ Params: { tenantId: string }; Querystring: { mint?: string; fetch?: string } }>(
+    '/api/v1/tenant/:tenantId/discord/mint-preview',
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
       const mint = parseMintQuery(request, reply)
       if (!mint) return
@@ -121,10 +121,10 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
     }
   )
 
-  app.get<{ Params: { slug: string }; Querystring: { mint?: string; fetch?: string } }>(
-    '/api/v1/tenant/:slug/discord/collection-preview',
+  app.get<{ Params: { tenantId: string }; Querystring: { mint?: string; fetch?: string } }>(
+    '/api/v1/tenant/:tenantId/discord/collection-preview',
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
       const mint = parseMintQuery(request, reply, 'Invalid mint or collection address')
       if (!mint) return
@@ -150,10 +150,10 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
     }
   )
 
-  app.get<{ Params: { slug: string } }>(
-    '/api/v1/tenant/:slug/discord/roles',
+  app.get<{ Params: { tenantId: string } }>(
+    '/api/v1/tenant/:tenantId/discord/roles',
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
       if (!getPool()) return reply.send({ roles: [], assignable_roles: [] })
       const server = await getDiscordServerByTenantSlug(result.tenant.id)
@@ -177,14 +177,14 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
 
   /** Public: role cards for Discord page carousel (no admin). Returns human-readable requirements per role.
    * When user is signed in with a Discord-linked wallet, adds eligible per card (based on holdings). */
-  app.get<{ Params: { slug: string } }>(
-    '/api/v1/tenant/:slug/discord/role-cards',
+  app.get<{ Params: { tenantId: string } }>(
+    '/api/v1/tenant/:tenantId/discord/role-cards',
     async (request, reply) => {
-      const slug = normalizeTenantIdentifier(request.params.slug ?? '')
-      if (!slug) {
-        return reply.status(400).send(apiError('Invalid tenant slug', ErrorCode.INVALID_SLUG))
+      const tenantId = request.params.tenantId?.trim()
+      if (!tenantId || !isValidTenantId(tenantId)) {
+        return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
       }
-      const tenant = await resolveTenant(slug)
+      const tenant = await getTenantById(tenantId)
       if (!tenant) return reply.send({ role_cards: [] })
       if (!getPool()) return reply.send({ role_cards: [] })
       const server = await getDiscordServerByTenantSlug(tenant.id)
@@ -246,20 +246,20 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
     }
   )
 
-  app.get<{ Params: { slug: string } }>(
-    '/api/v1/tenant/:slug/discord/condition-types',
+  app.get<{ Params: { tenantId: string } }>(
+    '/api/v1/tenant/:tenantId/discord/condition-types',
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
       return reply.send({ types: DISCORD_CONDITION_TYPES })
     }
   )
 
-  app.get<{ Params: { slug: string } }>(
-    '/api/v1/tenant/:slug/discord/rules',
+  app.get<{ Params: { tenantId: string } }>(
+    '/api/v1/tenant/:tenantId/discord/rules',
     async (request, reply) => {
       try {
-        const result = await requireTenantAdmin(request, reply, request.params.slug)
+        const result = await requireTenantAdmin(request, reply, request.params.tenantId)
         if (!result) return
         if (!getPool()) return reply.send({ rules: [], configured_mint_count: 0 })
         const server = await getDiscordServerByTenantSlug(result.tenant.id)
@@ -296,7 +296,7 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
   )
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: {
       discord_role_id: string
       operator?: string
@@ -314,11 +314,11 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
       }>
     }
   }>(
-    '/api/v1/tenant/:slug/discord/rules',
+    '/api/v1/tenant/:tenantId/discord/rules',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
       try {
-        const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.slug)
+        const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.tenantId)
         if (!result) return
         const { server } = result
         const body = request.body ?? {}
@@ -380,10 +380,10 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
     }
   )
 
-  app.get<{ Params: { slug: string; id: string } }>(
-    '/api/v1/tenant/:slug/discord/rules/:id',
+  app.get<{ Params: { tenantId: string; id: string } }>(
+    '/api/v1/tenant/:tenantId/discord/rules/:id',
     async (request, reply) => {
-      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.slug)
+      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.tenantId)
       if (!result) return
       const { server } = result
       const id = Number(request.params.id)
@@ -403,7 +403,7 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
   )
 
   app.patch<{
-    Params: { slug: string; id: string }
+    Params: { tenantId: string; id: string }
     Body: {
       operator?: string
       conditions?: Array<{
@@ -421,10 +421,10 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
       }>
     }
   }>(
-    '/api/v1/tenant/:slug/discord/rules/:id',
+    '/api/v1/tenant/:tenantId/discord/rules/:id',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.slug)
+      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.tenantId)
       if (!result) return
       const { server } = result
       const id = Number(request.params.id)
@@ -484,11 +484,11 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
     }
   )
 
-  app.delete<{ Params: { slug: string; id: string } }>(
-    '/api/v1/tenant/:slug/discord/rules/:id',
+  app.delete<{ Params: { tenantId: string; id: string } }>(
+    '/api/v1/tenant/:tenantId/discord/rules/:id',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.slug)
+      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.tenantId)
       if (!result) return
       const { server } = result
       const id = Number(request.params.id)
@@ -503,10 +503,10 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
     }
   )
 
-  app.get<{ Params: { slug: string } }>(
-    '/api/v1/tenant/:slug/discord/mints',
+  app.get<{ Params: { tenantId: string } }>(
+    '/api/v1/tenant/:tenantId/discord/mints',
     async (request, reply) => {
-      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.slug)
+      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.tenantId)
       if (!result) return
       if (!getPool()) return reply.send({ mints: [] })
       const { server } = result
@@ -533,16 +533,16 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
   )
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: {
       asset_id?: string
       kind?: DiscordGuildMintKind
     }
   }>(
-    '/api/v1/tenant/:slug/discord/mints',
+    '/api/v1/tenant/:tenantId/discord/mints',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.slug)
+      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.tenantId)
       if (!result) return
       if (!getPool()) {
         return reply
@@ -686,11 +686,11 @@ export async function registerDiscordRulesRoutes(app: FastifyInstance) {
     }
   )
 
-  app.delete<{ Params: { slug: string; id: string } }>(
-    '/api/v1/tenant/:slug/discord/mints/:id',
+  app.delete<{ Params: { tenantId: string; id: string } }>(
+    '/api/v1/tenant/:tenantId/discord/mints/:id',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.slug)
+      const result = await requireTenantAdminWithDiscordServer(request, reply, request.params.tenantId)
       if (!result) return
       if (!getPool()) return reply.status(500).send(apiError('Database not available', ErrorCode.INTERNAL_ERROR))
       const { server } = result

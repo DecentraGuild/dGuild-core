@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { TenantConfig } from '@decentraguild/core'
-import { resolveTenant, getAllTenantSlugs } from '../../db/tenant.js'
+import { getAddonModuleIds } from '@decentraguild/config'
+import { getTenantById, getAllTenantIds } from '../../db/tenant.js'
 import { getSubscription, listPayments } from '../../db/billing.js'
 import { tenantBillingKey } from '../../billing/service.js'
 import { requirePlatformAdmin } from './common.js'
@@ -11,10 +12,10 @@ export async function registerPlatformTenantsRoutes(app: FastifyInstance) {
     const admin = await requirePlatformAdmin(request, reply)
     if (!admin) return
 
-    const ids = await getAllTenantSlugs()
+    const ids = await getAllTenantIds()
     const tenants: TenantConfig[] = []
-    for (const idOrSlug of ids) {
-      const t = await resolveTenant(idOrSlug)
+    for (const id of ids) {
+      const t = await getTenantById(id)
       if (t) tenants.push(t)
     }
 
@@ -32,18 +33,20 @@ export async function registerPlatformTenantsRoutes(app: FastifyInstance) {
     }
   })
 
-  app.get<{ Params: { slug: string } }>('/api/v1/platform/tenants/:slug', async (request, reply) => {
+  app.get<{ Params: { tenantId: string } }>('/api/v1/platform/tenants/:tenantId', async (request, reply) => {
     const admin = await requirePlatformAdmin(request, reply)
     if (!admin) return
 
-    const slug = request.params.slug.trim()
-    const tenant = await resolveTenant(slug)
+    const tenantId = request.params.tenantId.trim()
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
     }
 
     const billingKey = tenantBillingKey({ id: tenant.id, slug: tenant.slug ?? null })
-    const moduleIds = Object.keys(tenant.modules ?? {})
+    const tenantModuleIds = Object.keys(tenant.modules ?? {})
+    const addonIds = getAddonModuleIds()
+    const moduleIds = [...new Set([...tenantModuleIds, ...addonIds])]
 
     const [subscriptionsByModule, payments] = await Promise.all([
       Promise.all(
@@ -79,8 +82,11 @@ export async function registerPlatformTenantsRoutes(app: FastifyInstance) {
       }
     }
 
+    const activeModules = tenantModuleIds.filter(
+      (id) => (tenant.modules?.[id] as { state?: string } | undefined)?.state === 'active',
+    ).length
     const stats = {
-      activeModules: moduleIds.length,
+      activeModules,
       totalPayments: payments.length,
       lastPaymentAt: payments[0]?.confirmedAt?.toISOString() ?? null,
     }

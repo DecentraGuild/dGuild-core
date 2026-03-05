@@ -89,6 +89,7 @@ const auth = useAuth()
 const apiBase = useApiBase()
 
 const tenant = computed(() => tenantStore.tenant)
+const tenantId = computed(() => tenantStore.tenantId)
 const slug = computed(() => tenantStore.slug ?? '')
 const wallet = computed(() => auth.wallet.value ?? null)
 
@@ -114,9 +115,9 @@ function shortenAddress(addr: string): string {
 }
 
 async function fetchMemberships() {
-  const s = slug.value
+  const id = tenantId.value
   const w = wallet.value
-  if (!s || !w) {
+  if (!id || !w) {
     memberships.value = []
     loading.value = false
     return
@@ -124,7 +125,7 @@ async function fetchMemberships() {
   loading.value = true
   try {
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${s}/whitelist/my-memberships?wallet=${encodeURIComponent(w)}`,
+      `${apiBase.value}${API_V1}/tenant/${id}/whitelist/my-memberships?wallet=${encodeURIComponent(w)}`,
       { credentials: 'include' }
     )
     if (!res.ok) {
@@ -141,16 +142,16 @@ async function fetchMemberships() {
 }
 
 async function fetchMembersForSelected() {
-  const s = slug.value
+  const id = tenantId.value
   const addr = selectedListAddress.value
-  if (!s || !addr) {
+  if (!id || !addr) {
     memberWallets.value = []
     return
   }
   membersLoading.value = true
   try {
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${s}/whitelist/lists/${addr}/entries-public`,
+      `${apiBase.value}${API_V1}/tenant/${id}/whitelist/lists/${addr}/entries-public`,
       { credentials: 'include' }
     )
     if (!res.ok) {

@@ -1,4 +1,5 @@
 import { API_V1 } from '~/utils/apiBase'
+import { useTenantStore } from '~/stores/tenant'
 
 export interface ScopeEntry {
   mint: string
@@ -35,6 +36,7 @@ function setCachedScope(slug: string, mints: string[], entries: ScopeEntry[]) {
  */
 export function useMarketplaceScope(slug: Ref<string | null>) {
   const apiBase = useApiBase()
+  const tenantId = computed(() => useTenantStore().tenantId)
 
   const mints = ref<string[]>([])
   const entries = ref<ScopeEntry[]>([])
@@ -42,14 +44,14 @@ export function useMarketplaceScope(slug: Ref<string | null>) {
   const error = ref<string | null>(null)
 
   async function load() {
-    const s = slug.value
-    if (!s) {
+    const id = tenantId.value
+    if (!id) {
       mints.value = []
       entries.value = []
       return
     }
 
-    const cached = getCachedScope(s)
+    const cached = getCachedScope(id)
     if (cached) {
       mints.value = cached.mints
       entries.value = cached.entries
@@ -59,14 +61,14 @@ export function useMarketplaceScope(slug: Ref<string | null>) {
     loading.value = true
     error.value = null
     try {
-      const res = await fetch(`${apiBase.value}${API_V1}/tenant/${encodeURIComponent(s)}/marketplace/scope`)
+      const res = await fetch(`${apiBase.value}${API_V1}/tenant/${encodeURIComponent(id)}/marketplace/scope`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = (await res.json()) as { mints?: string[]; entries?: ScopeEntry[] }
       const mintsList = Array.isArray(data.mints) ? data.mints : []
       const entriesList = Array.isArray(data.entries) ? data.entries : []
       mints.value = mintsList
       entries.value = entriesList
-      setCachedScope(s, mintsList, entriesList)
+      setCachedScope(id, mintsList, entriesList)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load marketplace scope'
       mints.value = []

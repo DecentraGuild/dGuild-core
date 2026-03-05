@@ -3,8 +3,8 @@ import BN from 'bn.js'
 import { fetchAllEscrows, fetchEscrowByAddress } from '@decentraguild/web3'
 import { getSolanaConnection } from '../solana-connection.js'
 import { getScopeEntriesForTenant } from '../marketplace/scope.js'
-import { resolveTenant } from '../db/tenant.js'
-import { normalizeTenantIdentifier } from '../validate-slug.js'
+import { getTenantById } from '../db/tenant.js'
+import { isValidTenantId } from '../validate-slug.js'
 import { apiError, ErrorCode } from '../api-errors.js'
 
 const ESCROWS_CACHE_TTL_MS = 60_000
@@ -27,14 +27,14 @@ interface EscrowCacheEntry {
 const escrowsCache = new Map<string, EscrowCacheEntry>()
 
 export async function registerMarketplaceEscrowsRoutes(app: FastifyInstance) {
-  app.get<{ Params: { slug: string }; Querystring: { maker?: string } }>(
-    '/api/v1/tenant/:slug/marketplace/escrows',
+  app.get<{ Params: { tenantId: string }; Querystring: { maker?: string } }>(
+    '/api/v1/tenant/:tenantId/marketplace/escrows',
     async (request, reply) => {
-      const idOrSlug = normalizeTenantIdentifier(request.params.slug)
-      if (!idOrSlug) {
-        return reply.status(400).send(apiError('Invalid tenant identifier', ErrorCode.INVALID_SLUG))
+      const tenantId = request.params.tenantId?.trim()
+      if (!tenantId || !isValidTenantId(tenantId)) {
+        return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
       }
-      const tenant = await resolveTenant(idOrSlug)
+      const tenant = await getTenantById(tenantId)
       if (!tenant) {
         return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
       }
@@ -109,15 +109,15 @@ export async function registerMarketplaceEscrowsRoutes(app: FastifyInstance) {
     }
   )
 
-  app.get<{ Params: { slug: string; escrowId: string } }>(
-    '/api/v1/tenant/:slug/marketplace/escrows/:escrowId',
+  app.get<{ Params: { tenantId: string; escrowId: string } }>(
+    '/api/v1/tenant/:tenantId/marketplace/escrows/:escrowId',
     async (request, reply) => {
-      const idOrSlug = normalizeTenantIdentifier(request.params.slug)
+      const tenantId = request.params.tenantId?.trim()
       const escrowId = request.params.escrowId
-      if (!idOrSlug) {
-        return reply.status(400).send(apiError('Invalid tenant identifier', ErrorCode.INVALID_SLUG))
+      if (!tenantId || !isValidTenantId(tenantId)) {
+        return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
       }
-      const tenant = await resolveTenant(idOrSlug)
+      const tenant = await getTenantById(tenantId)
       if (!tenant) {
         return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
       }

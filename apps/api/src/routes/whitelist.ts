@@ -7,21 +7,21 @@ import {
 } from '../config/whitelist-registry.js'
 import type { WhitelistCreateListBody, WhitelistUpdateListBody } from './types.js'
 import { requireTenantAdmin } from './tenant-settings.js'
-import { resolveTenant } from '../db/tenant.js'
+import { getTenantById } from '../db/tenant.js'
 import { getSolanaConnection } from '../solana-connection.js'
 import { fetchWhitelistEntries, isWalletOnWhitelist } from '@decentraguild/web3'
-import { normalizeTenantIdentifier } from '../validate-slug.js'
+import { isValidTenantId } from '../validate-slug.js'
 import { apiError, ErrorCode } from '../api-errors.js'
 
 export async function registerWhitelistRoutes(app: FastifyInstance) {
   app.get<{
-    Params: { slug: string }
-  }>('/api/v1/tenant/:slug/whitelist/lists/public', async (request, reply) => {
-    const slug = normalizeTenantIdentifier(request.params.slug)
-    if (!slug) {
-      return reply.status(400).send(apiError('Invalid tenant', ErrorCode.INVALID_SLUG))
+    Params: { tenantId: string }
+  }>('/api/v1/tenant/:tenantId/whitelist/lists/public', async (request, reply) => {
+    const tenantId = request.params.tenantId?.trim()
+    if (!tenantId || !isValidTenantId(tenantId)) {
+      return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
     }
-    const tenant = await resolveTenant(slug)
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.NOT_FOUND))
     }
@@ -37,9 +37,9 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
   })
 
   app.get<{
-    Params: { slug: string }
-  }>('/api/v1/tenant/:slug/whitelist/lists', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+    Params: { tenantId: string }
+  }>('/api/v1/tenant/:tenantId/whitelist/lists', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     const tenantId = result.tenant.id
@@ -48,10 +48,10 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
   })
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: WhitelistCreateListBody
-  }>('/api/v1/tenant/:slug/whitelist/lists', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  }>('/api/v1/tenant/:tenantId/whitelist/lists', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     const body = (request.body ?? {}) as Partial<WhitelistCreateListBody>
@@ -88,9 +88,9 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
   })
 
   app.delete<{
-    Params: { slug: string; address: string }
-  }>('/api/v1/tenant/:slug/whitelist/lists/:address', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+    Params: { tenantId: string; address: string }
+  }>('/api/v1/tenant/:tenantId/whitelist/lists/:address', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     const address = request.params.address
@@ -107,10 +107,10 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
   })
 
   app.patch<{
-    Params: { slug: string; address: string }
+    Params: { tenantId: string; address: string }
     Body: WhitelistUpdateListBody
-  }>('/api/v1/tenant/:slug/whitelist/lists/:address', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  }>('/api/v1/tenant/:tenantId/whitelist/lists/:address', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     const tenantId = result.tenant.id
@@ -141,18 +141,18 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
   })
 
   app.get<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Querystring: { wallet?: string }
-  }>('/api/v1/tenant/:slug/whitelist/my-memberships', async (request, reply) => {
-    const slug = normalizeTenantIdentifier(request.params.slug)
-    if (!slug) {
-      return reply.status(400).send(apiError('Invalid tenant', ErrorCode.INVALID_SLUG))
+  }>('/api/v1/tenant/:tenantId/whitelist/my-memberships', async (request, reply) => {
+    const tenantId = request.params.tenantId?.trim()
+    if (!tenantId || !isValidTenantId(tenantId)) {
+      return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
     }
     const wallet = request.query.wallet?.trim()
     if (!wallet) {
       return reply.status(400).send(apiError('wallet query parameter is required', ErrorCode.BAD_REQUEST))
     }
-    const tenant = await resolveTenant(slug)
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.NOT_FOUND))
     }
@@ -177,12 +177,12 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
   })
 
   app.get<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Querystring: { wallet?: string; list?: string }
-  }>('/api/v1/tenant/:slug/whitelist/check', async (request, reply) => {
-    const slug = normalizeTenantIdentifier(request.params.slug)
-    if (!slug) {
-      return reply.status(400).send(apiError('Invalid tenant', ErrorCode.INVALID_SLUG))
+  }>('/api/v1/tenant/:tenantId/whitelist/check', async (request, reply) => {
+    const tenantId = request.params.tenantId?.trim()
+    if (!tenantId || !isValidTenantId(tenantId)) {
+      return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
     }
     const wallet = request.query.wallet?.trim()
     const listAddress = request.query.list?.trim()
@@ -192,7 +192,7 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
     if (!listAddress) {
       return reply.status(400).send(apiError('list query parameter is required', ErrorCode.BAD_REQUEST))
     }
-    const config = await loadWhitelistByTenantId(slug)
+    const config = await loadWhitelistByTenantId(tenantId)
     const list = config?.lists?.find((l) => l.address === listAddress)
     if (!list) {
       return reply.status(404).send(apiError('List not found', ErrorCode.NOT_FOUND))
@@ -203,12 +203,12 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
   })
 
   app.get<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Querystring: { wallet?: string }
-  }>('/api/v1/tenant/:slug/whitelist/is-listed', async (request, reply) => {
-    const slug = normalizeTenantIdentifier(request.params.slug)
-    if (!slug) {
-      return reply.status(400).send(apiError('Invalid tenant', ErrorCode.INVALID_SLUG))
+  }>('/api/v1/tenant/:tenantId/whitelist/is-listed', async (request, reply) => {
+    const tenantId = request.params.tenantId?.trim()
+    if (!tenantId || !isValidTenantId(tenantId)) {
+      return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
     }
 
     const wallet = request.query.wallet?.trim()
@@ -216,7 +216,7 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
       return reply.status(400).send(apiError('wallet query parameter is required', ErrorCode.BAD_REQUEST))
     }
 
-    const tenant = await resolveTenant(slug)
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.NOT_FOUND))
     }
@@ -237,9 +237,9 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
   })
 
   app.get<{
-    Params: { slug: string; address: string }
-  }>('/api/v1/tenant/:slug/whitelist/lists/:address/entries', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+    Params: { tenantId: string; address: string }
+  }>('/api/v1/tenant/:tenantId/whitelist/lists/:address/entries', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     const { address } = request.params
@@ -261,13 +261,13 @@ export async function registerWhitelistRoutes(app: FastifyInstance) {
   })
 
   app.get<{
-    Params: { slug: string; address: string }
-  }>('/api/v1/tenant/:slug/whitelist/lists/:address/entries-public', async (request, reply) => {
-    const slug = normalizeTenantIdentifier(request.params.slug)
-    if (!slug) {
-      return reply.status(400).send(apiError('Invalid tenant', ErrorCode.INVALID_SLUG))
+    Params: { tenantId: string; address: string }
+  }>('/api/v1/tenant/:tenantId/whitelist/lists/:address/entries-public', async (request, reply) => {
+    const tenantId = request.params.tenantId?.trim()
+    if (!tenantId || !isValidTenantId(tenantId)) {
+      return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
     }
-    const tenant = await resolveTenant(slug)
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.NOT_FOUND))
     }

@@ -213,6 +213,8 @@ const emit = defineEmits<{
   deploy: [period: BillingPeriod]
 }>()
 
+const tenantStore = useTenantStore()
+const tenantId = computed(() => tenantStore.tenantId)
 const apiBase = useApiBase()
 const { connection } = useSolanaConnection()
 
@@ -249,12 +251,12 @@ function shortenAddress(addr: string): string {
 }
 
 async function fetchLists() {
-  if (!props.slug) return
+  if (!tenantId.value) return
   loading.value = true
   loadError.value = null
   try {
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/whitelist/lists`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/whitelist/lists`,
       { credentials: 'include' }
     )
     if (!res.ok) {
@@ -276,13 +278,13 @@ async function fetchLists() {
 }
 
 async function fetchEntries() {
-  if (!props.slug || !selectedListAddress.value) {
+  if (!tenantId.value || !selectedListAddress.value) {
     entries.value = []
     return
   }
   try {
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/whitelist/lists/${selectedListAddress.value}/entries`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/whitelist/lists/${selectedListAddress.value}/entries`,
       { credentials: 'include' }
     )
     if (!res.ok) {
@@ -303,7 +305,7 @@ watch(selectedList, (list) => {
 })
 
 async function createList() {
-  if (!createListName.value.trim() || !props.slug || !connection.value) return
+  if (!createListName.value.trim() || !tenantId.value || !connection.value) return
   createError.value = null
   creating.value = true
   try {
@@ -314,7 +316,7 @@ async function createList() {
     const whitelistPda = deriveWhitelistPda(authority, name)
 
     const intentRes = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/billing/payment-intent`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/billing/payment-intent`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -363,7 +365,7 @@ async function createList() {
     if (!sig) throw new Error('Transaction failed')
 
     const confirmRes = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/billing/confirm-payment`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/billing/confirm-payment`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -409,11 +411,11 @@ async function createList() {
 }
 
 async function saveImage() {
-  if (!props.slug || !selectedList.value) return
+  if (!tenantId.value || !selectedList.value) return
   updatingImage.value = true
   try {
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/whitelist/lists/${selectedList.value.address}`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/whitelist/lists/${selectedList.value.address}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -465,7 +467,7 @@ async function doDelete() {
     )
 
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/whitelist/lists/${addr}`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/whitelist/lists/${addr}`,
       { method: 'DELETE', credentials: 'include' }
     )
     if (!res.ok) {

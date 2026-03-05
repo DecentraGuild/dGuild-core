@@ -66,7 +66,7 @@
         @saved="onMarketplaceSaved"
         @save="(p: BillingPeriod) => handleBillingPayment('marketplace', p)"
         @deploy="(p: BillingPeriod) => deployModule('marketplace', p)"
-        @reactivate="(p: BillingPeriod) => reactivateModule('marketplace', p)"
+        @reactivate="(p: BillingPeriod) => handleReactivate('marketplace', p)"
       />
 
       <AdminDiscordTab
@@ -79,7 +79,7 @@
         :save-error="saveError"
         @save="(p: BillingPeriod) => saveWithBilling('discord', p)"
         @deploy="(p: BillingPeriod) => deployModule('discord', p)"
-        @reactivate="(p: BillingPeriod) => reactivateModule('discord', p)"
+        @reactivate="(p: BillingPeriod) => handleReactivate('discord', p)"
       />
 
       <AdminRaffleTab
@@ -284,12 +284,26 @@ function formatDeactivationDate(iso: string): string {
 const showDeactivateConfirm = ref(false)
 const pendingDeactivateModuleId = ref<string | null>(null)
 
+function isWithinPaidPeriod(moduleId: string): boolean {
+  const periodEnd = subscriptions[moduleId]?.periodEnd
+  if (!periodEnd) return false
+  try {
+    return new Date(periodEnd) > new Date()
+  } catch {
+    return false
+  }
+}
+
 function onModuleToggle(id: string, on: boolean) {
   if (on) {
     const entry = getModuleCatalogEntry(id)
     if (entry?.pricing) {
-      activationModalModuleId.value = id
-      showActivationModal.value = true
+      if (isWithinPaidPeriod(id)) {
+        form.modulesById[id] = 'active'
+      } else {
+        activationModalModuleId.value = id
+        showActivationModal.value = true
+      }
     } else {
       form.modulesById[id] = entry?.goActiveImmediately === true ? 'active' : 'staging'
     }
@@ -386,11 +400,30 @@ async function confirmExtend(moduleId: string) {
   extendingModuleId.value = null
 }
 
+async function reactivateWithinPeriod(moduleId: string) {
+  form.modulesById[moduleId] = 'active'
+  await save()
+  await fetchSubscription(moduleId)
+}
+
+async function handleReactivate(moduleId: string, period: BillingPeriod) {
+  if (isWithinPaidPeriod(moduleId)) {
+    await reactivateWithinPeriod(moduleId)
+  } else {
+    await reactivateModule(moduleId, period)
+    await fetchSubscription(moduleId)
+  }
+}
+
 function confirmModuleActivate() {
   const id = activationModalModuleId.value
   if (!id) return
   const entry = getModuleCatalogEntry(id)
-  form.modulesById[id] = entry?.goActiveImmediately === true ? 'active' : 'staging'
+  if (isWithinPaidPeriod(id)) {
+    form.modulesById[id] = 'active'
+  } else {
+    form.modulesById[id] = entry?.goActiveImmediately === true ? 'active' : 'staging'
+  }
   showActivationModal.value = false
   activationModalModuleId.value = null
 }

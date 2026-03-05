@@ -56,6 +56,24 @@ export function getModuleCatalogList(): ModuleCatalogEntry[] {
   return [...entries].sort((a, b) => a.order - b.order)
 }
 
+/** Addon module ids (e.g. slug from admin). Used by ops to include addons in subscription/module lists. */
+export function getAddonModuleIds(): string[] {
+  const adminEntry = catalog['admin'] as ModuleCatalogEntry & { addons?: Record<string, ModuleCatalogAddon> }
+  const addons = adminEntry?.addons
+  if (!addons || typeof addons !== 'object') return []
+  return Object.keys(addons)
+}
+
+/** All catalog entries for ops: top-level modules plus addons (e.g. slug) as synthetic entries, sorted by order. */
+export function getModuleCatalogListWithAddons(): ModuleCatalogEntry[] {
+  const list = getModuleCatalogList()
+  const adminEntry = catalog['admin'] as ModuleCatalogEntry & { addons?: Record<string, ModuleCatalogAddon> }
+  const addons = adminEntry?.addons
+  if (!addons || typeof addons !== 'object') return list
+  const addonEntries = Object.values(addons).map((addon) => addonToCatalogEntry(addon, adminEntry))
+  return [...list, ...addonEntries].sort((a, b) => a.order - b.order)
+}
+
 /** Billing period values accepted by the pricing engine and API. */
 export const VALID_BILLING_PERIODS: ReadonlySet<string> = new Set(['monthly', 'yearly'])
 

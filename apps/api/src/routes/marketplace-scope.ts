@@ -7,8 +7,8 @@ import {
 import { expandAndSaveScope } from '../marketplace/expand-collections.js'
 import { getMintMetadataBatch } from '../db/marketplace-metadata.js'
 import { resolveMarketplace } from '../db/marketplace-settings.js'
-import { resolveTenant } from '../db/tenant.js'
-import { normalizeTenantIdentifier } from '../validate-slug.js'
+import { getTenantById } from '../db/tenant.js'
+import { isValidTenantId } from '../validate-slug.js'
 import { apiError, ErrorCode } from '../api-errors.js'
 
 const MAX_ASSETS_PER_PAGE = 100
@@ -21,12 +21,12 @@ const ASSET_TYPE_MAP = {
 } as const
 
 export async function registerMarketplaceScopeRoutes(app: FastifyInstance) {
-  app.post<{ Params: { slug: string } }>('/api/v1/tenant/:slug/marketplace/scope/expand', async (request, reply) => {
-    const idOrSlug = normalizeTenantIdentifier(request.params.slug)
-    if (!idOrSlug) {
-      return reply.status(400).send(apiError('Invalid tenant identifier', ErrorCode.INVALID_SLUG))
+  app.post<{ Params: { tenantId: string } }>('/api/v1/tenant/:tenantId/marketplace/scope/expand', async (request, reply) => {
+    const tenantId = request.params.tenantId?.trim()
+    if (!tenantId || !isValidTenantId(tenantId)) {
+      return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
     }
-    const tenant = await resolveTenant(idOrSlug)
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
     }
@@ -49,12 +49,12 @@ export async function registerMarketplaceScopeRoutes(app: FastifyInstance) {
     }
   })
 
-  app.get<{ Params: { slug: string } }>('/api/v1/tenant/:slug/marketplace/scope', async (request, reply) => {
-    const idOrSlug = normalizeTenantIdentifier(request.params.slug)
-    if (!idOrSlug) {
-      return reply.status(400).send(apiError('Invalid tenant identifier', ErrorCode.INVALID_SLUG))
+  app.get<{ Params: { tenantId: string } }>('/api/v1/tenant/:tenantId/marketplace/scope', async (request, reply) => {
+    const tenantId = request.params.tenantId?.trim()
+    if (!tenantId || !isValidTenantId(tenantId)) {
+      return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.INVALID_SLUG))
     }
-    const tenant = await resolveTenant(idOrSlug)
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
     }
@@ -71,14 +71,14 @@ export async function registerMarketplaceScopeRoutes(app: FastifyInstance) {
   })
 
   app.get<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Querystring: { page?: string; limit?: string; collection?: string; search?: string }
-  }>('/api/v1/tenant/:slug/marketplace/assets', async (request, _reply) => {
-    const idOrSlug = normalizeTenantIdentifier(request.params.slug)
-    if (!idOrSlug) {
+  }>('/api/v1/tenant/:tenantId/marketplace/assets', async (request, _reply) => {
+    const tenantId = request.params.tenantId?.trim()
+    if (!tenantId || !isValidTenantId(tenantId)) {
       return { assets: [], total: 0, page: 1, limit: 24, scope: { mints: [], entries: [] } }
     }
-    const tenant = await resolveTenant(idOrSlug)
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return { assets: [], total: 0, page: 1, limit: 24, scope: { mints: [], entries: [] } }
     }

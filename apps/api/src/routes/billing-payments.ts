@@ -19,13 +19,13 @@ import { getModuleBillingState } from '../db/module-billing-state.js'
 
 export async function registerBillingPaymentRoutes(app: FastifyInstance) {
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { moduleId: string; billingPeriod?: string; conditions?: ConditionSet; slug?: string }
   }>(
-    '/api/v1/tenant/:slug/billing/payment-intent',
+    '/api/v1/tenant/:tenantId/billing/payment-intent',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
 
       if (!getPool()) {
@@ -76,13 +76,13 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
   )
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { paymentId: string; txSignature: string }
   }>(
-    '/api/v1/tenant/:slug/billing/confirm-payment',
+    '/api/v1/tenant/:tenantId/billing/confirm-payment',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
 
       if (!getPool()) {
@@ -151,10 +151,10 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
   )
 
   app.get<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Querystring: { limit?: string; offset?: string }
-  }>('/api/v1/tenant/:slug/billing/payments', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  }>('/api/v1/tenant/:tenantId/billing/payments', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     if (!getPool()) {
@@ -169,9 +169,9 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
   })
 
   app.get<{
-    Params: { slug: string; paymentId: string }
-  }>('/api/v1/tenant/:slug/billing/payments/:paymentId/invoice', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+    Params: { tenantId: string; paymentId: string }
+  }>('/api/v1/tenant/:tenantId/billing/payments/:paymentId/invoice', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     if (!getPool()) {
@@ -216,9 +216,9 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
   })
 
   app.get<{
-    Params: { slug: string; moduleId: string }
-  }>('/api/v1/tenant/:slug/billing/subscription/:moduleId', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+    Params: { tenantId: string; moduleId: string }
+  }>('/api/v1/tenant/:tenantId/billing/subscription/:moduleId', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     if (!getPool()) {
@@ -260,13 +260,13 @@ export async function registerBillingPaymentRoutes(app: FastifyInstance) {
   })
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { moduleId: string; billingPeriod?: string }
   }>(
-    '/api/v1/tenant/:slug/billing/extend',
+    '/api/v1/tenant/:tenantId/billing/extend',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
 
       if (!getPool()) {

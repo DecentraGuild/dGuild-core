@@ -17,15 +17,16 @@ export interface SubscriptionInfo {
 export function useAdminSubscriptions() {
   const tenantStore = useTenantStore()
   const apiBase = useApiBase()
+  const tenantId = computed(() => tenantStore.tenantId)
   const slug = computed(() => tenantStore.slug)
 
   const subscriptions = reactive<Record<string, SubscriptionInfo | null>>({})
 
   async function fetchSubscription(moduleId: string) {
-    if (!slug.value) return
+    if (!tenantId.value) return
     try {
       const res = await fetch(
-        `${apiBase.value}${API_V1}/tenant/${slug.value}/billing/subscription/${moduleId}`,
+        `${apiBase.value}${API_V1}/tenant/${tenantId.value}/billing/subscription/${moduleId}`,
         { credentials: 'include' },
       )
       if (res.ok) {

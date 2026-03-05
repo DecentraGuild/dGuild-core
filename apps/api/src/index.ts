@@ -37,7 +37,7 @@ import {
   DEFAULT_RATE_LIMIT_WINDOW,
 } from './config/constants.js'
 import { setSeedCompleted, isSeedPending } from './seed-state.js'
-import { runSeedFromRegistry, seedMintMetadataFromConfig } from './seed-from-registry.js'
+import { seedMintMetadataFromConfig } from './seed-from-registry.js'
 
 ensureConfigPaths()
 
@@ -79,19 +79,9 @@ async function main() {
   if (databaseUrl) {
     initPool(databaseUrl)
     await runMigrations(app.log)
-    // Seed from file registry only when TENANT_CONFIG_PATH is set (local dev or one-off migration).
-    // Production: DB is source of truth; populate via pnpm run seed:tenants or registration flow.
-    const tenantConfigDir = getTenantConfigDir()
-    if (tenantConfigDir) {
-      void runSeedFromRegistry(app.log)
-        .then(() => setSeedCompleted())
-        .catch((e) => {
-          app.log.warn({ err: e }, 'Seed failed (scope may be empty)')
-          setSeedCompleted()
-        })
-    } else {
-      setSeedCompleted()
-    }
+    // No automatic sync from JSON to DB. Tenant config in production comes from DB only.
+    // To load config from file into DB, run explicitly: pnpm run seed:tenants
+    setSeedCompleted()
   }
 
   app.get('/', async (_req, reply) => {

@@ -85,14 +85,42 @@
                   </span>
                   <span v-else class="ops-tenant__muted">none</span>
                 </td>
-                <td>
+                <td class="ops-tenant__actions-cell">
+                  <div v-if="entry.state === 'off'" class="ops-tenant__enable-row">
+                    <input
+                      v-model="endDateByModule[entry.id]"
+                      type="date"
+                      class="ops-tenant__date-input"
+                      :min="minDateForNewSub"
+                      aria-label="End date (optional)"
+                    />
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      :disabled="toggleLoading === entry.id"
+                      @click="toggleModule(entry.id, true, endDateByModule[entry.id] || undefined)"
+                    >
+                      Enable
+                    </Button>
+                  </div>
+                  <template v-else>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      :disabled="toggleLoading === entry.id"
+                      @click="toggleModule(entry.id, false)"
+                    >
+                      Disable
+                    </Button>
+                  </template>
                   <Button
                     size="xs"
                     variant="ghost"
-                    :disabled="toggleLoading === entry.id"
-                    @click="toggleModule(entry.id, entry.state !== 'active')"
+                    class="ops-tenant__set-date-btn"
+                    :disabled="setPeriodEndLoading === entry.id"
+                    @click="openSetPeriodEnd(entry.id)"
                   >
-                    {{ entry.state === 'active' ? 'Disable' : 'Enable' }}
+                    Set end date
                   </Button>
                 </td>
               </tr>
@@ -145,6 +173,7 @@
                     <th>Amount</th>
                     <th>Status</th>
                     <th>Confirmed</th>
+                    <th>Tx</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -156,6 +185,18 @@
                       <span v-if="p.confirmedAt">{{ formatDateTime(p.confirmedAt) }}</span>
                       <span v-else class="ops-tenant__muted">n/a</span>
                     </td>
+                    <td>
+                      <a
+                        v-if="p.txSignature"
+                        :href="`https://solscan.io/tx/${p.txSignature}`"
+                        target="_blank"
+                        rel="noopener"
+                        class="ops-tenant__tx-link"
+                      >
+                        View
+                      </a>
+                      <span v-else class="ops-tenant__muted">n/a</span>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -164,6 +205,55 @@
         </section>
       </div>
     </div>
+
+    <Modal
+      :model-value="setPeriodEndModuleId !== null"
+      title="Set end date"
+      @update:model-value="(v) => { if (!v) setPeriodEndModuleId = null }"
+    >
+      <form
+        v-if="setPeriodEndModuleId"
+        class="ops-tenant__set-date-form"
+        @submit.prevent="submitSetPeriodEnd"
+      >
+        <p class="ops-tenant__set-date-module">
+          Module: <code>{{ setPeriodEndModuleId }}</code>
+        </p>
+        <div class="ops-tenant__form-row">
+          <label for="set-period-end-date">End date</label>
+          <input
+            id="set-period-end-date"
+            v-model="setPeriodEndForm.periodEnd"
+            type="date"
+            required
+            :min="minDateForNewSub"
+            class="ops-tenant__date-input"
+          />
+        </div>
+        <div class="ops-tenant__form-row">
+          <label for="set-period-end-billing">Billing period (for new subscription)</label>
+          <select
+            id="set-period-end-billing"
+            v-model="setPeriodEndForm.billingPeriod"
+            class="ops-tenant__select"
+          >
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <p v-if="setPeriodEndError" class="ops-tenant__error">
+          {{ setPeriodEndError }}
+        </p>
+        <div class="ops-tenant__form-actions">
+          <Button type="button" variant="secondary" @click="setPeriodEndModuleId = null">
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" :disabled="setPeriodEndSaving">
+            {{ setPeriodEndSaving ? 'Saving…' : 'Set end date' }}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   </PageSection>
 </template>
 
@@ -171,8 +261,9 @@
 definePageMeta({ title: 'Tenant detail' })
 
 import type { TenantConfig } from '@decentraguild/core'
-import { getModuleCatalogList } from '@decentraguild/config'
-import { PageSection, Button } from '@decentraguild/ui/components'
+import { formatDate, formatDateTime, formatUsdc } from '@decentraguild/core'
+import { getModuleCatalogListWithAddons } from '@decentraguild/config'
+import { PageSection, Button, Modal } from '@decentraguild/ui/components'
 import { useApiBase } from '~/composables/useApiBase'
 
 interface SubscriptionSummary {
@@ -192,6 +283,7 @@ interface BillingPayment {
   periodEnd: string
   status: string
   confirmedAt: string | null
+  txSignature: string | null
 }
 
 interface TenantStats {
@@ -214,7 +306,7 @@ const router = useRouter()
 const apiBase = useApiBase()
 
 const tenant = ref<TenantConfig | null>(null)
-const catalogModules = getModuleCatalogList()
+const catalogModules = getModuleCatalogListWithAddons()
 const stats = ref<TenantStats | null>(null)
 const subscriptions = ref<Record<string, SubscriptionSummary | null>>({})
 const payments = ref<BillingPayment[]>([])
@@ -223,6 +315,19 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const moduleError = ref<string | null>(null)
 const toggleLoading = ref<string | null>(null)
+const endDateByModule = ref<Record<string, string>>({})
+
+const setPeriodEndModuleId = ref<string | null>(null)
+const setPeriodEndForm = ref({ periodEnd: '', billingPeriod: 'yearly' })
+const setPeriodEndError = ref<string | null>(null)
+const setPeriodEndSaving = ref(false)
+const setPeriodEndLoading = ref<string | null>(null)
+
+const minDateForNewSub = computed(() => {
+  const d = new Date()
+  d.setDate(d.getDate() + 30)
+  return d.toISOString().slice(0, 10)
+})
 
 const tenantIdentifier = computed(() => {
   if (!tenant.value) return ''
@@ -251,8 +356,8 @@ async function loadTenant() {
   loading.value = true
   error.value = null
   try {
-    const slug = route.params.slug as string
-    const res = await fetch(`${apiBase.value}/api/v1/platform/tenants/${encodeURIComponent(slug)}`, {
+    const tenantId = route.params.slug as string
+    const res = await fetch(`${apiBase.value}/api/v1/platform/tenants/${encodeURIComponent(tenantId)}`, {
       credentials: 'include',
     })
     if (!res.ok) {
@@ -271,19 +376,26 @@ async function loadTenant() {
   }
 }
 
-async function toggleModule(moduleId: string, enabled: boolean) {
+async function toggleModule(moduleId: string, enabled: boolean, periodEnd?: string) {
   if (!tenant.value) return
   moduleError.value = null
   toggleLoading.value = moduleId
   try {
-    const slugOrId = tenant.value.slug ?? tenant.value.id
+    const body: { moduleId: string; enabled: boolean; periodEnd?: string; billingPeriod?: string } = {
+      moduleId,
+      enabled,
+    }
+    if (enabled && periodEnd) {
+      body.periodEnd = periodEnd
+      body.billingPeriod = 'yearly'
+    }
     const res = await fetch(
-      `${apiBase.value}/api/v1/platform/tenants/${encodeURIComponent(slugOrId)}/modules`,
+      `${apiBase.value}/api/v1/platform/tenants/${encodeURIComponent(tenant.value.id)}/modules`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ moduleId, enabled }),
+        body: JSON.stringify(body),
       },
     )
     if (!res.ok) {
@@ -292,10 +404,53 @@ async function toggleModule(moduleId: string, enabled: boolean) {
     }
     const data = (await res.json()) as { tenant: TenantConfig }
     tenant.value = data.tenant
+    if (enabled && periodEnd) endDateByModule.value[moduleId] = ''
   } catch (e) {
     moduleError.value = e instanceof Error ? e.message : 'Failed to update module'
   } finally {
     toggleLoading.value = null
+  }
+}
+
+function openSetPeriodEnd(moduleId: string) {
+  setPeriodEndModuleId.value = moduleId
+  setPeriodEndError.value = null
+  const sub = subscriptions.value[moduleId]
+  setPeriodEndForm.value = {
+    periodEnd: sub?.periodEnd ? sub.periodEnd.slice(0, 10) : minDateForNewSub.value,
+    billingPeriod: 'yearly',
+  }
+}
+
+async function submitSetPeriodEnd() {
+  const moduleId = setPeriodEndModuleId.value
+  if (!moduleId || !tenant.value) return
+  setPeriodEndError.value = null
+  setPeriodEndSaving.value = true
+  try {
+    const res = await fetch(
+      `${apiBase.value}/api/v1/platform/tenants/${encodeURIComponent(tenant.value.id)}/billing/set-period-end`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          moduleId,
+          periodEnd: setPeriodEndForm.value.periodEnd,
+          billingPeriod: setPeriodEndForm.value.billingPeriod,
+        }),
+      },
+    )
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new Error(data.error ?? 'Failed to set end date')
+    }
+    setPeriodEndModuleId.value = null
+    await loadTenant()
+  } catch (e) {
+    setPeriodEndError.value = e instanceof Error ? e.message : 'Failed to set end date'
+  } finally {
+    setPeriodEndSaving.value = false
   }
 }
 
@@ -305,24 +460,6 @@ function back() {
   } else {
     router.push('/ops')
   }
-}
-
-function formatDate(value: string | Date | null): string {
-  if (!value) return ''
-  const d = typeof value === 'string' ? new Date(value) : value
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString()
-}
-
-function formatDateTime(value: string | Date | null): string {
-  if (!value) return ''
-  const d = typeof value === 'string' ? new Date(value) : value
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString()
-}
-
-function formatUsdc(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 </script>
 
@@ -486,6 +623,81 @@ function formatUsdc(n: number): string {
   margin-top: var(--theme-space-sm);
   font-size: var(--theme-font-xs);
   color: var(--theme-error);
+}
+
+.ops-tenant__tx-link {
+  color: var(--theme-text-link);
+  text-decoration: none;
+}
+
+.ops-tenant__tx-link:hover {
+  text-decoration: underline;
+}
+
+.ops-tenant__actions-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ops-tenant__enable-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ops-tenant__date-input {
+  font-size: var(--theme-font-xs);
+  padding: 0.25rem 0.35rem;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  background: var(--theme-bg);
+}
+
+.ops-tenant__set-date-btn {
+  margin-left: 0.25rem;
+}
+
+.ops-tenant__set-date-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-md);
+}
+
+.ops-tenant__set-date-module {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+}
+
+.ops-tenant__set-date-module code {
+  font-size: var(--theme-font-xs);
+}
+
+.ops-tenant__form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ops-tenant__form-row label {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+}
+
+.ops-tenant__select {
+  font-size: var(--theme-font-sm);
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  background: var(--theme-bg);
+  max-width: 12rem;
+}
+
+.ops-tenant__form-actions {
+  display: flex;
+  gap: var(--theme-space-sm);
+  margin-top: var(--theme-space-sm);
 }
 
 @media (max-width: var(--theme-breakpoint-md)) {

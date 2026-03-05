@@ -11,7 +11,7 @@ describe('computePrice', () => {
     const result = computePrice(
       'whitelist',
       {},
-      { modelType: 'add_unit', name: 'Whitelist', pricePerUnit: 25 },
+      { modelType: 'add_unit', conditionKey: 'whitelists', name: 'Whitelist', pricePerUnit: 25 },
       { billingPeriod: 'monthly' }
     )
     expect(result.billable).toBe(true)
@@ -27,7 +27,7 @@ describe('computePrice', () => {
     const result = computePrice(
       'whitelist',
       {},
-      { modelType: 'add_unit', name: 'Whitelist', pricePerUnit: 0 },
+      { modelType: 'add_unit', conditionKey: 'whitelists', name: 'Whitelist', pricePerUnit: 0 },
       { billingPeriod: 'monthly' }
     )
     expect(result.billable).toBe(false)

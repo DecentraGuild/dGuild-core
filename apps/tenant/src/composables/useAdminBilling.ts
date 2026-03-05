@@ -42,6 +42,7 @@ export function useAdminBilling(opts: {
   const tenantStore = useTenantStore()
   const apiBase = useApiBase()
   const { connection } = useSolanaConnection()
+  const tenantId = computed(() => tenantStore.tenantId)
   const slug = computed(() => tenantStore.slug)
   const txNotifications = useTransactionNotificationsStore()
 
@@ -51,15 +52,15 @@ export function useAdminBilling(opts: {
     slugToClaim?: string,
     conditions?: ConditionSet,
   ): Promise<boolean> {
-    const s = slug.value
-    if (!s) return false
+    const id = tenantId.value
+    if (!id) return false
     const base = apiBase.value
 
     const body: Record<string, unknown> = { moduleId, billingPeriod }
     if (moduleId === 'slug' && slugToClaim) body.slug = slugToClaim
     if (conditions && typeof conditions === 'object') body.conditions = conditions
 
-    const intentRes = await fetch(`${base}${API_V1}/tenant/${s}/billing/payment-intent`, {
+    const intentRes = await fetch(`${base}${API_V1}/tenant/${id}/billing/payment-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -153,7 +154,7 @@ export function useAdminBilling(opts: {
     moduleId: string,
     billingPeriod: BillingPeriod,
   ) {
-    if (!slug.value) return
+    if (!tenantId.value) return
     deploying.value = true
     saveError.value = null
     try {
@@ -187,7 +188,7 @@ export function useAdminBilling(opts: {
         settingsjson: prev.settingsjson ?? {},
       }
       const res = await fetch(
-        `${apiBase.value}${API_V1}/tenant/${slug.value}/settings`,
+        `${apiBase.value}${API_V1}/tenant/${tenantId.value}/settings`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -212,7 +213,7 @@ export function useAdminBilling(opts: {
     moduleId: string,
     billingPeriod: BillingPeriod,
   ) {
-    if (!slug.value) return
+    if (!tenantId.value) return
     saving.value = true
     saveError.value = null
     try {
@@ -245,7 +246,7 @@ export function useAdminBilling(opts: {
         settingsjson: prev.settingsjson ?? {},
       }
       const res = await fetch(
-        `${apiBase.value}${API_V1}/tenant/${slug.value}/settings`,
+        `${apiBase.value}${API_V1}/tenant/${tenantId.value}/settings`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -270,13 +271,13 @@ export function useAdminBilling(opts: {
     moduleId: string,
     billingPeriod: BillingPeriod,
   ) {
-    if (!slug.value) return
+    if (!tenantId.value) return
     extending.value = true
     saveError.value = null
     try {
       const base = apiBase.value
       const intentRes = await fetch(
-        `${base}${API_V1}/tenant/${slug.value}/billing/extend`,
+        `${base}${API_V1}/tenant/${tenantId.value}/billing/extend`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -330,7 +331,7 @@ export function useAdminBilling(opts: {
         )
 
         const confirmRes = await fetch(
-          `${base}${API_V1}/tenant/${slug.value}/billing/confirm-payment`,
+          `${base}${API_V1}/tenant/${tenantId.value}/billing/confirm-payment`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

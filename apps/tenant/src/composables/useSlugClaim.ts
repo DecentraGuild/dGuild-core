@@ -35,6 +35,7 @@ export function useSlugClaim(opts: {
   } = opts
   const tenantStore = useTenantStore()
   const apiBase = useApiBase()
+  const tenantId = computed(() => tenantStore.tenantId)
   const { connection } = useSolanaConnection()
   const txNotifications = useTransactionNotificationsStore()
 
@@ -53,7 +54,7 @@ export function useSlugClaim(opts: {
     slugCheckStatus.value = 'checking'
     try {
       const res = await fetch(
-        `${apiBase.value}${API_V1}/tenant/${slug.value}/slug/check?slug=${encodeURIComponent(s)}`,
+        `${apiBase.value}${API_V1}/tenant/${tenantId.value}/slug/check?slug=${encodeURIComponent(s)}`,
         { credentials: 'include' },
       )
       const data = (await res.json().catch(() => ({}))) as { available?: boolean }
@@ -100,7 +101,7 @@ export function useSlugClaim(opts: {
     try {
       const base = apiBase.value
       const intentRes = await fetch(
-        `${base}${API_V1}/tenant/${slug.value}/billing/extend`,
+        `${base}${API_V1}/tenant/${tenantId.value}/billing/extend`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -161,7 +162,7 @@ export function useSlugClaim(opts: {
         )
 
         const confirmRes = await fetch(
-          `${base}${API_V1}/tenant/${slug.value}/billing/confirm-payment`,
+          `${base}${API_V1}/tenant/${tenantId.value}/billing/confirm-payment`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

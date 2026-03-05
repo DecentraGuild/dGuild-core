@@ -6,9 +6,11 @@ Reference for where tenant and module configuration lives and how it is loaded.
 
 ## Tenant config: DB vs file
 
-- **Production:** The database (`tenant_config` table) is the primary source of truth. `resolveTenant(idOrSlug)` in `apps/api/src/db/tenant.ts` tries DB first (by slug, then by id), then falls back to file-based config when DB has no match.
-- **Local / non-production:** When `NODE_ENV !== 'production'`, `resolveTenant` tries file-based config first (so you can develop without a DB), then DB. This allows static JSON in `configs/tenants/` to bootstrap or override.
-- **File registry:** `apps/api/src/config/registry.ts` reads and writes tenant JSON under `TENANT_CONFIG_PATH` (e.g. `configs/tenants/{slug}.json` or `{id}.json`). Used for bootstrap, local dev, and optional fallback.
+- **When DATABASE_URL is set (production or any env with DB):** The database (`tenant_config` table) is the source of truth. The API does **not** sync from JSON to DB on startup. `resolveTenant(idOrSlug)` uses the DB only in production; in non-production with a DB it still tries file first for reads (see below), but no automatic write from file to DB.
+- **Production:** `resolveTenant` uses DB only (no file fallback). Tenant config is only in the DB; populate via explicit `pnpm run seed:tenants` or registration flow when moving config from dev to production.
+- **Local dev without DB:** `resolveTenant` uses file-based config from `configs/tenants/` so you can run without a DB.
+- **Local dev with DB:** With `DATABASE_URL` set, the API never pushes JSON into the DB. JSON in `configs/tenants/` is for development only. To push dev config into the DB, run `pnpm run seed:tenants` explicitly.
+- **File registry:** `apps/api/src/config/registry.ts` reads and writes tenant JSON under `TENANT_CONFIG_PATH`. Used for local dev and for the explicit seed script only; never auto-synced into the DB by the API.
 
 **Persistence:** Tenant-level settings (name, description, defaultWhitelist, branding, modules, etc.) are persisted via `tenant-settings` PATCH and stored in `tenant_config`. Default whitelist is stored in `tenant_config.default_whitelist` (JSONB) and set through the single path: Admin General tab → form → PATCH `/api/v1/tenant/:slug/settings` → DB. When using file-based config (`TENANT_CONFIG_PATH`), the same PATCH merges and writes the full tenant JSON (including `defaultWhitelist`). See `docs/whitelist-levels.md` for the three-level whitelist model (dGuild, module, transaction).
 

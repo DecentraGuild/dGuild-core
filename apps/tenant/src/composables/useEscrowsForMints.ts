@@ -6,6 +6,7 @@
 import { PublicKey } from '@solana/web3.js'
 import { watch } from 'vue'
 import { API_V1 } from '~/utils/apiBase'
+import { useTenantStore } from '~/stores/tenant'
 import BN from 'bn.js'
 import { escrowPriceToHuman } from '@decentraguild/display'
 import { createConnection, fetchAllEscrows } from '@decentraguild/web3'
@@ -90,14 +91,14 @@ export function useEscrowsForMints(
     })
   })
 
-  async function fetchWhitelistChecks(listAddresses: string[], wallet: string, slug: string) {
+  async function fetchWhitelistChecks(listAddresses: string[], wallet: string, tenantId: string) {
     const apiBase = options?.apiUrl?.value ?? ''
     if (!apiBase) return new Set<string>()
     const allowed = new Set<string>()
     for (const listAddr of listAddresses) {
       try {
         const res = await fetch(
-          `${apiBase}${API_V1}/tenant/${encodeURIComponent(slug)}/whitelist/check?wallet=${encodeURIComponent(wallet)}&list=${encodeURIComponent(listAddr)}`,
+          `${apiBase}${API_V1}/tenant/${encodeURIComponent(tenantId)}/whitelist/check?wallet=${encodeURIComponent(wallet)}&list=${encodeURIComponent(listAddr)}`,
           { credentials: 'include' }
         )
         if (res.ok) {
@@ -158,21 +159,22 @@ export function useEscrowsForMints(
       }
       const apiBase = options?.apiUrl?.value ?? ''
       if (!apiBase) return
-      whitelistAllowedLists.value = await fetchWhitelistChecks(uniqueLists, w, s)
+      const id = useTenantStore().tenantId
+      whitelistAllowedLists.value = id ? await fetchWhitelistChecks(uniqueLists, w, id) : new Set()
     },
     { immediate: true }
   )
 
   async function load() {
     const apiBase = options?.apiUrl?.value ?? ''
-    const slug = options?.slug?.value
-    const useApi = apiBase && slug && apiBase.length > 0
+    const tenantId = useTenantStore().tenantId
+    const useApi = apiBase && tenantId && apiBase.length > 0
 
     if (useApi) {
       loading.value = true
       error.value = null
       try {
-        const res = await fetch(`${apiBase}${API_V1}/tenant/${encodeURIComponent(slug)}/marketplace/escrows`)
+        const res = await fetch(`${apiBase}${API_V1}/tenant/${encodeURIComponent(tenantId)}/marketplace/escrows`)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = (await res.json()) as { escrows?: EscrowApiShape[] }
         const raw = Array.isArray(data.escrows) ? data.escrows : []

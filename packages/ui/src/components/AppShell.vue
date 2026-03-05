@@ -90,8 +90,8 @@ defineEmits<{
   display: none;
   align-items: center;
   justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: var(--theme-input-height);
+  height: var(--theme-input-height);
   margin: 0 0 var(--theme-space-sm);
   padding: 0;
   background: none;

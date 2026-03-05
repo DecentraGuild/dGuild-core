@@ -3,6 +3,7 @@
  * Used by WhitelistSelect and any UI that needs to show dGuild whitelist options.
  */
 import { API_V1 } from '~/utils/apiBase'
+import { useTenantStore } from '~/stores/tenant'
 
 export interface WhitelistListPublic {
   address: string
@@ -11,13 +12,14 @@ export interface WhitelistListPublic {
 }
 
 export function useWhitelistListsPublic(slug: Ref<string | null>) {
+  const tenantId = computed(() => useTenantStore().tenantId)
   const lists = ref<WhitelistListPublic[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
   async function fetchLists() {
-    const s = slug.value
-    if (!s?.trim()) {
+    const id = tenantId.value
+    if (!id) {
       lists.value = []
       return
     }
@@ -26,7 +28,7 @@ export function useWhitelistListsPublic(slug: Ref<string | null>) {
     try {
       const apiBase = useApiBase()
       const res = await fetch(
-        `${apiBase.value}${API_V1}/tenant/${encodeURIComponent(s)}/whitelist/lists/public`,
+        `${apiBase.value}${API_V1}/tenant/${encodeURIComponent(id)}/whitelist/lists/public`,
         { credentials: 'include' }
       )
       if (!res.ok) {

@@ -1,5 +1,6 @@
 import type { BillingPeriod, ConditionSet, PriceResult } from '@decentraguild/billing'
 import { API_V1 } from '~/utils/apiBase'
+import { useTenantStore } from '~/stores/tenant'
 
 export function usePricePreview(
   slug: Ref<string | null>,
@@ -7,6 +8,7 @@ export function usePricePreview(
   billingPeriod?: Ref<BillingPeriod>,
 ) {
   const apiBase = useApiBase()
+  const tenantId = computed(() => useTenantStore().tenantId)
 
   const conditions = ref<ConditionSet | null>(null)
   const price = ref<PriceResult | null>(null)
@@ -14,16 +16,16 @@ export function usePricePreview(
   const error = ref<string | null>(null)
 
   async function refresh() {
-    const s = slug.value
+    const id = tenantId.value
     const m = moduleId.value
-    if (!s || !m) {
+    if (!id || !m) {
       conditions.value = null
       price.value = null
       return
     }
 
     const period = billingPeriod?.value ?? 'monthly'
-    const url = `${apiBase.value}${API_V1}/tenant/${encodeURIComponent(s)}/billing/price-preview?moduleId=${encodeURIComponent(m)}&billingPeriod=${encodeURIComponent(period)}`
+    const url = `${apiBase.value}${API_V1}/tenant/${encodeURIComponent(id)}/billing/price-preview?moduleId=${encodeURIComponent(m)}&billingPeriod=${encodeURIComponent(period)}`
 
     loading.value = true
     error.value = null

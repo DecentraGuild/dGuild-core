@@ -276,8 +276,8 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: var(--theme-input-height);
+  height: var(--theme-input-height);
   padding: 0;
   background: none;
   border: none;

@@ -42,6 +42,13 @@ export interface ChargeCalculation {
 /**
  * Calculate how much (if anything) to charge when a module is deployed or
  * its settings are saved with a new price.
+ *
+ * - No existing sub or expired: charge full price, period = from now (initial).
+ * - Same or lower tier: no charge, keep current period.
+ * - Upgrade (higher tier): credit = unused value of current period (prorate deduct),
+ *   charge = (full new period price) - credit, period = full new period from now
+ *   (e.g. pay for 1 year of grow → get 1 year from now, not just remainder of old period).
+ * Extend (same tier, add time) is handled by calculateExtension; period is added on top of current end.
  */
 export function calculateCharge(
   newPrice: PriceResult,
@@ -90,16 +97,15 @@ export function calculateCharge(
   const remainingMs = existing.periodEnd.getTime() - now.getTime()
   const remainingDays = Math.max(1, Math.ceil(remainingMs / MS_PER_DAY))
 
-  const dailyRateOld = currentAmount / totalDays
-  const dailyRateNew = newAmount / totalDays
-  const prorated = (dailyRateNew - dailyRateOld) * remainingDays
+  const credit = (currentAmount / totalDays) * remainingDays
+  const charge = Math.max(0, newAmount - credit)
 
   return {
-    amountUsdc: roundUsdc(Math.max(0, prorated)),
+    amountUsdc: roundUsdc(charge),
     paymentType: 'upgrade_prorate',
-    periodStart: existing.periodStart,
-    periodEnd: existing.periodEnd,
-    noPaymentRequired: prorated <= 0,
+    periodStart: now,
+    periodEnd: periodEndFromStart(now, billingPeriod),
+    noPaymentRequired: charge <= 0,
     remainingDays,
   }
 }

@@ -1,7 +1,7 @@
 /**
- * Standalone seed: load tenant and marketplace configs from JSON and upsert into DB.
- * Use for production (run once per env or when adding tenants) so the API does not need
- * tenant JSON in the container at runtime.
+ * Standalone seed: load tenant and marketplace configs from JSON into DB.
+ * Use when you want to move dev config into the DB (e.g. before deploy). The API
+ * never syncs from JSON automatically; with DATABASE_URL set, it uses the DB only.
  *
  * Requires: DATABASE_URL.
  * Config paths: set SEED_TENANTS_PATH and/or SEED_MARKETPLACE_PATH to override;

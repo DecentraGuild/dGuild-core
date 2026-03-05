@@ -12,6 +12,8 @@ export {
   getModuleCatalog,
   getModuleCatalogEntry,
   getModuleCatalogList,
+  getModuleCatalogListWithAddons,
+  getAddonModuleIds,
   VALID_BILLING_PERIODS,
   getModuleDisplayName,
 } from './load-module-catalog.js'

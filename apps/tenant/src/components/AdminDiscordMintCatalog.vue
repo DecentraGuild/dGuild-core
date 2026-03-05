@@ -126,6 +126,7 @@ const props = defineProps<{
   catalogLoading: boolean
 }>()
 const emit = defineEmits<{ 'mints-changed': [] }>()
+const tenantId = computed(() => useTenantStore().tenantId)
 const apiBase = useApiBase()
 
 const creating = ref(false)
@@ -149,7 +150,7 @@ async function onCreate() {
       body.kind = newKind.value
     }
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/discord/mints`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/mints`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -179,7 +180,7 @@ async function onDelete(id: number) {
   createError.value = null
   try {
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/discord/mints/${id}`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/mints/${id}`,
       {
         method: 'DELETE',
         credentials: 'include',
@@ -210,7 +211,7 @@ async function onDelete(id: number) {
 
 .discord-mint-catalog__hint {
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
   margin-bottom: var(--theme-space-md);
 }
 
@@ -238,9 +239,9 @@ async function onDelete(id: number) {
 .discord-mint-catalog__error {
   padding: var(--theme-space-sm);
   margin: 0 0 var(--theme-space-sm);
-  background: var(--theme-surface-error, #fef2f2);
-  color: var(--theme-text-error, #b91c1c);
-  border-radius: var(--theme-radius-md, 4px);
+  background: var(--theme-surface-error);
+  color: var(--theme-text-error);
+  border-radius: var(--theme-radius-md);
   font-size: var(--theme-font-sm);
 }
 
@@ -277,7 +278,7 @@ async function onDelete(id: number) {
 }
 
 .discord-mint-catalog__symbol {
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
 }
 
 .discord-mint-catalog__decimals {
@@ -289,15 +290,14 @@ async function onDelete(id: number) {
   align-items: center;
   padding: 0 var(--theme-space-xs);
   border-radius: var(--theme-radius-full);
-  border: 1px solid var(--theme-border, #ddd);
-  font-size: var(--theme-font-xs, 11px);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  font-size: var(--theme-font-xs);
   text-transform: uppercase;
 }
 
 .discord-mint-catalog__asset {
-  font-family: var(--theme-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-        'Liberation Mono', 'Courier New', monospace);
-  font-size: var(--theme-font-xs, 11px);
+  font-family: var(--theme-font-mono);
+  font-size: var(--theme-font-xs);
 }
 
 .discord-mint-catalog__actions {
@@ -306,7 +306,7 @@ async function onDelete(id: number) {
 
 .discord-mint-catalog__add {
   margin-top: var(--theme-space-md);
-  border-top: 1px solid var(--theme-border, #eee);
+  border-top: var(--theme-border-thin) solid var(--theme-border);
   padding-top: var(--theme-space-md);
 }
 
@@ -325,29 +325,47 @@ async function onDelete(id: number) {
 .discord-mint-catalog__mint-input {
   flex: 1;
   min-width: 180px;
+  height: var(--theme-input-height);
+  display: flex;
+  align-items: stretch;
+}
+
+.discord-mint-catalog__mint-input :deep(.text-input) {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.discord-mint-catalog__mint-input :deep(.text-input__field) {
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .discord-mint-catalog__select {
-  padding: var(--theme-space-sm) var(--theme-space-md);
+  height: var(--theme-input-height);
+  padding: 0 var(--theme-space-md);
   border-radius: var(--theme-radius-md);
-  border: 1px solid var(--theme-border, #ccc);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  box-sizing: border-box;
 }
 
 .discord-mint-catalog__select--themed {
-  color: var(--theme-text-primary, #111);
-  background-color: var(--theme-bg-primary, #fff);
-  border-color: var(--theme-border, #ccc);
+  color: var(--theme-text-primary);
+  background-color: var(--theme-bg-primary);
+  border-color: var(--theme-border);
 }
 
 .discord-mint-catalog__select--themed option {
-  color: var(--theme-text-primary, #111);
-  background-color: var(--theme-bg-primary, #fff);
+  color: var(--theme-text-primary);
+  background-color: var(--theme-bg-primary);
 }
 
 .discord-mint-catalog__fine-print {
   margin-top: var(--theme-space-xs);
-  font-size: var(--theme-font-xs, 11px);
-  color: var(--theme-text-muted, #666);
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
 }
 
 .discord-mint-catalog__btn-spin {

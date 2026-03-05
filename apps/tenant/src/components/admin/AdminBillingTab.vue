@@ -59,6 +59,7 @@
 <script setup lang="ts">
 import { Card } from '@decentraguild/ui/components'
 import { Icon } from '@iconify/vue'
+import { useTenantStore } from '~/stores/tenant'
 import { MODULE_NAV } from '~/config/modules'
 import { API_V1 } from '~/utils/apiBase'
 
@@ -66,6 +67,8 @@ const props = defineProps<{
   slug: string | null
 }>()
 
+const tenantStore = useTenantStore()
+const tenantId = computed(() => tenantStore.tenantId)
 const payments = ref<BillingPaymentRecord[]>([])
 const loading = ref(false)
 
@@ -88,11 +91,11 @@ interface BillingPaymentRecord {
 const apiBase = useApiBase()
 
 async function load() {
-  if (!props.slug) return
+  if (!tenantId.value) return
   loading.value = true
   try {
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/billing/payments`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/billing/payments`,
       { credentials: 'include' },
     )
     if (res.ok) {
@@ -142,10 +145,10 @@ function formatUsdc(value: number): string {
 }
 
 async function downloadInvoice(paymentId: string) {
-  if (!props.slug) return
+  if (!tenantId.value) return
   try {
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/billing/payments/${paymentId}/invoice`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/billing/payments/${paymentId}/invoice`,
       { credentials: 'include' },
     )
     if (!res.ok) return

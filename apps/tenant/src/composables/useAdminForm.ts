@@ -39,6 +39,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
   const tenantStore = useTenantStore()
   const apiBase = useApiBase()
   const tenant = computed(() => tenantStore.tenant)
+  const tenantId = computed(() => tenantStore.tenantId)
   const slug = computed(() => tenantStore.slug)
 
   const moduleIds = computed(() => Object.keys(MODULE_NAV))
@@ -117,7 +118,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
   )
 
   async function save() {
-    if (!slug.value) return
+    if (!tenantId.value) return
     saving.value = true
     saveError.value = null
     try {
@@ -141,6 +142,9 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
           deactivatingUntil =
             subscriptions[id]?.periodEnd ?? prev?.deactivatedate ?? null
         }
+        if (state === 'active') {
+          deactivatingUntil = null
+        }
         modules[id] = {
           state: state as ModuleState,
           deactivatedate: prev?.deactivatedate ?? null,
@@ -149,7 +153,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
         }
       }
       const base = apiBase.value
-      const res = await fetch(`${base}${API_V1}/tenant/${slug.value}/settings`, {
+      const res = await fetch(`${base}${API_V1}/tenant/${tenantId.value}/settings`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

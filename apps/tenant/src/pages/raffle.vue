@@ -129,6 +129,7 @@ import { API_V1 } from '~/utils/apiBase'
 
 const tenantStore = useTenantStore()
 const apiBase = useApiBase()
+const tenantId = computed(() => tenantStore.tenantId)
 const { connection } = useSolanaConnection()
 const { fetchMetadata } = useMintMetadata()
 const slug = computed(() => tenantStore.slug ?? '')
@@ -316,10 +317,11 @@ watch(
 )
 
 onMounted(async () => {
-  if (!slug.value) return
+  const id = tenantId.value
+  if (!id) return
   loading.value = true
   try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${slug.value}/raffles`, { credentials: 'include' })
+    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${id}/raffles`, { credentials: 'include' })
     if (res.ok) {
       const data = (await res.json()) as { raffles: RaffleItem[] }
       raffles.value = data.raffles ?? []

@@ -46,6 +46,7 @@ interface CatalogMint {
 }
 
 const props = defineProps<{ slug: string }>()
+const tenantId = computed(() => useTenantStore().tenantId)
 const apiBase = useApiBase()
 
 const loading = ref(true)
@@ -64,7 +65,7 @@ const disconnecting = ref(false)
 const linkError = ref<string | null>(null)
 
 async function fetchInviteUrl() {
-  const res = await fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/discord/invite-url`, {
+  const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/invite-url`, {
     credentials: 'include',
   })
   if (res.ok) {
@@ -74,7 +75,7 @@ async function fetchInviteUrl() {
 }
 
 async function fetchServer() {
-  const res = await fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/discord/server`, {
+  const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/server`, {
     credentials: 'include',
   })
   if (res.ok) {
@@ -98,7 +99,7 @@ async function fetchMints() {
   catalogMintsLoading.value = true
   try {
     const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/discord/mints`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/mints`,
       { credentials: 'include' }
     )
     if (res.ok) {
@@ -131,7 +132,7 @@ async function onLink(payload: { guildId: string }) {
   linking.value = true
   linkError.value = null
   try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/discord/server`, {
+    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/server`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -164,7 +165,7 @@ async function onLink(payload: { guildId: string }) {
 async function disconnect() {
   disconnecting.value = true
   try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/discord/server`, {
+    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/server`, {
       method: 'DELETE',
       credentials: 'include',
     })

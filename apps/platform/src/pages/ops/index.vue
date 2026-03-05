@@ -149,6 +149,7 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Platform operations' })
 
+import { formatDate, formatDateTime, formatUsdc } from '@decentraguild/core'
 import { PageSection, Button } from '@decentraguild/ui/components'
 import { useApiBase } from '~/composables/useApiBase'
 
@@ -275,26 +276,7 @@ async function logout() {
 }
 
 function goToTenant(t: TenantSummary) {
-  const slugOrId = t.slug ?? t.id
-  navigateTo(`/ops/tenants/${encodeURIComponent(slugOrId)}`)
-}
-
-function formatDate(value: string | Date | null): string {
-  if (!value) return ''
-  const d = typeof value === 'string' ? new Date(value) : value
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString()
-}
-
-function formatDateTime(value: string | Date | null): string {
-  if (!value) return ''
-  const d = typeof value === 'string' ? new Date(value) : value
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString()
-}
-
-function formatUsdc(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  navigateTo(`/ops/tenants/${encodeURIComponent(t.id)}`)
 }
 
 function formatDetails(details: Record<string, unknown> | null): string {

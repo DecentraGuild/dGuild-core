@@ -109,6 +109,7 @@ const { connection } = useSolanaConnection()
 const txNotifications = useTransactionNotificationsStore()
 
 const apiBase = useApiBase()
+const tenantId = computed(() => tenantStore.tenantId)
 const { escrowLink } = useMarketplaceEscrowLinks(
   computed(() => tenantStore.slug)
 )
@@ -180,7 +181,7 @@ async function load() {
   loading.value = true
   error.value = null
   try {
-    const url = `${apiBase.value}${API_V1}/tenant/${encodeURIComponent(slug)}/marketplace/escrows?maker=${encodeURIComponent(addr)}`
+    const url = `${apiBase.value}${API_V1}/tenant/${encodeURIComponent(tenantId)}/marketplace/escrows?maker=${encodeURIComponent(addr)}`
     const res = await fetch(url)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = (await res.json()) as { escrows?: EscrowApiShape[] }

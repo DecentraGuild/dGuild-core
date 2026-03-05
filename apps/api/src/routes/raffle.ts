@@ -18,18 +18,18 @@ import {
   upsertRaffleSettings,
   type RaffleSettings,
 } from '../db/raffle.js'
-import { normalizeTenantIdentifier } from '../validate-slug.js'
-import { resolveTenant, updateTenant } from '../db/tenant.js'
+import { isValidTenantId } from '../validate-slug.js'
+import { getTenantById, updateTenant } from '../db/tenant.js'
 import type { TenantConfig, TenantModulesMap } from '@decentraguild/core'
 
 const DEFAULT_WHITELIST_PROGRAM = 'whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn'
 
 export async function registerRaffleRoutes(app: FastifyInstance) {
-  app.post<{ Params: { slug: string } }>(
-    '/api/v1/tenant/:slug/billing/create-raffle-payment',
+  app.post<{ Params: { tenantId: string } }>(
+    '/api/v1/tenant/:tenantId/billing/create-raffle-payment',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
 
       if (!getPool()) {
@@ -55,13 +55,13 @@ export async function registerRaffleRoutes(app: FastifyInstance) {
   )
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { paymentId: string; txSignature: string }
   }>(
-    '/api/v1/tenant/:slug/billing/confirm-raffle-payment',
+    '/api/v1/tenant/:tenantId/billing/confirm-raffle-payment',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
 
       if (!getPool()) {
@@ -132,13 +132,13 @@ export async function registerRaffleRoutes(app: FastifyInstance) {
   )
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { rafflePubkey: string }
   }>(
-    '/api/v1/tenant/:slug/raffles',
+    '/api/v1/tenant/:tenantId/raffles',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
 
       if (!getPool()) {
@@ -158,12 +158,12 @@ export async function registerRaffleRoutes(app: FastifyInstance) {
   )
 
   app.patch<{
-    Params: { slug: string; rafflePubkey: string }
+    Params: { tenantId: string; rafflePubkey: string }
   }>(
-    '/api/v1/tenant/:slug/raffles/:rafflePubkey/close',
+    '/api/v1/tenant/:tenantId/raffles/:rafflePubkey/close',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
 
       if (!getPool()) {
@@ -184,13 +184,13 @@ export async function registerRaffleRoutes(app: FastifyInstance) {
     },
   )
 
-  app.get<{ Params: { slug: string } }>('/api/v1/tenant/:slug/raffles', async (request, reply) => {
-    const slug = normalizeTenantIdentifier(request.params.slug)
-    if (!slug) {
-      return reply.status(400).send(apiError('Invalid tenant identifier', ErrorCode.BAD_REQUEST))
+  app.get<{ Params: { tenantId: string } }>('/api/v1/tenant/:tenantId/raffles', async (request, reply) => {
+    const tenantId = request.params.tenantId?.trim()
+    if (!tenantId || !isValidTenantId(tenantId)) {
+      return reply.status(400).send(apiError('Invalid tenant id', ErrorCode.BAD_REQUEST))
     }
 
-    const tenant = await resolveTenant(slug)
+    const tenant = await getTenantById(tenantId)
     if (!tenant) {
       return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
     }
@@ -210,8 +210,8 @@ export async function registerRaffleRoutes(app: FastifyInstance) {
     }
   })
 
-  app.get<{ Params: { slug: string } }>('/api/v1/tenant/:slug/raffle-settings', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  app.get<{ Params: { tenantId: string } }>('/api/v1/tenant/:tenantId/raffle-settings', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     if (!getPool()) {
@@ -223,13 +223,13 @@ export async function registerRaffleRoutes(app: FastifyInstance) {
   })
 
   app.patch<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { defaultWhitelist?: { programId?: string; account?: string } | 'use-default' | null }
   }>(
-    '/api/v1/tenant/:slug/raffle-settings',
+    '/api/v1/tenant/:tenantId/raffle-settings',
     { preHandler: [adminWriteRateLimit] },
     async (request, reply) => {
-      const result = await requireTenantAdmin(request, reply, request.params.slug)
+      const result = await requireTenantAdmin(request, reply, request.params.tenantId)
       if (!result) return
 
       if (!getPool()) {
@@ -245,12 +245,13 @@ export async function registerRaffleRoutes(app: FastifyInstance) {
       } else if (wlRaw === null || wlRaw === undefined) {
         defaultWhitelist = null
       } else if (typeof wlRaw === 'object' && wlRaw) {
-        const acc = (wlRaw.account as string)?.trim()
+        const wl = wlRaw as { account?: string; programId?: string }
+        const acc = wl.account?.trim()
         if (!acc) {
           defaultWhitelist = null
         } else {
           defaultWhitelist = {
-            programId: ((wlRaw.programId as string)?.trim()) || DEFAULT_WHITELIST_PROGRAM,
+            programId: (wl.programId?.trim()) || DEFAULT_WHITELIST_PROGRAM,
             account: acc,
           }
         }

@@ -25,6 +25,7 @@
   --theme-bg-primary: #0a0a0f;
   --theme-bg-secondary: #141420;
   --theme-bg-card: #1a1a2e;
+  --theme-bg-muted: #252535;
 
   /* Text */
   --theme-text-primary: #ffffff;
@@ -38,6 +39,8 @@
   /* Status */
   --theme-success: #00951a;
   --theme-error: #cf0000;
+  --theme-text-error: var(--theme-error);
+  --theme-surface-error: rgba(207, 0, 0, 0.12);
   --theme-warning: #ff6b35;
   --theme-info: #00d4ff;
 
@@ -60,9 +63,13 @@
   --theme-window-border: #2a2a3e;
   --theme-window-header: #141420;
 
+  /* Font family */
+  --theme-font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+
   /* Font sizes */
   --theme-font-xs: 0.75rem;
   --theme-font-sm: 0.875rem;
+  --theme-font-md: 1rem;
   --theme-font-base: 1rem;
   --theme-font-lg: 1.125rem;
   --theme-font-xl: 1.25rem;
@@ -85,6 +92,9 @@
   --theme-radius-lg: 1rem;
   --theme-radius-xl: 1.25rem;
   --theme-radius-full: 9999px;
+
+  /* Control height – form inputs, selects; use in form rows for consistent alignment */
+  --theme-input-height: 2.5rem;
 
   /* Border width */
   --theme-border-thin: 1px;

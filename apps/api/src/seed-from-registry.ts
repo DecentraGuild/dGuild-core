@@ -1,6 +1,7 @@
 /**
  * Seed tenants and marketplace configs from file registry into DB.
- * Used by API startup (when TENANT_CONFIG_PATH is set) and by the standalone seed script.
+ * Used only by the standalone script: pnpm run seed:tenants.
+ * The API does not run this on startup; DB is source of truth when DATABASE_URL is set.
  */
 
 import { listTenantSlugs, loadTenantByIdOrSlug } from './config/registry.js'
@@ -67,8 +68,8 @@ export async function seedMintMetadataFromConfig(
 
 /**
  * Load all tenants and marketplace configs from the file registry and upsert into DB.
- * Requires TENANT_CONFIG_PATH (and MARKETPLACE_CONFIG_PATH for marketplace) to be set.
- * Use from API startup (when config path is set) or from seed script after setting env.
+ * Run explicitly via pnpm run seed:tenants when you want to push dev config into the DB
+ * (e.g. before deploy). The API never runs this automatically.
  */
 export async function runSeedFromRegistry(log: SeedLog): Promise<void> {
   const tenantIds = await listTenantSlugs()

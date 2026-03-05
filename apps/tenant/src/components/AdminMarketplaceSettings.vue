@@ -351,6 +351,7 @@ const emit = defineEmits<{
   saved: [settings: Record<string, unknown>]
 }>()
 
+const tenantId = computed(() => useTenantStore().tenantId)
 const apiBase = useApiBase()
 
 const form = reactive<MarketplaceForm>({
@@ -789,7 +790,7 @@ async function save() {
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS)
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${props.slug}/marketplace-settings`, {
+    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantId.value}/marketplace-settings`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -916,7 +917,7 @@ button.marketplace-settings__mint-row {
   height: 40px;
   border-radius: var(--theme-radius-sm, 4px);
   overflow: hidden;
-  background: var(--theme-bg-muted, #eee);
+  background: var(--theme-bg-muted);
 }
 
 .marketplace-settings__mint-thumb img {

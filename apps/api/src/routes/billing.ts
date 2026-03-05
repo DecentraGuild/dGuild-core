@@ -7,10 +7,10 @@ import { previewPrice } from '../billing/service.js'
 
 export async function registerBillingRoutes(app: FastifyInstance) {
   app.get<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Querystring: { moduleId?: string; billingPeriod?: string }
-  }>('/api/v1/tenant/:slug/billing/price-preview', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  }>('/api/v1/tenant/:tenantId/billing/price-preview', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     const moduleId = request.query.moduleId
@@ -41,10 +41,10 @@ export async function registerBillingRoutes(app: FastifyInstance) {
   })
 
   app.post<{
-    Params: { slug: string }
+    Params: { tenantId: string }
     Body: { moduleId: string; conditions?: ConditionSet; billingPeriod?: BillingPeriod }
-  }>('/api/v1/tenant/:slug/billing/price-preview', async (request, reply) => {
-    const result = await requireTenantAdmin(request, reply, request.params.slug)
+  }>('/api/v1/tenant/:tenantId/billing/price-preview', async (request, reply) => {
+    const result = await requireTenantAdmin(request, reply, request.params.tenantId)
     if (!result) return
 
     const body = request.body ?? ({} as Record<string, unknown>)

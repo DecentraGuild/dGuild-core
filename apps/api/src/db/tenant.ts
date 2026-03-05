@@ -62,7 +62,7 @@ export function rowToTenantConfig(row: Record<string, unknown>): TenantConfig {
     discordServerInviteLink,
     defaultWhitelist: parseDefaultWhitelist(row.default_whitelist),
     branding,
-    modules: normalizeModules(rawModules),
+    modules: normalizeModules(rawModules as Parameters<typeof normalizeModules>[0]),
     admins: parseJsonField<string[]>(row.admins) ?? [],
     treasury: (row.treasury as string) ?? undefined,
     createdAt: row.created_at ? new Date(row.created_at as string).toISOString() : undefined,
@@ -116,10 +116,10 @@ export async function resolveTenant(idOrSlug: string): Promise<TenantConfig | nu
   return fromDb()
 }
 
-/** All tenant identifiers (slug or id) from DB. Used by module-lifecycle job to iterate tenants. */
-export async function getAllTenantSlugs(): Promise<string[]> {
-  const { rows } = await query<Record<string, unknown>>('SELECT id, slug FROM tenant_config')
-  return rows.map((r) => (r.slug as string) ?? (r.id as string)).filter(Boolean)
+/** All tenant primary keys (id) from DB. Canonical for worker and internal APIs. */
+export async function getAllTenantIds(): Promise<string[]> {
+  const { rows } = await query<Record<string, unknown>>('SELECT id FROM tenant_config')
+  return rows.map((r) => r.id as string).filter(Boolean)
 }
 
 export async function upsertTenant(config: TenantConfig): Promise<void> {
@@ -192,7 +192,7 @@ export function mergeTenantPatch(existing: TenantConfig, patch: TenantSettingsPa
       merged.branding.theme = patchTheme
     }
   }
-  if (patch.modules !== undefined) merged.modules = normalizeModules(patch.modules as unknown)
+  if (patch.modules !== undefined) merged.modules = normalizeModules(patch.modules as Parameters<typeof normalizeModules>[0])
   return merged
 }
 

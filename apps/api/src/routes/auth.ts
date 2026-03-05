@@ -80,7 +80,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   app.post('/api/v1/auth/logout', async (request, reply) => {
     const cookieName = getCookieName()
     const secure = request.headers['x-forwarded-proto'] === 'https'
-    const opts = { path: '/', sameSite: (secure ? 'none' : 'lax') as const, secure }
+    const opts = { path: '/', sameSite: (secure ? 'none' : 'lax') as 'lax' | 'none', secure }
     return reply
       .clearCookie(cookieName, opts)
       .send({ ok: true })

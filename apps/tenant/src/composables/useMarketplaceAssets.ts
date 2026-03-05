@@ -4,6 +4,7 @@
  * Returns scope (mints, entries) when API includes it.
  */
 import { API_V1 } from '~/utils/apiBase'
+import { useTenantStore } from '~/stores/tenant'
 import type { ScopeEntry } from './useMarketplaceScope'
 
 export type AssetType = 'CURRENCY' | 'NFT_COLLECTION' | 'SPL_ASSET'
@@ -45,6 +46,7 @@ export function useMarketplaceAssets(options: UseMarketplaceAssetsOptions) {
   } = options
 
   const apiBase = useApiBase()
+  const tenantId = computed(() => useTenantStore().tenantId)
 
   const assets = ref<MarketplaceAsset[]>([])
   const total = ref(0)
@@ -66,8 +68,8 @@ export function useMarketplaceAssets(options: UseMarketplaceAssetsOptions) {
   })
 
   async function load() {
-    const s = slug.value
-    if (!s) {
+    const id = tenantId.value
+    if (!id) {
       assets.value = []
       total.value = 0
       scope.value = null
@@ -83,7 +85,7 @@ export function useMarketplaceAssets(options: UseMarketplaceAssetsOptions) {
       if (search.value?.trim()) params.set('search', search.value.trim())
 
       const res = await fetch(
-        `${apiBase.value}${API_V1}/tenant/${encodeURIComponent(s)}/marketplace/assets?${params}`
+        `${apiBase.value}${API_V1}/tenant/${encodeURIComponent(id)}/marketplace/assets?${params}`
       )
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = (await res.json()) as {
