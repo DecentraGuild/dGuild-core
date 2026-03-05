@@ -5,6 +5,6 @@
     "buildCommand": "pnpm install && pnpm exec turbo run build --filter=api"
   },
   "deploy": {
-    "startCommand": "sh -lc \"case \\\"$SERVICE_ROLE\\\" in worker) pnpm --filter api worker ;; *) pnpm --filter api start ;; esac\""
+    "startCommand": "sh -c 'case \"$SERVICE_ROLE\" in worker) node apps/api/dist/worker.js ;; *) node apps/api/dist/index.js ;; esac'"
   }
 }
