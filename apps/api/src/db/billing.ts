@@ -453,3 +453,53 @@ export async function confirmSlugClaimPayment(params: {
     }
   })
 }
+
+/** Apply slug claim when no payment is required (e.g. zero charge). Updates tenant slug and subscription only. */
+export async function applySlugClaimNoPayment(params: {
+  tenantId: string
+  newSlug: string
+  billingPeriod: BillingPeriod
+  recurringAmountUsdc: number
+  periodStart: Date
+  periodEnd: Date
+  conditionsSnapshot: ConditionSet
+  priceSnapshot: PriceResult
+}): Promise<BillingSubscription> {
+  const pool = getPool()
+  if (!pool) throw new Error('Database not initialized')
+
+  const subRes = await query(
+    `UPDATE tenant_config SET slug = $1, updated_at = NOW() WHERE id = $2`,
+    [params.newSlug, params.tenantId],
+  )
+  if (subRes.rowCount === 0) {
+    throw new Error('Tenant not found')
+  }
+
+  const { rows } = await query(
+    `INSERT INTO billing_subscriptions
+       (tenant_slug, module_id, billing_period, recurring_amount_usdc,
+        period_start, period_end, conditions_snapshot, price_snapshot)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
+     ON CONFLICT (tenant_slug, module_id) DO UPDATE SET
+       billing_period = EXCLUDED.billing_period,
+       recurring_amount_usdc = EXCLUDED.recurring_amount_usdc,
+       period_start = EXCLUDED.period_start,
+       period_end = EXCLUDED.period_end,
+       conditions_snapshot = EXCLUDED.conditions_snapshot,
+       price_snapshot = EXCLUDED.price_snapshot,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      params.tenantId,
+      'slug',
+      params.billingPeriod,
+      params.recurringAmountUsdc,
+      params.periodStart,
+      params.periodEnd,
+      JSON.stringify(params.conditionsSnapshot),
+      JSON.stringify(params.priceSnapshot),
+    ],
+  )
+  return mapSubscription(rows[0] as SubscriptionRow)
+}

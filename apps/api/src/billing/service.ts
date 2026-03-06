@@ -16,6 +16,7 @@ import {
   confirmPaymentOnly,
   confirmPaymentAndActivate,
   confirmSlugClaimPayment,
+  applySlugClaimNoPayment,
   failPayment,
   expireStalePendingPayments,
 } from '../db/billing.js'
@@ -144,6 +145,22 @@ export async function createPaymentIntent(
   const charge = calculateCharge(price, billingPeriod, existing)
 
   if (charge.noPaymentRequired) {
+    if (moduleId === 'slug') {
+      const slugToClaim = (conditions as Record<string, unknown>).slugToClaim
+      if (typeof slugToClaim === 'string' && slugToClaim) {
+        const recurringAmountUsdc = price.recurringYearly ?? price.recurringMonthly ?? 0
+        await applySlugClaimNoPayment({
+          tenantId: tenant.id,
+          newSlug: slugToClaim,
+          billingPeriod,
+          recurringAmountUsdc,
+          periodStart: charge.periodStart,
+          periodEnd: charge.periodEnd,
+          conditionsSnapshot: conditions,
+          priceSnapshot: price,
+        })
+      }
+    }
     return {
       noPaymentRequired: true,
       amountUsdc: 0,

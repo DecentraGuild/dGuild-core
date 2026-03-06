@@ -944,11 +944,11 @@ async function onAddRewardSubmit() {
 }
 
 onMounted(async () => {
-  const slug = slugRef.value
-  if (!slug) return
+  const id = tenantIdRef.value
+  if (!id) return
   await fetchRaffles()
   try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${slug}/raffle-settings`, { credentials: 'include' })
+    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${id}/raffle-settings`, { credentials: 'include' })
     if (res.ok) {
       const data = await res.json()
       const s = data.settings

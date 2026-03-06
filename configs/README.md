@@ -14,6 +14,8 @@ Id-first conventions for tenant and marketplace config.
 - Billing, DB, and internal APIs use **id**.
 - Display and URLs use **slug** when present, else **id**.
 
+**In code:** All API paths, storage keys, and fetch/load logic must use **tenant id** (e.g. `tenantId`, `tenant.id`). Never use a variable like `s` or `slug` for the tenant identifier in requests. Slug is display-only (subdomain, nav, `?tenant=` for routing).
+
 ---
 
 ## File naming

@@ -379,7 +379,7 @@ async function createList() {
     }
 
     const postRes = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${props.slug}/whitelist/lists`,
+      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/whitelist/lists`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -44,6 +44,39 @@
                 <span v-else class="ops-tenant__muted">none</span>
               </dd>
             </div>
+            <div class="ops-tenant__slug-override">
+              <dt>Set slug (ops)</dt>
+              <dd>
+                <input
+                  v-model="opsSlugInput"
+                  type="text"
+                  class="ops-tenant__slug-input"
+                  placeholder="e.g. my-community"
+                  :disabled="slugSetLoading"
+                  @keydown.enter.prevent="checkOpsSlug()"
+                />
+                <span v-if="opsSlugCheckStatus === 'available'" class="ops-tenant__slug-ok">Available</span>
+                <span v-else-if="opsSlugCheckStatus === 'taken'" class="ops-tenant__slug-taken">Taken</span>
+                <span v-else-if="opsSlugCheckStatus === 'checking'" class="ops-tenant__slug-checking">Checking…</span>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  :disabled="!opsSlugInput.trim() || slugSetLoading"
+                  @click="checkOpsSlug()"
+                >
+                  Check
+                </Button>
+                <Button
+                  size="xs"
+                  variant="primary"
+                  :disabled="opsSlugCheckStatus !== 'available' || slugSetLoading"
+                  @click="setOpsSlug()"
+                >
+                  {{ slugSetLoading ? 'Saving…' : 'Set slug' }}
+                </Button>
+                <span v-if="opsSlugError" class="ops-tenant__error-inline">{{ opsSlugError }}</span>
+              </dd>
+            </div>
             <div>
               <dt>Treasury</dt>
               <dd>
@@ -323,6 +356,11 @@ const setPeriodEndError = ref<string | null>(null)
 const setPeriodEndSaving = ref(false)
 const setPeriodEndLoading = ref<string | null>(null)
 
+const opsSlugInput = ref('')
+const opsSlugCheckStatus = ref<'idle' | 'checking' | 'available' | 'taken'>('idle')
+const opsSlugError = ref<string | null>(null)
+const slugSetLoading = ref(false)
+
 const minDateForNewSub = computed(() => {
   const d = new Date()
   d.setDate(d.getDate() + 30)
@@ -351,6 +389,60 @@ const moduleRows = computed(() =>
 onMounted(async () => {
   await loadTenant()
 })
+
+async function checkOpsSlug() {
+  const s = opsSlugInput.value.trim().toLowerCase()
+  if (!s || !tenant.value) return
+  opsSlugError.value = null
+  opsSlugCheckStatus.value = 'checking'
+  try {
+    const res = await fetch(
+      `${apiBase.value}/api/v1/platform/tenants/${encodeURIComponent(tenant.value.id)}/slug/check?slug=${encodeURIComponent(s)}`,
+      { credentials: 'include' },
+    )
+    const data = (await res.json().catch(() => ({}))) as { available?: boolean; error?: string }
+    if (!res.ok) {
+      opsSlugCheckStatus.value = 'idle'
+      opsSlugError.value = data.error ?? 'Check failed'
+      return
+    }
+    opsSlugCheckStatus.value = data.available ? 'available' : 'taken'
+  } catch {
+    opsSlugCheckStatus.value = 'idle'
+    opsSlugError.value = 'Check failed'
+  }
+}
+
+async function setOpsSlug() {
+  const s = opsSlugInput.value.trim().toLowerCase()
+  if (!s || !tenant.value || opsSlugCheckStatus.value !== 'available') return
+  opsSlugError.value = null
+  slugSetLoading.value = true
+  try {
+    const res = await fetch(
+      `${apiBase.value}/api/v1/platform/tenants/${encodeURIComponent(tenant.value.id)}/slug`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ slug: s }),
+      },
+    )
+    const data = (await res.json().catch(() => ({}))) as { tenant?: TenantConfig; error?: string }
+    if (!res.ok) {
+      opsSlugError.value = data.error ?? 'Failed to set slug'
+      return
+    }
+    if (data.tenant) tenant.value = data.tenant
+    opsSlugInput.value = ''
+    opsSlugCheckStatus.value = 'idle'
+    await loadTenant()
+  } catch {
+    opsSlugError.value = 'Failed to set slug'
+  } finally {
+    slugSetLoading.value = false
+  }
+}
 
 async function loadTenant() {
   loading.value = true
@@ -569,6 +661,47 @@ function back() {
 
 .ops-tenant__config dd {
   margin: 0;
+}
+
+.ops-tenant__slug-override {
+  grid-column: 1 / -1;
+}
+
+.ops-tenant__slug-override dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ops-tenant__slug-input {
+  font-size: var(--theme-font-sm);
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  background: var(--theme-bg);
+  min-width: 10rem;
+}
+
+.ops-tenant__slug-ok {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-success, green);
+}
+
+.ops-tenant__slug-taken {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-error);
+}
+
+.ops-tenant__slug-checking {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+}
+
+.ops-tenant__error-inline {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-error);
+  width: 100%;
 }
 
 .ops-tenant__list {

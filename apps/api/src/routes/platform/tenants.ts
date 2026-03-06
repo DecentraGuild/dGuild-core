@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import type { TenantConfig } from '@decentraguild/core'
 import { getAddonModuleIds } from '@decentraguild/config'
-import { getTenantById, getAllTenantIds } from '../../db/tenant.js'
+import { getTenantById, getAllTenantIds, getTenantBySlug, updateTenant } from '../../db/tenant.js'
 import { getSubscription, listPayments } from '../../db/billing.js'
 import { tenantBillingKey } from '../../billing/service.js'
+import { normalizeTenantSlug } from '../../validate-slug.js'
 import { requirePlatformAdmin } from './common.js'
 import { apiError, ErrorCode } from '../../api-errors.js'
 
@@ -99,6 +100,68 @@ export async function registerPlatformTenantsRoutes(app: FastifyInstance) {
       },
       stats,
     }
+  })
+
+  app.get<{
+    Params: { tenantId: string }
+    Querystring: { slug?: string }
+  }>('/api/v1/platform/tenants/:tenantId/slug/check', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request, reply)
+    if (!admin) return
+
+    const tenantId = request.params.tenantId.trim()
+    const tenant = await getTenantById(tenantId)
+    if (!tenant) {
+      return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
+    }
+
+    const desired = request.query.slug
+    if (!desired || typeof desired !== 'string') {
+      return reply.status(400).send(apiError('slug query parameter is required', ErrorCode.BAD_REQUEST))
+    }
+    const normalized = normalizeTenantSlug(desired.trim())
+    if (!normalized) {
+      return reply.status(400).send(apiError('Invalid slug: use only lowercase letters, numbers, and hyphens (1–64 chars)', ErrorCode.INVALID_SLUG))
+    }
+    if (tenant.slug === normalized) {
+      return { available: true }
+    }
+    const existing = await getTenantBySlug(normalized)
+    return { available: !existing || existing.id === tenantId }
+  })
+
+  app.patch<{
+    Params: { tenantId: string }
+    Body: { slug?: string }
+  }>('/api/v1/platform/tenants/:tenantId/slug', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request, reply)
+    if (!admin) return
+
+    const tenantId = request.params.tenantId.trim()
+    const tenant = await getTenantById(tenantId)
+    if (!tenant) {
+      return reply.status(404).send(apiError('Tenant not found', ErrorCode.TENANT_NOT_FOUND))
+    }
+
+    const raw = request.body?.slug
+    if (raw === undefined || raw === null) {
+      return reply.status(400).send(apiError('slug is required', ErrorCode.BAD_REQUEST))
+    }
+    const normalized = typeof raw === 'string' ? normalizeTenantSlug(raw.trim()) : null
+    if (!normalized) {
+      return reply.status(400).send(apiError('Invalid slug: use only lowercase letters, numbers, and hyphens (1–64 chars)', ErrorCode.INVALID_SLUG))
+    }
+
+    const existing = await getTenantBySlug(normalized)
+    if (existing && existing.id !== tenantId) {
+      return reply.status(400).send(apiError('Slug is already in use by another tenant', ErrorCode.INVALID_SLUG))
+    }
+
+    const updated = await updateTenant(tenantId, { slug: normalized })
+    if (!updated) {
+      return reply.status(500).send(apiError('Failed to update tenant slug', ErrorCode.INTERNAL_ERROR))
+    }
+    return { tenant: updated }
   })
 }
 

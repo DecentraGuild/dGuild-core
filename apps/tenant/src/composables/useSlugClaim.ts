@@ -49,7 +49,7 @@ export function useSlugClaim(opts: {
 
   async function checkSlugAvailability() {
     const s = desiredSlug.value.trim().toLowerCase()
-    if (!s || !slug.value) return
+    if (!s || !tenantId.value) return
     slugChecking.value = true
     slugCheckStatus.value = 'checking'
     try {
@@ -72,7 +72,7 @@ export function useSlugClaim(opts: {
 
   async function claimSlug() {
     const s = desiredSlug.value.trim().toLowerCase()
-    if (!s || slugCheckStatus.value !== 'available' || !slug.value) return
+    if (!s || slugCheckStatus.value !== 'available' || !tenantId.value) return
     slugClaiming.value = true
     saveError.value = null
     try {
@@ -95,7 +95,7 @@ export function useSlugClaim(opts: {
   }
 
   async function extendSlug(period: BillingPeriod) {
-    if (!slug.value) return
+    if (!tenantId.value) return
     saving.value = true
     saveError.value = null
     try {

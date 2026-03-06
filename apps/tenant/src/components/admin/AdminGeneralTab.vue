@@ -22,17 +22,9 @@
             {{ slugClaiming ? 'Claiming...' : (showSlugUnlock ? 'Cancel' : 'Unlock') }}
           </Button>
         </div>
-        <div v-if="tenant?.id" class="admin__tenant-id">
-          <span class="admin__tenant-id-label">Tenant ID</span>
-          <code>{{ tenant.id }}</code>
-          <span class="admin__tenant-id-hint">
-            Your dGuild lives at
-            <code>{{ (tenant.slug ?? tenant.id) }}.dguild.org</code>.
-            On localhost you can still use
-            <code>?tenant={{ tenant.slug ?? tenant.id }}</code>
-            in the URL.
-          </span>
-        </div>
+        <p v-if="tenant?.id && isProduction" class="admin__tenant-domain">
+          <code>{{ (tenant.slug ?? tenant.id) }}.dguild.org</code>
+        </p>
         <div v-if="showSlugUnlock && !tenant?.slug" class="admin__slug-unlock">
           <TextInput
             :model-value="desiredSlug"
@@ -113,6 +105,8 @@ import { Card, TextInput, Button } from '@decentraguild/ui/components'
 import { Icon } from '@iconify/vue'
 import type { AdminForm } from '~/composables/useAdminForm'
 import type { TenantConfig } from '@decentraguild/core'
+
+const isProduction = import.meta.env.PROD
 
 defineProps<{
   form: AdminForm

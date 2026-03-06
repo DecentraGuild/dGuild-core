@@ -113,7 +113,7 @@ export function useAdminBilling(opts: {
         wallet.publicKey,
       )
 
-      const confirmRes = await fetch(`${base}${API_V1}/tenant/${s}/billing/confirm-payment`, {
+      const confirmRes = await fetch(`${base}${API_V1}/tenant/${id}/billing/confirm-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

@@ -109,8 +109,8 @@ async function load() {
   }
 }
 
-watch(() => props.slug, (s) => {
-  if (s) load()
+watch(tenantId, (id) => {
+  if (id) load()
 }, { immediate: true })
 
 function formatPaymentDate(iso: string | null): string {

@@ -167,10 +167,10 @@ async function fetchMe() {
 }
 
 async function fetchRoleCards() {
-  const slug = tenantStore.slug
-  if (!slug) return
+  const id = tenantStore.tenantId
+  if (!id) return
   try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${encodeURIComponent(slug)}/discord/role-cards`, {
+    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${encodeURIComponent(id)}/discord/role-cards`, {
       credentials: 'include',
     })
     if (!res.ok) return
@@ -195,11 +195,11 @@ async function doLinkAdditionalWallet(wallet: string) {
   }
   const { nonce } = (await nonceRes.json()) as { nonce: string }
   const { signature, message } = await signMessageForAuth(nonce)
-  const slug = tenantStore.slug ?? undefined
+  const tenantId = tenantStore.tenantId ?? undefined
   const linkRes = await fetch(`${base}${API_V1}/discord/link-additional-wallet`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wallet, message, signature, tenant_slug: slug }),
+    body: JSON.stringify({ wallet, message, signature, tenant_slug: tenantId }),
     credentials: 'include',
   })
   if (!linkRes.ok) {
