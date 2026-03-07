@@ -13,5 +13,11 @@
   border-radius: var(--theme-radius-lg);
   box-shadow: var(--theme-shadow-card);
   padding: var(--theme-space-lg);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: var(--theme-shadow-glow);
+  border-color: var(--theme-border-light);
 }
 </style>

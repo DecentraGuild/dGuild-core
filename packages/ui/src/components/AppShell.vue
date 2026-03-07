@@ -1,5 +1,12 @@
 <template>
   <div class="app-shell" :class="{ 'app-shell--nav-open': mobileNavOpen }">
+    <!-- Pattern overlay: purely decorative, pointer-events off, rendered below content -->
+    <div
+      v-if="patternClass"
+      class="app-shell__pattern"
+      :class="patternClass"
+      aria-hidden="true"
+    />
     <header v-if="$slots.header" class="app-shell__header">
       <slot name="header" />
     </header>
@@ -33,7 +40,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useThemeStore } from '../stores/theme'
 
 withDefaults(
   defineProps<{
@@ -44,6 +53,12 @@ withDefaults(
 defineEmits<{
   'update:mobileNavOpen': [value: boolean]
 }>()
+
+const themeStore = useThemeStore()
+const patternClass = computed(() => {
+  const p = themeStore.currentTheme.effects?.pattern
+  return p && p !== 'none' ? `app-shell__pattern--${p}` : null
+})
 </script>
 
 <style scoped>
@@ -53,15 +68,61 @@ defineEmits<{
   min-height: 100vh;
   background-color: var(--theme-bg-primary);
   color: var(--theme-text-primary);
+  position: relative;
+}
+
+/* Pattern overlay
+ * position: fixed so it covers the full viewport while scrolling.
+ * z-index: 0 places it above the shell background but below positioned children.
+ * Header and body use position: relative + z-index: 1 to render above it. */
+.app-shell__pattern {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: transparent;
+  background-repeat: repeat;
+  transition: opacity 0.3s ease;
+}
+
+/* Dots – 1 px dot, spacing controlled by --theme-effect-pattern-size */
+.app-shell__pattern--dots {
+  background-image: radial-gradient(circle, var(--theme-border-light) 1px, transparent 1px);
+  background-size: var(--theme-effect-pattern-size) var(--theme-effect-pattern-size);
+  opacity: 0.4;
+}
+
+/* Grid – 1 px lines, cell size controlled by --theme-effect-pattern-size */
+.app-shell__pattern--grid {
+  background-image:
+    linear-gradient(to right, var(--theme-border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--theme-border) 1px, transparent 1px);
+  background-size: var(--theme-effect-pattern-size) var(--theme-effect-pattern-size);
+  opacity: 0.3;
+}
+
+/* Grain – dot diameter scales with pattern size; clamped so it stays fine */
+.app-shell__pattern--noise {
+  background-image: radial-gradient(
+    circle,
+    var(--theme-border) calc(var(--theme-effect-pattern-size) * 0.08),
+    transparent calc(var(--theme-effect-pattern-size) * 0.08)
+  );
+  background-size: var(--theme-effect-pattern-size) var(--theme-effect-pattern-size);
+  opacity: 0.3;
 }
 
 .app-shell__header {
+  position: relative;
+  z-index: 1;
   flex-shrink: 0;
   background-color: var(--theme-bg-secondary);
   border-bottom: var(--theme-border-thin) solid var(--theme-border);
 }
 
 .app-shell__body {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -72,7 +133,7 @@ defineEmits<{
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--theme-backdrop, rgba(0, 0, 0, 0.6));
 }
 
 .app-shell__nav {

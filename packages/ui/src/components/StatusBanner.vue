@@ -42,8 +42,9 @@ defineEmits<{ retry: [] }>()
 }
 
 .status-banner--error {
-  background: var(--theme-status-error, #fcc);
-  color: var(--theme-text-primary, #111);
+  background: var(--theme-surface-error);
+  color: var(--theme-text-primary);
+  border-left: var(--theme-border-medium) solid var(--theme-status-error);
 }
 
 .status-banner--loading {
@@ -63,7 +64,7 @@ defineEmits<{ retry: [] }>()
   padding: 2px 8px;
   font-size: var(--theme-font-xs);
   background: var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
+  border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
   color: var(--theme-text-primary);
   cursor: pointer;

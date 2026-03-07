@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { TenantTheme, TenantBranding } from '@decentraguild/core'
 import { DEFAULT_TENANT_THEME } from '../theme/defaults'
+import { hexToRgba, lightenHex, darkenHex, contrastColor } from '../theme/color-utils'
 
 export function mergeTheme(base: TenantTheme, override: Partial<TenantTheme>): TenantTheme {
   const colors: NonNullable<TenantTheme['colors']> = {
@@ -31,6 +32,7 @@ export function mergeTheme(base: TenantTheme, override: Partial<TenantTheme>): T
     shadows: { ...base.shadows, ...override.shadows },
     gradients: { ...base.gradients, ...override.gradients },
     fonts: { ...base.fonts, ...override.fonts },
+    effects: { ...base.effects, ...override.effects },
   }
 }
 
@@ -48,6 +50,7 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-primary-hover': colors.primary?.hover ?? '',
     '--theme-primary-light': colors.primary?.light ?? '',
     '--theme-primary-dark': colors.primary?.dark ?? '',
+    '--theme-primary-inverse': colors.primary?.main ? contrastColor(colors.primary.main) : '',
     '--theme-secondary': colors.secondary?.main ?? '',
     '--theme-secondary-hover': colors.secondary?.hover ?? '',
     '--theme-secondary-light': colors.secondary?.light ?? '',
@@ -57,6 +60,8 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-bg-primary': colors.background?.primary ?? '',
     '--theme-bg-secondary': colors.background?.secondary ?? '',
     '--theme-bg-card': colors.background?.card ?? '',
+    '--theme-bg-muted': colors.background?.muted ?? '',
+    '--theme-backdrop': colors.background?.backdrop ?? '',
     '--theme-text-primary': colors.text?.primary ?? '',
     '--theme-text-secondary': colors.text?.secondary ?? '',
     '--theme-text-muted': colors.text?.muted ?? '',
@@ -64,8 +69,14 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-border-light': colors.border?.light ?? '',
     '--theme-success': colors.status?.success ?? '',
     '--theme-error': colors.status?.error ?? '',
+    '--theme-text-error': colors.status?.error ?? '',
     '--theme-warning': colors.status?.warning ?? '',
     '--theme-info': colors.status?.info ?? '',
+    // Aliases so components using --theme-status-* prefix also pick up tenant overrides
+    '--theme-status-success': colors.status?.success ?? '',
+    '--theme-status-error': colors.status?.error ?? '',
+    '--theme-status-warning': colors.status?.warning ?? '',
+    '--theme-status-info': colors.status?.info ?? '',
     '--theme-trade-buy': colors.trade?.buy ?? '',
     '--theme-trade-buy-hover': colors.trade?.buyHover ?? '',
     '--theme-trade-buy-light': colors.trade?.buyLight ?? '',
@@ -121,6 +132,30 @@ export const useThemeStore = defineStore('theme', () => {
 
   function loadTheme(theme: Partial<TenantTheme>, brandingOverride?: Partial<TenantBranding>) {
     const merged = mergeTheme(DEFAULT_TENANT_THEME, theme ?? {})
+
+    // Always recompute glow/gradient from the resolved primary so they stay
+    // in sync with the tenant's brand color rather than the hardcoded default.
+    const primary = merged.colors?.primary?.main
+    if (primary) {
+      const primaryLight = merged.colors?.primary?.light ?? lightenHex(primary, 0.2)
+      const primaryDark = merged.colors?.primary?.dark ?? darkenHex(primary, 0.15)
+      const secondary = merged.colors?.secondary?.main ?? darkenHex(primary, 0.25)
+      const warning = merged.colors?.status?.warning ?? '#ff6b35'
+
+      merged.shadows = {
+        ...merged.shadows,
+        glow: `0 0 20px ${hexToRgba(primary, 0.28)}`,
+        glowHover: `0 0 40px ${hexToRgba(primary, 0.55)}`,
+        card: merged.shadows?.card ?? '0 8px 32px rgba(0, 0, 0, 0.4)',
+      }
+      merged.gradients = {
+        ...merged.gradients,
+        primary: `linear-gradient(135deg, ${primary} 0%, ${primaryLight} 50%, ${primaryDark} 100%)`,
+        secondary: `linear-gradient(135deg, ${warning} 0%, ${lightenHex(warning, 0.2)} 100%)`,
+        accent: `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`,
+      }
+    }
+
     currentTheme.value = merged
     if (brandingOverride) {
       branding.value = {
@@ -139,6 +174,19 @@ export const useThemeStore = defineStore('theme', () => {
     for (const [prop, value] of Object.entries(vars)) {
       if (value) root.style.setProperty(prop, value)
     }
+    // Glow intensity: CSS scale multiplier consumed by components
+    const glowScale: Record<string, string> = {
+      none: '0',
+      subtle: '1',
+      medium: '1.6',
+      strong: '2.5',
+    }
+    const intensity = currentTheme.value.effects?.glowIntensity ?? 'subtle'
+    root.style.setProperty('--theme-effect-glow-scale', glowScale[intensity] ?? '1')
+
+    // Pattern size: controls background-size of the pattern overlay
+    const patternSize = currentTheme.value.effects?.patternSize ?? 24
+    root.style.setProperty('--theme-effect-pattern-size', `${patternSize}px`)
   }
 
   return {

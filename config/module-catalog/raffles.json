@@ -16,7 +16,7 @@
     "- Tier-based concurrency limits"
   ],
   "routePath": "/raffle",
-  "order": 4,
+  "order": 5,
   "goActiveImmediately": true,
   "activationInstructions": {
     "intro": "Summon your community. Announce the prize. Let fate decide the victor.",

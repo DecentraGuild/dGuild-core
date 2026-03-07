@@ -27,6 +27,8 @@ export const DEFAULT_TENANT_THEME: TenantTheme = {
       primary: '#0a0a0f',
       secondary: '#141420',
       card: '#1a1a2e',
+      muted: '#252535',
+      backdrop: 'rgba(10, 10, 15, 0.75)',
     },
     text: {
       primary: '#ffffff',
@@ -107,5 +109,10 @@ export const DEFAULT_TENANT_THEME: TenantTheme = {
   fonts: {
     primary: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
     mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+  },
+  effects: {
+    pattern: 'none',
+    patternSize: 24,
+    glowIntensity: 'subtle',
   },
 }

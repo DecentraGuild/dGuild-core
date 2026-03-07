@@ -235,8 +235,9 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
 <style scoped>
 .tenant-error {
   padding: var(--theme-space-md);
-  background: var(--theme-status-error, #fcc);
-  color: var(--theme-text-primary, #111);
+  background: var(--theme-surface-error);
+  color: var(--theme-text-primary);
+  border-bottom: var(--theme-border-thin) solid var(--theme-status-error);
   text-align: center;
   font-size: var(--theme-font-sm);
 }
@@ -260,6 +261,7 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   text-decoration: none;
   border-radius: var(--theme-radius-md);
   font-size: var(--theme-font-sm);
+  transition: color 0.15s, background-color 0.15s;
 }
 
 .layout-subnav__tab:hover {
@@ -270,6 +272,18 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
 .layout-subnav__tab--active {
   color: var(--theme-primary);
   background: var(--theme-bg-card);
+  position: relative;
+}
+
+.layout-subnav__tab--active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: var(--theme-space-md);
+  right: var(--theme-space-md);
+  height: 2px;
+  background: var(--theme-gradient-primary, var(--theme-primary));
+  border-radius: var(--theme-radius-full);
 }
 
 .layout-nav-toggle {
@@ -284,6 +298,7 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   border-radius: var(--theme-radius-md);
   color: var(--theme-text-secondary);
   cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
 }
 
 .layout-nav-toggle:hover {

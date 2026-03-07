@@ -85,7 +85,7 @@ export interface TenantThemeColors {
   primary?: { main: string; hover?: string; light?: string; dark?: string }
   secondary?: { main: string; hover?: string; light?: string; dark?: string }
   accent?: { main: string; hover?: string }
-  background?: { primary?: string; secondary?: string; card?: string }
+  background?: { primary?: string; secondary?: string; card?: string; muted?: string; backdrop?: string }
   text?: { primary?: string; secondary?: string; muted?: string }
   border?: { default?: string; light?: string }
   status?: { success?: string; error?: string; warning?: string; info?: string }
@@ -106,6 +106,18 @@ export interface TenantThemeColors {
   window?: { background?: string; border?: string; header?: string }
 }
 
+export interface TenantThemeEffects {
+  /** Background pattern overlay. Default: 'none'. */
+  pattern?: 'none' | 'dots' | 'grid' | 'noise'
+  /**
+   * Pattern tile size in pixels. Dots: dot spacing. Grid: cell size. Noise: grain pitch.
+   * Reasonable range: 4–64. Default: 24.
+   */
+  patternSize?: number
+  /** Intensity of glow on interactive elements. Default: 'subtle'. */
+  glowIntensity?: 'none' | 'subtle' | 'medium' | 'strong'
+}
+
 export interface TenantTheme {
   colors?: TenantThemeColors
   fontSize?: Record<string, string>
@@ -118,6 +130,7 @@ export interface TenantTheme {
     primary?: string[]
     mono?: string[]
   }
+  effects?: TenantThemeEffects
 }
 
 export interface TenantBranding {

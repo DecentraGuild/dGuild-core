@@ -37,12 +37,13 @@ export interface ModuleSubnavTab {
 export const MODULE_SUBNAV: Record<string, ModuleSubnavTab[]> = {
   admin: [
     { id: 'general', label: 'General' },
-    { id: 'modules', label: 'Modules' },
     { id: 'theming', label: 'Theming' },
-    { id: 'marketplace', label: 'Marketplace' },
+    { id: 'modules', label: 'Modules' },
+    { id: 'addressbook', label: 'Address Book' },
+    { id: 'whitelist', label: 'Whitelist' },
     { id: 'discord', label: 'Discord' },
     { id: 'raffle', label: 'Raffle' },
-    { id: 'whitelist', label: 'Whitelist' },
+    { id: 'marketplace', label: 'Marketplace' },
     { id: 'billing', label: 'Billing' },
   ],
   marketplace: [
@@ -72,11 +73,13 @@ export function getModuleSubnavForPath(
   const discordVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.discord))
   const raffleVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.raffles))
   const whitelistVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.whitelist))
+  const addressbookVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.addressbook))
   return tabs.filter((t) => {
     if (t.id === 'marketplace' && !marketplaceVisible) return false
     if (t.id === 'discord' && !discordVisible) return false
     if (t.id === 'raffle' && !raffleVisible) return false
     if (t.id === 'whitelist' && !whitelistVisible) return false
+    if (t.id === 'addressbook' && !addressbookVisible) return false
     return true
   })
 }

@@ -25,14 +25,14 @@
           <div class="pricing-widget__usage-header">
             <span class="pricing-widget__usage-label">{{ row.label }}</span>
             <span v-if="row.type === 'numeric'" class="pricing-widget__usage-count">
-              {{ row.current }} / {{ row.included }}
+              {{ row.stored != null ? `${row.current} / ${row.stored}` : (row.included === 0 ? String(row.current) : `${row.current} / ${row.included}`) }}
             </span>
             <span v-else class="pricing-widget__usage-bool">
               <Icon v-if="row.active" icon="mdi:check" class="pricing-widget__icon-check" />
               <span v-else class="pricing-widget__icon-dash">--</span>
             </span>
           </div>
-          <div v-if="row.type === 'numeric'" class="pricing-widget__bar-track">
+          <div v-if="row.type === 'numeric' && row.showBar" class="pricing-widget__bar-track">
             <div
               class="pricing-widget__bar-fill"
               :class="{ 'pricing-widget__bar-fill--over': row.ratio > 1 }"
@@ -248,6 +248,9 @@ const CONDITION_LABELS: Record<string, string> = {
   customCurrenciesCount: 'Custom currencies',
   monetizeStorefront: 'Monetize storefront',
   raffleSlotsUsed: 'Raffle slots',
+  mintsBase: 'Metadata mints',
+  mintsGrow: 'Snapshot mints',
+  mintsPro: 'Transaction mints',
 }
 
 export interface SubscriptionInfo {
@@ -267,6 +270,8 @@ const props = withDefaults(
     saveError: string | null
     /** Live conditions from the form. When provided, pricing is computed client-side. */
     conditions?: ConditionSet | null
+    /** Saved/deployed condition counts. When provided with conditions, numeric rows show "dirty / stored" instead of "current / included". */
+    storedConditions?: ConditionSet | null
     /** Current active subscription. When provided and module is active, locks the period toggle. */
     subscription?: SubscriptionInfo | null
     /** When true, hide monthly/yearly toggle and use yearly only (e.g. slug). */
@@ -416,7 +421,10 @@ interface NumericUsageRow {
   type: 'numeric'
   current: number
   included: number
+  /** When set, display is "current / stored" (dirty vs stored); otherwise "current / included" or just "current" when included is 0. */
+  stored: number | null
   ratio: number
+  showBar: boolean
 }
 
 interface BooleanUsageRow {
@@ -432,6 +440,7 @@ type UsageRow = NumericUsageRow | BooleanUsageRow
 const usageRows = computed((): UsageRow[] => {
   if (!pricingModel.value || !conditions.value || !selectedTier.value) return []
   const pm = pricingModel.value as TieredAddonsPricing | TieredWithOneTimePerUnitPricing
+  const storedCond = props.storedConditions ?? null
   return pm.conditionKeys.map((key) => {
     const condVal = conditions.value![key]
     const inclVal = selectedTier.value!.included[key]
@@ -449,9 +458,13 @@ const usageRows = computed((): UsageRow[] => {
 
     const current = typeof condVal === 'number' ? condVal : 0
     const included = typeof inclVal === 'number' ? inclVal : 0
-    const ratio = included > 0 ? current / included : (current > 0 ? 1 : 0)
+    const stored =
+      storedCond != null && typeof storedCond[key] === 'number' ? (storedCond[key] as number) : null
+    const denominator = stored != null ? stored : included
+    const ratio = denominator > 0 ? current / denominator : (current > 0 ? 1 : 0)
+    const showBar = denominator > 0
 
-    return { key, label, type: 'numeric' as const, current, included, ratio }
+    return { key, label, type: 'numeric' as const, current, included, stored, ratio, showBar }
   })
 })
 
@@ -580,13 +593,13 @@ const addUnitName = computed(() => {
 
 .pricing-widget__bar-fill {
   height: 100%;
-  background: var(--theme-primary);
+  background: var(--theme-gradient-primary, var(--theme-primary));
   border-radius: var(--theme-radius-full);
   transition: width 0.3s ease;
 }
 
 .pricing-widget__bar-fill--over {
-  background: var(--theme-warning);
+  background: var(--theme-gradient-secondary, var(--theme-warning));
 }
 
 .pricing-widget__section-label {
@@ -693,12 +706,12 @@ const addUnitName = computed(() => {
 }
 
 .pricing-widget__period-btn--active {
-  background: var(--theme-primary);
-  color: var(--theme-text-on-primary, #fff);
+  background: var(--theme-gradient-primary, var(--theme-primary));
+  color: var(--theme-primary-inverse);
 }
 
 .pricing-widget__period-btn--active:hover {
-  background: var(--theme-primary);
+  background: var(--theme-gradient-primary, var(--theme-primary));
 }
 
 .pricing-widget__period-save {

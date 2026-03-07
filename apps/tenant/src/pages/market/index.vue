@@ -262,7 +262,7 @@ function onEscrowModalClose() {
 .create-trade-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--theme-backdrop, rgba(0, 0, 0, 0.6));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -278,7 +278,7 @@ function onEscrowModalClose() {
   max-height: 90vh;
   overflow-y: auto;
   padding: var(--theme-space-lg);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--theme-shadow-card);
 }
 
 .create-trade-modal__header {

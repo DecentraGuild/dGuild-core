@@ -44,7 +44,7 @@ const variantClass = computed(() => `btn--${props.variant}`)
   border-radius: var(--theme-radius-md);
   border: var(--theme-border-thin) solid transparent;
   cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.2s;
 }
 
 .btn:disabled {
@@ -61,6 +61,12 @@ const variantClass = computed(() => `btn--${props.variant}`)
 .btn--primary:hover:not(:disabled) {
   background-color: var(--theme-primary-hover);
   border-color: var(--theme-primary-hover);
+  box-shadow: var(--theme-shadow-glow);
+}
+
+.btn--primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--theme-bg-primary), 0 0 0 4px var(--theme-primary-light);
 }
 
 .btn--secondary {
@@ -71,7 +77,12 @@ const variantClass = computed(() => `btn--${props.variant}`)
 
 .btn--secondary:hover:not(:disabled) {
   background-color: var(--theme-primary);
-  color: white;
+  color: var(--theme-primary-inverse);
+}
+
+.btn--secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--theme-bg-primary), 0 0 0 4px var(--theme-primary-light);
 }
 
 .btn--ghost {
@@ -82,6 +93,11 @@ const variantClass = computed(() => `btn--${props.variant}`)
 .btn--ghost:hover:not(:disabled) {
   background-color: var(--theme-bg-card);
   color: var(--theme-text-primary);
+}
+
+.btn--ghost:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--theme-bg-primary), 0 0 0 4px var(--theme-border-light);
 }
 
 .btn__icon {

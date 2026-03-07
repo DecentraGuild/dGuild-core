@@ -3,7 +3,7 @@ import { getPool } from '../db/client.js'
 import { getSolanaConnection } from '../solana-connection.js'
 import { getMintMetadata, upsertMintMetadata } from '../db/marketplace-metadata.js'
 import { fetchMintMetadataFromChain } from '@decentraguild/web3'
-import { fetchSplAssetPreview, fetchCollectionPreview } from '../marketplace/asset-preview.js'
+import { fetchSplAssetPreview, fetchCollectionPreview, resolveAssetPreview } from '../marketplace/asset-preview.js'
 import { requireTenantAdmin } from './tenant-settings.js'
 import { apiError, ErrorCode } from '../api-errors.js'
 
@@ -125,6 +125,22 @@ export async function registerMarketplaceMetadataRoutes(app: FastifyInstance) {
     } catch (e) {
       request.log.warn({ err: e, mint }, 'SPL asset preview failed')
       return reply.status(404).send(apiError('Failed to fetch asset', ErrorCode.NOT_FOUND, {
+        message: e instanceof Error ? e.message : 'Unknown error',
+      }))
+    }
+  })
+
+  app.get<{ Params: { mint: string } }>('/api/v1/marketplace/asset-preview/resolve/:mint', async (request, reply) => {
+    const { mint } = request.params
+    if (!mint || mint.length < MIN_MINT_LENGTH) {
+      return reply.status(400).send(apiError('Invalid mint address', ErrorCode.BAD_REQUEST))
+    }
+    try {
+      const resolved = await resolveAssetPreview(mint)
+      return resolved
+    } catch (e) {
+      request.log.warn({ err: e, mint }, 'Asset resolve failed')
+      return reply.status(404).send(apiError('Failed to resolve asset', ErrorCode.NOT_FOUND, {
         message: e instanceof Error ? e.message : 'Unknown error',
       }))
     }

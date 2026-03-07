@@ -73,6 +73,10 @@ defineEmits<{
   background-color: white;
 }
 
+.toggle__input:focus-visible + .toggle__track {
+  box-shadow: 0 0 0 2px var(--theme-bg-primary), 0 0 0 4px var(--theme-primary-light);
+}
+
 .toggle__input:disabled + .toggle__track {
   opacity: 0.5;
   cursor: not-allowed;

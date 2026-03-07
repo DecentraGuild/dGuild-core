@@ -71,7 +71,7 @@ function onClose() {
 .modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--theme-backdrop, rgba(0, 0, 0, 0.6));
 }
 
 .modal__content {
@@ -82,7 +82,7 @@ function onClose() {
   overflow: auto;
   background: var(--theme-bg-card);
   border-radius: var(--theme-radius-lg);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--theme-shadow-card);
 }
 .modal__content--wide {
   max-width: 42rem;
@@ -113,11 +113,17 @@ function onClose() {
   color: var(--theme-text-secondary);
   cursor: pointer;
   border-radius: var(--theme-radius-sm);
+  transition: color 0.15s, background-color 0.15s;
 }
 
 .modal__close:hover {
   color: var(--theme-text-primary);
   background: var(--theme-bg-secondary);
+}
+
+.modal__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--theme-bg-card), 0 0 0 4px var(--theme-primary-light);
 }
 
 .modal__body {

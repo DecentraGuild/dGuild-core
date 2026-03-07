@@ -1,117 +1,26 @@
 <template>
   <div class="marketplace-settings">
     <Card>
-      <h3>NFT collections</h3>
-      <p class="marketplace-settings__hint">Collection mint addresses. Each collection is expanded via DAS into individual NFTs.</p>
-      <div class="marketplace-settings__add-mint">
-        <TextInput
-          v-model="newCollectionMint"
-          placeholder="Collection mint (e.g. CL2m6...)"
-          :error="addCollectionError"
-          @keydown.enter.prevent="addCollection"
-        />
-        <Button variant="secondary" :disabled="!newCollectionMint.trim() || saving" @click="addCollection">
-          Add
-        </Button>
-      </div>
-      <ul v-if="form.collectionMints.length" class="marketplace-settings__mint-list">
-        <li
-          v-for="(item, idx) in form.collectionMints"
-          :key="item.mint"
-          class="marketplace-settings__mint-item marketplace-settings__mint-item--clickable"
-        >
-          <button
-            type="button"
-            class="marketplace-settings__mint-row"
-            :disabled="!!item._loading || !!item._error"
-            @click="openCollectionDetail(item)"
-          >
-            <div class="marketplace-settings__mint-thumb">
-              <img v-if="item.image" :src="item.image" :alt="item.name ?? item.mint" />
-              <span v-else class="marketplace-settings__mint-thumb-placeholder"><Icon icon="mdi:image-off" /></span>
-            </div>
-            <div class="marketplace-settings__mint-detail">
-              <template v-if="item._loading">
-                <Icon icon="mdi:loading" class="marketplace-settings__spinner" />
-                <span class="marketplace-settings__mint-name">{{ item.mint.slice(0, 8) + '...' + item.mint.slice(-4) }}</span>
-                <span class="marketplace-settings__mint-status">Loading...</span>
-              </template>
-              <template v-else-if="item._error">
-                <span class="marketplace-settings__mint-name">{{ item.mint.slice(0, 8) + '...' }}</span>
-                <span class="marketplace-settings__mint-error">{{ item._error }}</span>
-              </template>
-              <template v-else>
-                <span class="marketplace-settings__mint-name">{{ item.name || item.mint.slice(0, 8) + '...' }}</span>
-                <code class="marketplace-settings__mint-address">{{ item.mint.slice(0, 8) }}...{{ item.mint.slice(-6) }}</code>
-                <span class="marketplace-settings__mint-meta">
-                  {{ item.collectionSize ?? 0 }} NFTs, {{ item.uniqueTraitCount ?? 0 }} trait types
-                  <span v-if="item.sellerFeeBasisPoints != null"> · {{ item.sellerFeeBasisPoints }} bps</span>
-                  <span v-if="(item.traitTypes?.length ?? 0) > 0" class="marketplace-settings__traits-hint">
-                    ({{ item.traitTypes!.slice(0, 3).join(', ') }}{{ (item.traitTypes!.length ?? 0) > 3 ? '...' : '' }})
-                  </span>
-                </span>
-              </template>
-            </div>
-          </button>
-          <Button variant="ghost" :disabled="!!item._loading" @click.stop="removeCollection(idx)">
-            <Icon icon="mdi:close" />
-          </Button>
-        </li>
-      </ul>
-      <p v-else class="marketplace-settings__empty">No NFT collections. Add a collection mint above.</p>
-    </Card>
+      <h3>Mint catalog</h3>
+      <p class="marketplace-settings__hint">NFT collections and SPL tokens available in the marketplace.</p>
 
-    <Card>
-      <h3>SPL assets</h3>
-      <p class="marketplace-settings__hint">Individual SPL token mints (one mint = one asset).</p>
-      <div class="marketplace-settings__add-mint">
-        <TextInput
-          v-model="newSplMint"
-          placeholder="Mint address"
-          :error="addSplError"
-          @keydown.enter.prevent="addSpl"
-        />
-        <Button variant="secondary" :disabled="!newSplMint.trim() || saving" @click="addSpl">
-          Add
-        </Button>
-      </div>
-      <ul v-if="form.splAssetMints.length" class="marketplace-settings__mint-list">
-        <li
-          v-for="(item, idx) in form.splAssetMints"
-          :key="item.mint"
-          class="marketplace-settings__mint-item"
-        >
-          <div class="marketplace-settings__mint-row marketplace-settings__mint-row--plain">
-            <div class="marketplace-settings__mint-thumb">
-              <img v-if="item.image" :src="item.image" :alt="item.name ?? item.symbol ?? item.mint" />
-              <span v-else class="marketplace-settings__mint-thumb-placeholder"><Icon icon="mdi:token" /></span>
-            </div>
-            <div class="marketplace-settings__mint-detail">
-              <template v-if="item._loading">
-                <Icon icon="mdi:loading" class="marketplace-settings__spinner" />
-                <span class="marketplace-settings__mint-name">{{ item.mint.slice(0, 8) + '...' + item.mint.slice(-4) }}</span>
-                <span class="marketplace-settings__mint-status">Loading...</span>
-              </template>
-              <template v-else-if="item._error">
-                <span class="marketplace-settings__mint-name">{{ item.mint.slice(0, 8) + '...' + item.mint.slice(-4) }}</span>
-                <span class="marketplace-settings__mint-error">{{ item._error }}</span>
-              </template>
-              <template v-else>
-                <span class="marketplace-settings__mint-name">{{ (item.symbol || item.name) || item.mint.slice(0, 8) + '...' }}</span>
-                <code class="marketplace-settings__mint-address">{{ item.mint.slice(0, 8) }}...{{ item.mint.slice(-6) }}</code>
-                <span class="marketplace-settings__mint-meta">
-                  {{ item.name || '' }} {{ item.decimals != null ? `· ${item.decimals} dec` : '' }}
-                  {{ item.sellerFeeBasisPoints != null ? `· ${item.sellerFeeBasisPoints} bps` : '' }}
-                </span>
-              </template>
-            </div>
-          </div>
-          <Button variant="ghost" :disabled="!!item._loading" @click="removeSpl(idx)">
-            <Icon icon="mdi:close" />
-          </Button>
-        </li>
-      </ul>
-      <p v-else class="marketplace-settings__empty">No SPL assets. Add a mint above.</p>
+      <AdminMintCatalog
+        :mints="catalogItems"
+        @inspect="onInspectMint"
+        @delete="onDeleteMint"
+      >
+        <template #add>
+          <h4 class="marketplace-settings__add-title">Add mint</h4>
+          <AddMintInput
+            v-model="newMint"
+            v-model:kind="newMintKind"
+            :error="addMintError"
+            :loading="adding"
+            :disabled="saving"
+            @submit="addMint"
+          />
+        </template>
+      </AdminMintCatalog>
     </Card>
 
     <Card>
@@ -136,6 +45,7 @@
             :error="addCurrencyError"
             @keydown.enter.prevent="lookupAndAddCurrency"
           />
+          <AddressBookBrowser kind="SPL" @select="(mint) => { newCurrencyMint = mint; lookupAndAddCurrency() }" />
           <Button
             variant="secondary"
             :disabled="!newCurrencyMint.trim() || saving"
@@ -262,11 +172,7 @@
       <p v-else-if="saveError" class="marketplace-settings__error">{{ saveError }}</p>
     </div>
 
-    <AdminCollectionDetailModal
-      v-model="showCollectionModal"
-      :collection="selectedCollection"
-      :slug="slug"
-    />
+    <MintDetailModal v-model="showMintModal" :mint="selectedMint" />
   </div>
 </template>
 
@@ -277,7 +183,11 @@ import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
 import { getModuleCatalogEntry } from '@decentraguild/config'
 import type { TieredAddonsPricing } from '@decentraguild/config'
 import { Card, TextInput, Button } from '@decentraguild/ui/components'
-import AdminCollectionDetailModal from './AdminCollectionDetailModal.vue'
+import AdminMintCatalog from './AdminMintCatalog.vue'
+import MintDetailModal from './MintDetailModal.vue'
+import AddMintInput from './AddMintInput.vue'
+import AddressBookBrowser from './AddressBookBrowser.vue'
+import type { CatalogMintItem } from '~/types/mints'
 import { reactive, ref, watch, computed, nextTick } from 'vue'
 
 interface CollectionMint {
@@ -428,22 +338,126 @@ function onWhitelistSelectUpdate(value: WhitelistSettings | null | 'use-default'
   form.whitelist = value
 }
 
-const newCollectionMint = ref('')
-const addCollectionError = ref('')
-const newSplMint = ref('')
-const addSplError = ref('')
+const newMint = ref('')
+const newMintKind = ref<'auto' | 'SPL' | 'NFT'>('auto')
+const addMintError = ref('')
+const adding = ref(false)
 const newCurrencyMint = ref('')
 const addCurrencyError = ref('')
 const saving = ref(false)
 const saveError = ref<string | null>(null)
 const saveSuccess = ref(false)
-const selectedCollection = ref<CollectionMint | null>(null)
-const showCollectionModal = ref(false)
+const selectedMint = ref<CatalogMintItem | null>(null)
+const showMintModal = ref(false)
 
-function openCollectionDetail(collection: CollectionMint) {
-  if (collection._loading || collection._error) return
-  selectedCollection.value = collection
-  showCollectionModal.value = true
+const catalogItems = computed<CatalogMintItem[]>(() => [
+  ...form.splAssetMints.map((m) => ({
+    id: m.mint,
+    mint: m.mint,
+    kind: 'SPL' as const,
+    label: m.name || m.symbol || m.mint,
+    symbol: m.symbol ?? null,
+    image: m.image ?? null,
+    decimals: m.decimals ?? null,
+    sellerFeeBasisPoints: m.sellerFeeBasisPoints ?? null,
+    _loading: m._loading,
+    _error: m._error,
+  })),
+  ...form.collectionMints.map((m) => ({
+    id: m.mint,
+    mint: m.mint,
+    kind: 'NFT' as const,
+    label: m.name || m.mint,
+    image: m.image ?? null,
+    sellerFeeBasisPoints: m.sellerFeeBasisPoints ?? null,
+    traitTypes: m.traitTypes ?? null,
+    _loading: m._loading,
+    _error: m._error,
+  })),
+])
+
+function onInspectMint(item: CatalogMintItem) {
+  if (item._loading || item._error) return
+  selectedMint.value = item
+  showMintModal.value = true
+}
+
+function onDeleteMint(item: CatalogMintItem) {
+  if (item.kind === 'NFT') {
+    const idx = form.collectionMints.findIndex((m) => m.mint === item.mint)
+    if (idx >= 0) form.collectionMints.splice(idx, 1)
+  } else {
+    const idx = form.splAssetMints.findIndex((m) => m.mint === item.mint)
+    if (idx >= 0) form.splAssetMints.splice(idx, 1)
+  }
+}
+
+async function addMint(mint: string, kind: 'auto' | 'SPL' | 'NFT') {
+  const trimmed = mint.trim()
+  if (!trimmed || trimmed.length < 32) {
+    addMintError.value = 'Invalid mint address'
+    return
+  }
+  if (form.collectionMints.some((m) => m.mint === trimmed) || form.splAssetMints.some((m) => m.mint === trimmed)) {
+    addMintError.value = 'Mint already added'
+    return
+  }
+  if (totalMintsCount.value >= MARKETPLACE_UI_MINTS_CAP) {
+    addMintError.value = `Maximum ${MARKETPLACE_UI_MINTS_CAP} mints (collections + SPL assets)`
+    return
+  }
+  addMintError.value = ''
+  adding.value = true
+  try {
+    const tryCollection = kind === 'auto' || kind === 'NFT'
+    const trySpl = kind === 'auto' || kind === 'SPL'
+    if (tryCollection) {
+      const colRes = await fetch(`${apiBase.value}${API_V1}/marketplace/asset-preview/collection/${encodeURIComponent(trimmed)}`)
+      if (colRes.ok) {
+        const data = (await colRes.json()) as {
+          name?: string; image?: string; sellerFeeBasisPoints?: number
+          collectionSize?: number; uniqueTraitCount?: number; traitTypes?: string[]
+        }
+        form.collectionMints.push({
+          mint: trimmed,
+          name: data.name,
+          image: data.image,
+          sellerFeeBasisPoints: data.sellerFeeBasisPoints,
+          collectionSize: data.collectionSize ?? 0,
+          uniqueTraitCount: data.uniqueTraitCount ?? 0,
+          traitTypes: data.traitTypes ?? [],
+        })
+        newMint.value = ''
+        newMintKind.value = 'auto'
+        return
+      }
+    }
+    if (trySpl) {
+      const splRes = await fetch(`${apiBase.value}${API_V1}/marketplace/asset-preview/spl/${encodeURIComponent(trimmed)}`)
+      if (splRes.ok) {
+        const data = (await splRes.json()) as {
+          name?: string; symbol?: string; image?: string
+          decimals?: number; sellerFeeBasisPoints?: number
+        }
+        form.splAssetMints.push({
+          mint: trimmed,
+          name: data.name,
+          symbol: data.symbol,
+          image: data.image,
+          decimals: data.decimals,
+          sellerFeeBasisPoints: data.sellerFeeBasisPoints,
+        })
+        newMint.value = ''
+        newMintKind.value = 'auto'
+        return
+      }
+    }
+    addMintError.value = 'Could not resolve mint as NFT collection or SPL token.'
+  } catch (e) {
+    addMintError.value = e instanceof Error ? e.message : 'Failed to resolve mint'
+  } finally {
+    adding.value = false
+  }
 }
 
 watch(
@@ -528,201 +542,6 @@ function onBaseToggle(symbol: string, checked: boolean) {
   }
 }
 
-async function addCollection() {
-  const mint = newCollectionMint.value.trim()
-  if (!mint || mint.length < 32) {
-    addCollectionError.value = 'Invalid mint address'
-    return
-  }
-  if (form.collectionMints.some((m) => m.mint === mint)) {
-    addCollectionError.value = 'Collection already added'
-    return
-  }
-  if (totalMintsCount.value >= MARKETPLACE_UI_MINTS_CAP) {
-    addCollectionError.value = `Maximum ${MARKETPLACE_UI_MINTS_CAP} mints (collections + SPL assets)`
-    return
-  }
-  addCollectionError.value = ''
-  const item: CollectionMint = { mint, _loading: true }
-  form.collectionMints.push(item)
-  newCollectionMint.value = ''
-  const idx = form.collectionMints.length - 1
-  try {
-    const collectionUrl = `${apiBase.value}${API_V1}/marketplace/asset-preview/collection/${encodeURIComponent(mint)}`
-    const res = await fetch(collectionUrl)
-    if (res.ok) {
-      const data = (await res.json()) as {
-        name?: string
-        image?: string
-        sellerFeeBasisPoints?: number
-        collectionSize?: number
-        uniqueTraitCount?: number
-        traitTypes?: string[]
-      }
-      form.collectionMints[idx] = {
-        mint,
-        name: data.name ?? undefined,
-        image: data.image ?? undefined,
-        sellerFeeBasisPoints: data.sellerFeeBasisPoints ?? undefined,
-        collectionSize: data.collectionSize ?? 0,
-        uniqueTraitCount: data.uniqueTraitCount ?? 0,
-        traitTypes: data.traitTypes ?? [],
-      }
-      return
-    }
-
-    // If the collection endpoint does not recognise this mint, try the SPL preview.
-    const baseErrorData = (await res.json().catch(() => ({}))) as { message?: string; error?: string }
-    let message =
-      baseErrorData.message ?? baseErrorData.error ?? 'Mint is not supported as an NFT collection. Contact DecentraGuild for support.'
-
-    try {
-      const splUrl = `${apiBase.value}${API_V1}/marketplace/asset-preview/spl/${encodeURIComponent(mint)}`
-      const splRes = await fetch(splUrl)
-      if (splRes.ok) {
-        const splData = (await splRes.json()) as {
-          name?: string
-          symbol?: string
-          image?: string
-          decimals?: number
-          sellerFeeBasisPoints?: number
-        }
-        const confirmMove = window.confirm(
-          'This mint looks like an SPL token, not an NFT collection. Move it to SPL assets instead?'
-        )
-        if (confirmMove) {
-          // Remove provisional collection entry and add to SPL assets instead.
-          form.collectionMints.splice(idx, 1)
-          if (totalMintsCount.value >= MARKETPLACE_UI_MINTS_CAP) {
-            addSplError.value = `Maximum ${MARKETPLACE_UI_MINTS_CAP} mints (collections + SPL assets)`
-            return
-          }
-          form.splAssetMints.push({
-            mint,
-            name: splData.name ?? undefined,
-            symbol: splData.symbol ?? undefined,
-            image: splData.image ?? undefined,
-            decimals: splData.decimals ?? undefined,
-            sellerFeeBasisPoints: splData.sellerFeeBasisPoints ?? undefined,
-          })
-          return
-        }
-        message = 'Mint is an SPL token, not an NFT collection. Contact DecentraGuild for support.'
-      } else {
-        const splErrorData = (await splRes.json().catch(() => ({}))) as { message?: string; error?: string }
-        if (splErrorData.message || splErrorData.error) {
-          message = splErrorData.message ?? splErrorData.error ?? message
-        }
-      }
-    } catch {
-      // Fall back to the base message if SPL lookup fails for any reason.
-    }
-
-    throw new Error(message)
-  } catch (e) {
-    form.collectionMints[idx] = { ...item, _loading: false, _error: e instanceof Error ? e.message : 'Failed to load' }
-  }
-}
-
-function removeCollection(idx: number) {
-  form.collectionMints.splice(idx, 1)
-}
-
-async function addSpl() {
-  const mint = newSplMint.value.trim()
-  if (!mint || mint.length < 32) {
-    addSplError.value = 'Invalid mint address'
-    return
-  }
-  if (form.splAssetMints.some((m) => m.mint === mint)) {
-    addSplError.value = 'Mint already added'
-    return
-  }
-  if (totalMintsCount.value >= MARKETPLACE_UI_MINTS_CAP) {
-    addSplError.value = `Maximum ${MARKETPLACE_UI_MINTS_CAP} mints (collections + SPL assets)`
-    return
-  }
-  addSplError.value = ''
-  const item: SplAssetMint = { mint, _loading: true }
-  form.splAssetMints.push(item)
-  newSplMint.value = ''
-  const idx = form.splAssetMints.length - 1
-  try {
-    const splUrl = `${apiBase.value}${API_V1}/marketplace/asset-preview/spl/${encodeURIComponent(mint)}`
-    const res = await fetch(splUrl)
-    if (res.ok) {
-      const data = (await res.json()) as {
-        name?: string
-        symbol?: string
-        image?: string
-        decimals?: number
-        sellerFeeBasisPoints?: number
-      }
-      form.splAssetMints[idx] = {
-        mint,
-        name: data.name ?? undefined,
-        symbol: data.symbol ?? undefined,
-        image: data.image ?? undefined,
-        decimals: data.decimals ?? undefined,
-        sellerFeeBasisPoints: data.sellerFeeBasisPoints ?? undefined,
-      }
-      return
-    }
-
-    // If the SPL endpoint does not recognise this mint, try the collection preview.
-    const baseErrorData = (await res.json().catch(() => ({}))) as { message?: string; error?: string }
-    let message =
-      baseErrorData.message ?? baseErrorData.error ?? 'Mint is not supported as an SPL asset. Contact DecentraGuild for support.'
-
-    try {
-      const collectionUrl = `${apiBase.value}${API_V1}/marketplace/asset-preview/collection/${encodeURIComponent(mint)}`
-      const colRes = await fetch(collectionUrl)
-      if (colRes.ok) {
-        const colData = (await colRes.json()) as {
-          name?: string
-          image?: string
-          sellerFeeBasisPoints?: number
-          collectionSize?: number
-          uniqueTraitCount?: number
-          traitTypes?: string[]
-        }
-        const confirmMove = window.confirm(
-          'This mint looks like an NFT collection. Add it under NFT collections instead?'
-        )
-        if (confirmMove) {
-          // Remove provisional SPL entry and add to NFT collections instead.
-          form.splAssetMints.splice(idx, 1)
-          form.collectionMints.push({
-            mint,
-            name: colData.name ?? undefined,
-            image: colData.image ?? undefined,
-            sellerFeeBasisPoints: colData.sellerFeeBasisPoints ?? undefined,
-            collectionSize: colData.collectionSize ?? 0,
-            uniqueTraitCount: colData.uniqueTraitCount ?? 0,
-            traitTypes: colData.traitTypes ?? [],
-          })
-          return
-        }
-        message = 'Mint is an NFT collection, not a single SPL asset. Contact DecentraGuild for support.'
-      } else {
-        const colErrorData = (await colRes.json().catch(() => ({}))) as { message?: string; error?: string }
-        if (colErrorData.message || colErrorData.error) {
-          message = colErrorData.message ?? colErrorData.error ?? message
-        }
-      }
-    } catch {
-      // Fall back to the base message if collection lookup fails for any reason.
-    }
-
-    throw new Error(message)
-  } catch (e) {
-    form.splAssetMints[idx] = { ...item, _loading: false, _error: e instanceof Error ? e.message : 'Failed to load' }
-  }
-}
-
-function removeSpl(idx: number) {
-  form.splAssetMints.splice(idx, 1)
-}
 
 async function lookupAndAddCurrency() {
   const mint = newCurrencyMint.value.trim()
@@ -864,6 +683,11 @@ defineExpose({ save, form })
   margin-bottom: var(--theme-space-md);
 }
 
+.marketplace-settings__add-title {
+  font-size: var(--theme-font-md);
+  margin-bottom: var(--theme-space-sm);
+}
+
 .marketplace-settings__add-mint {
   display: flex;
   gap: var(--theme-space-sm);
@@ -894,119 +718,6 @@ defineExpose({ save, form })
   margin-top: var(--theme-space-md);
 }
 
-.marketplace-settings__mint-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.marketplace-settings__mint-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--theme-space-sm);
-  padding: var(--theme-space-sm) 0;
-  border-bottom: var(--theme-border-thin) solid var(--theme-border);
-}
-
-.marketplace-settings__mint-item--clickable .marketplace-settings__mint-row {
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-}
-
-.marketplace-settings__mint-item--clickable .marketplace-settings__mint-row:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.marketplace-settings__mint-row {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-md);
-  flex: 1;
-  min-width: 0;
-}
-
-.marketplace-settings__mint-row--plain {
-  cursor: default;
-}
-
-button.marketplace-settings__mint-row {
-  border: none;
-  background: none;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-}
-
-.marketplace-settings__mint-thumb {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--theme-radius-sm, 4px);
-  overflow: hidden;
-  background: var(--theme-bg-muted);
-}
-
-.marketplace-settings__mint-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.marketplace-settings__mint-thumb-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  color: var(--theme-text-muted);
-  font-size: 1.25rem;
-}
-
-.marketplace-settings__mint-address {
-  display: block;
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-  font-family: var(--theme-font-mono, monospace);
-  word-break: break-all;
-}
-
-.marketplace-settings__mint-item:last-child {
-  border-bottom: none;
-}
-
-.marketplace-settings__mint-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.marketplace-settings__mint-name {
-  font-size: var(--theme-font-sm);
-  font-weight: 600;
-  font-family: var(--theme-font-mono, monospace);
-}
-
-.marketplace-settings__mint-meta {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-}
-
-.marketplace-settings__traits-hint {
-  opacity: 0.9;
-}
-
-.marketplace-settings__mint-status {
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted);
-}
-
-.marketplace-settings__mint-error {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-error);
-}
-
 .marketplace-settings__spinner {
   animation: spin 0.8s linear infinite;
 }
@@ -1014,11 +725,6 @@ button.marketplace-settings__mint-row {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-.marketplace-settings__empty {
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted);
 }
 
 .marketplace-settings__fees {

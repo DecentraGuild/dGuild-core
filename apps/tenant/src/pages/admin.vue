@@ -103,6 +103,19 @@
         @deploy="(p: BillingPeriod) => deployModule('whitelist', p)"
       />
 
+      <AdminAddressbookTab
+        v-else-if="tab === 'addressbook'"
+        :slug="slug ?? ''"
+        :module-state="addressbookModuleState"
+        :subscription="subscriptions.addressbook ?? null"
+        :saving="saving"
+        :deploying="deploying"
+        :save-error="saveError"
+        @save="(p: BillingPeriod) => handleBillingPayment('addressbook', p)"
+        @deploy="(p: BillingPeriod) => deployModule('addressbook', p)"
+        @reactivate="(p: BillingPeriod) => handleReactivate('addressbook', p)"
+      />
+
       <AdminBillingTab
         v-else-if="tab === 'billing'"
         :slug="slug"
@@ -165,6 +178,7 @@ import AdminMarketplaceTab from '~/components/admin/AdminMarketplaceTab.vue'
 import AdminDiscordTab from '~/components/admin/AdminDiscordTab.vue'
 import AdminRaffleTab from '~/components/admin/AdminRaffleTab.vue'
 import AdminWhitelistTab from '~/components/admin/AdminWhitelistTab.vue'
+import AdminAddressbookTab from '~/components/admin/AdminAddressbookTab.vue'
 import AdminBillingTab from '~/components/admin/AdminBillingTab.vue'
 import AdminModuleActivationModal from '~/components/AdminModuleActivationModal.vue'
 import AdminPricingWidget from '~/components/AdminPricingWidget.vue'
@@ -235,6 +249,7 @@ const marketplaceModuleState = computed(() => getModuleState(tenant.value?.modul
 const discordModuleState = computed(() => getModuleState(tenant.value?.modules?.discord))
 const raffleModuleState = computed(() => getModuleState(tenant.value?.modules?.raffles))
 const whitelistModuleState = computed(() => getModuleState(tenant.value?.modules?.whitelist))
+const addressbookModuleState = computed(() => getModuleState(tenant.value?.modules?.addressbook))
 
 const slugModuleState = computed((): 'off' | 'staging' | 'active' | 'deactivating' => {
   if (tenant.value?.slug) return 'active'
@@ -243,7 +258,7 @@ const slugModuleState = computed((): 'off' | 'staging' | 'active' | 'deactivatin
 
 const showSlugPricingWidget = computed(() => Boolean(tenant.value))
 
-const WIDGET_TABS = new Set(['marketplace', 'discord', 'raffle', 'whitelist'])
+const WIDGET_TABS = new Set(['marketplace', 'discord', 'raffle', 'whitelist', 'addressbook'])
 const tab = computed(() => {
   const q = route.query.tab
   return typeof q === 'string' && VALID_TABS.has(q) ? q : 'general'
@@ -384,6 +399,7 @@ watch(tab, (t) => {
   if (t === 'marketplace') fetchSubscription('marketplace')
   if (t === 'discord') fetchSubscription('discord')
   if (t === 'raffle') fetchSubscription('raffles')
+  if (t === 'addressbook') fetchSubscription('addressbook')
   if (t === 'modules') {
     for (const id of moduleIds.value) {
       if (id !== 'admin' && getModuleCatalogEntry(id)?.pricing) fetchSubscription(id)

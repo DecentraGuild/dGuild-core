@@ -41,7 +41,7 @@ defineProps<{
   color: var(--theme-text-secondary);
   text-decoration: none;
   border-radius: var(--theme-radius-md);
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.2s;
 }
 
 .nav-link:hover {
@@ -52,6 +52,12 @@ defineProps<{
 .nav-link--active {
   color: var(--theme-primary);
   background-color: var(--theme-bg-card);
+  box-shadow: var(--theme-shadow-glow);
+}
+
+.nav-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--theme-bg-primary), 0 0 0 4px var(--theme-primary-light);
 }
 
 .nav-link__icon {

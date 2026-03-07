@@ -19,6 +19,7 @@ import { registerBillingPaymentRoutes } from './routes/billing-payments.js'
 import { registerRegisterRoutes } from './routes/register.js'
 import { registerWhitelistRoutes } from './routes/whitelist.js'
 import { registerRaffleRoutes } from './routes/raffle.js'
+import { registerAddressbookRoutes } from './routes/addressbook.js'
 import { registerPlatformAuthRoutes } from './routes/platform/auth.js'
 import { registerPlatformTenantsRoutes } from './routes/platform/tenants.js'
 import { registerPlatformTenantModulesRoutes } from './routes/platform/tenants-modules.js'
@@ -157,6 +158,7 @@ async function main() {
   await registerRegisterRoutes(app)
   await registerWhitelistRoutes(app)
   await registerRaffleRoutes(app)
+  await registerAddressbookRoutes(app)
   await registerPlatformAuthRoutes(app)
   await registerPlatformTenantsRoutes(app)
   await registerPlatformTenantModulesRoutes(app)

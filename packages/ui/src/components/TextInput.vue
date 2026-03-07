@@ -61,6 +61,7 @@ const id = computed(() => `input-${Math.random().toString(36).slice(2)}`)
 
 .text-input__field:focus {
   border-color: var(--theme-primary);
+  box-shadow: 0 0 0 2px var(--theme-bg-primary), 0 0 0 4px var(--theme-primary-light);
 }
 
 .text-input__field:disabled {

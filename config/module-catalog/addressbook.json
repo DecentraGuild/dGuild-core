@@ -1,0 +1,48 @@
+{
+  "id": "addressbook",
+  "status": "development",
+  "name": "Address Book",
+  "icon": "mdi:book-account",
+  "image": null,
+  "shortDescription": "Maintain an address book of SPL tokens and NFT collections with tiered data (metadata, holder snapshots, and more).",
+  "longDescription": "The Address Book gives admins a centralised list of SPL and NFT mints for their dGuild. Each mint can be at Base (metadata only, free), Grow (metadata + daily holder snapshots, 5 USDC/month), or Pro (full indexing – coming soon, 25 USDC/month). The address book feeds every mint input across the dapp and can be shared with members via a whitelist.",
+  "detailedDescription": "Admins add mints via the unified picker and assign a tier. Base mints are free and show metadata only. Grow mints get weekly metadata refresh and daily holder snapshots. Pro mints (coming soon) will add transfer/mint/burn indexing. Admins choose a whitelist; those wallets plus admins can view the address book and open each entry to see metadata and, for Grow+, daily snapshots.",
+  "keyInfo": [
+    "- Centralised mint address book",
+    "- Per-mint tiers (Base / Grow / Pro)",
+    "- Optional whitelist for member access",
+    "- Base: metadata only; Grow: + daily snapshots; Pro: + transactions (coming soon)",
+    "- App-wide mint picker integration"
+  ],
+  "routePath": "/addressbook",
+  "order": 2,
+  "goActiveImmediately": true,
+  "activationInstructions": {
+    "intro": "Catalogue your realm's assets. Share with members who need it.",
+    "steps": [
+      "Add SPL tokens or NFT collections",
+      "Set tier per mint (Base or Grow)",
+      "Optionally select a whitelist for member access",
+      "Review pricing and deploy"
+    ],
+    "note": "Pro tier is visible but not selectable yet. Grow mints are updated daily for holder snapshots and weekly for metadata."
+  },
+  "pricing": {
+    "modelType": "tiered_addons",
+    "conditionKeys": ["mintsBase", "mintsGrow", "mintsPro"],
+    "tiers": [
+      {
+        "id": "tier1",
+        "name": "Address Book",
+        "recurringPrice": 0,
+        "included": { "mintsBase": 0, "mintsGrow": 0, "mintsPro": 0 }
+      }
+    ],
+    "addons": [
+      { "conditionKey": "mintsBase", "name": "Base mint (metadata only)", "unitSize": 1, "recurringPricePerUnit": 0 },
+      { "conditionKey": "mintsGrow", "name": "Grow mint (+holders)", "unitSize": 1, "recurringPricePerUnit": 0.0005 },
+      { "conditionKey": "mintsPro", "name": "Pro mint (+transactions)", "unitSize": 1, "recurringPricePerUnit": 0.0025 }
+    ],
+    "yearlyDiscountPercent": 25
+  }
+}

@@ -3,6 +3,7 @@ import { extractMarketplaceConditions } from './extractors/marketplace.js'
 import { extractDiscordConditions } from './extractors/discord.js'
 import { extractWhitelistConditions } from './extractors/whitelist.js'
 import { extractRaffleConditions } from './extractors/raffles.js'
+import { extractAddressbookConditions } from './extractors/addressbook.js'
 
 type Extractor = (tenantId: string) => Promise<ConditionSet>
 
@@ -11,6 +12,7 @@ const extractors: Record<string, Extractor> = {
   discord: extractDiscordConditions,
   whitelist: extractWhitelistConditions,
   raffles: extractRaffleConditions,
+  addressbook: extractAddressbookConditions,
   slug: async () => ({}),
 }
 

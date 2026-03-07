@@ -16,7 +16,7 @@
     "- 0.0044 SOL per wallet slot (reclaimable)"
   ],
   "routePath": "/whitelist",
-  "order": 5,
+  "order": 3,
   "activationInstructions": {
     "intro": "Decide who may enter your halls. Forge your access scroll and seal it on-chain.",
     "steps": [

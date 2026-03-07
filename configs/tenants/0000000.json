@@ -3,10 +3,162 @@
   "name": "Decentra Guild",
   "description": "Decentra Guild Envirement",
   "branding": {
-    "logo": "https://www.decentraguild.com/logo/dguild-logo.svg"
+    "logo": "https://www.decentraguild.com/logo/dguild-logo.svg",
+    "theme": {
+      "colors": {
+        "primary": {
+          "main": "#00951a",
+          "hover": "#008918",
+          "light": "#33aa48",
+          "dark": "#007f16"
+        },
+        "secondary": {
+          "main": "#007014",
+          "hover": "#006712",
+          "light": "#338d43",
+          "dark": "#005f11"
+        },
+        "accent": {
+          "main": "#00951a",
+          "hover": "#008617"
+        },
+        "background": {
+          "primary": "#3c3434",
+          "secondary": "#443c3c",
+          "card": "#4a4242",
+          "muted": "#534c4c",
+          "backdrop": "rgba(60, 52, 52, 0.78)"
+        },
+        "text": {
+          "primary": "#ffffff",
+          "secondary": "#b5b5c0",
+          "muted": "#6b6b80"
+        },
+        "border": {
+          "default": "#2a2a3e",
+          "light": "#3b3b4d"
+        },
+        "status": {
+          "success": "#00951a",
+          "error": "#cf0000",
+          "warning": "#ff6b35",
+          "info": "#00d4ff"
+        },
+        "trade": {
+          "buy": "#00ff00",
+          "buyHover": "#00e600",
+          "buyLight": "#26ff26",
+          "sell": "#ff0000",
+          "sellHover": "#e60000",
+          "sellLight": "#ff2626",
+          "trade": "#ffaa00",
+          "tradeHover": "#e69900",
+          "tradeLight": "#ffb726",
+          "swap": "#00951a",
+          "swapHover": "#008617",
+          "swapLight": "#33aa48"
+        },
+        "window": {
+          "background": "#4a4242",
+          "border": "#2a2a3e",
+          "header": "#443c3c"
+        }
+      },
+      "fontSize": {
+        "xs": "0.7875rem",
+        "sm": "0.875rem",
+        "base": "1rem",
+        "lg": "1.125rem",
+        "xl": "1.2375rem",
+        "2xl": "1.40625rem",
+        "3xl": "1.6875rem",
+        "4xl": "1.96875rem",
+        "5xl": "2.25rem"
+      },
+      "spacing": {
+        "xs": "0.25rem",
+        "sm": "0.375rem",
+        "md": "0.5rem",
+        "lg": "0.75rem",
+        "xl": "1rem",
+        "2xl": "1.5rem"
+      },
+      "borderRadius": {
+        "sm": "0.5rem",
+        "md": "0.75rem",
+        "lg": "1rem",
+        "xl": "1.25rem",
+        "full": "9999px"
+      },
+      "borderWidth": {
+        "thin": "1px",
+        "medium": "2px",
+        "thick": "4px"
+      },
+      "shadows": {
+        "glow": "0 0 20px rgba(0, 149, 26, 0.28)",
+        "glowHover": "0 0 40px rgba(0, 149, 26, 0.55)",
+        "card": "0 8px 32px rgba(0, 0, 0, 0.4)"
+      },
+      "gradients": {
+        "primary": "linear-gradient(135deg, #00951a 0%, #33aa48 50%, #007f16 100%)",
+        "secondary": "linear-gradient(135deg, #ff6b35 0%, #ff895d 100%)",
+        "accent": "linear-gradient(135deg, #00951a 0%, #007014 100%)"
+      },
+      "fonts": {
+        "primary": [
+          "Inter",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "Roboto",
+          "sans-serif"
+        ],
+        "mono": [
+          "JetBrains Mono",
+          "Fira Code",
+          "monospace"
+        ]
+      },
+      "effects": {
+        "pattern": "none",
+        "patternSize": 10,
+        "glowIntensity": "none"
+      }
+    }
   },
   "modules": {
     "admin": {
+      "state": "active",
+      "deactivatedate": null,
+      "deactivatingUntil": null,
+      "settingsjson": {}
+    },
+    "addressbook": {
+      "state": "active",
+      "deactivatedate": null,
+      "deactivatingUntil": null,
+      "settingsjson": {}
+    },
+    "whitelist": {
+      "state": "active",
+      "deactivatedate": null,
+      "deactivatingUntil": null,
+      "settingsjson": {}
+    },
+    "discord": {
+      "state": "active",
+      "deactivatedate": null,
+      "deactivatingUntil": null,
+      "settingsjson": {}
+    },
+    "raffles": {
+      "state": "active",
+      "deactivatedate": null,
+      "deactivatingUntil": null,
+      "settingsjson": {}
+    },
+    "marketplace": {
       "state": "active",
       "deactivatedate": null,
       "deactivatingUntil": null,

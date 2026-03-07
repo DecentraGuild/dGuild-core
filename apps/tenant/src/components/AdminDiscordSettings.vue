@@ -32,18 +32,7 @@ import { API_V1 } from '~/utils/apiBase'
 import AdminDiscordServerCard from '~/components/AdminDiscordServerCard.vue'
 import AdminDiscordRulesCard from '~/components/AdminDiscordRulesCard.vue'
 import AdminDiscordMintCatalog from '~/components/AdminDiscordMintCatalog.vue'
-
-interface CatalogMint {
-  id: number
-  asset_id: string
-  kind: 'SPL' | 'NFT'
-  label: string
-  symbol: string | null
-  image: string | null
-  decimals: number | null
-  trait_keys: string[] | null
-  trait_options: Record<string, string[]> | null
-}
+import type { CatalogMint } from '~/types/mints'
 
 const props = defineProps<{ slug: string }>()
 const tenantId = computed(() => useTenantStore().tenantId)

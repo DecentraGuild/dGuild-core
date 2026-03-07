@@ -7,6 +7,9 @@
       class="whitelist-select__field"
       @change="onChange"
     >
+      <option v-if="showAdminOnly" value="__admin_only__">
+        Admin only
+      </option>
       <option value="">
         {{ loading ? 'Loading...' : (lists.length ? 'Public (no whitelist)' : 'No lists / Public') }}
       </option>
@@ -30,8 +33,8 @@ import type { MarketplaceWhitelistSettings } from '@decentraguild/core'
 
 const WHITELIST_PROGRAM_ID = 'whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn'
 
-/** Emitted value: null | { programId, account } for public/specific list, or 'use-default' sentinel. */
-export type WhitelistSelectValue = MarketplaceWhitelistSettings | null | 'use-default'
+/** Emitted value: null | { programId, account } for public/specific list, or 'use-default' | 'admin-only' sentinel. */
+export type WhitelistSelectValue = MarketplaceWhitelistSettings | null | 'use-default' | 'admin-only'
 
 const props = withDefaults(
   defineProps<{
@@ -39,9 +42,10 @@ const props = withDefaults(
     modelValue?: WhitelistSelectValue
     label?: string
     showUseDefault?: boolean
+    showAdminOnly?: boolean
     disabled?: boolean
   }>(),
-  { showUseDefault: false, disabled: false }
+  { showUseDefault: false, showAdminOnly: false, disabled: false }
 )
 
 const emit = defineEmits<{
@@ -54,6 +58,7 @@ const selectValue = computed(() => {
   const v = props.modelValue
   if (v === undefined || v === null) return ''
   if (v === 'use-default') return '__use_default__'
+  if (v === 'admin-only') return '__admin_only__'
   if (typeof v === 'object' && v.account && v.account.trim()) return v.account
   return ''
 })
@@ -66,6 +71,10 @@ function onChange(e: Event) {
   }
   if (value === '__use_default__') {
     emit('update:modelValue', 'use-default')
+    return
+  }
+  if (value === '__admin_only__') {
+    emit('update:modelValue', 'admin-only')
     return
   }
   emit('update:modelValue', {

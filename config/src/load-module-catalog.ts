@@ -5,6 +5,7 @@ import marketplace from '../module-catalog/marketplace.json'
 import discord from '../module-catalog/discord.json'
 import whitelist from '../module-catalog/whitelist.json'
 import raffles from '../module-catalog/raffles.json'
+import addressbook from '../module-catalog/addressbook.json'
 
 const entries: ModuleCatalogEntry[] = [
   admin as ModuleCatalogEntry,
@@ -12,6 +13,7 @@ const entries: ModuleCatalogEntry[] = [
   discord as ModuleCatalogEntry,
   whitelist as ModuleCatalogEntry,
   raffles as ModuleCatalogEntry,
+  addressbook as ModuleCatalogEntry,
 ]
 
 const catalog: Record<string, ModuleCatalogEntry> = Object.fromEntries(

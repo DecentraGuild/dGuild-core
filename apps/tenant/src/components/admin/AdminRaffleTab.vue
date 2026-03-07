@@ -138,12 +138,16 @@
       @update:model-value="showAddRewardModal = false"
     >
       <form v-if="showAddRewardModal && selectedRaffleForReward" class="raffle-add-reward-form" @submit.prevent="onAddRewardSubmit">
-        <TextInput
-          v-model="addRewardForm.prizeMint"
-          label="Prize token mint"
-          placeholder="SPL token mint address"
-          required
-        />
+        <div class="raffle-mint-row">
+          <TextInput
+            v-model="addRewardForm.prizeMint"
+            label="Prize token mint"
+            placeholder="SPL token mint address"
+            class="raffle-mint-row__input"
+            required
+          />
+          <AddressBookBrowser kind="SPL" @select="(mint) => { addRewardForm.prizeMint = mint }" />
+        </div>
         <TextInput
           v-model="addRewardForm.amountDisplay"
           type="number"
@@ -224,12 +228,16 @@
           label="Description"
           placeholder="Brief description"
         />
-        <TextInput
-          v-model="createForm.ticketMint"
-          label="Ticket token mint"
-          placeholder="SPL token mint address"
-          required
-        />
+        <div class="raffle-mint-row">
+          <TextInput
+            v-model="createForm.ticketMint"
+            label="Ticket token mint"
+            placeholder="SPL token mint address"
+            class="raffle-mint-row__input"
+            required
+          />
+          <AddressBookBrowser kind="SPL" @select="(mint) => { createForm.ticketMint = mint }" />
+        </div>
         <TextInput
           v-model="createForm.ticketPriceDisplay"
           type="number"
@@ -273,6 +281,7 @@ import { Card, Button, TextInput, Modal } from '@decentraguild/ui/components'
 import { Icon } from '@iconify/vue'
 import WhitelistSelect from '~/components/WhitelistSelect.vue'
 import AdminPricingWidget from '~/components/AdminPricingWidget.vue'
+import AddressBookBrowser from '~/components/AddressBookBrowser.vue'
 import RaffleSlotCard from '~/components/admin/RaffleSlotCard.vue'
 import { useTenantStore } from '~/stores/tenant'
 import { nextTick, watch } from 'vue'
@@ -1069,7 +1078,7 @@ defineExpose({
 }
 .raffle-slot-card--empty:hover:not(:disabled) {
   border-color: var(--theme-primary);
-  background: var(--theme-bg-secondary, rgba(0, 0, 0, 0.02));
+  background: var(--theme-bg-secondary);
 }
 .raffle-slot-card:disabled {
   opacity: 0.5;
@@ -1095,7 +1104,7 @@ defineExpose({
   background: transparent;
 }
 .raffle-slot-card--upgrade:hover {
-  background: var(--theme-bg-secondary, rgba(0, 0, 0, 0.02));
+  background: var(--theme-bg-secondary);
   border-color: var(--theme-primary);
 }
 .raffle-slot-card__upgrade-icon {
@@ -1147,7 +1156,7 @@ defineExpose({
 }
 .raffle-upgrade-option:hover {
   border-color: var(--theme-primary);
-  background: var(--theme-bg-secondary, rgba(0, 0, 0, 0.02));
+  background: var(--theme-bg-secondary);
 }
 .raffle-upgrade-option--disabled,
 .raffle-upgrade-option--disabled:hover {
@@ -1237,6 +1246,17 @@ defineExpose({
   justify-content: flex-end;
   gap: var(--theme-space-sm);
   margin-top: var(--theme-space-sm);
+}
+
+.raffle-mint-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--theme-space-xs);
+}
+
+.raffle-mint-row__input {
+  flex: 1;
+  min-width: 0;
 }
 
 .raffle-start-modal {

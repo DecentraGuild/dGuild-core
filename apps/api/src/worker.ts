@@ -7,6 +7,7 @@ import 'dotenv/config'
 import { ensureConfigPaths } from './config/ensure-paths.js'
 import { initPool } from './db/client.js'
 import { runModuleLifecycle } from './jobs/module-lifecycle.js'
+import { runTrackerSync } from './jobs/tracker-sync.js'
 import {
   DEFAULT_MODULE_LIFECYCLE_INTERVAL_MINUTES,
 } from './config/constants.js'
@@ -37,6 +38,14 @@ async function main(): Promise<void> {
   } else {
     log.info({}, 'Worker: module lifecycle disabled (MODULE_LIFECYCLE_INTERVAL_MINUTES=0); process staying alive')
     setInterval(() => {}, 60_000)
+  }
+
+  const trackerIntervalMinutes = Number(process.env.TRACKER_SYNC_INTERVAL_MINUTES ?? 30)
+  if (trackerIntervalMinutes > 0) {
+    const trackerIntervalMs = trackerIntervalMinutes * 60 * 1000
+    await runTrackerSync(log)
+    setInterval(() => void runTrackerSync(log), trackerIntervalMs)
+    log.info({ trackerIntervalMinutes }, 'Worker: tracker sync scheduled')
   }
 }
 

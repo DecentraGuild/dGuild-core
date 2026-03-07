@@ -16,7 +16,7 @@
     "- Monetization options (Pro)"
   ],
   "routePath": "/market",
-  "order": 2,
+  "order": 6,
   "activationInstructions": {
     "intro": "Raise your merchant banners. Open your gates to trade.",
     "steps": [

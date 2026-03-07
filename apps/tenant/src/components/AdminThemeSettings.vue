@@ -4,29 +4,29 @@
       <details class="theme-settings__section" open>
         <summary class="theme-settings__heading">Colors</summary>
         <p class="theme-settings__hint">
-          Core colours used across the app. Hover and variants are derived automatically.
+          Core colours used across the app. All shades and variants are derived automatically.
         </p>
         <div class="theme-settings__grid theme-settings__grid--two">
           <div class="theme-settings__group">
             <h4 class="theme-settings__sub">Core</h4>
-            <ColorInput v-model="simpleColors.primary" label="Primary (buttons, links)" />
-            <ColorInput v-model="simpleColors.backgroundPage" label="Background (page)" />
-            <ColorInput v-model="simpleColors.textPrimary" label="Text" />
-            <ColorInput v-model="simpleColors.textMuted" label="Text muted" />
-            <ColorInput v-model="simpleColors.border" label="Border (leave empty to derive)" />
+            <ColorInput v-model="inputs.primary" label="Primary (buttons, links)" @update:model-value="apply" />
+            <ColorInput v-model="inputs.background" label="Background (page)" @update:model-value="apply" />
+            <ColorInput v-model="inputs.text" label="Text" @update:model-value="apply" />
+            <ColorInput v-model="inputs.textMuted" label="Text muted (leave empty to derive)" @update:model-value="apply" />
+            <ColorInput v-model="inputs.border" label="Border (leave empty to derive)" @update:model-value="apply" />
           </div>
           <div class="theme-settings__group">
             <h4 class="theme-settings__sub">Status</h4>
-            <ColorInput v-model="simpleColors.statusSuccess" label="Success" />
-            <ColorInput v-model="simpleColors.statusError" label="Error" />
-            <ColorInput v-model="simpleColors.statusWarning" label="Warning" />
-            <ColorInput v-model="simpleColors.statusInfo" label="Info" />
+            <ColorInput v-model="statusSuccess" label="Success" @update:model-value="applyStatus" />
+            <ColorInput v-model="statusError" label="Error" @update:model-value="applyStatus" />
+            <ColorInput v-model="statusWarning" label="Warning" @update:model-value="applyStatus" />
+            <ColorInput v-model="statusInfo" label="Info" @update:model-value="applyStatus" />
           </div>
           <div class="theme-settings__group">
             <h4 class="theme-settings__sub">Trade (marketplace)</h4>
-            <ColorInput v-model="simpleColors.tradeBuy" label="Buy" />
-            <ColorInput v-model="simpleColors.tradeSell" label="Sell" />
-            <ColorInput v-model="simpleColors.tradeTrade" label="Trade" />
+            <ColorInput v-model="tradeBuy" label="Buy" @update:model-value="applyTrade" />
+            <ColorInput v-model="tradeSell" label="Sell" @update:model-value="applyTrade" />
+            <ColorInput v-model="tradeTrade" label="Trade" @update:model-value="applyTrade" />
           </div>
         </div>
       </details>
@@ -35,12 +35,12 @@
         <summary class="theme-settings__heading">Typography</summary>
         <p class="theme-settings__hint">Font family and size scale: small (labels), body (main text), heading (titles).</p>
         <div class="theme-settings__group">
-          <Select v-model="fontFamilyId" label="Font" :options="FONT_OPTIONS" />
+          <Select v-model="fontFamilyId" label="Font" :options="FONT_OPTIONS" @update:model-value="applyFont" />
         </div>
         <div class="theme-settings__typography-row">
-          <TextInput v-model="typographySmall" label="Small (rem)" placeholder="0.875" />
-          <TextInput v-model="typographyBody" label="Body (rem)" placeholder="1" />
-          <TextInput v-model="typographyHeading" label="Heading (rem)" placeholder="1.25" />
+          <TextInput v-model="typographySmall" label="Small (rem)" placeholder="0.875" @update:model-value="applyTypography" />
+          <TextInput v-model="typographyBody" label="Body (rem)" placeholder="1" @update:model-value="applyTypography" />
+          <TextInput v-model="typographyHeading" label="Heading (rem)" placeholder="1.25" @update:model-value="applyTypography" />
         </div>
       </details>
 
@@ -55,15 +55,16 @@
           <label class="theme-settings__slider-label" :for="sliderId">Sharp</label>
           <input
             :id="sliderId"
-            v-model.number="radiusLevel"
+            v-model.number="inputs.radiusLevel"
             type="range"
             min="0"
             max="4"
             step="1"
             class="theme-settings__slider"
+            @input="apply"
           />
           <label class="theme-settings__slider-label">Round</label>
-          <span class="theme-settings__slider-value">{{ radiusLabels[radiusLevel] }}</span>
+          <span class="theme-settings__slider-value">{{ radiusLabels[inputs.radiusLevel ?? 3] }}</span>
         </div>
 
         <h4 class="theme-settings__sub">Spacing</h4>
@@ -71,16 +72,16 @@
           <label :for="spacingSliderId" class="theme-settings__slider-label">Tight</label>
           <input
             :id="spacingSliderId"
-            v-model.number="spacingLevel"
+            v-model.number="inputs.spacingLevel"
             type="range"
             min="0"
             max="10"
             step="1"
             class="theme-settings__slider"
-            @input="applySpacingFromSlider"
+            @input="apply"
           />
           <label class="theme-settings__slider-label">Loose</label>
-          <span class="theme-settings__slider-value">{{ spacingBaseRem }} base</span>
+          <span class="theme-settings__slider-value">{{ spacingBaseLabel }} base</span>
         </div>
 
         <h4 class="theme-settings__sub">Border width (px)</h4>
@@ -88,17 +89,52 @@
           <label :for="borderSliderId" class="theme-settings__slider-label">1px</label>
           <input
             :id="borderSliderId"
-            v-model.number="borderWidthPx"
+            v-model.number="inputs.borderWidthPx"
             type="range"
             min="1"
             max="10"
             step="1"
             class="theme-settings__slider"
-            @input="applyBorderFromSlider"
+            @input="apply"
           />
           <label class="theme-settings__slider-label">10px</label>
-          <span class="theme-settings__slider-value">{{ borderWidthPx }}px</span>
+          <span class="theme-settings__slider-value">{{ inputs.borderWidthPx ?? 1 }}px</span>
         </div>
+      </details>
+
+      <details class="theme-settings__section">
+        <summary class="theme-settings__heading">Effects</summary>
+        <p class="theme-settings__hint">
+          Optional visual enhancements. Patterns and glow intensity are purely aesthetic and do not
+          affect functionality.
+        </p>
+        <div class="theme-settings__grid theme-settings__grid--two">
+          <div class="theme-settings__group">
+            <Select v-model="effectPattern" label="Background pattern" :options="PATTERN_OPTIONS" @update:model-value="applyEffects" />
+          </div>
+          <div class="theme-settings__group">
+            <Select v-model="effectGlow" label="Glow intensity" :options="GLOW_OPTIONS" @update:model-value="applyEffects" />
+          </div>
+        </div>
+
+        <template v-if="effectPattern !== 'none'">
+          <h4 class="theme-settings__sub">Pattern size</h4>
+          <div class="theme-settings__slider-row">
+            <label :for="patternSizeId" class="theme-settings__slider-label">Fine</label>
+            <input
+              :id="patternSizeId"
+              v-model.number="effectPatternSize"
+              type="range"
+              min="4"
+              max="64"
+              step="2"
+              class="theme-settings__slider"
+              @input="applyEffects"
+            />
+            <label class="theme-settings__slider-label">Coarse</label>
+            <span class="theme-settings__slider-value">{{ effectPatternSize }}px</span>
+          </div>
+        </template>
       </details>
     </div>
 
@@ -129,25 +165,19 @@
           <span class="theme-settings__chip theme-settings__chip--sell">Sell</span>
           <span class="theme-settings__chip theme-settings__chip--trade">Trade</span>
         </div>
+        <div class="theme-settings__preview-glow">
+          <button type="button" class="theme-settings__btn--glow">Glow button</button>
+        </div>
       </div>
     </aside>
   </div>
 </template>
 
 <script setup lang="ts">
-/* eslint-disable vue/no-mutating-props */
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { TextInput, ColorInput, Select } from '@decentraguild/ui/components'
-import { themeToCssVars } from '@decentraguild/ui'
-import type { TenantTheme, TenantThemeColors } from '@decentraguild/core'
-import {
-  lightenHex,
-  darkenHex,
-  mixHex,
-  BORDER_RADIUS_PRESETS,
-  getRadiusLevelFromTheme,
-  parseRem,
-} from '~/utils/themeHelpers'
+import { themeToCssVars, deriveTheme, themeToInputs, parseRem } from '@decentraguild/ui'
+import type { TenantTheme } from '@decentraguild/core'
 
 const props = defineProps<{
   branding: {
@@ -157,6 +187,9 @@ const props = defineProps<{
 }>()
 
 const sliderId = `radius-slider-${Math.random().toString(36).slice(2)}`
+const spacingSliderId = `spacing-slider-${Math.random().toString(36).slice(2)}`
+const borderSliderId = `border-slider-${Math.random().toString(36).slice(2)}`
+const patternSizeId = `pattern-size-slider-${Math.random().toString(36).slice(2)}`
 
 const radiusLabels = ['None', 'Slight', 'Medium', 'Rounded', 'Full']
 
@@ -178,10 +211,22 @@ const FONT_STACKS: Record<string, string[]> = {
 
 const DEFAULT_MONO = ['JetBrains Mono', 'Fira Code', 'monospace']
 
+const PATTERN_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'dots', label: 'Dots' },
+  { value: 'grid', label: 'Grid' },
+  { value: 'noise', label: 'Noise' },
+]
+
+const GLOW_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'subtle', label: 'Subtle' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'strong', label: 'Strong' },
+]
+
 function fontStackToId(stack: string[] | undefined): string {
-  if (!stack?.[0]) return 'inter'
-  const first = stack[0].toLowerCase()
-  if (first.startsWith('inter')) return 'inter'
+  const first = (stack?.[0] ?? '').toLowerCase()
   if (first.startsWith('system')) return 'system'
   if (first.startsWith('roboto')) return 'roboto'
   if (first.startsWith('open')) return 'open-sans'
@@ -189,168 +234,105 @@ function fontStackToId(stack: string[] | undefined): string {
   return 'inter'
 }
 
-const fontFamilyId = ref('inter')
-
-const simpleColors = reactive({
-  primary: '',
-  backgroundPage: '',
-  textPrimary: '',
+// Derived inputs synced from the stored theme
+const inputs = reactive({
+  primary: '#00951a',
+  background: '#0a0a0f',
+  text: '#ffffff',
   textMuted: '',
   border: '',
-  statusSuccess: '',
-  statusError: '',
-  statusWarning: '',
-  statusInfo: '',
-  tradeBuy: '',
-  tradeSell: '',
-  tradeTrade: '',
+  radiusLevel: 3,
+  spacingLevel: 5,
+  borderWidthPx: 1,
 })
 
-const spacingLevel = ref(5) // 0=tight (0.5rem base), 5=default (1rem), 10=loose (2rem base)
-const borderWidthPx = ref(1)
-const spacingSliderId = `spacing-slider-${Math.random().toString(36).slice(2)}`
-const borderSliderId = `border-slider-${Math.random().toString(36).slice(2)}`
+// Status and trade as flat refs (optional overrides)
+const statusSuccess = ref('')
+const statusError = ref('')
+const statusWarning = ref('')
+const statusInfo = ref('')
+const tradeBuy = ref('')
+const tradeSell = ref('')
+const tradeTrade = ref('')
 
-const spacingBaseRem = computed(() => {
-  const base = 0.5 + (spacingLevel.value / 10) * 1.5 // 0.5rem at 0, 2rem at 10, ~1rem at 3
-  return `${base}rem`
-})
-
+const fontFamilyId = ref('inter')
 const typographySmall = ref('0.875')
 const typographyBody = ref('1')
 const typographyHeading = ref('1.25')
-const radiusLevel = ref(2)
 
-function isValidHex(hex: string): boolean {
-  return /^#?[0-9a-fA-F]{3}$/.test(hex.trim()) || /^#?[0-9a-fA-F]{6}$/.test(hex.trim())
-}
+const effectPattern = ref<'none' | 'dots' | 'grid' | 'noise'>('none')
+const effectPatternSize = ref(24)
+const effectGlow = ref<'none' | 'subtle' | 'medium' | 'strong'>('subtle')
 
-function norm(hex: string): string {
-  const s = String(hex).trim().replace(/^#/, '')
-  if (s.length === 3) return '#' + s.split('').map((c) => c + c).join('')
-  if (s.length === 6) return '#' + s
-  return hex
-}
+const spacingBaseLabel = computed(() => {
+  const base = 0.5 + ((inputs.spacingLevel ?? 5) / 10) * 1.5
+  return `${base.toFixed(2)}rem`
+})
 
-function syncSimpleFromTheme() {
-  const t = props.branding.theme
-  const c = t.colors ?? {}
-  simpleColors.primary = c.primary?.main ?? ''
-  simpleColors.backgroundPage = c.background?.primary ?? ''
-  simpleColors.textPrimary = c.text?.primary ?? ''
-  simpleColors.textMuted = c.text?.muted ?? ''
-  simpleColors.border = c.border?.default ?? ''
-  simpleColors.statusSuccess = c.status?.success ?? ''
-  simpleColors.statusError = c.status?.error ?? ''
-  simpleColors.statusWarning = c.status?.warning ?? ''
-  simpleColors.statusInfo = c.status?.info ?? ''
-  simpleColors.tradeBuy = c.trade?.buy ?? ''
-  simpleColors.tradeSell = c.trade?.sell ?? ''
-  simpleColors.tradeTrade = c.trade?.trade ?? ''
-  const fs = t.fontSize ?? {}
+function syncFromTheme() {
+  const extracted = themeToInputs(props.branding.theme)
+  inputs.primary = extracted.primary
+  inputs.background = extracted.background
+  inputs.text = extracted.text
+  inputs.textMuted = extracted.textMuted ?? ''
+  inputs.border = extracted.border ?? ''
+  inputs.radiusLevel = extracted.radiusLevel ?? 3
+  inputs.spacingLevel = extracted.spacingLevel ?? 5
+  inputs.borderWidthPx = extracted.borderWidthPx ?? 1
+
+  const c = props.branding.theme.colors ?? {}
+  statusSuccess.value = c.status?.success ?? ''
+  statusError.value = c.status?.error ?? ''
+  statusWarning.value = c.status?.warning ?? ''
+  statusInfo.value = c.status?.info ?? ''
+  tradeBuy.value = c.trade?.buy ?? ''
+  tradeSell.value = c.trade?.sell ?? ''
+  tradeTrade.value = c.trade?.trade ?? ''
+
+  fontFamilyId.value = fontStackToId(props.branding.theme.fonts?.primary)
+
+  const fs = props.branding.theme.fontSize ?? {}
   typographySmall.value = String(parseRem(fs.sm ?? '0.875rem'))
   typographyBody.value = String(parseRem(fs.base ?? '1rem'))
   typographyHeading.value = String(parseRem(fs.lg ?? '1.125rem'))
-  radiusLevel.value = getRadiusLevelFromTheme(t)
-  fontFamilyId.value = fontStackToId(t.fonts?.primary)
 
-  // Spacing: derive level from md (0.5rem=0, 1rem=3, 2rem=10)
-  const mdRem = parseRem(t.spacing?.md ?? '1rem')
-  spacingLevel.value = Math.round(Math.max(0, Math.min(10, ((mdRem - 0.5) / 1.5) * 10)))
-
-  // Border: parse px from thin
-  const bw = t.borderWidth?.thin ?? '1px'
-  const pxMatch = bw.match(/^(\d+)px$/)
-  borderWidthPx.value = pxMatch ? Math.min(10, Math.max(1, parseInt(pxMatch[1], 10))) : 1
+  const effects = props.branding.theme.effects ?? {}
+  effectPattern.value = (effects.pattern ?? 'none') as typeof effectPattern.value
+  effectPatternSize.value = effects.patternSize ?? 24
+  effectGlow.value = (effects.glowIntensity ?? 'subtle') as typeof effectGlow.value
 }
 
-function applySimpleToTheme() {
-  const c = props.branding.theme.colors ?? ({} as TenantThemeColors)
-  const bg = simpleColors.backgroundPage && isValidHex(simpleColors.backgroundPage)
-    ? norm(simpleColors.backgroundPage)
-    : (c.background?.primary ?? '#1a1a2e')
-  const borderDefault = simpleColors.border && isValidHex(simpleColors.border)
-    ? norm(simpleColors.border)
-    : darkenHex(bg, 0.12)
-  const borderLight = lightenHex(borderDefault, 0.1)
-  const textPri = simpleColors.textPrimary && isValidHex(simpleColors.textPrimary)
-    ? norm(simpleColors.textPrimary)
-    : (c.text?.primary ?? '#ffffff')
-  const textMut = simpleColors.textMuted && isValidHex(simpleColors.textMuted)
-    ? norm(simpleColors.textMuted)
-    : (c.text?.muted ?? '#6b6b80')
-  const textSec = mixHex(textPri, textMut, 0.5)
-
-  const primary = simpleColors.primary && isValidHex(simpleColors.primary) ? norm(simpleColors.primary) : (c.primary?.main ?? '#00951a')
-  const secondary = darkenHex(primary, 0.25)
-  const accent = primary
-
-  const colors: TenantThemeColors = {
-    primary: {
-      main: primary,
-      hover: darkenHex(primary, 0.08),
-      light: lightenHex(primary, 0.2),
-      dark: darkenHex(primary, 0.15),
-    },
-    secondary: {
-      main: secondary,
-      hover: darkenHex(secondary, 0.08),
-      light: lightenHex(secondary, 0.2),
-      dark: darkenHex(secondary, 0.15),
-    },
-    accent: {
-      main: accent,
-      hover: darkenHex(accent, 0.1),
-    },
-    background: {
-      primary: bg,
-      secondary: lightenHex(bg, 0.03),
-      card: lightenHex(bg, 0.05),
-    },
-    text: {
-      primary: textPri,
-      secondary: textSec,
-      muted: textMut,
-    },
-    border: {
-      default: borderDefault,
-      light: borderLight,
-    },
+function buildTheme(): TenantTheme {
+  const derived = deriveTheme({
+    primary: inputs.primary,
+    background: inputs.background,
+    text: inputs.text,
+    textMuted: inputs.textMuted || undefined,
+    border: inputs.border || undefined,
     status: {
-      success: simpleColors.statusSuccess && isValidHex(simpleColors.statusSuccess) ? norm(simpleColors.statusSuccess) : (c.status?.success ?? '#00951a'),
-      error: simpleColors.statusError && isValidHex(simpleColors.statusError) ? norm(simpleColors.statusError) : (c.status?.error ?? '#cf0000'),
-      warning: simpleColors.statusWarning && isValidHex(simpleColors.statusWarning) ? norm(simpleColors.statusWarning) : (c.status?.warning ?? '#ff6b35'),
-      info: simpleColors.statusInfo && isValidHex(simpleColors.statusInfo) ? norm(simpleColors.statusInfo) : (c.status?.info ?? '#00d4ff'),
+      success: statusSuccess.value || undefined,
+      error: statusError.value || undefined,
+      warning: statusWarning.value || undefined,
+      info: statusInfo.value || undefined,
     },
     trade: {
-      buy: simpleColors.tradeBuy && isValidHex(simpleColors.tradeBuy) ? norm(simpleColors.tradeBuy) : (c.trade?.buy ?? '#00ff00'),
-      buyHover: simpleColors.tradeBuy && isValidHex(simpleColors.tradeBuy) ? darkenHex(norm(simpleColors.tradeBuy), 0.1) : (c.trade?.buyHover ?? '#00cc00'),
-      buyLight: simpleColors.tradeBuy && isValidHex(simpleColors.tradeBuy) ? lightenHex(norm(simpleColors.tradeBuy), 0.15) : (c.trade?.buyLight ?? '#33ff33'),
-      sell: simpleColors.tradeSell && isValidHex(simpleColors.tradeSell) ? norm(simpleColors.tradeSell) : (c.trade?.sell ?? '#ff0000'),
-      sellHover: simpleColors.tradeSell && isValidHex(simpleColors.tradeSell) ? darkenHex(norm(simpleColors.tradeSell), 0.1) : (c.trade?.sellHover ?? '#cc0000'),
-      sellLight: simpleColors.tradeSell && isValidHex(simpleColors.tradeSell) ? lightenHex(norm(simpleColors.tradeSell), 0.15) : (c.trade?.sellLight ?? '#ff3333'),
-      trade: simpleColors.tradeTrade && isValidHex(simpleColors.tradeTrade) ? norm(simpleColors.tradeTrade) : (c.trade?.trade ?? '#ffaa00'),
-      tradeHover: simpleColors.tradeTrade && isValidHex(simpleColors.tradeTrade) ? darkenHex(norm(simpleColors.tradeTrade), 0.1) : (c.trade?.tradeHover ?? '#cc8800'),
-      tradeLight: simpleColors.tradeTrade && isValidHex(simpleColors.tradeTrade) ? lightenHex(norm(simpleColors.tradeTrade), 0.15) : (c.trade?.tradeLight ?? '#ffbb33'),
-      swap: accent,
-      swapHover: darkenHex(accent, 0.1),
-      swapLight: lightenHex(accent, 0.2),
+      buy: tradeBuy.value || undefined,
+      sell: tradeSell.value || undefined,
+      trade: tradeTrade.value || undefined,
     },
-    window: {
-      background: lightenHex(bg, 0.05),
-      border: borderDefault,
-      header: lightenHex(bg, 0.03),
-    },
-  }
-  props.branding.theme.colors = colors
-}
+    radiusLevel: inputs.radiusLevel,
+    spacingLevel: inputs.spacingLevel,
+    borderWidthPx: inputs.borderWidthPx,
+    fontPrimary: FONT_STACKS[fontFamilyId.value] ?? FONT_STACKS.inter,
+    fontMono: props.branding.theme.fonts?.mono ?? DEFAULT_MONO,
+  })
 
-function applyTypographyToTheme() {
+  // Apply typography overrides if user changed them manually
   const small = parseFloat(typographySmall.value) || 0.875
   const body = parseFloat(typographyBody.value) || 1
   const heading = parseFloat(typographyHeading.value) || 1.25
   const r = (v: number) => `${v}rem`
-  props.branding.theme.fontSize = {
+  derived.fontSize = {
     xs: r(small * 0.9),
     sm: r(small),
     base: r(body),
@@ -361,91 +343,37 @@ function applyTypographyToTheme() {
     '4xl': r(heading * 1.75),
     '5xl': r(heading * 2),
   }
+
+  derived.effects = {
+    pattern: effectPattern.value,
+    patternSize: effectPatternSize.value,
+    glowIntensity: effectGlow.value,
+  }
+
+  return derived
 }
 
-function applyRadiusToTheme() {
-  const preset = BORDER_RADIUS_PRESETS[Math.max(0, Math.min(4, radiusLevel.value))]
-  props.branding.theme.borderRadius = {
-    sm: preset.sm,
-    md: preset.md,
-    lg: preset.lg,
-    xl: preset.xl,
-    full: preset.full,
-  }
+function apply() {
+  const theme = buildTheme()
+  Object.assign(props.branding.theme, theme)
 }
 
-function applySpacingFromSlider() {
-  const base = 0.5 + (spacingLevel.value / 10) * 1.5
-  const r = (m: number) => `${(base * m).toFixed(3).replace(/\.?0+$/, '')}rem`
-  props.branding.theme.spacing = {
-    xs: r(0.5),
-    sm: r(0.75),
-    md: r(1),
-    lg: r(1.5),
-    xl: r(2),
-    '2xl': r(3),
-  }
-}
-
-function applyBorderFromSlider() {
-  const px = Math.max(1, Math.min(10, borderWidthPx.value))
-  props.branding.theme.borderWidth = {
-    thin: `${px}px`,
-    medium: `${Math.min(10, px * 2)}px`,
-    thick: `${Math.min(10, px * 4)}px`,
-  }
-}
-
-function applyFontFromSelect() {
-  const stack = FONT_STACKS[fontFamilyId.value] ?? FONT_STACKS.inter
-  props.branding.theme.fonts = {
-    primary: stack,
-    mono: props.branding.theme.fonts?.mono ?? DEFAULT_MONO,
-  }
-}
+function applyStatus() { apply() }
+function applyTrade() { apply() }
+function applyFont() { apply() }
+function applyTypography() { apply() }
+function applyEffects() { apply() }
 
 let isSyncing = false
 watch(
   () => props.branding,
   async () => {
     isSyncing = true
-    syncSimpleFromTheme()
+    syncFromTheme()
     await nextTick()
     isSyncing = false
   },
-  { immediate: true }
-)
-
-watch(
-  () => ({ ...simpleColors }),
-  () => {
-    if (!isSyncing) applySimpleToTheme()
-  },
-  { deep: true }
-)
-
-watch(
-  [typographySmall, typographyBody, typographyHeading],
-  () => {
-    if (!isSyncing) applyTypographyToTheme()
-  },
-  { immediate: true }
-)
-
-watch(
-  radiusLevel,
-  () => {
-    if (!isSyncing) applyRadiusToTheme()
-  },
-  { immediate: true }
-)
-
-watch(
-  fontFamilyId,
-  () => {
-    if (!isSyncing) applyFontFromSelect()
-  },
-  { immediate: true }
+  { immediate: true, deep: false },
 )
 
 const previewStyle = computed(() => {
@@ -533,10 +461,6 @@ const previewStyle = computed(() => {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
-.theme-settings__grid--small {
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-}
-
 .theme-settings__group {
   margin-bottom: var(--theme-space-md);
 }
@@ -614,11 +538,12 @@ const previewStyle = computed(() => {
   border-radius: var(--theme-radius-sm);
   border: var(--theme-border-thin) solid transparent;
   cursor: default;
+  transition: box-shadow 0.2s;
 }
 
 .theme-settings__btn--primary {
   background: var(--theme-primary);
-  color: var(--theme-text-primary);
+  color: var(--theme-primary-inverse);
   border-color: var(--theme-primary);
 }
 
@@ -626,6 +551,18 @@ const previewStyle = computed(() => {
   background: var(--theme-bg-secondary);
   color: var(--theme-text-primary);
   border-color: var(--theme-border);
+}
+
+.theme-settings__btn--glow {
+  padding: var(--theme-space-sm) var(--theme-space-md);
+  font-size: var(--theme-font-sm);
+  border-radius: var(--theme-radius-sm);
+  border: var(--theme-border-thin) solid var(--theme-primary);
+  background: transparent;
+  color: var(--theme-primary);
+  cursor: default;
+  box-shadow: var(--theme-shadow-glow);
+  transition: box-shadow 0.2s;
 }
 
 .theme-settings__preview-card {
@@ -654,7 +591,8 @@ const previewStyle = computed(() => {
 }
 
 .theme-settings__preview-status,
-.theme-settings__preview-trade {
+.theme-settings__preview-trade,
+.theme-settings__preview-glow {
   display: flex;
   flex-wrap: wrap;
   gap: var(--theme-space-xs);

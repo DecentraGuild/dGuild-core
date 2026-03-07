@@ -73,137 +73,81 @@
             :key="idx"
             class="discord-rules-card__condition-block"
           >
+            <!-- Main row: type + mint/role/list + amount + logic + remove -->
             <div class="discord-rules-card__condition-row">
               <select
                 v-model="cond.type"
-                class="discord-rules-card__select discord-rules-card__select--sm discord-rules-card__select--themed"
+                class="discord-rules-card__select discord-rules-card__select--type discord-rules-card__select--themed"
                 @change="onConditionTypeChange(cond)"
               >
                 <option value="">Type</option>
                 <option v-for="t in conditionTypes" :key="t.id" :value="t.id">{{ t.label }}</option>
               </select>
-              <template v-if="typeNeedsMint(cond.type)">
-                <template v-if="cond.type === 'SPL'">
-                  <select
-                    v-model="cond.mint_or_group"
-                    class="discord-rules-card__select discord-rules-card__select--themed discord-rules-card__select--mint"
-                  >
-                    <option value="">Mint / collection</option>
-                    <option
-                      v-for="mint in splMints"
-                      :key="mint.asset_id"
-                      :value="mint.asset_id"
-                    >
-                      {{ mint.label }}{{ mint.symbol ? ` (${mint.symbol})` : '' }}
-                    </option>
-                  </select>
-                  <TextInput
-                    v-model="cond.threshold"
-                    type="number"
-                    placeholder="Amount"
-                    class="discord-rules-card__amount-input"
-                  />
-                </template>
-                <template v-else>
-                  <select
-                    v-model="cond.mint_or_group"
-                    class="discord-rules-card__select discord-rules-card__select--themed discord-rules-card__select--mint"
-                    @change="clearTraitWhenCollectionChanges(cond)"
-                  >
-                    <option value="">Mint / collection</option>
-                    <option
-                      v-for="mint in nftMints"
-                      :key="mint.asset_id"
-                      :value="mint.asset_id"
-                    >
-                      {{ mint.label }}{{ mint.symbol ? ` (${mint.symbol})` : '' }}
-                    </option>
-                  </select>
-                  <TextInput
-                    v-model="cond.amount"
-                    type="number"
-                    placeholder="Amount"
-                    class="discord-rules-card__amount-input"
-                  />
-                  <template v-if="cond.type === 'TRAIT'">
-                    <template v-if="traitOptionsForCondition(idx).trait_keys.length">
-                      <select
-                        v-model="cond.trait_key"
-                        class="discord-rules-card__select discord-rules-card__select--sm discord-rules-card__select--themed"
-                        aria-label="Trait key"
-                        @change="cond.trait_value = ''"
-                      >
-                        <option value="">Trait key</option>
-                        <option
-                          v-for="key in traitOptionsForCondition(idx).trait_keys"
-                          :key="key"
-                          :value="key"
-                        >
-                          {{ key }}
-                        </option>
-                      </select>
-                      <select
-                        v-model="cond.trait_value"
-                        class="discord-rules-card__select discord-rules-card__select--sm discord-rules-card__select--themed"
-                        aria-label="Trait value"
-                      >
-                        <option value="">Trait value</option>
-                        <option
-                          v-for="val in traitValueOptionsForCondition(idx)"
-                          :key="val"
-                          :value="val"
-                        >
-                          {{ val }}
-                        </option>
-                      </select>
-                    </template>
-                    <template v-else>
-                      <TextInput
-                        v-model="cond.trait_key"
-                        placeholder="Trait key"
-                        class="discord-rules-card__trait-input"
-                      />
-                      <TextInput
-                        v-model="cond.trait_value"
-                        placeholder="Trait value"
-                        class="discord-rules-card__trait-input"
-                      />
-                      <span class="discord-rules-card__trait-hint">
-                        {{ cond.mint_or_group ? 'Traits are stored when the collection is added to the mint catalog. Re-add the collection to refresh trait options.' : 'Select an NFT collection from the catalog above.' }}
-                      </span>
-                    </template>
-                  </template>
-                </template>
+
+              <template v-if="cond.type === 'SPL'">
+                <select
+                  v-model="cond.mint_or_group"
+                  class="discord-rules-card__select discord-rules-card__select--themed discord-rules-card__select--mint"
+                >
+                  <option value="">Token</option>
+                  <option v-for="mint in splMints" :key="mint.asset_id" :value="mint.asset_id">
+                    {{ mint.label }}{{ mint.symbol ? ` (${mint.symbol})` : '' }}
+                  </option>
+                </select>
+                <TextInput
+                  v-model="cond.threshold"
+                  type="number"
+                  placeholder="Min balance"
+                  class="discord-rules-card__input--amount"
+                />
               </template>
+
+              <template v-else-if="cond.type === 'NFT' || cond.type === 'TRAIT'">
+                <select
+                  v-model="cond.mint_or_group"
+                  class="discord-rules-card__select discord-rules-card__select--themed discord-rules-card__select--mint"
+                  @change="clearTraitWhenCollectionChanges(cond)"
+                >
+                  <option value="">Collection</option>
+                  <option v-for="mint in nftMints" :key="mint.asset_id" :value="mint.asset_id">
+                    {{ mint.label }}{{ mint.symbol ? ` (${mint.symbol})` : '' }}
+                  </option>
+                </select>
+                <TextInput
+                  v-model="cond.amount"
+                  type="number"
+                  placeholder="Min amount"
+                  class="discord-rules-card__input--amount"
+                />
+              </template>
+
               <template v-else-if="cond.type === 'DISCORD'">
                 <select
                   v-model="cond.required_role_id"
-                  class="discord-rules-card__select discord-rules-card__select--themed"
+                  class="discord-rules-card__select discord-rules-card__select--themed discord-rules-card__select--mint"
                   aria-label="Required Discord role"
                 >
                   <option value="">Discord role</option>
                   <option v-for="r in roles" :key="r.id" :value="r.id">{{ r.name }}</option>
                 </select>
               </template>
+
               <template v-else-if="cond.type === 'WHITELIST'">
                 <select
                   v-model="cond.mint_or_group"
                   class="discord-rules-card__select discord-rules-card__select--themed discord-rules-card__select--mint"
                   aria-label="Whitelist list"
                 >
-                  <option value="">Whitelist list</option>
-                  <option
-                    v-for="list in whitelistLists"
-                    :key="list.address"
-                    :value="list.address"
-                  >
+                  <option value="">Whitelist</option>
+                  <option v-for="list in whitelistLists" :key="list.address" :value="list.address">
                     {{ list.name }}
                   </option>
                 </select>
               </template>
+
               <select
                 v-model="cond.logic_to_next"
-                class="discord-rules-card__select discord-rules-card__select--sm discord-rules-card__select--themed"
+                class="discord-rules-card__select discord-rules-card__select--logic discord-rules-card__select--themed"
                 aria-label="Logic to next condition"
                 @change="onLogicChange(idx)"
               >
@@ -214,6 +158,40 @@
               <Button variant="ghost" size="small" @click="removeCondition(idx)">
                 <Icon icon="mdi:close" />
               </Button>
+            </div>
+
+            <!-- Trait row: only for TRAIT type, shown below the main row -->
+            <div v-if="cond.type === 'TRAIT'" class="discord-rules-card__trait-row">
+              <template v-if="traitOptionsForCondition(idx).trait_keys.length">
+                <select
+                  v-model="cond.trait_key"
+                  class="discord-rules-card__select discord-rules-card__select--themed discord-rules-card__select--trait"
+                  aria-label="Trait key"
+                  @change="cond.trait_value = ''"
+                >
+                  <option value="">Trait key</option>
+                  <option v-for="key in traitOptionsForCondition(idx).trait_keys" :key="key" :value="key">
+                    {{ key }}
+                  </option>
+                </select>
+                <select
+                  v-model="cond.trait_value"
+                  class="discord-rules-card__select discord-rules-card__select--themed discord-rules-card__select--trait"
+                  aria-label="Trait value"
+                >
+                  <option value="">Trait value</option>
+                  <option v-for="val in traitValueOptionsForCondition(idx)" :key="val" :value="val">
+                    {{ val }}
+                  </option>
+                </select>
+              </template>
+              <template v-else>
+                <TextInput v-model="cond.trait_key" placeholder="Trait key" class="discord-rules-card__input--trait" />
+                <TextInput v-model="cond.trait_value" placeholder="Trait value" class="discord-rules-card__input--trait" />
+                <span class="discord-rules-card__trait-hint">
+                  {{ cond.mint_or_group ? 'Load traits in the mint catalog above.' : 'Select a collection first.' }}
+                </span>
+              </template>
             </div>
           </div>
         </div>
@@ -245,18 +223,7 @@
 import { API_V1 } from '~/utils/apiBase'
 import { Card, TextInput, Button } from '@decentraguild/ui/components'
 import { Icon } from '@iconify/vue'
-
-interface CatalogMint {
-  id: number
-  asset_id: string
-  kind: 'SPL' | 'NFT'
-  label: string
-  symbol: string | null
-  image: string | null
-  decimals: number | null
-  trait_keys: string[] | null
-  trait_options: Record<string, string[]> | null
-}
+import type { CatalogMint } from '~/types/mints'
 
 const props = defineProps<{
   slug: string
@@ -721,10 +688,10 @@ onMounted(() => {
 
 .discord-rules-card__select {
   height: var(--theme-input-height);
-  padding: 0 var(--theme-space-md);
+  padding: 0 var(--theme-space-sm);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
-  min-width: 200px;
+  min-width: 0;
   box-sizing: border-box;
 }
 
@@ -746,61 +713,37 @@ onMounted(() => {
   margin-bottom: 0;
 }
 
-.discord-rules-card__select--sm {
+/* Type selector: short label, fixed width */
+.discord-rules-card__select--type {
   flex: none;
-  width: 7.5rem;
-  min-width: 5.5rem;
+  width: 7rem;
 }
 
+/* Mint/collection/role/list selector: takes available space */
 .discord-rules-card__select--mint {
   flex: 1;
   min-width: 0;
-  max-width: none;
 }
 
-.discord-rules-card__amount-input {
+/* AND/OR connector: short, fixed */
+.discord-rules-card__select--logic {
   flex: none;
-  width: 7.5rem;
-  min-width: 5.5rem;
+  width: 5rem;
 }
 
-.discord-rules-card__condition-block {
-  margin-bottom: var(--theme-space-md);
+/* Trait key/value: each half the available space */
+.discord-rules-card__select--trait {
+  flex: 1;
+  min-width: 0;
 }
 
-.discord-rules-card__condition-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--theme-space-sm);
-  margin-bottom: var(--theme-space-xs);
-  min-height: var(--theme-input-height);
+.discord-rules-card__input--amount {
+  flex: none;
+  width: 7rem;
 }
 
-.discord-rules-card__condition-row > select,
-.discord-rules-card__condition-row > .discord-rules-card__amount-input,
-.discord-rules-card__condition-row > .discord-rules-card__trait-input {
-  height: var(--theme-input-height);
-  min-height: var(--theme-input-height);
-  box-sizing: border-box;
-}
-
-.discord-rules-card__condition-row .discord-rules-card__amount-input,
-.discord-rules-card__condition-row .discord-rules-card__trait-input {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.discord-rules-card__condition-row .discord-rules-card__amount-input :deep(.text-input),
-.discord-rules-card__condition-row .discord-rules-card__trait-input :deep(.text-input) {
-  height: 100%;
-  display: flex;
-  align-items: center;
-}
-
-.discord-rules-card__condition-row .discord-rules-card__amount-input :deep(.text-input__field),
-.discord-rules-card__condition-row .discord-rules-card__trait-input :deep(.text-input__field) {
+.discord-rules-card__input--amount :deep(.text-input__field),
+.discord-rules-card__input--trait :deep(.text-input__field) {
   height: var(--theme-input-height);
   min-height: var(--theme-input-height);
   box-sizing: border-box;
@@ -809,28 +752,38 @@ onMounted(() => {
   line-height: var(--theme-input-height);
 }
 
-.discord-rules-card__mint-preview {
+.discord-rules-card__input--trait {
+  flex: 1;
+  min-width: 0;
+}
+
+.discord-rules-card__condition-block {
+  margin-bottom: var(--theme-space-sm);
+  padding: var(--theme-space-sm);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-bg-muted);
+}
+
+.discord-rules-card__condition-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--theme-space-sm);
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted, #666);
-  margin-left: 0;
-  padding-left: 0;
 }
 
-.discord-rules-card__mint-preview-name {
-  font-weight: 500;
+.discord-rules-card__trait-row {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-sm);
+  margin-top: var(--theme-space-sm);
+  padding-top: var(--theme-space-sm);
+  border-top: var(--theme-border-thin) solid var(--theme-border);
 }
 
-.discord-rules-card__mint-preview-symbol {
-  opacity: 0.9;
-}
-
-.discord-rules-card__mint-preview-meta,
-.discord-rules-card__mint-preview-holders {
-  margin-left: var(--theme-space-sm);
+.discord-rules-card__trait-hint {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+  flex: 1;
 }
 
 .discord-rules-card__btn-spin {
@@ -840,20 +793,6 @@ onMounted(() => {
 @keyframes discord-rules-btn-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-.discord-rules-card__trait-hint {
-  flex-basis: 100%;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted);
-  margin-top: var(--theme-space-xs);
-  order: 10;
-}
-
-.discord-rules-card__mint-input,
-.discord-rules-card__trait-input {
-  flex: 1;
-  min-width: 120px;
 }
 
 .discord-rules-card__form-actions {

@@ -11,6 +11,9 @@
   --theme-primary-light: #00cc22;
   --theme-primary-dark: #007a14;
 
+  /* Primary contrast – white text on primary background */
+  --theme-primary-inverse: #ffffff;
+
   /* Secondary */
   --theme-secondary: #cf0000;
   --theme-secondary-hover: #b30000;
@@ -26,6 +29,7 @@
   --theme-bg-secondary: #141420;
   --theme-bg-card: #1a1a2e;
   --theme-bg-muted: #252535;
+  --theme-backdrop: rgba(10, 10, 15, 0.75);
 
   /* Text */
   --theme-text-primary: #ffffff;
@@ -39,10 +43,18 @@
   /* Status */
   --theme-success: #00951a;
   --theme-error: #cf0000;
-  --theme-text-error: var(--theme-error);
+  --theme-text-error: #cf0000;
   --theme-surface-error: rgba(207, 0, 0, 0.12);
   --theme-warning: #ff6b35;
   --theme-info: #00d4ff;
+  --theme-surface-success: rgba(0, 149, 26, 0.12);
+  --theme-surface-warning: rgba(255, 107, 53, 0.12);
+
+  /* Status aliases – used by some components with the --theme-status-* prefix */
+  --theme-status-success: var(--theme-success);
+  --theme-status-error: var(--theme-error);
+  --theme-status-warning: var(--theme-warning);
+  --theme-status-info: var(--theme-info);
 
   /* Trade */
   --theme-trade-buy: #00ff00;
@@ -110,6 +122,11 @@
   --theme-gradient-primary: linear-gradient(135deg, #00951a 0%, #00cc22 50%, #007a14 100%);
   --theme-gradient-secondary: linear-gradient(135deg, #ff6b35 0%, #f59e0b 100%);
   --theme-gradient-accent: linear-gradient(135deg, #00951a 0%, #cf0000 100%);
+
+  /* Effects – pattern overlay, size, and glow intensity multiplier */
+  --theme-effect-pattern: none;
+  --theme-effect-pattern-size: 24px;
+  --theme-effect-glow-scale: 1;
 
   /* Scrollbar (thumb / track) */
   --theme-scrollbar-thumb: var(--theme-border);

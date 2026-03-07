@@ -16,7 +16,7 @@
     "- Cross-dGuild compatibility"
   ],
   "routePath": "/discord",
-  "order": 3,
+  "order": 4,
   "activationInstructions": {
     "intro": "Bridge your guildhall and your Discord keep. Let roles be earned, not granted.",
     "steps": [

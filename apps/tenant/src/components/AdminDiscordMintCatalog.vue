@@ -1,136 +1,64 @@
 <template>
   <Card class="discord-mint-catalog">
-    <h3 class="discord-mint-catalog__title">Mint catalog</h3>
+    <h3 class="discord-mint-catalog__title">
+      Mint catalog
+      <span v-if="!catalogLoading && catalogMints.length" class="discord-mint-catalog__count">({{ catalogMints.length }})</span>
+    </h3>
     <p class="discord-mint-catalog__hint">
-      Configure the SPL tokens and NFT collections this dGuild uses for Discord rules.
-      Define them once here, then pick them from dropdowns when creating rules. Our indexer will
-      fetch each mint every 15min-6hr (depending on total token holders).
+      Configure SPL tokens and NFT collections used in Discord role rules.
+      Define them here, then pick from dropdowns when creating rules.
+      Holders are synced every 15 min–6 hr depending on collection size.
     </p>
 
-    <div v-if="catalogLoading" class="discord-mint-catalog__loading">
-      <Icon icon="mdi:loading" class="discord-mint-catalog__spinner" />
-      Loading mints…
-    </div>
+    <AdminMintCatalog
+      :mints="catalogItems"
+      :loading="catalogLoading"
+      :pending-ids="deletePending"
+      @inspect="onInspect"
+      @delete="onDelete"
+    >
+      <template #item-extra="{ item }">
+        <Button
+          v-if="item.kind === 'NFT' && !item.traitKeys?.length"
+          variant="ghost"
+          size="small"
+          :disabled="refreshTraitsPending[item.id as number]"
+          title="Fetch collection traits for rule dropdowns"
+          @click.stop="onRefreshTraits(item.id as number)"
+        >
+          <Icon v-if="refreshTraitsPending[item.id as number]" icon="mdi:loading" class="discord-mint-catalog__btn-spin" />
+          <Icon v-else icon="mdi:refresh" />
+          <span class="discord-mint-catalog__action-label">Load traits</span>
+        </Button>
+      </template>
 
-    <div v-else>
-      <p class="discord-mint-catalog__count">
-        Mints configured: {{ catalogMints.length }}
-      </p>
-
-      <table v-if="catalogMints.length" class="discord-mint-catalog__table">
-        <thead>
-          <tr>
-            <th scope="col">Label</th>
-            <th scope="col">Type</th>
-            <th scope="col">Decimals</th>
-            <th scope="col">Mint / collection</th>
-            <th scope="col"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="mint in catalogMints" :key="mint.id">
-            <td>
-              <div class="discord-mint-catalog__label-cell">
-                <span class="discord-mint-catalog__label">{{ mint.label }}</span>
-                <span v-if="mint.symbol" class="discord-mint-catalog__symbol">({{ mint.symbol }})</span>
-              </div>
-            </td>
-            <td>
-              <span class="discord-mint-catalog__kind-badge">
-                {{ mint.kind === 'SPL' ? 'SPL token' : 'NFT / collection' }}
-              </span>
-            </td>
-            <td class="discord-mint-catalog__decimals">
-              {{ mint.kind === 'SPL' && mint.decimals != null ? mint.decimals : '—' }}
-            </td>
-            <td class="discord-mint-catalog__asset">
-              {{ truncateAddress(mint.asset_id, 4, 4) }}
-            </td>
-            <td class="discord-mint-catalog__actions">
-              <Button
-                v-if="mint.kind === 'NFT' && !hasTraits(mint)"
-                variant="ghost"
-                size="small"
-                :disabled="refreshTraitsPending[mint.id]"
-                title="Fetch collection traits for rule dropdowns"
-                @click="onRefreshTraits(mint.id)"
-              >
-                <Icon v-if="refreshTraitsPending[mint.id]" icon="mdi:loading" class="discord-mint-catalog__btn-spin" />
-                <Icon v-else icon="mdi:refresh" />
-                <span class="discord-mint-catalog__action-label">Load traits</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="small"
-                :disabled="deletePending[mint.id]"
-                @click="onDelete(mint.id)"
-              >
-                <Icon v-if="deletePending[mint.id]" icon="mdi:loading" class="discord-mint-catalog__btn-spin" />
-                <Icon v-else icon="mdi:delete" />
-              </Button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="discord-mint-catalog__add">
+      <template #add>
         <h4 class="discord-mint-catalog__add-title">Add mint</h4>
-        <div class="discord-mint-catalog__add-row">
-          <TextInput
-            v-model="newMint"
-            placeholder="Mint or collection address"
-            class="discord-mint-catalog__mint-input"
-          />
-          <select
-            v-model="newKind"
-            class="discord-mint-catalog__select discord-mint-catalog__select--themed"
-          >
-            <option value="auto">Auto-detect type</option>
-            <option value="SPL">SPL token</option>
-            <option value="NFT">NFT / collection</option>
-          </select>
-          <Button
-            variant="secondary"
-            :disabled="!canSubmit || creating"
-            @click="onCreate"
-          >
-            <Icon
-              v-if="creating"
-              icon="mdi:loading"
-              class="discord-mint-catalog__btn-spin"
-            />
-            {{ creating ? 'Loading…' : 'Load' }}
-          </Button>
-        </div>
-        <p v-if="createError" class="discord-mint-catalog__error discord-mint-catalog__error--inline">
-          {{ createError }}
-        </p>
-        <p class="discord-mint-catalog__fine-print">
-          We fetch metadata and holder snapshots in the background. If detection fails, choose SPL or NFT explicitly
-          and try again.
-        </p>
-      </div>
-    </div>
+        <AddMintInput
+          v-model="newMint"
+          v-model:kind="newKind"
+          :error="createError"
+          :loading="creating"
+          @submit="onCreateSubmit"
+        />
+      </template>
+    </AdminMintCatalog>
+
+    <MintDetailModal v-model="showModal" :mint="selectedMint" />
   </Card>
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { API_V1 } from '~/utils/apiBase'
-import { truncateAddress } from '@decentraguild/display'
-import { Card, TextInput, Button } from '@decentraguild/ui/components'
+import { Card, Button } from '@decentraguild/ui/components'
 import { Icon } from '@iconify/vue'
+import type { CatalogMint, CatalogMintItem } from '~/types/mints'
+import AdminMintCatalog from '~/components/AdminMintCatalog.vue'
+import MintDetailModal from '~/components/MintDetailModal.vue'
+import AddMintInput from '~/components/AddMintInput.vue'
 
-export interface CatalogMint {
-  id: number
-  asset_id: string
-  kind: 'SPL' | 'NFT'
-  label: string
-  symbol: string | null
-  image: string | null
-  decimals: number | null
-  trait_keys: string[] | null
-  trait_options: Record<string, string[]> | null
-}
+export type { CatalogMint }
 
 const props = defineProps<{
   slug: string
@@ -148,9 +76,26 @@ const newKind = ref<'auto' | 'SPL' | 'NFT'>('auto')
 const deletePending = ref<Record<number, boolean>>({})
 const refreshTraitsPending = ref<Record<number, boolean>>({})
 
-function hasTraits(mint: CatalogMint): boolean {
-  const keys = mint.trait_keys
-  return Array.isArray(keys) && keys.length > 0
+const showModal = ref(false)
+const selectedMint = ref<CatalogMintItem | null>(null)
+
+const catalogItems = computed<CatalogMintItem[]>(() =>
+  props.catalogMints.map((m) => ({
+    id: m.id,
+    mint: m.asset_id,
+    kind: m.kind,
+    label: m.label,
+    symbol: m.symbol,
+    image: m.image,
+    decimals: m.decimals,
+    traitKeys: m.trait_keys,
+    traitTypes: m.trait_keys,
+  }))
+)
+
+function onInspect(item: CatalogMintItem) {
+  selectedMint.value = item
+  showModal.value = true
 }
 
 async function onRefreshTraits(id: number) {
@@ -172,19 +117,15 @@ async function onRefreshTraits(id: number) {
   }
 }
 
-const canSubmit = computed(
-  () => newMint.value.trim().length >= 32 && !creating.value
-)
-
-async function onCreate() {
-  const asset = newMint.value.trim()
+async function onCreateSubmit(mint: string, kind: 'auto' | 'SPL' | 'NFT') {
+  const asset = mint.trim()
   if (!asset || asset.length < 32) return
   creating.value = true
   createError.value = null
   try {
     const body: Record<string, unknown> = { asset_id: asset }
-    if (newKind.value !== 'auto') {
-      body.kind = newKind.value
+    if (kind !== 'auto') {
+      body.kind = kind
     }
     const res = await fetch(
       `${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/mints`,
@@ -212,22 +153,19 @@ async function onCreate() {
   }
 }
 
-async function onDelete(id: number) {
+async function onDelete(item: CatalogMintItem) {
+  const id = item.id as number
   deletePending.value = { ...deletePending.value, [id]: true }
   createError.value = null
   try {
     const res = await fetch(
       `${apiBase.value}${API_V1}/tenant/${tenantId.value}/discord/mints/${id}`,
-      {
-        method: 'DELETE',
-        credentials: 'include',
-      }
+      { method: 'DELETE', credentials: 'include' }
     )
     const body = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean }
     if (!res.ok || body.ok === false) {
       createError.value =
-        body.error ??
-        `Failed to delete mint from catalog (${res.status})`
+        body.error ?? `Failed to delete mint from catalog (${res.status})`
       return
     }
     emit('mints-changed')
@@ -235,6 +173,7 @@ async function onDelete(id: number) {
     deletePending.value = { ...deletePending.value, [id]: false }
   }
 }
+
 </script>
 
 <style scoped>
@@ -243,7 +182,16 @@ async function onDelete(id: number) {
 }
 
 .discord-mint-catalog__title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--theme-space-sm);
   margin-bottom: var(--theme-space-xs);
+}
+
+.discord-mint-catalog__count {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-muted);
+  font-weight: 400;
 }
 
 .discord-mint-catalog__hint {
@@ -252,62 +200,9 @@ async function onDelete(id: number) {
   margin-bottom: var(--theme-space-md);
 }
 
-.discord-mint-catalog__loading {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-sm);
-}
-
-.discord-mint-catalog__spinner {
-  animation: discord-mint-spin 1s linear infinite;
-}
-
-@keyframes discord-mint-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.discord-mint-catalog__count {
-  font-size: var(--theme-font-sm);
+.discord-mint-catalog__add-title {
+  font-size: var(--theme-font-md);
   margin-bottom: var(--theme-space-sm);
-}
-
-.discord-mint-catalog__error {
-  padding: var(--theme-space-sm);
-  margin: 0 0 var(--theme-space-sm);
-  background: var(--theme-surface-error);
-  color: var(--theme-text-error);
-  border-radius: var(--theme-radius-md);
-  font-size: var(--theme-font-sm);
-}
-
-.discord-mint-catalog__error--inline {
-  margin-top: var(--theme-space-xs);
-}
-
-.discord-mint-catalog__table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: var(--theme-space-md);
-}
-
-.discord-mint-catalog__table th,
-.discord-mint-catalog__table td {
-  text-align: left;
-  padding: var(--theme-space-xs) var(--theme-space-sm);
-  font-size: var(--theme-font-sm);
-}
-
-.discord-mint-catalog__table thead {
-  border-bottom: 1px solid var(--theme-border, #eee);
-}
-
-.discord-mint-catalog__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-xs);
-  flex-wrap: wrap;
 }
 
 .discord-mint-catalog__action-label {
@@ -320,119 +215,15 @@ async function onDelete(id: number) {
   }
 }
 
-.discord-mint-catalog__label-cell {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--theme-space-xs);
-}
-
-.discord-mint-catalog__label {
-  font-weight: 500;
-}
-
-.discord-mint-catalog__symbol {
-  color: var(--theme-text-muted);
-}
-
-.discord-mint-catalog__decimals {
-  font-variant-numeric: tabular-nums;
-}
-
-.discord-mint-catalog__kind-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 var(--theme-space-xs);
-  border-radius: var(--theme-radius-full);
-  border: var(--theme-border-thin) solid var(--theme-border);
-  font-size: var(--theme-font-xs);
-  text-transform: uppercase;
-}
-
-.discord-mint-catalog__asset {
-  font-family: var(--theme-font-mono);
-  font-size: var(--theme-font-xs);
-}
-
-.discord-mint-catalog__actions {
-  text-align: right;
-}
-
-.discord-mint-catalog__add {
-  margin-top: var(--theme-space-md);
-  border-top: var(--theme-border-thin) solid var(--theme-border);
-  padding-top: var(--theme-space-md);
-}
-
-.discord-mint-catalog__add-title {
-  font-size: var(--theme-font-md);
-  margin-bottom: var(--theme-space-sm);
-}
-
-.discord-mint-catalog__add-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--theme-space-sm);
-  align-items: center;
-}
-
-.discord-mint-catalog__mint-input {
-  flex: 1;
-  min-width: 180px;
-  height: var(--theme-input-height);
-  display: flex;
-  align-items: stretch;
-}
-
-.discord-mint-catalog__mint-input :deep(.text-input) {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.discord-mint-catalog__mint-input :deep(.text-input__field) {
-  flex: 1;
-  min-height: 0;
-  box-sizing: border-box;
-}
-
-.discord-mint-catalog__select {
-  height: var(--theme-input-height);
-  padding: 0 var(--theme-space-md);
-  border-radius: var(--theme-radius-md);
-  border: var(--theme-border-thin) solid var(--theme-border);
-  box-sizing: border-box;
-}
-
-.discord-mint-catalog__select--themed {
-  color: var(--theme-text-primary);
-  background-color: var(--theme-bg-primary);
-  border-color: var(--theme-border);
-}
-
-.discord-mint-catalog__select--themed option {
-  color: var(--theme-text-primary);
-  background-color: var(--theme-bg-primary);
-}
-
-.discord-mint-catalog__fine-print {
-  margin-top: var(--theme-space-xs);
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-}
-
 .discord-mint-catalog__btn-spin {
   animation: discord-mint-btn-spin 0.8s linear infinite;
 }
 
 @keyframes discord-mint-btn-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 </style>
+
+
+
 

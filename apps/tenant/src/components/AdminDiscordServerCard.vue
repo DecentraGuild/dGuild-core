@@ -104,7 +104,7 @@ defineEmits<{
 <style scoped>
 .discord-server-card__hint {
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
   margin-bottom: var(--theme-space-md);
 }
 
@@ -135,7 +135,7 @@ defineEmits<{
 }
 
 .discord-server-card__status-icon {
-  color: var(--theme-status-success, green);
+  color: var(--theme-status-success);
 }
 
 .discord-server-card__guild-id {
@@ -143,7 +143,7 @@ defineEmits<{
 }
 
 .discord-server-card__guild-id code {
-  background: var(--theme-bg-secondary, #eee);
+  background: var(--theme-bg-secondary);
   padding: 2px 6px;
   border-radius: var(--theme-radius-sm);
 }
@@ -163,7 +163,7 @@ defineEmits<{
 }
 
 .discord-server-card__invite a {
-  color: var(--theme-primary, #333);
+  color: var(--theme-primary);
   text-decoration: underline;
 }
 
@@ -173,7 +173,7 @@ defineEmits<{
 
 .discord-server-card__permissions-hint {
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted, #666);
+  color: var(--theme-text-muted);
   margin-top: var(--theme-space-sm);
   margin-bottom: 0;
   max-width: 42rem;
