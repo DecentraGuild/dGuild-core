@@ -14,6 +14,7 @@ export {
 } from './build.js'
 export {
   fetchRaffleChainData,
+  fetchAllRaffles,
   isRaffleVisibleToUsers,
   USER_VISIBLE_STATES,
 } from './fetch.js'
@@ -22,4 +23,4 @@ export type {
   BuildPrepareRaffleParams,
   BuildBuyTicketsParams,
 } from './build.js'
-export type { RaffleChainData, RaffleState } from './fetch.js'
+export type { RaffleChainData, RaffleState, RaffleWithAddress } from './fetch.js'

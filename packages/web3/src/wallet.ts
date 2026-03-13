@@ -10,14 +10,9 @@ export {
   connectWallet,
   disconnectWallet,
   signMessageForAuth,
+  signMessageWithConnector,
   getWalletAndAccount,
   getEscrowWalletFromConnector,
+  getSupabaseWalletAdapter,
   type ConnectorStateSnapshot,
 } from './connector.js'
-
-export {
-  signInWithWallet,
-  signOut,
-  type AuthSignInResult,
-  type AuthSignInError,
-} from './auth.js'

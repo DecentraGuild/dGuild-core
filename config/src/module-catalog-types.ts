@@ -24,6 +24,8 @@ export interface ModuleCatalogEntry {
   id: string
   status: ModuleCatalogStatus
   name: string
+  /** App-wide label for gate/whitelist (e.g. "Gate" or "Whitelist"). From gates module catalog. */
+  gateLabel?: string
   icon: string
   image: string | null
   shortDescription: string
@@ -42,6 +44,12 @@ export interface ModuleCatalogEntry {
   }
   /** When true, enabling the module sets state to active immediately (no staging/deploy step). */
   goActiveImmediately?: boolean
+  /** When true, module shows "Always on" in Admin > Modules (no billing/extend). */
+  alwaysOn?: boolean
+  /** Blockchain program used in transaction logic. Present only for modules with on-chain programs. */
+  blockchain?: {
+    programId: string
+  }
 }
 
 /** Statuses where the module code exists and can appear in tenant nav. */

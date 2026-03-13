@@ -1,9 +1,9 @@
 <template>
   <div class="market-open-trades">
     <StatusBanner
-      v-if="!apiBase"
+      v-if="!supabaseConfigured"
       variant="error"
-      message="API is not configured. Set NUXT_PUBLIC_API_URL."
+      message="Backend is not configured. Set NUXT_PUBLIC_SUPABASE_URL and NUXT_PUBLIC_SUPABASE_ANON_KEY."
     />
     <StatusBanner
       v-else-if="!connected"
@@ -19,7 +19,7 @@
           :disabled="props.createDisabled"
           @click="!props.createDisabled && emit('open-create-trade')"
         >
-          <Icon icon="mdi:plus" class="market-open-trades__create-btn-icon" />
+          <Icon icon="lucide:plus" class="market-open-trades__create-btn-icon" />
           <span>New trade</span>
         </button>
       </div>
@@ -33,38 +33,88 @@
         variant="error"
         :message="error"
       />
-      <StatusBanner
-        v-else-if="!escrows.length"
-        variant="empty"
-        message="You have no open escrows in this dGuild."
-      />
-      <div v-else class="market-open-trades__list">
-        <section
-          v-for="group in groupedByDeposit"
-          :key="group.depositMint"
-          class="market-open-trades__group"
-        >
-          <h3 class="market-open-trades__group-heading">
-            <MintLabel :mint="group.depositMint" />
-          </h3>
-          <div class="market-open-trades__group-items">
-            <NuxtLink
-              v-for="item in group.escrows"
-              :key="item.publicKey.toBase58()"
-              :to="myTradesEscrowLink(item.publicKey.toBase58())"
-              class="market-open-trades__row-link"
+      <template v-else>
+        <StatusBanner
+          v-if="!escrows.length"
+          variant="empty"
+          message="You have no open escrows in this dGuild."
+        />
+        <div v-else class="market-open-trades__list">
+          <section
+            v-for="group in groupedByDeposit"
+            :key="group.depositMint"
+            class="market-open-trades__group"
+          >
+            <h3 class="market-open-trades__group-heading">
+              <MintLabel :mint="group.depositMint" />
+            </h3>
+            <div class="market-open-trades__group-items">
+              <NuxtLink
+                v-for="item in group.escrows"
+                :key="item.publicKey.toBase58()"
+                :to="myTradesEscrowLink(item.publicKey.toBase58())"
+                class="market-open-trades__row-link"
+              >
+                <ManageEscrowCard
+                  :escrow="item"
+                  :escrow-link="myTradesEscrowLink(item.publicKey.toBase58())"
+                  :show-quick-cancel="true"
+                  :cancelling="cancellingId === item.publicKey.toBase58()"
+                  @cancel="handleQuickCancel(item)"
+                />
+              </NuxtLink>
+            </div>
+          </section>
+        </div>
+        <section class="market-open-trades__elsewhere">
+          <h2 class="market-open-trades__elsewhere-title">Open elsewhere</h2>
+          <p class="market-open-trades__elsewhere-hint">
+            Trades your wallet has on other dGuilds or the same program. Cancel and create here to list in this dGuild.
+          </p>
+          <StatusBanner
+            v-if="externalLoading"
+            variant="loading"
+            message="Loading escrows elsewhere..."
+          />
+          <StatusBanner
+            v-else-if="externalError"
+            variant="error"
+            :message="externalError"
+          />
+          <StatusBanner
+            v-else-if="!externalEscrows.length"
+            variant="empty"
+            message="No open trades elsewhere."
+          />
+          <div v-else class="market-open-trades__list">
+            <section
+              v-for="group in groupedByDepositExternal"
+              :key="`ext-${group.depositMint}`"
+              class="market-open-trades__group"
             >
-              <ManageEscrowCard
-                :escrow="item"
-                :escrow-link="myTradesEscrowLink(item.publicKey.toBase58())"
-                :show-quick-cancel="true"
-                :cancelling="cancellingId === item.publicKey.toBase58()"
-                @cancel="handleQuickCancel(item)"
-              />
-            </NuxtLink>
+              <h3 class="market-open-trades__group-heading">
+                <MintLabel :mint="group.depositMint" />
+              </h3>
+              <div class="market-open-trades__group-items">
+                <NuxtLink
+                  v-for="item in group.escrows"
+                  :key="item.publicKey.toBase58()"
+                  :to="myTradesEscrowLink(item.publicKey.toBase58())"
+                  class="market-open-trades__row-link"
+                >
+                  <ManageEscrowCard
+                    :escrow="item"
+                    :escrow-link="myTradesEscrowLink(item.publicKey.toBase58())"
+                    :show-quick-cancel="true"
+                    :cancelling="cancellingId === item.publicKey.toBase58()"
+                    @cancel="handleQuickCancel(item)"
+                  />
+                </NuxtLink>
+              </div>
+            </section>
           </div>
         </section>
-      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -77,21 +127,24 @@ import {
   buildCancelTransaction,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
+  fetchAllEscrows,
 } from '@decentraguild/web3'
+import { escrowPriceToHuman } from '@decentraguild/display'
 import { Icon } from '@iconify/vue'
-import { StatusBanner } from '@decentraguild/ui/components'
+import StatusBanner from '~/components/ui/status-banner/StatusBanner.vue'
 import ManageEscrowCard from './ManageEscrowCard.vue'
 import MintLabel from './MintLabel.vue'
 import { useTenantStore } from '~/stores/tenant'
-import { useMarketplaceEscrowLinks } from '~/composables/useMarketplaceEscrowLinks'
-import { API_V1 } from '~/utils/apiBase'
-import { useApiBase } from '~/composables/useApiBase'
+import { useMarketplaceEscrowLinks } from '~/composables/marketplace/useMarketplaceEscrowLinks'
+import { useMarketplaceScope } from '~/composables/marketplace/useMarketplaceScope'
+import { useSupabase } from '~/composables/core/useSupabase'
 import { useAuth } from '@decentraguild/auth'
-import { useSolanaConnection } from '~/composables/useSolanaConnection'
+import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 import type { EscrowWithAddress } from '@decentraguild/web3'
-import type { EscrowApiShape } from '~/composables/useEscrowsForMints'
 
+const config = useRuntimeConfig()
+const supabaseConfigured = computed(() => Boolean(config.public.supabaseUrl && config.public.supabaseAnonKey))
 
 const props = withDefaults(
   defineProps<{ tabActive?: boolean; createDisabled?: boolean }>(),
@@ -108,7 +161,6 @@ const auth = useAuth()
 const { connection } = useSolanaConnection()
 const txNotifications = useTransactionNotificationsStore()
 
-const apiBase = useApiBase()
 const tenantId = computed(() => tenantStore.tenantId)
 const { escrowLink } = useMarketplaceEscrowLinks(
   computed(() => tenantStore.slug)
@@ -121,6 +173,16 @@ const escrows = ref<EscrowWithAddress[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const cancellingId = ref<string | null>(null)
+
+const externalEscrows = ref<EscrowWithAddress[]>([])
+const externalLoading = ref(false)
+const externalError = ref<string | null>(null)
+
+const MIN_REMAINING_HUMAN = 0.0000001
+function isEffectivelyComplete(remaining: BN, decimals: number): boolean {
+  const rawThreshold = Math.max(1, Math.round(MIN_REMAINING_HUMAN * 10 ** decimals))
+  return remaining.lt(new BN(rawThreshold))
+}
 
 const groupedByDeposit = computed(() => {
   const list = escrows.value
@@ -144,7 +206,32 @@ const groupedByDeposit = computed(() => {
   return groups.map(({ depositMint, escrows: es }) => ({ depositMint, escrows: es }))
 })
 
-function apiToFull(e: EscrowApiShape): EscrowWithAddress {
+const groupedByDepositExternal = computed(() => {
+  const list = externalEscrows.value
+  if (!list.length) return []
+  const byDeposit = new Map<string, EscrowWithAddress[]>()
+  for (const e of list) {
+    const mint = e.account.depositToken.toBase58()
+    const arr = byDeposit.get(mint) ?? []
+    arr.push(e)
+    byDeposit.set(mint, arr)
+  }
+  for (const arr of byDeposit.values()) {
+    arr.sort((a, b) => (a.account.price ?? 0) - (b.account.price ?? 0))
+  }
+  const groups = [...byDeposit.entries()].map(([depositMint, escrows]) => ({
+    depositMint,
+    escrows,
+    minPrice: Math.min(...escrows.map((e) => e.account.price ?? 0)),
+  }))
+  groups.sort((a, b) => a.minPrice - b.minPrice)
+  return groups.map(({ depositMint, escrows: es }) => ({ depositMint, escrows: es }))
+})
+
+const { mintsSet: scopeMintsSet, loading: scopeLoading } = useMarketplaceScope()
+const supabase = useSupabase()
+
+function apiEscrowToFull(e: { publicKey: string; account: Record<string, unknown> }): EscrowWithAddress {
   const acc = e.account
   return {
     publicKey: new PublicKey(e.publicKey),
@@ -154,18 +241,18 @@ function apiToFull(e: EscrowApiShape): EscrowWithAddress {
       requestToken: new PublicKey(acc.requestToken),
       tokensDepositInit: new BN(acc.tokensDepositInit),
       tokensDepositRemaining: new BN(acc.tokensDepositRemaining),
-      price: acc.price,
-      decimals: acc.decimals,
-      slippage: acc.slippage,
+      price: escrowPriceToHuman(acc.price),
+      decimals: acc.decimals as number,
+      slippage: acc.slippage as number,
       seed: new BN(acc.seed),
       authBump: 0,
       vaultBump: 0,
       escrowBump: 0,
       expireTimestamp: new BN(acc.expireTimestamp),
       recipient: new PublicKey(acc.recipient),
-      onlyRecipient: acc.onlyRecipient,
-      onlyWhitelist: acc.onlyWhitelist,
-      allowPartialFill: acc.allowPartialFill,
+      onlyRecipient: acc.onlyRecipient as boolean,
+      onlyWhitelist: acc.onlyWhitelist as boolean,
+      allowPartialFill: acc.allowPartialFill as boolean,
       whitelist: new PublicKey(acc.whitelist),
     },
   }
@@ -173,36 +260,89 @@ function apiToFull(e: EscrowApiShape): EscrowWithAddress {
 
 async function load() {
   const addr = walletAddress.value
-  const slug = tenantStore.slug
-  if (!apiBase.value || !slug || !addr) {
+  const conn = connection.value
+  const tid = tenantId.value
+  if (!addr) {
     loading.value = false
     return
   }
   loading.value = true
   error.value = null
   try {
-    const url = `${apiBase.value}${API_V1}/tenant/${encodeURIComponent(tenantId)}/marketplace/escrows?maker=${encodeURIComponent(addr)}`
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = (await res.json()) as { escrows?: EscrowApiShape[] }
-    const raw = Array.isArray(data.escrows) ? data.escrows : []
-    escrows.value = raw.map(apiToFull)
+    if (supabaseConfigured.value && tid) {
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke('marketplace', {
+          body: { action: 'escrows', tenantId: tid, wallet: addr },
+        })
+        if (!fnError && data) {
+          const raw = ((data as { escrows?: Array<{ publicKey: string; account: Record<string, unknown> }> })?.escrows) ?? []
+          const converted = raw.map(apiEscrowToFull)
+          escrows.value = converted.filter((e) => !isEffectivelyComplete(e.account.tokensDepositRemaining, e.account.decimals))
+          return
+        }
+      } catch {
+        /* fall through to RPC */
+      }
+    }
+    if (conn) {
+      const all = await fetchAllEscrows(conn, addr)
+      const scope = scopeMintsSet.value
+      escrows.value = all.filter((e) => {
+        if (isEffectivelyComplete(e.account.tokensDepositRemaining, e.account.decimals)) return false
+        if (scope.size === 0) return true
+        const dep = e.account.depositToken.toBase58()
+        const req = e.account.requestToken.toBase58()
+        return scope.has(dep) && scope.has(req)
+      })
+    } else {
+      escrows.value = []
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load escrows'
     escrows.value = []
   } finally {
     loading.value = false
+    void loadExternal()
+  }
+}
+
+async function loadExternal() {
+  const conn = connection.value
+  const addr = walletAddress.value
+  if (!conn || !addr) return
+  const inDguildKeys = new Set(escrows.value.map((e) => e.publicKey.toBase58()))
+  externalLoading.value = true
+  externalError.value = null
+  try {
+    const all = await fetchAllEscrows(conn, addr)
+    externalEscrows.value = all.filter(
+      (e) =>
+        !inDguildKeys.has(e.publicKey.toBase58()) &&
+        !isEffectivelyComplete(e.account.tokensDepositRemaining, e.account.decimals)
+    )
+  } catch (e) {
+    externalError.value = e instanceof Error ? e.message : 'Failed to load escrows elsewhere'
+    externalEscrows.value = []
+  } finally {
+    externalLoading.value = false
   }
 }
 
 watch(
-  () => [walletAddress.value, tenantStore.slug, apiBase.value],
+  () => [walletAddress.value, tenantStore.slug],
   () => { void load() },
   { immediate: false }
 )
 watch(
   () => props.tabActive,
   (active) => { if (active) void load() }
+)
+watch(
+  scopeLoading,
+  (loading, wasLoading) => {
+    if (wasLoading && !loading && connection.value) void load()
+  },
+  { immediate: false }
 )
 onMounted(() => { void load() })
 
@@ -226,6 +366,7 @@ async function handleQuickCancel(escrow: EscrowWithAddress) {
     const sig = await sendAndConfirmTransaction(connection.value, tx, wallet, escrow.account.maker)
     txNotifications.update(txId, { status: 'success', message: 'Escrow cancelled', signature: sig })
     escrows.value = escrows.value.filter((e) => e.publicKey.toBase58() !== id)
+    externalEscrows.value = externalEscrows.value.filter((e) => e.publicKey.toBase58() !== id)
   } catch (e) {
     txNotifications.update(txId, {
       status: 'error',
@@ -315,5 +456,22 @@ async function handleQuickCancel(escrow: EscrowWithAddress) {
 
 .market-open-trades__row-link:last-child {
   border-bottom: none;
+}
+
+.market-open-trades__elsewhere {
+  margin-top: var(--theme-space-xl);
+}
+
+.market-open-trades__elsewhere-title {
+  font-size: var(--theme-font-base);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  margin: 0 0 var(--theme-space-xs);
+}
+
+.market-open-trades__elsewhere-hint {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-muted);
+  margin: 0 0 var(--theme-space-md);
 }
 </style>

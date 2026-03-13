@@ -24,8 +24,12 @@
         <h2 class="onboard-form__title">Create Organisation</h2>
         <TextInput v-model="form.name" label="Name (required)" placeholder="My dGuild" />
         <TextInput v-model="form.description" label="Description (required)" placeholder="Our community hub" />
-        <TextInput v-model="form.logo" label="Logo (required)" placeholder="https://..." />
-        <TextInput v-model="form.discordInviteLink" label="Discord invite link" placeholder="https://discord.gg/..." />
+        <TextInput v-model="form.logo" label="Logo (optional)" placeholder="https://..." />
+        <TextInput
+          v-model="form.discordInviteLink"
+          label="Discord invite link (optional)"
+          placeholder="https://discord.gg/..."
+        />
         <div v-if="error" class="onboard-form__error">{{ error }}</div>
         <Button type="submit" variant="primary" :disabled="saving">Create and pay</Button>
       </form>
@@ -41,13 +45,14 @@ import {
   buildBillingTransfer,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
+  getConnectorState,
+  isBackpackConnector,
 } from '@decentraguild/web3'
 import { PageSection, Card, TextInput, Button, ConnectWalletModal } from '@decentraguild/ui/components'
 import type { WalletConnectorId } from '@solana/connector/headless'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 
 const auth = useAuth()
-const apiBase = useApiBase()
 const { rpcUrl, hasRpc } = useRpc()
 const showConnectModal = ref(false)
 const txNotifications = useTransactionNotificationsStore()
@@ -68,6 +73,9 @@ const config = useRuntimeConfig()
 const saving = ref(false)
 const error = ref<string | null>(null)
 
+/** Path to fallback logo (served from platform app public). */
+const DEFAULT_LOGO_PATH = '/dguild-logoGreyscale.webp'
+
 async function handleConnectAndSignIn(connectorId: WalletConnectorId) {
   const ok = await auth.connectAndSignIn(connectorId)
   if (ok) showConnectModal.value = false
@@ -83,10 +91,6 @@ async function submit() {
     error.value = 'Description is required'
     return
   }
-  if (!form.logo?.trim()) {
-    error.value = 'Logo is required'
-    return
-  }
   if (!hasRpc.value || !rpcUrl.value) {
     error.value = 'RPC not configured. Set NUXT_PUBLIC_HELIUS_RPC.'
     return
@@ -96,36 +100,37 @@ async function submit() {
   error.value = null
   let notificationId: string | null = null
   try {
-    const base = apiBase.value
-    const branding = { logo: form.logo.trim() }
-    const intentRes = await fetch(`${base}/api/v1/register/intent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        name: form.name.trim(),
-        description: form.description.trim(),
-        branding,
-        discordInviteLink: form.discordInviteLink?.trim() ?? undefined,
-      }),
-    })
-    if (!intentRes.ok) {
-      const data = (await intentRes.json().catch(() => ({}))) as { error?: string }
-      throw new Error(data.error ?? 'Failed to create payment intent')
+    const wallet = getEscrowWalletFromConnector()
+    if (!wallet?.publicKey) {
+      showConnectModal.value = true
+      throw new Error('Wallet disconnected. Reconnect to sign the transaction.')
     }
-    const intent = (await intentRes.json()) as {
+
+    const { useSupabase } = await import('~/composables/useSupabase')
+    const supabase = useSupabase()
+    const { data: intentData, error: intentError } = await supabase.functions.invoke('billing', {
+      body: {
+        action: 'register-intent',
+        payerWallet: wallet.publicKey.toBase58(),
+      },
+    })
+    if (intentError) {
+      const msg = intentError.message ?? 'Failed to create payment intent'
+      const hint = msg.includes('non-2xx')
+        ? ' Ensure Supabase is running (pnpm supabase start) and edge functions are served (pnpm supabase functions serve).'
+        : ''
+      throw new Error(msg + hint)
+    }
+    const intent = intentData as {
       paymentId: string
       amountUsdc: number
       memo: string
       recipientAta: string
-      tenantId: string
     }
-    if (!intent.paymentId || !intent.amountUsdc || !intent.memo || !intent.recipientAta || !intent.tenantId?.trim()) {
+    if (!intent.paymentId || !intent.amountUsdc || !intent.memo || !intent.recipientAta) {
       throw new Error('Invalid payment intent response')
     }
 
-    const wallet = getEscrowWalletFromConnector()
-    if (!wallet?.publicKey) throw new Error('Wallet not connected')
     const connection = new Connection(rpcUrl.value)
     notificationId = `create-org-${intent.paymentId}`
     txNotifications.add(notificationId, {
@@ -133,12 +138,14 @@ async function submit() {
       message: 'Creating organisation. Confirm the transaction in your wallet.',
       signature: null,
     })
+    const connectorId = getConnectorState().connectorId
     const tx = buildBillingTransfer({
       payer: wallet.publicKey,
       amountUsdc: intent.amountUsdc,
       recipientAta: new PublicKey(intent.recipientAta),
       memo: intent.memo,
       connection,
+      instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
     })
     const txSignature = await sendAndConfirmTransaction(
       connection,
@@ -155,24 +162,24 @@ async function submit() {
       })
     }
 
-    const confirmRes = await fetch(`${base}/api/v1/register/confirm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
+    const { data: confirmData, error: confirmError } = await supabase.functions.invoke('billing', {
+      body: {
+        action: 'register-confirm',
         paymentId: intent.paymentId,
         txSignature,
-      }),
+        tenantName: form.name.trim(),
+        payerWallet: wallet.publicKey.toBase58(),
+        description: form.description.trim() || null,
+        logo:
+          form.logo?.trim() ||
+          (typeof window !== 'undefined' ? window.location.origin : 'https://dguild.org') + DEFAULT_LOGO_PATH,
+        discordInviteLink: form.discordInviteLink.trim() || null,
+      },
     })
-    if (!confirmRes.ok) {
-      const data = (await confirmRes.json().catch(() => ({}))) as { error?: string }
-      throw new Error(data.error ?? 'Failed to confirm registration')
-    }
-    const confirmData = (await confirmRes.json()) as { tenant?: { id: string; slug?: string | null } }
-    const tenant = confirmData.tenant
-    // Always use tenant id so the tenant app loads this org; new=1 forces the tenant (no cache).
-    // Fallback to intent.tenantId so the redirect never drops the tenant param.
-    const tenantId = (tenant?.id ?? '').trim() || intent.tenantId
+    if (confirmError) throw new Error(confirmError.message ?? 'Failed to confirm registration')
+    const result = confirmData as { tenant?: { id: string; slug?: string | null } }
+    const tenant = result.tenant
+    const tenantId = (tenant?.id ?? '').trim()
     if (!tenantId?.trim()) throw new Error('No tenant id returned')
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     if (isLocal) {

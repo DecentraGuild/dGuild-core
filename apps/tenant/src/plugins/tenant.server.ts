@@ -1,15 +1,18 @@
 /**
  * Resolves tenant slug from request host during SSR and fetches tenant context
  * so first paint has full branding/nav. Avoids client waterfall and hydration mismatch.
+ * Uses Supabase PostgREST (tenant_context_view) instead of the old Fastify API.
  */
 import type { TenantConfig, MarketplaceSettings } from '@decentraguild/core'
 import { getTenantSlugFromHost } from '@decentraguild/core'
+import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr'
 import { useTenantStore } from '~/stores/tenant'
-import { API_V1, normalizeApiBase } from '~/utils/apiBase'
 
 export default defineNuxtPlugin(async () => {
   const config = useRuntimeConfig()
   const devDefaultSlug = (config.public.devTenantSlug as string)?.trim() || ''
+  const supabaseUrl = config.public.supabaseUrl as string
+  const supabaseAnonKey = config.public.supabaseAnonKey as string
 
   const event = useRequestEvent()
   const req = event?.node?.req
@@ -23,34 +26,96 @@ export default defineNuxtPlugin(async () => {
   const isSingleHost = singleHost && host === singleHost
   const hasTenantInQuery = Boolean(searchParams.get('tenant')?.trim())
 
-  // On the single-host entry (e.g. dapp.dguild.org), tenant must come from ?tenant=.
-  // If the request has no query param, do not set slug from host (would be "dapp"); let the client use cached last tenant.
   if (isSingleHost && !hasTenantInQuery) return
 
   let slug = getTenantSlugFromHost(host, searchParams)
   if (!slug && (host.includes('localhost') || host.includes('127.0.0.1')) && devDefaultSlug) {
     slug = devDefaultSlug
   }
-
   if (!slug) return
 
   const tenantStore = useTenantStore()
   tenantStore.setSlug(slug)
 
-  const apiBase = normalizeApiBase(config.public.apiUrl as string)
-  const contextUrl = `${apiBase}${API_V1}/tenant-context?slug=${encodeURIComponent(slug)}`
-
   try {
-    const data = await $fetch<{ tenant: TenantConfig; marketplaceSettings?: MarketplaceSettings | null }>(
-      contextUrl,
-      { headers: { Accept: 'application/json' } }
-    )
-    if (data?.tenant) {
-      tenantStore.applyTenantContext(slug, {
-        tenant: data.tenant,
-        marketplaceSettings: data.marketplaceSettings ?? null,
-      })
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        getAll() {
+          return parseCookieHeader(req?.headers?.cookie ?? '')
+        },
+        setAll(cookiesToSet) {
+          for (const { name, value, options } of cookiesToSet) {
+            event?.node?.res?.appendHeader(
+              'Set-Cookie',
+              serializeCookieHeader(name, value, options),
+            )
+          }
+        },
+      },
+    })
+
+    const { data, error } = await supabase
+      .from('tenant_context_view')
+      .select('*')
+      .or(`id.eq.${slug},slug.eq.${slug}`)
+      .maybeSingle()
+
+    if (error || !data) {
+      tenantStore.error = error?.message ?? 'Failed to load tenant'
+      return
     }
+
+    const tenantData: TenantConfig = {
+      id: data.id as string,
+      slug: data.slug as string | undefined,
+      name: data.name as string,
+      description: data.description as string | undefined,
+      discordServerInviteLink: data.discord_server_invite_link as string | undefined,
+      defaultGate: data.default_gate as TenantConfig['defaultGate'],
+      branding: data.branding as TenantConfig['branding'],
+      modules: data.modules as TenantConfig['modules'],
+      admins: data.admins as string[],
+      treasury: data.treasury as string | undefined,
+    }
+
+    let marketplaceSettings = data.marketplace_settings as MarketplaceSettings | null
+    if (marketplaceSettings) {
+      const mints = [
+        ...(marketplaceSettings.currencyMints ?? []).map((c) => (typeof c === 'string' ? c : c.mint)),
+        ...(marketplaceSettings.splAssetMints ?? []).map((c) => (typeof c === 'string' ? c : c.mint)),
+        ...(marketplaceSettings.collectionMints ?? []).map((c) => (typeof c === 'string' ? c : c.mint)),
+      ].filter(Boolean)
+      const uniqueMints = [...new Set(mints)]
+      if (uniqueMints.length > 0) {
+        const { data: metaRows } = await supabase
+          .from('mint_metadata')
+          .select('mint, name, symbol, image')
+          .in('mint', uniqueMints)
+        const metaByMint = new Map((metaRows ?? []).map((m) => [(m.mint as string), m]))
+        const enrich = (arr: Array<{ mint: string; name?: string; symbol?: string; image?: string }> | undefined) =>
+          (arr ?? []).map((item) => {
+            const m = typeof item === 'string' ? { mint: item } : item
+            const meta = metaByMint.get(m.mint)
+            return {
+              ...m,
+              name: m.name ?? meta?.name ?? null,
+              symbol: m.symbol ?? meta?.symbol ?? null,
+              image: m.image ?? meta?.image ?? null,
+            }
+          })
+        marketplaceSettings = {
+          ...marketplaceSettings,
+          currencyMints: enrich(marketplaceSettings.currencyMints as Array<{ mint: string; name?: string; symbol?: string; image?: string }>),
+          splAssetMints: enrich(marketplaceSettings.splAssetMints as Array<{ mint: string; name?: string; symbol?: string; image?: string }>),
+          collectionMints: enrich(marketplaceSettings.collectionMints as Array<{ mint: string; name?: string; image?: string }>),
+        }
+      }
+    }
+
+    tenantStore.applyTenantContext(slug, {
+      tenant: tenantData,
+      marketplaceSettings,
+    })
   } catch {
     tenantStore.error = 'Failed to load tenant'
   }

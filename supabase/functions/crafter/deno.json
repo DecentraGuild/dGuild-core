@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@decentraguild/config": "../../../config/dist/index.js"
+  }
+}

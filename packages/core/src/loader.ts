@@ -22,7 +22,7 @@ function resolveConfigDir(): string {
   const cwd = process.cwd()
   const fromCwd = join(cwd, DEFAULT_CONFIG_PATH)
   if (existsSync(fromCwd)) return fromCwd
-  // Monorepo: from apps/api or apps/api/dist -> repo root configs/tenants
+  // Monorepo: from _integrate/api or apps -> repo root configs/tenants
   const monorepoFallback = join(cwd, '..', '..', 'configs', 'tenants')
   if (existsSync(monorepoFallback)) return monorepoFallback
   const monorepoFromDist = join(cwd, '..', '..', '..', 'configs', 'tenants')

@@ -1,11 +1,10 @@
 <template>
-  <Teleport to="body">
-    <div v-if="modelValue" class="nft-instance-selector" @click.self="$emit('update:modelValue', false)">
-      <div class="nft-instance-selector__panel">
+  <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
+    <DialogContent :class="['nft-instance-selector__panel p-0 gap-0 max-h-[85vh] flex flex-col overflow-hidden sm:max-w-[48rem]']" :show-close-button="false">
         <div class="nft-instance-selector__header">
           <h3 class="nft-instance-selector__title">{{ collectionName }}</h3>
           <button type="button" class="nft-instance-selector__close" aria-label="Close" @click="$emit('update:modelValue', false)">
-            <Icon icon="mdi:close" />
+            <Icon icon="lucide:x" />
           </button>
         </div>
         <p class="nft-instance-selector__subtitle">Select a specific NFT from the collection</p>
@@ -23,7 +22,7 @@
               :class="{ 'nft-instance-selector__filter-btn--active': filtersOpen }"
               @click="filtersOpen = !filtersOpen"
             >
-              <Icon icon="mdi:filter-outline" />
+              <Icon icon="lucide:filter" />
               Filters
               <span v-if="activeFilterCount" class="nft-instance-selector__filter-badge">{{ activeFilterCount }}</span>
             </button>
@@ -52,17 +51,17 @@
         </div>
         <div class="nft-instance-selector__body">
           <div v-if="loading" class="nft-instance-selector__empty">
-            <Icon icon="svg-spinners:ring-resize" class="nft-instance-selector__empty-icon" />
+            <Icon icon="lucide:loader-2" class="nft-instance-selector__empty-icon" />
             <p>Loading NFTs...</p>
           </div>
           <div v-else-if="filteredNfts.length === 0" class="nft-instance-selector__empty">
-            <Icon icon="mdi:image-off-outline" class="nft-instance-selector__empty-icon" />
+            <Icon icon="lucide:image-off" class="nft-instance-selector__empty-icon" />
             <p>{{ hasActiveFilters ? 'No NFTs match the selected filters' : 'No NFTs found' }}</p>
             <button v-if="hasActiveFilters" type="button" @click="clearSearchAndFilters">Clear filters</button>
           </div>
           <div v-else class="nft-instance-selector__grid">
             <button
-              v-for="nft in filteredNfts"
+              v-for="nft in paginatedNfts"
               :key="nft.mint"
               type="button"
               class="nft-instance-selector__card"
@@ -71,7 +70,7 @@
               <div class="nft-instance-selector__card-media">
                 <img v-if="nft.metadata?.image" :src="nft.metadata.image" :alt="nft.metadata.name ?? nft.mint" />
                 <div v-else class="nft-instance-selector__card-placeholder">
-                  <Icon icon="mdi:image-off" />
+                  <Icon icon="lucide:image-off" />
                 </div>
               </div>
               <div class="nft-instance-selector__card-info">
@@ -87,18 +86,23 @@
                 </div>
               </div>
             </button>
+            <div v-if="hasMore" class="nft-instance-selector__load-more">
+              <button type="button" class="nft-instance-selector__load-more-btn" @click="loadMore">
+                Load more ({{ filteredNfts.length - visibleCount }} remaining)
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-  </Teleport>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { truncateAddress } from '@decentraguild/display'
-import { useMarketplaceAssets } from '~/composables/useMarketplaceAssets'
+import { useCollectionMembers } from '~/composables/mint/useCollectionMembers'
+import { Dialog, DialogContent } from '~/components/ui/dialog'
 import {
   filterNFTsBySearch,
   filterNFTsByTraits,
@@ -106,7 +110,7 @@ import {
   normaliseAttributes,
   type TraitAttribute,
 } from '~/utils/nftFilterHelpers'
-import type { MarketplaceAsset } from '~/composables/useMarketplaceAssets'
+import type { CollectionMemberNft } from '~/composables/mint/useCollectionMembers'
 
 const props = defineProps<{
   modelValue: boolean
@@ -121,18 +125,9 @@ const searchQuery = ref('')
 const selectedTraits = ref<Record<string, string>>({})
 const filtersOpen = ref(false)
 
-const collectionRef = ref<string | null>(props.collectionMint)
-watch(
-  () => props.collectionMint,
-  (v) => { collectionRef.value = v ?? null },
-  { immediate: true }
-)
+const collectionRef = computed(() => props.collectionMint ?? null)
 
-const { assets, loading } = useMarketplaceAssets({
-  slug: props.slug,
-  collection: collectionRef,
-  limit: 500,
-})
+const { assets, loading } = useCollectionMembers(collectionRef)
 
 const nfts = computed(() => assets.value)
 
@@ -144,7 +139,16 @@ const activeFilterCount = computed(() => Object.keys(selectedTraits.value).lengt
 const afterSearch = computed(() => filterNFTsBySearch(nfts.value, searchQuery.value))
 const filteredNfts = computed(() => filterNFTsByTraits(afterSearch.value, selectedTraits.value))
 
-function displayTraits(nft: MarketplaceAsset): TraitAttribute[] {
+const PAGE_SIZE = 24
+const visibleCount = ref(PAGE_SIZE)
+const paginatedNfts = computed(() => filteredNfts.value.slice(0, visibleCount.value))
+const hasMore = computed(() => filteredNfts.value.length > visibleCount.value)
+
+function loadMore() {
+  visibleCount.value += PAGE_SIZE
+}
+
+function displayTraits(nft: CollectionMemberNft): TraitAttribute[] {
   return normaliseAttributes(nft.metadata?.traits ?? [])
 }
 
@@ -165,7 +169,7 @@ function clearSearchAndFilters() {
   filtersOpen.value = false
 }
 
-function selectNft(nft: MarketplaceAsset) {
+function selectNft(nft: CollectionMemberNft) {
   emit('select', nft.mint, nft.metadata?.name ?? undefined)
   emit('update:modelValue', false)
 }
@@ -177,22 +181,17 @@ watch(
       searchQuery.value = ''
       selectedTraits.value = {}
       filtersOpen.value = false
+      visibleCount.value = PAGE_SIZE
     }
   }
 )
+
+watch(filteredNfts, () => {
+  visibleCount.value = PAGE_SIZE
+})
 </script>
 
 <style scoped>
-.nft-instance-selector {
-  position: fixed;
-  inset: 0;
-  background: var(--theme-backdrop, rgba(0, 0, 0, 0.6));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1001;
-}
-
 .nft-instance-selector__panel {
   background: var(--theme-bg-primary);
   border: var(--theme-border-thin) solid var(--theme-border);
@@ -357,6 +356,28 @@ watch(
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   gap: var(--theme-space-md);
+}
+
+.nft-instance-selector__load-more {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding: var(--theme-space-md);
+}
+
+.nft-instance-selector__load-more-btn {
+  padding: var(--theme-space-sm) var(--theme-space-lg);
+  font-size: var(--theme-font-sm);
+  background: var(--theme-bg-secondary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  color: var(--theme-text-primary);
+  cursor: pointer;
+}
+
+.nft-instance-selector__load-more-btn:hover {
+  background: var(--theme-bg-muted);
+  border-color: var(--theme-primary);
 }
 
 .nft-instance-selector__card {

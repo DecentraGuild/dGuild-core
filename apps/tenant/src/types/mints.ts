@@ -5,6 +5,12 @@ export interface BaseMintMetadata {
   image?: string
   decimals?: number | null
   sellerFeeBasisPoints?: number | null
+  updateAuthority?: string | null
+  uri?: string | null
+  primarySaleHappened?: boolean | null
+  isMutable?: boolean | null
+  editionNonce?: number | null
+  tokenStandard?: string | null
 }
 
 export interface SplAssetMint extends BaseMintMetadata {
@@ -32,6 +38,7 @@ export interface AddressBookEntry {
   image: string | null
   name: string | null
   symbol?: string | null
+  shipment_banner_image?: string | null
   /** NFT collection trait keys (e.g. for filtering or rule dropdowns). */
   trait_keys?: string[] | null
   /** NFT collection trait key -> list of values. */
@@ -62,6 +69,12 @@ export interface CatalogMint {
   decimals: number | null
   trait_keys: string[] | null
   trait_options: Record<string, string[]> | null
+  /** Holders track (15min–6hr sync for role rules). */
+  track_discord?: boolean
+  /** Snapshot track (daily holder snapshots). */
+  track_snapshot?: boolean
+  /** Transactions track (coming soon). */
+  track_transactions?: boolean
 }
 
 /**
@@ -75,10 +88,23 @@ export interface CatalogMintItem {
   label: string
   symbol?: string | null
   image?: string | null
+  shipment_banner_image?: string | null
   decimals?: number | null
   sellerFeeBasisPoints?: number | null
+  updateAuthority?: string | null
+  uri?: string | null
+  primarySaleHappened?: boolean | null
+  isMutable?: boolean | null
+  editionNonce?: number | null
+  tokenStandard?: string | null
   traitTypes?: string[] | null
   traitKeys?: string[] | null
   _loading?: boolean
   _error?: string
+  /** Holders track enabled (Discord mint catalog). */
+  track_discord?: boolean
+  /** Snapshot track enabled (Discord mint catalog). */
+  track_snapshot?: boolean
+  /** Transactions track enabled (Discord mint catalog). */
+  track_transactions?: boolean
 }

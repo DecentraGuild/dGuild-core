@@ -7,7 +7,7 @@
 
     <template v-if="loading">
       <p class="discord-server-card__loading">
-        <Icon icon="mdi:loading" class="discord-server-card__spinner" />
+        <Icon icon="lucide:loader-2" class="discord-server-card__spinner" />
         Loading…
       </p>
     </template>
@@ -15,7 +15,7 @@
     <template v-else-if="server.connected">
       <div class="discord-server-card__connected">
         <p class="discord-server-card__status">
-          <Icon icon="mdi:check-circle" class="discord-server-card__status-icon" />
+          <Icon icon="lucide:check-circle" class="discord-server-card__status-icon" />
           Connected: {{ server.guild_name || server.discord_guild_id }}
         </p>
         <p v-if="server.guild_name" class="discord-server-card__guild-id">
@@ -51,15 +51,15 @@
           2. Enable Developer Mode in Discord (User Settings → App Settings → Advanced), then right‑click your server name and choose "Copy Server ID".
         </p>
         <div class="discord-server-card__link-row">
-          <TextInput
+          <FormInput
             :model-value="guildIdInput"
             placeholder="Paste Discord Server ID"
             label="Server ID"
-            :error="linkError"
+            :error="linkError ?? undefined"
             @update:model-value="$emit('update:guildIdInput', $event)"
           />
           <Button
-            variant="primary"
+            variant="default"
             :disabled="!guildIdInput.trim() || linking"
             @click="$emit('link', { guildId: guildIdInput.trim() })"
           >
@@ -75,7 +75,9 @@
 </template>
 
 <script setup lang="ts">
-import { Card, TextInput, Button } from '@decentraguild/ui/components'
+import { Card } from '~/components/ui/card'
+import { FormInput } from '~/components/ui/form-input'
+import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 
 defineProps<{
@@ -181,13 +183,26 @@ defineEmits<{
 
 .discord-server-card__link-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--theme-space-md);
   flex-wrap: wrap;
 }
 
-.discord-server-card__link-row .text-input {
+.discord-server-card__link-row :deep(.form-input) {
   flex: 1;
   min-width: 200px;
+  margin-bottom: 0;
+}
+
+.discord-server-card__link-row :deep(.form-input__field) {
+  height: var(--theme-input-height, 2.25rem);
+  min-height: var(--theme-input-height, 2.25rem);
+  box-sizing: border-box;
+}
+
+.discord-server-card__link-row :deep(button) {
+  height: var(--theme-input-height, 2.25rem);
+  min-height: var(--theme-input-height, 2.25rem);
+  flex-shrink: 0;
 }
 </style>

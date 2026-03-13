@@ -14,7 +14,7 @@
         :class="{ 'market-browse-toolbar__filter-btn--active': filtersOpen }"
         @click="toggleFiltersOpen"
       >
-        <Icon icon="mdi:filter-outline" />
+        <Icon icon="lucide:filter" />
         Filters
         <span v-if="activeFilterCount" class="market-browse-toolbar__filter-badge">{{ activeFilterCount }}</span>
       </button>

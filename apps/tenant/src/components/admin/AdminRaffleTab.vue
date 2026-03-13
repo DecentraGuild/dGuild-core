@@ -2,295 +2,134 @@
   <div class="admin__split">
     <div class="admin__panel">
       <Card>
-        <h3>Default whitelist for raffles</h3>
-        <p class="admin__hint">Use dGuild default, public, or a specific list. Applies to all raffles. Set to Public to allow per-raffle whitelist selection.</p>
-        <WhitelistSelect
+        <GateSelectRow
           :slug="slug"
           :model-value="whitelistFormValue"
-          label="Whitelist"
+          title="Who can see Raffles"
+          hint="Who can see Raffles. Use dGuild default, admins only, public, or a specific list."
           show-use-default
-          :disabled="savingWhitelist"
+          show-admin-only
+          show-save
+          save-label="Save"
+          :dirty="whitelistDirty"
+          :loading="savingWhitelist"
+          :save-success="whitelistSaveSuccess"
+          :save-error="whitelistSaveError"
           @update:model-value="onWhitelistUpdate"
+          @save="saveWhitelist"
         />
-        <div class="admin__panel-actions">
-          <Button
-            variant="primary"
-            :disabled="savingWhitelist || !whitelistDirty"
-            @click="saveWhitelist"
-          >
-            {{ savingWhitelist ? 'Saving...' : 'Save default whitelist' }}
-          </Button>
-          <p v-if="whitelistSaveSuccess" class="admin__success">Saved.</p>
-          <p v-if="whitelistSaveError" class="admin__error">{{ whitelistSaveError }}</p>
-        </div>
       </Card>
 
-      <div class="raffle-slots">
-        <h3>Raffle slots</h3>
-        <p class="admin__hint">Each slot holds one raffle. Click the plus to create a new raffle in that slot.</p>
-        <p v-if="actionTxStatus" class="raffle-slots__tx-status">
-          <Icon icon="mdi:loading" class="raffle-slots__tx-spinner" />
-          {{ actionTxStatus }}
-        </p>
-        <div v-if="slotsLoading" class="raffle-slots__loading">
-          <Icon icon="mdi:loading" class="raffle-slots__spinner" />
-          <span>Loading...</span>
-        </div>
-        <div v-else class="raffle-slots__grid">
-          <template v-for="(slot, idx) in slotCards" :key="slot.key">
-            <RaffleSlotCard
-              v-if="slot.raffle"
-              :slot="slot"
-              :action-submitting="actionSubmitting"
-              :action-error="actionError"
-              :action-error-raffle="actionErrorRaffle"
-              :mint-metadata-by-ticket-mint="mintMetadataByTicketMint"
-              @add-reward="openAddRewardModal(slot.raffle!)"
-              @start="openStartRaffleModal(slot)"
-              @pause="onPauseRaffle(slot)"
-              @resume="onResumeRaffle(slot)"
-              @edit="openEditRaffleModal(slot)"
-              @reveal-winner="onRevealWinner(slot)"
-              @distribute-reward="onDistributeReward(slot)"
-              @claim-proceeds="onClaimProceeds(slot)"
-              @close="onCloseRaffle(slot.raffle!)"
-            />
-            <button
-              v-else
-              type="button"
-              class="raffle-slot-card raffle-slot-card--empty"
-              :disabled="!canCreateMore"
-              @click="openCreateModal(idx)"
-            >
-              <Icon icon="mdi:plus" class="raffle-slot-card__plus" />
-              <span class="raffle-slot-card__label">Create raffle</span>
-            </button>
-          </template>
-          <button
-            type="button"
-            class="raffle-slot-card raffle-slot-card--upgrade"
-            @click="openUpgradeModal"
-          >
-            <Icon icon="mdi:arrow-up-bold" class="raffle-slot-card__upgrade-icon" />
-            <span class="raffle-slot-card__upgrade-label">Upgrade tier</span>
-            <span class="raffle-slot-card__upgrade-hint">More included slots</span>
-          </button>
-        </div>
-      </div>
+      <Card>
+        <RaffleSlotList
+          :slot-cards="slotCards"
+          :slots-loading="slotsLoading"
+          :can-create-more="canCreateMore"
+          :action-tx-status="actionTxStatus"
+          :action-submitting="actionSubmitting"
+          :action-error="actionError"
+          :action-error-raffle="actionErrorRaffle"
+          :mint-metadata-by-ticket-mint="mintMetadataByTicketMint"
+          @add-reward="openAddRewardModal"
+          @start="openStartRaffleModal"
+          @pause="onPauseRaffle"
+          @resume="onResumeRaffle"
+          @edit="openEditRaffleModal"
+          @reveal-winner="onRevealWinner"
+          @distribute-reward="onDistributeReward"
+          @claim-proceeds="onClaimProceeds"
+          @close="onCloseRaffle"
+          @create="openCreateModal"
+          @upgrade="openUpgradeModal"
+        />
+      </Card>
     </div>
 
     <div id="raffle-pricing-widget" class="raffle-pricing-wrapper">
-    <AdminPricingWidget
-      ref="pricingRef"
-      module-id="raffles"
-      :module-state="moduleState"
-      :conditions="liveConditions"
-      :subscription="subscription"
-      :saving="Boolean(savingWhitelist || saving)"
-      :deploying="deploying"
-      :save-error="saveError"
-      @save="onSave"
-      @deploy="onDeploy"
-    />
+      <AdminPricingWidget
+        ref="pricingRef"
+        module-id="raffles"
+        :module-state="moduleState"
+        :conditions="liveConditions"
+        :subscription="subscription"
+        :saving="Boolean(savingWhitelist || saving)"
+        :deploying="deploying"
+        :save-error="saveError"
+        @save="onSave"
+        @deploy="onDeploy"
+      />
     </div>
 
-    <Modal
-      :model-value="showUpgradeModal"
-      title="Unlock more slots"
-      @update:model-value="showUpgradeModal = false"
+    <SimpleModal
+      :model-value="!!raffleModalMode"
+      :title="raffleModalTitle"
+      :wide="raffleModalWide"
+      @update:model-value="closeRaffleModal"
     >
-      <div v-if="showUpgradeModal" class="raffle-upgrade-modal">
-        <p class="raffle-upgrade-modal__hint">Choose a plan to get more raffle slots. The pricing panel will update.</p>
-        <div class="raffle-upgrade-modal__options">
-          <button
-            type="button"
-            class="raffle-upgrade-option"
-            :class="{ 'raffle-upgrade-option--current': effectiveTierId === 'grow', 'raffle-upgrade-option--disabled': effectiveTierId === 'grow' }"
-            :disabled="effectiveTierId === 'grow'"
-            @click="effectiveTierId !== 'grow' && selectUpgradeTier('grow')"
-          >
-            <span class="raffle-upgrade-option__name">Grow</span>
-            <span class="raffle-upgrade-option__slots">3 slots</span>
-            <span class="raffle-upgrade-option__price">15 USDC/mo</span>
-            <span v-if="effectiveTierId === 'grow'" class="raffle-upgrade-option__badge">Current</span>
-          </button>
-          <button
-            type="button"
-            class="raffle-upgrade-option"
-            :class="{ 'raffle-upgrade-option--current': effectiveTierId === 'pro', 'raffle-upgrade-option--disabled': effectiveTierId === 'pro' }"
-            :disabled="effectiveTierId === 'pro'"
-            @click="effectiveTierId !== 'pro' && selectUpgradeTier('pro')"
-          >
-            <span class="raffle-upgrade-option__name">Pro</span>
-            <span class="raffle-upgrade-option__slots">10 slots included</span>
-            <span class="raffle-upgrade-option__price">25 USDC/mo</span>
-            <span v-if="effectiveTierId === 'pro'" class="raffle-upgrade-option__badge">Current</span>
-          </button>
-        </div>
-        <p class="raffle-upgrade-modal__note">Scroll down to select monthly/yearly and pay.</p>
-      </div>
-    </Modal>
-
-    <Modal
-      :model-value="showAddRewardModal"
-      title="Add reward"
-      wide
-      @update:model-value="showAddRewardModal = false"
-    >
-      <form v-if="showAddRewardModal && selectedRaffleForReward" class="raffle-add-reward-form" @submit.prevent="onAddRewardSubmit">
-        <div class="raffle-mint-row">
-          <TextInput
-            v-model="addRewardForm.prizeMint"
-            label="Prize token mint"
-            placeholder="SPL token mint address"
-            class="raffle-mint-row__input"
-            required
-          />
-          <AddressBookBrowser kind="SPL" @select="(mint) => { addRewardForm.prizeMint = mint }" />
-        </div>
-        <TextInput
-          v-model="addRewardForm.amountDisplay"
-          type="number"
-          :label="prizeMintMeta.label"
-          :placeholder="prizeMintMeta.placeholder"
-          required
-        />
-        <p v-if="prizeMintMeta.hint" class="raffle-add-reward-form__hint">{{ prizeMintMeta.hint }}</p>
-        <TextInput
-          v-model="addRewardForm.imageUrl"
-          label="Image URL (optional)"
-          placeholder="https://..."
-        />
-        <p v-if="addRewardError" class="raffle-add-reward-form__error">{{ addRewardError }}</p>
-        <div class="raffle-add-reward-form__actions">
-          <Button variant="secondary" type="button" @click="showAddRewardModal = false">
-            Cancel
-          </Button>
-          <Button variant="primary" type="submit" :disabled="addRewardSubmitting">
-            {{ addRewardSubmitting ? 'Adding...' : 'Add reward' }}
-          </Button>
-        </div>
-      </form>
-    </Modal>
-
-    <Modal
-      :model-value="showStartRaffleModal"
-      title="Start raffle"
-      @update:model-value="onCancelStartRaffle"
-    >
-      <div v-if="showStartRaffleModal && selectedRaffleForStart" class="raffle-start-modal">
-        <p class="raffle-start-modal__warning">
-          Starting the raffle will finalise it. You will not be able to cancel from this point. Users can buy tickets once started.
-        </p>
-        <p v-if="selectedRaffleForStart.chainData?.name" class="raffle-start-modal__name">{{ selectedRaffleForStart.chainData.name }}</p>
-        <div class="raffle-start-modal__actions">
-          <Button variant="secondary" type="button" @click="onCancelStartRaffle">Cancel</Button>
-          <Button variant="primary" type="button" @click="onConfirmStartRaffle">Start raffle</Button>
-        </div>
-      </div>
-    </Modal>
-
-    <Modal
-      :model-value="showEditRaffleModal"
-      title="Edit raffle"
-      wide
-      @update:model-value="showEditRaffleModal = false"
-    >
-      <form v-if="showEditRaffleModal && selectedRaffleForEdit" class="raffle-edit-form" @submit.prevent="onEditRaffleSubmit">
-        <p class="raffle-edit-form__hint">You can only edit name, description and image when the raffle is paused.</p>
-        <TextInput v-model="editForm.name" label="Name" placeholder="Raffle name" required />
-        <TextInput v-model="editForm.description" label="Description" placeholder="Brief description" />
-        <TextInput v-model="editForm.url" label="Image URL" placeholder="https://..." />
-        <div class="raffle-edit-form__actions">
-          <Button variant="secondary" type="button" @click="showEditRaffleModal = false">Cancel</Button>
-          <Button variant="primary" type="submit" :disabled="actionSubmitting === selectedRaffleForEdit?.raffle?.rafflePubkey">
-            Save
-          </Button>
-        </div>
-      </form>
-    </Modal>
-
-    <Modal
-      :model-value="showCreateModal"
-      title="Create raffle"
-      wide
-      @update:model-value="showCreateModal = false"
-    >
-      <form v-if="showCreateModal" class="raffle-create-form" @submit.prevent="onCreateSubmit">
-        <TextInput
-          v-model="createForm.name"
-          label="Name"
-          placeholder="Raffle name"
-          required
-        />
-        <TextInput
-          v-model="createForm.description"
-          label="Description"
-          placeholder="Brief description"
-        />
-        <div class="raffle-mint-row">
-          <TextInput
-            v-model="createForm.ticketMint"
-            label="Ticket token mint"
-            placeholder="SPL token mint address"
-            class="raffle-mint-row__input"
-            required
-          />
-          <AddressBookBrowser kind="SPL" @select="(mint) => { createForm.ticketMint = mint }" />
-        </div>
-        <TextInput
-          v-model="createForm.ticketPriceDisplay"
-          type="number"
-          :label="createTicketMeta.label"
-          :placeholder="createTicketMeta.placeholder"
-        />
-        <p v-if="createTicketMeta.hint" class="raffle-create-form__hint">{{ createTicketMeta.hint }}</p>
-        <TextInput
-          v-model="createForm.maxTicketsDisplay"
-          type="number"
-          label="Max tickets"
-          placeholder="e.g. 100"
-          required
-        />
-        <WhitelistSelect
-          v-if="isDefaultWhitelistPublic"
-          :slug="slug"
-          :model-value="createForm.whitelist"
-          label="Whitelist (this raffle)"
-          show-use-default
-          @update:model-value="createForm.whitelist = $event"
-        />
-        <p v-if="createError" class="raffle-create-form__error">{{ createError }}</p>
-        <div class="raffle-create-form__actions">
-          <Button variant="secondary" type="button" @click="showCreateModal = false">
-            Cancel
-          </Button>
-          <Button variant="primary" type="submit" :disabled="createSubmitting">
-            {{ createSubmitting ? 'Creating...' : 'Create raffle' }}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+      <RaffleUpgradeModal
+        v-if="raffleModalMode === 'upgrade'"
+        :effective-tier-id="effectiveTierId"
+        @select-tier="selectUpgradeTier"
+      />
+      <RaffleAddRewardForm
+        v-else-if="raffleModalMode === 'addReward' && selectedRaffleForReward"
+        v-model:form="addRewardForm"
+        :prize-mint-meta="prizeMintMeta"
+        :submitting="addRewardSubmitting"
+        :error="addRewardError"
+        @submit="onAddRewardSubmit"
+        @cancel="closeRaffleModal"
+      />
+      <RaffleStartConfirm
+        v-else-if="raffleModalMode === 'start' && selectedRaffleForStart"
+        :raffle-name="selectedRaffleForStart.chainData?.name"
+        @confirm="onConfirmStartRaffle"
+        @cancel="onCancelStartRaffle"
+      />
+      <RaffleEditForm
+        v-else-if="raffleModalMode === 'edit' && selectedRaffleForEdit"
+        v-model:form="editForm"
+        :submitting="actionSubmitting === selectedRaffleForEdit?.raffle?.rafflePubkey"
+        @submit="onEditRaffleSubmit"
+        @cancel="closeRaffleModal"
+      />
+      <RaffleCreateForm
+        v-else-if="raffleModalMode === 'create'"
+        :form="createForm"
+        :slug="slug"
+        :show-gate-select="isDefaultGatePublic"
+        :submitting="createSubmitting"
+        :error="createError"
+        :ticket-meta="{ label: createTicketMeta.label, placeholder: createTicketMeta.placeholder, hint: createTicketMeta.hint }"
+        @submit="onCreateSubmit"
+        @cancel="closeRaffleModal"
+      />
+    </SimpleModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { ModuleState } from '@decentraguild/core'
 import type { BillingPeriod, ConditionSet } from '@decentraguild/billing'
-import { Card, Button, TextInput, Modal } from '@decentraguild/ui/components'
-import { Icon } from '@iconify/vue'
-import WhitelistSelect from '~/components/WhitelistSelect.vue'
-import AdminPricingWidget from '~/components/AdminPricingWidget.vue'
-import AddressBookBrowser from '~/components/AddressBookBrowser.vue'
-import RaffleSlotCard from '~/components/admin/RaffleSlotCard.vue'
+import { Card } from '~/components/ui/card'
+import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
+import AdminPricingWidget from '~/components/admin/AdminPricingWidget.vue'
+import RaffleSlotList from '~/components/admin/RaffleSlotList.vue'
+import RaffleAddRewardForm from '~/components/admin/RaffleAddRewardForm.vue'
+import RaffleStartConfirm from '~/components/admin/RaffleStartConfirm.vue'
+import RaffleEditForm from '~/components/admin/RaffleEditForm.vue'
+import RaffleCreateForm from '~/components/admin/RaffleCreateForm.vue'
+import RaffleUpgradeModal from '~/components/admin/RaffleUpgradeModal.vue'
 import { useTenantStore } from '~/stores/tenant'
 import { nextTick, watch } from 'vue'
-import { usePricePreview } from '~/composables/usePricePreview'
-import { useMintMetadata } from '~/composables/useMintMetadata'
-import { useMintMetadataForInput } from '~/composables/useMintMetadataForInput'
-import { useAdminRaffleActions } from '~/composables/useAdminRaffleActions'
+import { usePricePreview } from '~/composables/core/usePricePreview'
+import { useMintMetadataForInput } from '~/composables/mint/useMintMetadataForInput'
+import { useAdminRaffleActions } from '~/composables/admin/useAdminRaffleActions'
+import { useAdminRaffleModals } from '~/composables/admin/useAdminRaffleModals'
+import { useRaffleSlots, type SlotCard, type RaffleItem } from '~/composables/raffles/useRaffleSlots'
 import { toRef } from 'vue'
-import { getEffectiveWhitelist } from '@decentraguild/core'
+import { resolveGateForTransaction } from '@decentraguild/core'
+import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
 import {
   getEscrowWalletFromConnector,
   buildBillingTransfer,
@@ -304,7 +143,6 @@ import {
   buildClaimPrizeTransaction,
   buildClaimTicketsTransaction,
   deriveRafflePda,
-  fetchRaffleChainData,
 } from '@decentraguild/web3'
 import { PublicKey, Transaction } from '@solana/web3.js'
 import {
@@ -313,9 +151,8 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from '@solana/spl-token'
-import type { RaffleChainData } from '@decentraguild/web3'
-import { useSolanaConnection } from '~/composables/useSolanaConnection'
-import { API_V1 } from '~/utils/apiBase'
+import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
+import { useSupabase } from '~/composables/core/useSupabase'
 
 const props = defineProps<{
   slug: string
@@ -332,35 +169,30 @@ const emit = defineEmits<{
 }>()
 
 const tenantStore = useTenantStore()
-const apiBase = useApiBase()
 const { connection } = useSolanaConnection()
-
-interface RaffleItem {
-  id: string
-  rafflePubkey: string
-  createdAt: string
-  closedAt: string | null
-}
-
-interface SlotCard {
-  key: string
-  raffle: RaffleItem | null
-  chainData: RaffleChainData | null
-}
+const tenantRef = computed(() => tenantStore.tenant)
+const raffleSettingsRef = computed(() => tenantStore.raffleSettings)
+const effectiveRaffleGate = useEffectiveGate(tenantRef, 'raffles', {
+  raffleSettings: raffleSettingsRef,
+})
 
 const conditions = ref<ConditionSet | null>(null)
-const raffles = ref<RaffleItem[]>([])
-const slotsLoading = ref(true)
-const showCreateModal = ref(false)
-const showUpgradeModal = ref(false)
-const showAddRewardModal = ref(false)
-const selectedRaffleForReward = ref<RaffleItem | null>(null)
+const {
+  raffleModalMode,
+  selectedRaffleForReward,
+  selectedRaffleForStart,
+  selectedRaffleForEdit,
+  raffleModalTitle,
+  raffleModalWide,
+  closeRaffleModal,
+  openCreateModal: openCreateModalBase,
+  openEditRaffleModal: openEditRaffleModalBase,
+  openAddRewardModal: openAddRewardModalBase,
+  openStartRaffleModal: openStartRaffleModalBase,
+  openUpgradeModal: openUpgradeModalBase,
+} = useAdminRaffleModals()
 const addRewardSubmitting = ref(false)
 const addRewardError = ref<string | null>(null)
-const showStartRaffleModal = ref(false)
-const selectedRaffleForStart = ref<SlotCard | null>(null)
-const showEditRaffleModal = ref(false)
-const selectedRaffleForEdit = ref<SlotCard | null>(null)
 const editForm = reactive({ name: '', description: '', url: '' })
 const addRewardForm = reactive({
   prizeMint: '',
@@ -377,7 +209,7 @@ const createForm = reactive({
   ticketMint: '',
   ticketPriceDisplay: '',
   maxTicketsDisplay: '100',
-  whitelist: null as { programId: string; account: string } | null | 'use-default',
+  gate: null as { programId: string; account: string } | null | 'use-default',
 })
 
 const createTicketMeta = useMintMetadataForInput(
@@ -409,58 +241,24 @@ const slotLimit = computed(() =>
   effectiveTierId.value === 'pro' ? 10 : effectiveTierId.value === 'grow' ? 3 : 1,
 )
 
-const activeRaffles = computed(() => raffles.value.filter((r) => !r.closedAt))
-
-const chainDataByRaffle = ref<Record<string, RaffleChainData | null>>({})
-const mintMetadataByTicketMint = ref<Record<string, { symbol: string; name: string }>>({})
-
-/** Always show exactly slotLimit slots: filled or empty create buttons. */
-const slotCards = computed((): SlotCard[] => {
-  const active = activeRaffles.value
-  const limit = slotLimit.value
-  const chain = chainDataByRaffle.value
-  const cards: SlotCard[] = []
-  for (let i = 0; i < limit; i++) {
-    const r = i < active.length ? active[i] : null
-    cards.push({
-      key: r ? r.rafflePubkey : `empty-${i}`,
-      raffle: r,
-      chainData: r ? (chain[r.rafflePubkey] ?? null) : null,
-    })
-  }
-  return cards
-})
-
-watch(
-  chainDataByRaffle,
-  async (chain) => {
-    const mints = new Set<string>()
-    for (const data of Object.values(chain)) {
-      if (data?.ticketMint) mints.add(data.ticketMint)
-    }
-    const map = { ...mintMetadataByTicketMint.value }
-    let changed = false
-    for (const mint of mints) {
-      if (map[mint]) continue
-      const meta = await fetchMetadata(mint)
-      if (meta) {
-        map[mint] = { symbol: meta.symbol, name: meta.name }
-        changed = true
-      }
-    }
-    if (changed) mintMetadataByTicketMint.value = { ...map }
-  },
-  { deep: true },
-)
+const {
+  slotCards,
+  slotsLoading,
+  chainDataByRaffle: _chainDataByRaffle,
+  mintMetadataByTicketMint,
+  activeRaffles,
+  fetchRaffles,
+  fetchChainDataForRaffles,
+} = useRaffleSlots(tenantIdRef, connection, slotLimit)
 
 function openUpgradeModal() {
   upgradeConditionsOverride.value = null
-  showUpgradeModal.value = true
+  openUpgradeModalBase()
 }
 
 function selectUpgradeTier(tier: 'grow' | 'pro') {
   upgradeConditionsOverride.value = { raffleSlotsUsed: tier === 'pro' ? 10 : 3 }
-  showUpgradeModal.value = false
+  closeRaffleModal()
   nextTick(() => {
     document.getElementById('raffle-pricing-widget')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   })
@@ -473,52 +271,53 @@ const canCreateMore = computed(() => {
 
 const raffleSettings = computed(() => tenantStore.raffleSettings)
 const whitelistFormValue = computed(() => {
-  const rw = raffleSettings.value?.defaultWhitelist
+  const rw = raffleSettings.value?.defaultGate
+  if (rw === undefined) return 'use-default'
+  if (rw === null || rw === 'public') return null
   if (rw === 'use-default') return 'use-default'
-  if (rw && typeof rw === 'object' && rw.account) return rw
+  if (rw === 'admin-only') return 'admin-only'
+  if (typeof rw === 'object' && rw.account) return rw
   return null
 })
 
-const isDefaultWhitelistPublic = computed(() => whitelistFormValue.value === null)
+const isDefaultGatePublic = computed(() => whitelistFormValue.value === null)
+
+function whitelistToCompareStr(v: typeof whitelistFormValue.value): string {
+  if (v === 'use-default') return '__use_default__'
+  if (v === 'admin-only') return '__admin_only__'
+  return (v && typeof v === 'object' ? v.account : '') ?? ''
+}
 
 const initialWhitelist = ref<string | null>(null)
-const whitelistDirty = computed(() => {
-  const current = whitelistFormValue.value
-  const currStr = current === 'use-default' ? '__use_default__' : (current && typeof current === 'object' ? current.account : '')
-  return currStr !== (initialWhitelist.value ?? '')
-})
+const whitelistDirty = computed(() => whitelistToCompareStr(whitelistFormValue.value) !== (initialWhitelist.value ?? ''))
 
 const savingWhitelist = ref(false)
 const whitelistSaveSuccess = ref(false)
 const whitelistSaveError = ref<string | null>(null)
 
-function onWhitelistUpdate(value: { programId: string; account: string } | null | 'use-default') {
-  const next = { ...(raffleSettings.value ?? {}), defaultWhitelist: value === 'use-default' ? 'use-default' : value }
+function onWhitelistUpdate(value: { programId: string; account: string } | null | 'use-default' | 'admin-only') {
+  const next = { ...(raffleSettings.value ?? {}), defaultGate: value === 'use-default' ? 'use-default' : value }
   tenantStore.setRaffleSettings(next)
 }
 
 async function saveWhitelist(): Promise<boolean> {
+  const id = tenantIdRef.value
+  if (!id) return false
   savingWhitelist.value = true
   whitelistSaveError.value = null
   whitelistSaveSuccess.value = false
   try {
     const wl = whitelistFormValue.value
-    const body: { defaultWhitelist?: { programId: string; account: string } | 'use-default' | null } = {
-      defaultWhitelist: wl === 'use-default' ? 'use-default' : wl ?? null,
-    }
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/raffle-settings`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error((data.error as string) || `HTTP ${res.status}`)
-    }
-    const data = await res.json()
-    tenantStore.setRaffleSettings(data.settings ?? {})
-    initialWhitelist.value = whitelistFormValue.value === 'use-default' ? '__use_default__' : (whitelistFormValue.value && typeof whitelistFormValue.value === 'object' ? whitelistFormValue.value.account : null)
+    const settings = { defaultGate: wl === 'use-default' ? 'use-default' : (wl === null ? 'public' : wl) }
+
+    const supabase = useSupabase()
+    const { error } = await supabase
+      .from('raffle_settings')
+      .upsert({ tenant_id: id, settings, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
+    if (error) throw new Error(error.message)
+
+    tenantStore.setRaffleSettings(settings)
+    initialWhitelist.value = whitelistToCompareStr(wl)
     whitelistSaveSuccess.value = true
     return true
   } catch (e) {
@@ -553,13 +352,13 @@ function openCreateModal(_slotIndex: number) {
   createForm.ticketMint = ''
   createForm.ticketPriceDisplay = ''
   createForm.maxTicketsDisplay = '100'
-  if (isDefaultWhitelistPublic.value) {
-    createForm.whitelist = null
+  if (isDefaultGatePublic.value) {
+    createForm.gate = null
   } else {
-    createForm.whitelist = whitelistFormValue.value === 'use-default' ? 'use-default' : whitelistFormValue.value
+    createForm.gate = whitelistFormValue.value === 'use-default' ? 'use-default' : whitelistFormValue.value
   }
   createError.value = null
-  showCreateModal.value = true
+  openCreateModalBase()
 }
 
 async function onCreateSubmit() {
@@ -594,17 +393,16 @@ async function onCreateSubmit() {
   createSubmitting.value = true
   createError.value = null
   try {
-    const paymentRes = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/billing/create-raffle-payment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({}),
+    const supabase = useSupabase()
+    const { data: intentData, error: intentError } = await supabase.functions.invoke('billing', {
+      body: {
+        action: 'raffle-intent',
+        tenantId: tenantIdRef.value,
+        payerWallet: wallet.publicKey.toBase58(),
+      },
     })
-    if (!paymentRes.ok) {
-      const data = (await paymentRes.json().catch(() => ({}))) as { error?: string }
-      throw new Error(data.error ?? `HTTP ${paymentRes.status}`)
-    }
-    const intent = (await paymentRes.json()) as {
+    if (intentError) throw new Error(intentError.message ?? `Failed to create raffle payment`)
+    const intent = intentData as {
       noPaymentRequired?: boolean
       paymentId?: string
       amountUsdc?: number
@@ -616,11 +414,11 @@ async function onCreateSubmit() {
     seed.writeBigUInt64LE(BigInt(Date.now()), 0)
     const rafflePda = deriveRafflePda(name, seed)
 
-    const rw = createForm.whitelist
-    const moduleDefault = rw === 'use-default' ? undefined : rw === null ? { programId: '', account: '' } : rw
-    const effectiveWl = getEffectiveWhitelist(tenantStore.tenant?.defaultWhitelist ?? null, moduleDefault)
-    const useWhitelist = Boolean(effectiveWl?.account?.trim())
-    const whitelistAccount = useWhitelist && effectiveWl?.account ? effectiveWl.account : null
+    const resolvedGate = resolveGateForTransaction(
+      effectiveRaffleGate.value,
+      createForm.gate
+    )
+    const useWhitelist = Boolean(resolvedGate?.account?.trim())
 
     const raffleTx = await buildInitializeRaffleTransaction({
       name,
@@ -631,8 +429,8 @@ async function onCreateSubmit() {
       ticketDecimals: dec,
       maxTickets,
       useWhitelist,
-      whitelist: whitelistAccount,
-      whitelistProgram: effectiveWl?.programId,
+      whitelist: useWhitelist && resolvedGate?.account ? resolvedGate.account : null,
+      whitelistProgram: resolvedGate?.programId,
       connection: connection.value,
       wallet,
     })
@@ -658,35 +456,24 @@ async function onCreateSubmit() {
       combined.add(...raffleTx.instructions, ...billingTx.instructions)
     }
 
-    const sig = await sendWithTxStatus(connection.value, combined, wallet, wallet.publicKey)
+    const sig = await sendWithTxStatus(connection.value!, combined, wallet, wallet.publicKey)
     if (!sig) throw new Error('Transaction failed')
 
     if (!skipPayment && !intent.noPaymentRequired && intent.paymentId) {
-      const confirmRes = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/billing/confirm-raffle-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ paymentId: intent.paymentId, txSignature: sig }),
+      const { error: confirmError } = await supabase.functions.invoke('billing', {
+        body: { action: 'confirm', tenantId: tenantIdRef.value, paymentId: intent.paymentId, txSignature: sig },
       })
-      if (!confirmRes.ok) {
-        const data = (await confirmRes.json().catch(() => ({}))) as { error?: string }
-        throw new Error(data.error ?? 'Payment confirmation failed')
-      }
+      if (confirmError) throw new Error(confirmError.message ?? 'Payment confirmation failed')
     }
 
-    const postRes = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/raffles`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ rafflePubkey: rafflePda.toBase58() }),
+    const { error: registerError } = await supabase.from('tenant_raffles').insert({
+      tenant_id: tenantIdRef.value,
+      raffle_pubkey: rafflePda.toBase58(),
     })
-    if (!postRes.ok) {
-      const data = (await postRes.json().catch(() => ({}))) as { error?: string }
-      throw new Error(data.error ?? 'Failed to register raffle')
-    }
+    if (registerError) throw new Error(registerError.message ?? 'Failed to register raffle')
 
     await fetchRaffles()
-    showCreateModal.value = false
+    closeRaffleModal()
     createForm.name = ''
     createForm.description = ''
     createForm.ticketMint = ''
@@ -699,46 +486,12 @@ async function onCreateSubmit() {
   }
 }
 
-async function fetchRaffles() {
-  if (!tenantIdRef.value) return
-  slotsLoading.value = true
-  try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/raffles`, { credentials: 'include' })
-    if (res.ok) {
-      const data = (await res.json()) as { raffles: RaffleItem[] }
-      raffles.value = data.raffles ?? []
-      await fetchChainDataForRaffles()
-    } else {
-      raffles.value = []
-    }
-  } catch {
-    raffles.value = []
-  } finally {
-    slotsLoading.value = false
-  }
-}
-
-async function fetchChainDataForRaffles() {
-  if (!connection.value) return
-  const active = raffles.value.filter((r) => !r.closedAt)
-  const next: Record<string, RaffleChainData | null> = {}
-  for (const r of active) {
-    try {
-      const data = await fetchRaffleChainData(connection.value!, r.rafflePubkey)
-      next[r.rafflePubkey] = data
-    } catch {
-      next[r.rafflePubkey] = null
-    }
-  }
-  chainDataByRaffle.value = next
-}
-
 const {
   actionSubmitting,
   actionTxStatus,
   actionError,
   actionErrorRaffle,
-  clearActionError,
+  clearActionError: _clearActionError,
   sendWithTxStatus,
   runRaffleAction,
 } = useAdminRaffleActions({ connection, onSuccess: fetchChainDataForRaffles })
@@ -750,8 +503,7 @@ const prizeMintMeta = useMintMetadataForInput(
 )
 
 function openStartRaffleModal(slot: SlotCard) {
-  selectedRaffleForStart.value = slot
-  showStartRaffleModal.value = true
+  openStartRaffleModalBase(slot)
 }
 
 async function onConfirmStartRaffle() {
@@ -759,18 +511,16 @@ async function onConfirmStartRaffle() {
   if (!slot?.raffle || !connection.value) return
   const wallet = getEscrowWalletFromConnector()
   if (!wallet?.publicKey) return
-  showStartRaffleModal.value = false
+  closeRaffleModal()
   await runRaffleAction(slot.raffle.rafflePubkey, async () => {
     const tx = await buildEnableRaffleTransaction({ rafflePubkey: slot.raffle!.rafflePubkey, wallet })
     const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
     if (!sig) throw new Error('Transaction failed')
   }, 'Failed to start raffle')
-  selectedRaffleForStart.value = null
 }
 
 function onCancelStartRaffle() {
-  showStartRaffleModal.value = false
-  selectedRaffleForStart.value = null
+  closeRaffleModal()
 }
 
 async function onPauseRaffle(slot: SlotCard) {
@@ -794,11 +544,10 @@ async function onResumeRaffle(slot: SlotCard) {
 }
 
 function openEditRaffleModal(slot: SlotCard) {
-  selectedRaffleForEdit.value = slot
   editForm.name = slot.chainData?.name ?? ''
   editForm.description = slot.chainData?.description ?? ''
   editForm.url = slot.chainData?.url ?? ''
-  showEditRaffleModal.value = true
+  openEditRaffleModalBase(slot)
 }
 
 async function onEditRaffleSubmit() {
@@ -806,7 +555,7 @@ async function onEditRaffleSubmit() {
   if (!slot?.raffle || !connection.value) return
   const wallet = getEscrowWalletFromConnector()
   if (!wallet?.publicKey) return
-  showEditRaffleModal.value = false
+  closeRaffleModal()
   await runRaffleAction(slot.raffle.rafflePubkey, async () => {
     const tx = await buildEditRaffleTransaction({
       rafflePubkey: slot.raffle!.rafflePubkey,
@@ -818,7 +567,6 @@ async function onEditRaffleSubmit() {
     const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
     if (!sig) throw new Error('Transaction failed')
   }, 'Failed to edit raffle')
-  selectedRaffleForEdit.value = null
 }
 
 async function onRevealWinner(slot: SlotCard) {
@@ -896,14 +644,13 @@ async function onCloseRaffle(raffle: RaffleItem) {
       })
       const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
       if (!sig) throw new Error('Transaction failed')
-      const res = await fetch(`${apiBase.value}${API_V1}/tenant/${tenantIdRef.value}/raffles/${encodeURIComponent(raffle.rafflePubkey)}/close`, {
-        method: 'PATCH',
-        credentials: 'include',
-      })
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(data.error ?? `HTTP ${res.status}`)
-      }
+      const supabase = useSupabase()
+      const { error: closeError } = await supabase
+        .from('tenant_raffles')
+        .update({ closed_at: new Date().toISOString() })
+        .eq('tenant_id', tenantIdRef.value)
+        .eq('raffle_pubkey', raffle.rafflePubkey)
+      if (closeError) throw new Error(closeError.message)
     },
     'Failed to close raffle',
     fetchRaffles
@@ -911,12 +658,11 @@ async function onCloseRaffle(raffle: RaffleItem) {
 }
 
 function openAddRewardModal(raffle: RaffleItem) {
-  selectedRaffleForReward.value = raffle
   addRewardForm.prizeMint = ''
   addRewardForm.amountDisplay = ''
   addRewardForm.imageUrl = ''
   addRewardError.value = null
-  showAddRewardModal.value = true
+  openAddRewardModalBase(raffle)
 }
 
 async function onAddRewardSubmit() {
@@ -924,7 +670,7 @@ async function onAddRewardSubmit() {
   if (!raffle || !connection.value) return
 
   const prizeMint = addRewardForm.prizeMint.trim()
-  const amountStr = addRewardForm.amountDisplay.trim()
+  const _amountStr = addRewardForm.amountDisplay.trim()
   if (!prizeMint) {
     addRewardError.value = 'Prize mint is required'
     return
@@ -961,8 +707,7 @@ async function onAddRewardSubmit() {
     const sig = await sendWithTxStatus(connection.value, raffleTx, wallet, wallet.publicKey)
     if (!sig) throw new Error('Transaction failed')
 
-    showAddRewardModal.value = false
-    selectedRaffleForReward.value = null
+    closeRaffleModal()
     await fetchRaffles()
   } catch (e) {
     addRewardError.value = e instanceof Error ? e.message : 'Failed to add reward'
@@ -977,13 +722,17 @@ onMounted(async () => {
   if (!id) return
   await fetchRaffles()
   try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${id}/raffle-settings`, { credentials: 'include' })
-    if (res.ok) {
-      const data = await res.json()
-      const s = data.settings
-      if (s?.defaultWhitelist === 'use-default') initialWhitelist.value = '__use_default__'
-      else if (s?.defaultWhitelist?.account) initialWhitelist.value = s.defaultWhitelist.account
-      else initialWhitelist.value = ''
+    const supabase = useSupabase()
+    const { data } = await supabase
+      .from('raffle_settings')
+      .select('settings')
+      .eq('tenant_id', id)
+      .maybeSingle()
+    if (data?.settings) {
+      const s = data.settings as Record<string, unknown>
+      const dg = s.defaultGate
+      const val = dg === undefined ? 'use-default' : dg === null || dg === 'public' ? null : dg === 'use-default' ? 'use-default' : dg === 'admin-only' ? 'admin-only' : (dg && typeof dg === 'object' && (dg as { account?: string }).account ? (dg as { account: string }) : null)
+      initialWhitelist.value = whitelistToCompareStr(val)
     }
   } catch {
     /* ignore */
@@ -1029,10 +778,10 @@ defineExpose({
   color: var(--theme-error);
 }
 
-.raffle-slots {
+:deep(.raffle-slots) {
   margin-top: var(--theme-space-xl);
 }
-.raffle-slots__tx-status {
+:deep(.raffle-slots__tx-status) {
   display: flex;
   align-items: center;
   gap: var(--theme-space-sm);
@@ -1040,10 +789,10 @@ defineExpose({
   font-size: var(--theme-font-sm);
   color: var(--theme-primary);
 }
-.raffle-slots__tx-spinner {
+:deep(.raffle-slots__tx-spinner) {
   animation: raffle-spin 1s linear infinite;
 }
-.raffle-slots__loading {
+:deep(.raffle-slots__loading) {
   display: flex;
   align-items: center;
   gap: var(--theme-space-sm);
@@ -1051,19 +800,23 @@ defineExpose({
   font-size: var(--theme-font-sm);
   padding: var(--theme-space-lg);
 }
-.raffle-slots__spinner {
+:deep(.raffle-slots__spinner) {
   animation: raffle-spin 1s linear infinite;
 }
 @keyframes raffle-spin {
   to { transform: rotate(360deg); }
 }
-.raffle-slots__grid {
+:deep(.raffle-slots__hint) {
+  margin-bottom: var(--theme-space-sm);
+}
+:deep(.raffle-slots__grid) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: var(--theme-space-lg);
+  margin-top: var(--theme-space-md);
 }
 
-.raffle-slot-card {
+:deep(.raffle-slot-card) {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1076,11 +829,11 @@ defineExpose({
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
 }
-.raffle-slot-card--empty:hover:not(:disabled) {
+:deep(.raffle-slot-card--empty:hover:not(:disabled)) {
   border-color: var(--theme-primary);
   background: var(--theme-bg-secondary);
 }
-.raffle-slot-card:disabled {
+:deep(.raffle-slot-card:disabled) {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1089,35 +842,35 @@ defineExpose({
   color: var(--theme-text-muted);
   margin-bottom: var(--theme-space-sm);
 }
-.raffle-slot-card--empty:hover:not(:disabled) .raffle-slot-card__plus {
+:deep(.raffle-slot-card--empty:hover:not(:disabled) .raffle-slot-card__plus) {
   color: var(--theme-primary);
 }
-.raffle-slot-card__label {
+:deep(.raffle-slot-card__label) {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
 }
 
-.raffle-slot-card--upgrade {
+:deep(.raffle-slot-card--upgrade) {
   min-height: 120px;
   border-color: var(--theme-primary);
   border-style: dashed;
   background: transparent;
 }
-.raffle-slot-card--upgrade:hover {
+:deep(.raffle-slot-card--upgrade:hover) {
   background: var(--theme-bg-secondary);
   border-color: var(--theme-primary);
 }
-.raffle-slot-card__upgrade-icon {
+:deep(.raffle-slot-card__upgrade-icon) {
   font-size: 1.5rem;
   color: var(--theme-primary);
   margin-bottom: var(--theme-space-xs);
 }
-.raffle-slot-card__upgrade-label {
+:deep(.raffle-slot-card__upgrade-label) {
   font-size: var(--theme-font-sm);
   font-weight: 600;
   color: var(--theme-primary);
 }
-.raffle-slot-card__upgrade-hint {
+:deep(.raffle-slot-card__upgrade-hint) {
   font-size: var(--theme-font-xs);
   color: var(--theme-text-muted);
   margin-top: 2px;
@@ -1127,22 +880,22 @@ defineExpose({
   scroll-margin-top: var(--theme-space-lg);
 }
 
-.raffle-upgrade-modal {
+:deep(.raffle-upgrade-modal) {
   display: flex;
   flex-direction: column;
   gap: var(--theme-space-lg);
 }
-.raffle-upgrade-modal__hint {
+:deep(.raffle-upgrade-modal__hint) {
   margin: 0;
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
 }
-.raffle-upgrade-modal__options {
+:deep(.raffle-upgrade-modal__options) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--theme-space-md);
 }
-.raffle-upgrade-option {
+:deep(.raffle-upgrade-option) {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1154,151 +907,68 @@ defineExpose({
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
 }
-.raffle-upgrade-option:hover {
+:deep(.raffle-upgrade-option:hover) {
   border-color: var(--theme-primary);
   background: var(--theme-bg-secondary);
 }
-.raffle-upgrade-option--disabled,
-.raffle-upgrade-option--disabled:hover {
+:deep(.raffle-upgrade-option--disabled),
+:deep(.raffle-upgrade-option--disabled:hover) {
   cursor: default;
   opacity: 0.7;
   border-color: var(--theme-border);
   background: var(--theme-bg-card);
 }
-.raffle-upgrade-option--current .raffle-upgrade-option__price {
+:deep(.raffle-upgrade-option--current .raffle-upgrade-option__price) {
   color: var(--theme-text-secondary);
 }
-.raffle-upgrade-option__badge {
+:deep(.raffle-upgrade-option__badge) {
   font-size: var(--theme-font-xs);
   font-weight: 600;
   color: var(--theme-text-muted);
   text-transform: uppercase;
 }
-.raffle-upgrade-option__name {
+:deep(.raffle-upgrade-option__name) {
   font-size: var(--theme-font-lg);
   font-weight: 600;
   color: var(--theme-text-primary);
 }
-.raffle-upgrade-option__slots {
+:deep(.raffle-upgrade-option__slots) {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
 }
-.raffle-upgrade-option__price {
+:deep(.raffle-upgrade-option__price) {
   font-size: var(--theme-font-md);
   font-weight: 600;
   color: var(--theme-primary);
 }
-.raffle-upgrade-modal__note {
+:deep(.raffle-upgrade-modal__note) {
   margin: 0;
   font-size: var(--theme-font-xs);
   color: var(--theme-text-muted);
 }
 
-.raffle-create-form {
+:deep(.raffle-create-form) {
   display: flex;
   flex-direction: column;
   gap: var(--theme-space-md);
   min-width: 320px;
 }
-.raffle-create-form__hint {
+:deep(.raffle-create-form__hint) {
   margin: 0;
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
 }
 
-.raffle-create-form__error {
+:deep(.raffle-create-form__error) {
   margin: 0;
   font-size: var(--theme-font-sm);
   color: var(--theme-error);
 }
-.raffle-create-form__actions {
+:deep(.raffle-create-form__actions) {
   display: flex;
   justify-content: flex-end;
   gap: var(--theme-space-sm);
   margin-top: var(--theme-space-sm);
 }
 
-.raffle-add-reward-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--theme-space-md);
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: hidden;
-  overflow-wrap: break-word;
-}
-.raffle-add-reward-form :deep(input) {
-  max-width: 100%;
-  box-sizing: border-box;
-}
-.raffle-add-reward-form__hint {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
-}
-.raffle-add-reward-form__error {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-error);
-}
-.raffle-add-reward-form__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--theme-space-sm);
-  margin-top: var(--theme-space-sm);
-}
-
-.raffle-mint-row {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--theme-space-xs);
-}
-
-.raffle-mint-row__input {
-  flex: 1;
-  min-width: 0;
-}
-
-.raffle-start-modal {
-  display: flex;
-  flex-direction: column;
-  gap: var(--theme-space-md);
-  min-width: 280px;
-  overflow: hidden;
-}
-.raffle-start-modal__warning {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
-  line-height: 1.5;
-}
-.raffle-start-modal__name {
-  margin: 0;
-  font-weight: 600;
-  font-size: var(--theme-font-base);
-}
-.raffle-start-modal__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--theme-space-sm);
-  margin-top: var(--theme-space-xs);
-}
-
-.raffle-edit-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--theme-space-md);
-  min-width: 320px;
-}
-.raffle-edit-form__hint {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
-}
-.raffle-edit-form__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--theme-space-sm);
-  margin-top: var(--theme-space-sm);
-}
 </style>

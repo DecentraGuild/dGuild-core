@@ -1,0 +1,139 @@
+# Supabase local dev configuration.
+# Docs: https://supabase.com/docs/guides/cli/config
+#
+# Ports 65421-65429 avoid Windows reserved ranges (often 54152-54451).
+# If you hit port conflicts, run: netsh interface ipv4 show excludedportrange protocol=tcp
+
+[api]
+enabled = true
+port = 65421
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[api.tls]
+enabled = false
+
+[db]
+port = 65422
+shadow_port = 65420
+major_version = 15
+
+[db.pooler]
+enabled = false
+port = 65429
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[realtime]
+enabled = true
+ip_version = "IPv6"
+max_header_length = 4096
+
+[studio]
+enabled = true
+port = 65423
+api_url = "http://127.0.0.1"
+openai_api_key = "env(OPENAI_API_KEY)"
+
+[inbucket]
+enabled = true
+port = 65424
+smtp_port = 65425
+pop3_port = 65426
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[storage.image_transformation]
+enabled = true
+
+[auth]
+enabled = true
+# Base URL for redirects and Web3 SIWS URI validation.
+site_url = "http://localhost:3000"
+# Allow Web3 sign-in from platform (3000), tenant (3002), and 127.0.0.1 variants.
+additional_redirect_urls = [
+  "http://localhost:3000",
+  "http://localhost:3000/**",
+  "http://localhost:3002",
+  "http://localhost:3002/**",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3000/**",
+  "http://127.0.0.1:3002",
+  "http://127.0.0.1:3002/**"
+]
+# Session JWT expiry in seconds (12 hours).
+jwt_expiry = 43200
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+minimum_password_length = 6
+password_requirements = ""
+
+[auth.rate_limit]
+# Limit sign-in attempts per wallet to prevent abuse (Web3, token refresh, etc.)
+token_refresh = 150
+sign_in_sign_ups = 30
+anonymous_users = 30
+token_verifications = 30
+web3 = 30
+
+[auth.web3.solana]
+enabled = true
+
+# Custom access token hook: embed wallet_address in JWT for RLS and Edge Functions.
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
+[auth.external.google]
+enabled = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+
+[edge_runtime]
+enabled = true
+policy = "oneshot"
+inspector_port = 8083
+
+# Disable JWT verification in edge runtime (ES256 CryptoKey bug in 1.7+).
+# Functions handle auth themselves (billing: payerWallet in body; platform: getUserClient; etc).
+[functions.billing]
+verify_jwt = false
+import_map = "./functions/billing/deno.json"
+[functions.platform]
+verify_jwt = false
+[functions.discord-bot]
+verify_jwt = false
+import_map = "./functions/discord-bot/deno.json"
+[functions.discord-server]
+verify_jwt = false
+[functions.discord-verify]
+verify_jwt = false
+[functions.gates]
+verify_jwt = false
+[functions.marketplace]
+verify_jwt = false
+[functions.tenant-catalog]
+verify_jwt = false
+[functions.cron-lifecycle]
+verify_jwt = false
+[functions.cron-tracker]
+verify_jwt = false
+[functions.watchtower]
+verify_jwt = false
+[functions.qualification]
+verify_jwt = false
+[functions.shipment]
+verify_jwt = false
+[functions.crafter]
+verify_jwt = false
+
+[analytics]
+enabled = false

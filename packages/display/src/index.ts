@@ -70,6 +70,60 @@ export function truncateAddress(
 }
 
 /**
+ * Format USDC amount for display (no currency symbol).
+ */
+export function formatUsdc(value: number): string {
+  return parseFloat(value.toFixed(6)).toString()
+}
+
+/**
+ * Format UI (human) amount for display. Strips trailing zeros.
+ * Use for token amounts, balances, etc.
+ * @param maxDecimals - Max decimal places; 0 for NFTs (floors to integer).
+ */
+export function formatUiAmount(amount: number | null | undefined, maxDecimals = 6): string {
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return '0'
+  if (maxDecimals === 0) return String(Math.floor(amount))
+  if (Number.isInteger(amount)) return String(amount)
+  return amount.toFixed(maxDecimals).replace(/\.?0+$/, '')
+}
+
+/**
+ * Format raw token amount (on-chain units) for UI display.
+ * Always use this when displaying amounts from chain/API to avoid showing raw units.
+ * Callers must pass decimals from catalog/mint_metadata or RPC fetch. No assumption.
+ * @param rawAmount - Raw amount string (e.g. from holder_wallets, token account)
+ * @param decimals - Token decimals from catalog or RPC; 0 for NFTs (count); null for SPL when unknown
+ * @param kind - 'NFT' forces count display (decimals 0); 'SPL' uses decimals (requires decimals when not 0)
+ */
+export function formatRawTokenAmount(
+  rawAmount: string | { toString: () => string } | null | undefined,
+  decimals: number | null | undefined,
+  kind?: 'SPL' | 'NFT'
+): string {
+  if (rawAmount === null || rawAmount === undefined) return '0'
+  const str = typeof rawAmount === 'object' && 'toString' in rawAmount ? rawAmount.toString() : String(rawAmount)
+  if (!str || str === '0') return '0'
+  const dec = kind === 'NFT' ? 0 : decimals
+  if (dec == null || !Number.isFinite(dec)) return '?'
+  const human = fromRawUnits(str, dec)
+  return formatUiAmount(human, dec === 0 ? 0 : 6)
+}
+
+/**
+ * Format ISO date string for display (medium date style).
+ */
+export function formatDate(iso: string | Date): string {
+  try {
+    const d = typeof iso === 'string' ? new Date(iso) : iso
+    if (Number.isNaN(d.getTime())) return String(iso)
+    return d.toLocaleDateString(undefined, { dateStyle: 'medium' })
+  } catch {
+    return String(iso)
+  }
+}
+
+/**
  * Escrow price: program stores human-readable per-unit price (request tokens per 1 deposit unit).
  * Use as-is. Do not scale by decimals or any other factor.
  */

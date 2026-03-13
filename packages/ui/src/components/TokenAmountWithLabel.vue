@@ -12,7 +12,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { sanitizeTokenLabel, truncateAddress } from '@decentraguild/display'
+import { formatUiAmount, sanitizeTokenLabel, truncateAddress } from '@decentraguild/display'
 
 const props = withDefaults(
   defineProps<{
@@ -26,13 +26,9 @@ const props = withDefaults(
   { decimals: 0, showMintShort: false }
 )
 
-/** Raw number for display until a new formatter is added. No K/M, no decimal rules. */
-function rawAmountString(amount: number): string {
-  if (amount === null || amount === undefined || !Number.isFinite(amount)) return '0'
-  return Number.isInteger(amount) ? String(amount) : amount.toFixed(6).replace(/\.?0+$/, '')
-}
-
-const formattedAmount = computed(() => rawAmountString(props.amount))
+const formattedAmount = computed(() =>
+  formatUiAmount(props.amount, props.decimals ?? 6)
+)
 const mintShort = computed(() => truncateAddress(props.mint, 6, 4))
 const displayLabel = computed(() => {
   const dec = props.decimals ?? 0

@@ -18,10 +18,10 @@ import {
   lightenHex,
   darkenHex,
   mixHex,
-  contrastColor,
   hexToRgba,
   isDark,
   BORDER_RADIUS_PRESETS,
+  getRadiusLevelFromTheme,
 } from './color-utils'
 
 export interface ThemeInputs {
@@ -29,10 +29,18 @@ export interface ThemeInputs {
   primary: string
   /** Page background color. */
   background: string
-  /** Primary text color. */
-  text: string
-  /** Muted text color. */
-  textMuted?: string
+  /** Primary text/foreground color. */
+  foreground: string
+  /** Muted text color; derived when omitted. */
+  mutedForeground?: string
+  /** Card/popover surface color; derived from background when omitted. */
+  card?: string
+  /** Secondary surface (buttons, ghost hover); derived when omitted. */
+  secondary?: string
+  /** Accent highlight color; derived from primary when omitted. */
+  accent?: string
+  /** Destructive/danger actions; defaults to error when omitted. */
+  destructive?: string
   /** Override border color; auto-derived when omitted. */
   border?: string
   status?: {
@@ -71,8 +79,12 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
   const {
     primary,
     background: bg,
-    text,
-    textMuted: rawMuted,
+    foreground: fg,
+    mutedForeground: rawMuted,
+    card: cardOverride,
+    secondary: secondaryOverride,
+    accent: accentOverride,
+    destructive: destructiveOverride,
     border: borderOverride,
     status = {},
     trade = {},
@@ -83,14 +95,16 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
     fontMono = ['JetBrains Mono', 'Fira Code', 'monospace'],
   } = inputs
 
-  const textMuted = rawMuted ?? (isDark(text) ? lightenHex(text, 0.55) : darkenHex(text, 0.45))
-  const textSecondary = mixHex(text, textMuted, 0.5)
+  const textMuted = rawMuted ?? (isDark(fg) ? lightenHex(fg, 0.55) : darkenHex(fg, 0.45))
+  const textSecondary = mixHex(fg, textMuted, 0.5)
 
   // Derive background scale
-  const bgSecondary = isDark(bg) ? lightenHex(bg, 0.04) : darkenHex(bg, 0.04)
-  const bgCard = isDark(bg) ? lightenHex(bg, 0.07) : darkenHex(bg, 0.07)
+  const bgSecondaryDerived = isDark(bg) ? lightenHex(bg, 0.04) : darkenHex(bg, 0.04)
+  const bgCardDerived = isDark(bg) ? lightenHex(bg, 0.07) : darkenHex(bg, 0.07)
   const bgMuted = isDark(bg) ? lightenHex(bg, 0.12) : darkenHex(bg, 0.12)
   const backdrop = hexToRgba(bg, 0.78)
+  const bgSecondary = secondaryOverride ?? bgSecondaryDerived
+  const bgCard = cardOverride ?? bgCardDerived
 
   // Border – derived from background unless explicitly provided
   const borderDefault = borderOverride ?? (isDark(bg) ? lightenHex(bg, 0.15) : darkenHex(bg, 0.15))
@@ -100,16 +114,15 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
   const primaryHover = darkenHex(primary, 0.08)
   const primaryLight = lightenHex(primary, 0.2)
   const primaryDark = darkenHex(primary, 0.15)
-  const primaryInverse = contrastColor(primary)
 
-  // Secondary = darkened primary
+  // Secondary (brand) = darkened primary
   const secondary = darkenHex(primary, 0.25)
   const secondaryHover = darkenHex(secondary, 0.08)
   const secondaryLight = lightenHex(secondary, 0.2)
   const secondaryDark = darkenHex(secondary, 0.15)
 
-  // Accent = primary (can diverge later)
-  const accent = primary
+  // Accent = override or primary
+  const accent = accentOverride ?? primary
   const accentHover = darkenHex(accent, 0.1)
 
   // Status
@@ -117,11 +130,12 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
   const error = status.error ?? '#cf0000'
   const warning = status.warning ?? '#ff6b35'
   const info = status.info ?? '#00d4ff'
+  const destructive = destructiveOverride ?? error
 
-  // Trade
-  const buy = trade.buy ?? '#00ff00'
-  const sell = trade.sell ?? '#ff0000'
-  const tradeTrade = trade.trade ?? '#ffaa00'
+  // Trade derives from status: Sell=Positive, Buy=Negative, Trade=Warning
+  const buy = trade.buy ?? error
+  const sell = trade.sell ?? success
+  const tradeTrade = trade.trade ?? warning
 
   // Shadows – glow derives from primary color
   const glowRgba = hexToRgba(primary, 0.28)
@@ -147,9 +161,9 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
     secondary: { main: secondary, hover: secondaryHover, light: secondaryLight, dark: secondaryDark },
     accent: { main: accent, hover: accentHover },
     background: { primary: bg, secondary: bgSecondary, card: bgCard, muted: bgMuted, backdrop },
-    text: { primary: text, secondary: textSecondary, muted: textMuted },
+    text: { primary: fg, secondary: textSecondary, muted: textMuted },
     border: { default: borderDefault, light: borderLight },
-    status: { success, error, warning, info },
+    status: { success, error, warning, info, destructive },
     trade: {
       buy,
       buyHover: darkenHex(buy, 0.1),
@@ -240,18 +254,20 @@ export function themeToInputs(theme: TenantTheme): ThemeInputs {
   const bwMatch = (borderWidth.thin ?? '1px').match(/^(\d+)px$/)
   const borderWidthPx = bwMatch ? Math.min(10, Math.max(1, parseInt(bwMatch[1], 10))) : 1
 
+  const radiusLevel = getRadiusLevelFromTheme(theme)
+
   return {
     primary: c.primary?.main ?? '#00951a',
     background: c.background?.primary ?? '#0a0a0f',
-    text: c.text?.primary ?? '#ffffff',
-    textMuted: c.text?.muted,
+    foreground: c.text?.primary ?? '#ffffff',
+    mutedForeground: c.text?.muted,
+    card: c.background?.card,
+    secondary: c.background?.secondary,
+    accent: c.accent?.main,
+    destructive: c.status?.destructive,
     border: c.border?.default,
     status: c.status,
-    trade: {
-      buy: c.trade?.buy,
-      sell: c.trade?.sell,
-      trade: c.trade?.trade,
-    },
+    radiusLevel,
     spacingLevel,
     borderWidthPx,
     fontPrimary: theme.fonts?.primary,

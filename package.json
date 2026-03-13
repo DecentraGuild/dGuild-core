@@ -5,12 +5,19 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --concurrency 15",
+    "supabase": "supabase",
+    "db:generate-seed": "node scripts/generate-seed.mjs",
+    "db:seed": "node scripts/generate-seed.mjs && pnpm supabase db reset",
+    "db:sync": "node scripts/sync-tenant-config.mjs",
+    "db:export-tenant": "node scripts/export-tenant-config.mjs",
     "lint": "pnpm exec eslint apps packages",
     "build:platform": "pnpm exec turbo run build --filter=./packages/* --filter=@decentraguild/config && pnpm --filter platform generate",
     "build:tenant": "pnpm exec turbo run build --filter=./packages/* --filter=./config && pnpm --filter tenant generate"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.98.0",
     "@eslint/js": "^10.0.0",
+    "supabase": "^2.0.0",
     "eslint": "^10.0.0",
     "eslint-plugin-vue": "^10.0.0",
     "turbo": "^2.8.9",

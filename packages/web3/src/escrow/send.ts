@@ -1,5 +1,6 @@
 import type { Connection } from '@solana/web3.js'
 import { Transaction, type PublicKey } from '@solana/web3.js'
+import type { Keypair } from '@solana/web3.js'
 import type { Wallet } from './types.js'
 
 export interface SendAndConfirmOptions {
@@ -7,12 +8,17 @@ export interface SendAndConfirmOptions {
   simulate?: boolean
   /** Called with status updates during the transaction lifecycle. */
   onStatus?: (status: 'signing' | 'sending' | 'confirming') => void
+  /**
+   * Extra signers (e.g. mint keypair for CreateMint). These are partialSigned before
+   * the wallet signs. Use when the transaction requires signers the wallet doesn't control.
+   */
+  signers?: Keypair[]
 }
 
 /**
- * Sets recent blockhash and fee payer on the transaction, signs with the wallet,
- * optionally simulates, sends, and confirms. Call this after building a transaction
- * (builders no longer set blockhash/feePayer).
+ * Sets recent blockhash and fee payer on the transaction, optionally partialSigns with
+ * extra signers, then signs with the wallet, optionally simulates, sends, and confirms.
+ * Call this after building a transaction (builders no longer set blockhash/feePayer).
  */
 export async function sendAndConfirmTransaction(
   connection: Connection,
@@ -21,7 +27,7 @@ export async function sendAndConfirmTransaction(
   feePayer: PublicKey,
   options: SendAndConfirmOptions = {}
 ): Promise<string> {
-  const { simulate = true, onStatus } = options
+  const { simulate = true, onStatus, signers = [] } = options
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
   transaction.recentBlockhash = blockhash
   transaction.feePayer = feePayer
@@ -32,6 +38,9 @@ export async function sendAndConfirmTransaction(
 
   onStatus?.('signing')
   const signed = await wallet.signTransaction(transaction)
+  for (const kp of signers) {
+    signed.partialSign(kp)
+  }
   if (simulate) {
     const sim = await connection.simulateTransaction(signed)
     if (sim.value.err) {

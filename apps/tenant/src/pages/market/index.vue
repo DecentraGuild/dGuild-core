@@ -40,6 +40,8 @@
         </main>
       </div>
       <EscrowDetailModal
+        v-if="escrowId"
+        :key="escrowId"
         :model-value="escrowModalOpen"
         :escrow-id="escrowId"
         :fill-disabled="marketplaceDeactivating"
@@ -51,7 +53,7 @@
             <div class="create-trade-modal__header">
               <h3>Create trade with this asset</h3>
               <button type="button" class="create-trade-modal__close" aria-label="Close" @click="offerRequestChoiceOpen = false">
-                <Icon icon="mdi:close" />
+                <Icon icon="lucide:x" />
               </button>
             </div>
             <p class="create-trade-modal__choice-hint">Start as offer (you give this) or request (you want this)?</p>
@@ -70,7 +72,7 @@
             <div class="create-trade-modal__header">
               <h3>Create trade</h3>
               <button type="button" class="create-trade-modal__close" aria-label="Close" @click="createTradeModalOpen = false">
-                <Icon icon="mdi:close" />
+                <Icon icon="lucide:x" />
               </button>
             </div>
             <CreateTradeForm
@@ -93,17 +95,17 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getModuleState, isModuleVisibleToMembers } from '@decentraguild/core'
-import { PageSection } from '@decentraguild/ui/components'
 import { useTenantStore } from '~/stores/tenant'
-import { useMarketplaceScope } from '~/composables/useMarketplaceScope'
-import { useMarketplaceTree } from '~/composables/useMarketplaceTree'
+import { useMarketplaceScope } from '~/composables/marketplace/useMarketplaceScope'
+import { useMarketplaceTree } from '~/composables/marketplace/useMarketplaceTree'
+import { useMintLabels } from '~/composables/mint/useMintLabels'
 import { FEATURES } from '~/config/feature-flags'
 import { Icon } from '@iconify/vue'
 
 const MarketTree = defineAsyncComponent(() => import('~/modules/marketplace/components/MarketTree.vue'))
 const MarketBrowseView = defineAsyncComponent(() => import('~/modules/marketplace/components/MarketBrowseView.vue'))
 const MarketOpenTradesView = defineAsyncComponent(() => import('~/modules/marketplace/components/MarketOpenTradesView.vue'))
-const EscrowDetailModal = defineAsyncComponent(() => import('~/modules/marketplace/components/EscrowDetailModal.vue'))
+import EscrowDetailModal from '~/modules/marketplace/components/EscrowDetailModal.vue'
 const CreateTradeForm = defineAsyncComponent(() => import('~/modules/marketplace/components/CreateTradeForm.vue'))
 
 definePageMeta({ layout: 'default' })
@@ -111,7 +113,7 @@ definePageMeta({ layout: 'default' })
 const route = useRoute()
 const router = useRouter()
 const tenantStore = useTenantStore()
-const { slug, marketplaceSettings } = storeToRefs(tenantStore)
+const { slug: _slug, marketplaceSettings } = storeToRefs(tenantStore)
 
 const tenant = computed(() => tenantStore.tenant)
 const marketplaceState = computed(() => getModuleState(tenant.value?.modules?.marketplace))
@@ -121,7 +123,8 @@ const marketplaceDeactivating = computed(() => marketplaceState.value === 'deact
 const createDisabled = computed(() => !FEATURES.marketplace.createTrade || marketplaceDeactivating.value)
 const activeTab = computed(() => (route.query.tab === 'open-trades' ? 'open-trades' : 'browse'))
 
-const { entries } = useMarketplaceScope(slug)
+const { entries, mintsSet } = useMarketplaceScope()
+const { labelByMint } = useMintLabels(mintsSet)
 const {
   tree,
   selectedNodeId,
@@ -132,7 +135,7 @@ const {
   selectNode,
   selectNodeByBreadcrumbIndex,
   setSelectedDetailMint,
-} = useMarketplaceTree(entries, marketplaceSettings)
+} = useMarketplaceTree(entries, marketplaceSettings, labelByMint)
 
 watch(
   selectedNode,
@@ -270,7 +273,8 @@ function onEscrowModalClose() {
 }
 
 .create-trade-modal {
-  background: var(--theme-bg-primary);
+  background: var(--theme-bg-primary, #16121c);
+  color: var(--theme-text-primary, #ffffff);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
   max-width: min(90vw, 36rem);
@@ -291,21 +295,26 @@ function onEscrowModalClose() {
 .create-trade-modal__header h3 {
   margin: 0;
   font-size: var(--theme-font-lg);
+  color: var(--theme-text-primary, #ffffff);
 }
 
 .create-trade-modal__close {
   padding: var(--theme-space-xs);
   background: none;
   border: none;
-  color: var(--theme-text-secondary);
+  color: var(--theme-text-secondary, #c8c8d1);
   cursor: pointer;
   font-size: 1.25rem;
+}
+
+.create-trade-modal__close:hover {
+  color: var(--theme-text-primary, #ffffff);
 }
 
 .create-trade-modal__choice-hint {
   margin: 0 0 var(--theme-space-md);
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
+  color: var(--theme-text-secondary, #c8c8d1);
 }
 
 .create-trade-modal__choice-actions {

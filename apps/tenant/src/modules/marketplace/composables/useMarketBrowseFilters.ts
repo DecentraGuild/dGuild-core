@@ -9,7 +9,7 @@ import {
   filterNFTsByTraits,
   getUniqueTraits,
 } from '~/utils/nftFilterHelpers'
-import type { MarketplaceAsset } from '~/composables/useMarketplaceAssets'
+import type { MarketplaceAsset } from '~/composables/marketplace/useMarketplaceAssets'
 
 export interface UseMarketBrowseFiltersOptions {
   /** All asset cards (before search/trait filter). */

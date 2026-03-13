@@ -1,69 +1,70 @@
 <template>
   <div class="admin__split">
     <div class="admin__panel">
-    <Card>
-      <h3>Billing History</h3>
-      <div v-if="loading" class="admin__billing-loading">
-        <Icon icon="mdi:loading" class="admin__spinner" />
-        <span>Loading payments...</span>
-      </div>
-      <div v-else-if="payments.length === 0" class="admin__billing-empty">
-        No payments recorded yet.
-      </div>
-      <table v-else class="admin__billing-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Module</th>
-            <th>Type</th>
-            <th>Amount</th>
-            <th>Period</th>
-            <th>End date</th>
-            <th>Tx</th>
-            <th>Invoice</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="p in payments" :key="p.id">
-            <td>{{ formatPaymentDate(p.confirmedAt) }}</td>
-            <td>{{ MODULE_NAV[p.moduleId]?.label ?? p.moduleId }}</td>
-            <td>{{ formatPaymentType(p) }}</td>
-            <td class="admin__billing-amount">{{ formatUsdc(p.amountUsdc) }} USDC</td>
-            <td>{{ p.billingPeriod }}</td>
-            <td>{{ formatPaymentDate(p.periodEnd) }}</td>
-            <td>
-              <a
-                v-if="p.txSignature"
-                :href="`https://solscan.io/tx/${p.txSignature}`"
-                target="_blank"
-                rel="noopener"
-                class="admin__billing-tx-link"
-              >
-                <Icon icon="mdi:open-in-new" />
-              </a>
-            </td>
-            <td>
-              <button class="admin__billing-invoice-btn" @click="downloadInvoice(p.id)">
-                <Icon icon="mdi:file-download-outline" />
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </Card>
+      <Card>
+        <h3>Billing History</h3>
+        <div v-if="loading" class="admin__billing-loading">
+          <Icon icon="lucide:loader-2" class="admin__spinner" />
+          <span>Loading payments...</span>
+        </div>
+        <div v-else-if="payments.length === 0" class="admin__billing-empty">
+          No payments recorded yet.
+        </div>
+        <table v-else class="admin__billing-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Module</th>
+              <th>Type</th>
+              <th>Amount</th>
+              <th>Period</th>
+              <th>End date</th>
+              <th>Tx</th>
+              <th>Invoice</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in payments" :key="p.id">
+              <td>{{ formatPaymentDate(p.confirmedAt) }}</td>
+              <td>{{ MODULE_NAV[p.moduleId]?.label ?? p.moduleId }}</td>
+              <td>{{ formatPaymentType(p) }}</td>
+              <td class="admin__billing-amount">{{ formatUsdc(p.amountUsdc) }} USDC</td>
+              <td>{{ formatPeriod(p) }}</td>
+              <td>{{ formatPeriodEnd(p) }}</td>
+              <td>
+                <a
+                  v-if="p.txSignature"
+                  :href="`https://solscan.io/tx/${p.txSignature}`"
+                  target="_blank"
+                  rel="noopener"
+                  class="admin__billing-tx-link"
+                >
+                  <Icon icon="lucide:external-link" />
+                </a>
+              </td>
+              <td>
+                <button class="admin__billing-invoice-btn" @click="downloadInvoice(p.id)">
+                  <Icon icon="lucide:download" />
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </Card>
     </div>
     <div aria-hidden="true" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { Card } from '@decentraguild/ui/components'
+import { formatUsdc } from '@decentraguild/display'
+import { Card } from '~/components/ui/card'
 import { Icon } from '@iconify/vue'
 import { useTenantStore } from '~/stores/tenant'
 import { MODULE_NAV } from '~/config/modules'
-import { API_V1 } from '~/utils/apiBase'
+import { useSupabase } from '~/composables/core/useSupabase'
 
-const props = defineProps<{
+defineProps<{
   slug: string | null
 }>()
 
@@ -88,19 +89,30 @@ interface BillingPaymentRecord {
   } | null
 }
 
-const apiBase = useApiBase()
-
 async function load() {
   if (!tenantId.value) return
   loading.value = true
   try {
-    const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/billing/payments`,
-      { credentials: 'include' },
-    )
-    if (res.ok) {
-      const data = (await res.json()) as { payments: BillingPaymentRecord[] }
-      payments.value = data.payments
+    const supabase = useSupabase()
+    const { data, error } = await supabase
+      .from('billing_payments')
+      .select('id, module_id, payment_type, amount_usdc, billing_period, period_end, tx_signature, confirmed_at, price_snapshot')
+      .eq('tenant_id', tenantId.value)
+      .eq('status', 'confirmed')
+      .order('confirmed_at', { ascending: false })
+
+    if (!error && data) {
+      payments.value = data.map((r) => ({
+        id: r.id as string,
+        moduleId: r.module_id as string,
+        paymentType: r.payment_type as string,
+        amountUsdc: Number(r.amount_usdc),
+        billingPeriod: r.billing_period as string,
+        periodEnd: r.period_end as string | null,
+        txSignature: r.tx_signature as string | null,
+        confirmedAt: r.confirmed_at as string | null,
+        priceSnapshot: r.price_snapshot as BillingPaymentRecord['priceSnapshot'],
+      }))
     }
   } catch {
     // silent
@@ -133,6 +145,7 @@ function formatPaymentType(p: BillingPaymentRecord): string {
   }
   const labels: Record<string, string> = {
     initial: 'Initial',
+    registration: 'Registration',
     upgrade_prorate: 'Upgrade',
     renewal: 'Renewal',
     extend: 'Extension',
@@ -140,22 +153,31 @@ function formatPaymentType(p: BillingPaymentRecord): string {
   return labels[p.paymentType] ?? p.paymentType
 }
 
-function formatUsdc(value: number): string {
-  return parseFloat(value.toFixed(6)).toString()
+/** Admin registration is one-time permanent; slug and other modules are recurring. */
+function isOneTimePayment(p: BillingPaymentRecord): boolean {
+  return p.moduleId === 'admin' && p.paymentType === 'registration'
 }
+
+function formatPeriod(p: BillingPaymentRecord): string {
+  return isOneTimePayment(p) ? 'one-time' : p.billingPeriod
+}
+
+function formatPeriodEnd(p: BillingPaymentRecord): string {
+  return isOneTimePayment(p) ? '--' : formatPaymentDate(p.periodEnd)
+}
+
 
 async function downloadInvoice(paymentId: string) {
   if (!tenantId.value) return
   try {
-    const res = await fetch(
-      `${apiBase.value}${API_V1}/tenant/${tenantId.value}/billing/payments/${paymentId}/invoice`,
-      { credentials: 'include' },
-    )
-    if (!res.ok) return
-    const data = (await res.json()) as { invoice: Record<string, unknown> }
-    const blob = new Blob([JSON.stringify(data.invoice, null, 2)], {
-      type: 'application/json',
-    })
+    const supabase = useSupabase()
+    const { data, error } = await supabase
+      .from('billing_payments')
+      .select('*')
+      .eq('id', paymentId)
+      .single()
+    if (error || !data) return
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

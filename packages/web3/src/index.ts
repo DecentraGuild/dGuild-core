@@ -4,18 +4,12 @@ export {
   subscribeToConnectorState,
   connectWallet,
   disconnectWallet,
+  isBackpackConnector,
   signMessageForAuth,
   getWalletAndAccount,
   getEscrowWalletFromConnector,
   type ConnectorStateSnapshot,
 } from './connector.js'
-
-export {
-  signInWithWallet,
-  signOut,
-  type AuthSignInResult,
-  type AuthSignInError,
-} from './auth.js'
 
 export {
   buildInitializeTransaction,
@@ -87,6 +81,23 @@ export type {
   BuildRemoveFromWhitelistParams,
   BuildDeleteWhitelistParams,
 } from './whitelist/index.js'
+
+export {
+  buildCreateMintAndBillingTransaction,
+  buildCreateMetadataTransaction,
+  buildMintTransaction,
+  buildBurnTransaction,
+  buildUpdateMetadataTransaction,
+  buildCloseMintTransaction,
+} from './crafter/index.js'
+export type {
+  BuildCreateMintAndBillingParams,
+  BuildCreateMetadataParams,
+  BuildMintTransactionParams,
+  BuildBurnTransactionParams,
+  BuildUpdateMetadataTransactionParams,
+  BuildCloseMintTransactionParams,
+} from './crafter/index.js'
 
 export {
   deriveRafflePda,

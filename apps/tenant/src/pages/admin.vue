@@ -5,16 +5,13 @@
         v-if="tab === 'general'"
         :form="form"
         :tenant="tenant ?? null"
-        :show-slug-unlock="showSlugUnlock"
         :desired-slug="desiredSlug"
         :slug-check-status="slugCheckStatus"
         :slug-checking="slugChecking"
         :slug-claiming="slugClaiming"
-        @toggle-slug-unlock="toggleSlugUnlock"
         @update:desired-slug="(v: string) => { slugClaim.desiredSlug.value = v }"
         @slug-check-blur="slugClaim.onSlugCheckBlur()"
         @check-slug="slugClaim.checkSlugAvailability()"
-        @claim-slug="slugClaim.claimSlug()"
       >
         <template #sidebar>
           <AdminPricingWidget
@@ -36,6 +33,11 @@
       <AdminThemingTab
         v-else-if="tab === 'theming'"
         :branding="form.branding"
+      />
+
+      <AdminGatingTab
+        v-else-if="tab === 'gating'"
+        :default-gate-ref="toRef(form, 'defaultGate')"
       />
 
       <AdminModulesTab
@@ -65,7 +67,7 @@
         :save-error="saveError"
         @saved="onMarketplaceSaved"
         @save="(p: BillingPeriod) => handleBillingPayment('marketplace', p)"
-        @deploy="(p: BillingPeriod) => deployModule('marketplace', p)"
+        @deploy="(p: BillingPeriod, cond?: Record<string, number | boolean>) => deployModule('marketplace', p, cond)"
         @reactivate="(p: BillingPeriod) => handleReactivate('marketplace', p)"
       />
 
@@ -95,25 +97,42 @@
         @deploy="(p: BillingPeriod, cond?: Record<string, number>) => handleRaffleBilling(p, cond)"
       />
 
-      <AdminWhitelistTab
-        v-else-if="tab === 'whitelist'"
+      <AdminGatesTab
+        v-else-if="tab === 'gates'"
         :slug="slug ?? ''"
-        :module-state="whitelistModuleState"
+        :module-state="gatesModuleState"
         :deploying="deploying"
-        @deploy="(p: BillingPeriod) => deployModule('whitelist', p)"
+        @deploy="(p: BillingPeriod) => deployModule('gates', p)"
       />
 
       <AdminAddressbookTab
         v-else-if="tab === 'addressbook'"
         :slug="slug ?? ''"
-        :module-state="addressbookModuleState"
-        :subscription="subscriptions.addressbook ?? null"
+      />
+
+      <AdminWatchtowerTab
+        v-else-if="tab === 'watchtower'"
+        ref="watchtowerTabRef"
+        :slug="slug ?? ''"
+        :module-state="watchtowerModuleState"
+        :subscription="subscriptions.watchtower ?? null"
         :saving="saving"
         :deploying="deploying"
         :save-error="saveError"
-        @save="(p: BillingPeriod) => handleBillingPayment('addressbook', p)"
-        @deploy="(p: BillingPeriod) => deployModule('addressbook', p)"
-        @reactivate="(p: BillingPeriod) => handleReactivate('addressbook', p)"
+        @save="(p: BillingPeriod) => handleWatchtowerSave(p)"
+        @deploy="(p: BillingPeriod) => handleWatchtowerDeploy(p)"
+        @reactivate="(p: BillingPeriod) => handleReactivate('watchtower', p)"
+      />
+
+      <AdminShipmentListTab
+        v-else-if="tab === 'shipment-list'"
+        :slug="slug ?? ''"
+      />
+
+      <AdminPlanShipmentTab
+        v-else-if="tab === 'plan-shipment'"
+        :slug="slug ?? ''"
+        :module-state="shipmentModuleState"
       />
 
       <AdminBillingTab
@@ -121,8 +140,8 @@
         :slug="slug"
       />
 
-      <div v-if="!hasWidgetTab && tab !== 'billing'" class="admin__actions">
-        <Button variant="primary" :disabled="saving" @click="save">
+      <div v-if="!hasWidgetTab && tab !== 'billing' && tab !== 'addressbook' && tab !== 'modules' && tab !== 'gating'" class="admin__actions">
+        <Button variant="default" :disabled="saving" @click="save">
           Save
         </Button>
         <p v-if="saveError" class="admin__error">{{ saveError }}</p>
@@ -132,11 +151,11 @@
     <AdminModuleActivationModal
       :model-value="showActivationModal"
       :module-id="activationModalModuleId"
-      @update:model-value="showActivationModal = $event; if (!$event) activationModalModuleId = null"
+      @update:model-value="onActivationModalClose"
       @activate="confirmModuleActivate"
     />
 
-    <Modal
+    <SimpleModal
       :model-value="showDeactivateConfirm"
       title="Disable module?"
       @update:model-value="(v: boolean) => !v && cancelDeactivate()"
@@ -146,19 +165,19 @@
           The module will stay active until the end of your current billing period.
           After that, it will turn off automatically.
         </p>
-        <p v-if="subscriptions[pendingDeactivateModuleId]?.periodEnd" class="admin__deactivate-date">
-          End of period: {{ formatDeactivationDate(subscriptions[pendingDeactivateModuleId].periodEnd) }}
+        <p v-if="getSubscriptionPeriodEnd(pendingDeactivateModuleId!)" class="admin__deactivate-date">
+          End of period: {{ formatDeactivationDate(getSubscriptionPeriodEnd(pendingDeactivateModuleId!)!) }}
         </p>
         <div class="admin__deactivate-actions">
           <Button variant="secondary" @click="cancelDeactivate">
             Cancel
           </Button>
-          <Button variant="primary" @click="confirmDeactivate">
+          <Button variant="default" @click="confirmDeactivate">
             Disable at period end
           </Button>
         </div>
       </div>
-    </Modal>
+    </SimpleModal>
   </PageSection>
 </template>
 
@@ -167,25 +186,36 @@ definePageMeta({ middleware: 'admin-auth' })
 import type { BillingPeriod } from '@decentraguild/billing'
 import { getModuleState } from '@decentraguild/core'
 import { getModuleCatalogEntry } from '@decentraguild/config'
-import { PageSection, Button, Modal } from '@decentraguild/ui/components'
+import { Button } from '~/components/ui/button'
+import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import { useTenantStore } from '~/stores/tenant'
 import { MODULE_SUBNAV } from '~/config/modules'
 import type { MarketplaceSettings } from '@decentraguild/core'
-import AdminGeneralTab from '~/components/admin/AdminGeneralTab.vue'
-import AdminThemingTab from '~/components/admin/AdminThemingTab.vue'
-import AdminModulesTab from '~/components/admin/AdminModulesTab.vue'
-import AdminMarketplaceTab from '~/components/admin/AdminMarketplaceTab.vue'
-import AdminDiscordTab from '~/components/admin/AdminDiscordTab.vue'
-import AdminRaffleTab from '~/components/admin/AdminRaffleTab.vue'
-import AdminWhitelistTab from '~/components/admin/AdminWhitelistTab.vue'
-import AdminAddressbookTab from '~/components/admin/AdminAddressbookTab.vue'
-import AdminBillingTab from '~/components/admin/AdminBillingTab.vue'
-import AdminModuleActivationModal from '~/components/AdminModuleActivationModal.vue'
-import AdminPricingWidget from '~/components/AdminPricingWidget.vue'
-import { useAdminSubscriptions } from '~/composables/useAdminSubscriptions'
-import { useAdminForm } from '~/composables/useAdminForm'
-import { useAdminBilling } from '~/composables/useAdminBilling'
-import { useSlugClaim } from '~/composables/useSlugClaim'
+import { defineAsyncComponent } from 'vue'
+
+const AdminGeneralTab = defineAsyncComponent(() => import('~/components/admin/AdminGeneralTab.vue'))
+const AdminThemingTab = defineAsyncComponent(() => import('~/components/admin/AdminThemingTab.vue'))
+const AdminModulesTab = defineAsyncComponent(() => import('~/components/admin/AdminModulesTab.vue'))
+const AdminMarketplaceTab = defineAsyncComponent(() => import('~/components/admin/AdminMarketplaceTab.vue'))
+const AdminDiscordTab = defineAsyncComponent(() => import('~/components/admin/AdminDiscordTab.vue'))
+const AdminRaffleTab = defineAsyncComponent(() => import('~/components/admin/AdminRaffleTab.vue'))
+const AdminGatingTab = defineAsyncComponent(() => import('~/components/admin/AdminGatingTab.vue'))
+const AdminGatesTab = defineAsyncComponent(() => import('~/components/admin/AdminGatesTab.vue'))
+const AdminAddressbookTab = defineAsyncComponent(() => import('~/components/admin/AdminAddressbookTab.vue'))
+const AdminWatchtowerTab = defineAsyncComponent(() => import('~/components/admin/AdminWatchtowerTab.vue'))
+const AdminShipmentListTab = defineAsyncComponent(() => import('~/components/admin/AdminShipmentListTab.vue'))
+const AdminPlanShipmentTab = defineAsyncComponent(() => import('~/components/admin/AdminPlanShipmentTab.vue'))
+const AdminBillingTab = defineAsyncComponent(() => import('~/components/admin/AdminBillingTab.vue'))
+const AdminModuleActivationModal = defineAsyncComponent(() => import('~/components/admin/AdminModuleActivationModal.vue'))
+  const AdminPricingWidget = defineAsyncComponent(() => import('~/components/admin/AdminPricingWidget.vue'))
+import {
+  useAdminSubscriptions,
+  type SubscriptionInfo,
+  type WatchtowerSubscriptionByScope,
+} from '~/composables/admin/useAdminSubscriptions'
+import { useAdminForm } from '~/composables/admin/useAdminForm'
+import { useAdminBilling } from '~/composables/admin/useAdminBilling'
+import { useSlugClaim } from '~/composables/core/useSlugClaim'
 
 const route = useRoute()
 const tenantStore = useTenantStore()
@@ -214,11 +244,6 @@ const slugClaim = useSlugClaim({
   fetchSubscription,
 })
 
-function toggleSlugUnlock() {
-  slugClaim.showSlugUnlock.value = !slugClaim.showSlugUnlock.value
-}
-
-const showSlugUnlock = computed(() => slugClaim.showSlugUnlock.value)
 const desiredSlug = computed(() => slugClaim.desiredSlug.value)
 const slugCheckStatus = computed(() => slugClaim.slugCheckStatus.value)
 const slugChecking = computed(() => slugClaim.slugChecking.value)
@@ -236,11 +261,12 @@ const activationModalModuleId = ref<string | null>(null)
 const marketplaceSettings = computed(() => {
   const s = tenantStore.marketplaceSettings
   if (!s) return null
+  const gate = s.gate ?? (s as { whitelist?: unknown }).whitelist
   return {
     collectionMints: s.collectionMints,
     splAssetMints: s.splAssetMints ?? [],
     currencyMints: s.currencyMints,
-    whitelist: s.whitelist,
+    gate,
     shopFee: s.shopFee,
   }
 })
@@ -248,8 +274,9 @@ const marketplaceSettings = computed(() => {
 const marketplaceModuleState = computed(() => getModuleState(tenant.value?.modules?.marketplace))
 const discordModuleState = computed(() => getModuleState(tenant.value?.modules?.discord))
 const raffleModuleState = computed(() => getModuleState(tenant.value?.modules?.raffles))
-const whitelistModuleState = computed(() => getModuleState(tenant.value?.modules?.whitelist))
-const addressbookModuleState = computed(() => getModuleState(tenant.value?.modules?.addressbook))
+const gatesModuleState = computed(() => getModuleState(tenant.value?.modules?.gates))
+const watchtowerModuleState = computed(() => getModuleState(tenant.value?.modules?.watchtower))
+const shipmentModuleState = computed(() => getModuleState(tenant.value?.modules?.shipment))
 
 const slugModuleState = computed((): 'off' | 'staging' | 'active' | 'deactivating' => {
   if (tenant.value?.slug) return 'active'
@@ -258,12 +285,12 @@ const slugModuleState = computed((): 'off' | 'staging' | 'active' | 'deactivatin
 
 const showSlugPricingWidget = computed(() => Boolean(tenant.value))
 
-const WIDGET_TABS = new Set(['marketplace', 'discord', 'raffle', 'whitelist', 'addressbook'])
+const WIDGET_TABS = new Set(['marketplace', 'discord', 'raffle', 'gates', 'watchtower'])
 const tab = computed(() => {
   const q = route.query.tab
   return typeof q === 'string' && VALID_TABS.has(q) ? q : 'general'
 })
-const hasWidgetTab = computed(() => WIDGET_TABS.has(tab.value))
+const hasWidgetTab = computed(() => WIDGET_TABS.has(tab.value) || tab.value === 'shipment-list' || tab.value === 'plan-shipment')
 
 async function saveWithBilling(moduleId: string, billingPeriod: BillingPeriod) {
   await save()
@@ -271,6 +298,7 @@ async function saveWithBilling(moduleId: string, billingPeriod: BillingPeriod) {
 }
 
 const raffleTabRef = ref<InstanceType<typeof AdminRaffleTab> | null>(null)
+const watchtowerTabRef = ref<InstanceType<typeof AdminWatchtowerTab> | null>(null)
 
 async function handleRaffleBilling(period: BillingPeriod, conditions?: Record<string, number>) {
   deploying.value = true
@@ -286,6 +314,34 @@ async function handleRaffleBilling(period: BillingPeriod, conditions?: Record<st
   }
 }
 
+async function handleWatchtowerSave(period: BillingPeriod) {
+  saving.value = true
+  saveError.value = null
+  try {
+    const ok = await watchtowerTabRef.value?.saveWatches?.()
+    if (!ok) {
+      saveError.value = 'Failed to save watchtower settings'
+      return
+    }
+    await handleBillingPayment('watchtower', period)
+    await fetchSubscription('watchtower')
+  } catch (e) {
+    saveError.value = e instanceof Error ? e.message : 'Billing failed'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function handleWatchtowerDeploy(period: BillingPeriod) {
+  const ok = await watchtowerTabRef.value?.saveWatches?.()
+  if (!ok) {
+    saveError.value = 'Failed to save watchtower settings'
+    return
+  }
+  await deployModule('watchtower', period)
+  await fetchSubscription('watchtower')
+}
+
 function formatDeactivationDate(iso: string): string {
   try {
     const date = new Date(iso)
@@ -299,8 +355,18 @@ function formatDeactivationDate(iso: string): string {
 const showDeactivateConfirm = ref(false)
 const pendingDeactivateModuleId = ref<string | null>(null)
 
+function getSubscriptionPeriodEnd(moduleId: string): string | null {
+  const s = subscriptions[moduleId]
+  if (!s) return null
+  if (typeof (s as SubscriptionInfo).periodEnd === 'string') return (s as SubscriptionInfo).periodEnd
+  const byScope = s as WatchtowerSubscriptionByScope
+  const ends = Object.values(byScope).map((x) => x.periodEnd).filter(Boolean) as string[]
+  if (ends.length === 0) return null
+  return ends.reduce((a, b) => (a < b ? a : b))
+}
+
 function isWithinPaidPeriod(moduleId: string): boolean {
-  const periodEnd = subscriptions[moduleId]?.periodEnd
+  const periodEnd = getSubscriptionPeriodEnd(moduleId)
   if (!periodEnd) return false
   try {
     return new Date(periodEnd) > new Date()
@@ -315,17 +381,20 @@ function onModuleToggle(id: string, on: boolean) {
     if (entry?.pricing) {
       if (isWithinPaidPeriod(id)) {
         form.modulesById[id] = 'active'
+        save()
       } else {
         activationModalModuleId.value = id
         showActivationModal.value = true
       }
     } else {
       form.modulesById[id] = entry?.goActiveImmediately === true ? 'active' : 'staging'
+      save()
     }
   } else {
     const current = form.modulesById[id] ?? 'off'
     if (current === 'staging') {
       form.modulesById[id] = 'off'
+      save()
     } else if (current === 'active') {
       pendingDeactivateModuleId.value = id
       showDeactivateConfirm.value = true
@@ -333,10 +402,11 @@ function onModuleToggle(id: string, on: boolean) {
   }
 }
 
-function confirmDeactivate() {
+async function confirmDeactivate() {
   const id = pendingDeactivateModuleId.value
   if (id) {
     form.modulesById[id] = 'deactivating'
+    await save()
   }
   pendingDeactivateModuleId.value = null
   showDeactivateConfirm.value = false
@@ -361,16 +431,17 @@ async function onMarketplaceSaved(settings: Record<string, unknown>) {
     collectionMints?: unknown[]
     splAssetMints?: unknown[]
     currencyMints?: unknown[]
-    whitelist?: { programId?: string; account?: string }
+    gate?: unknown
     shopFee?: unknown
   }
+  const gateVal = s.gate
   tenantStore.setMarketplaceSettings(
     s
       ? {
           collectionMints: s.collectionMints ?? [],
           splAssetMints: (s.splAssetMints as Array<{ mint: string; name?: string; symbol?: string }>) ?? [],
           currencyMints: (s.currencyMints as Array<{ mint: string; name: string; symbol: string }>) ?? [],
-          whitelist: s.whitelist,
+          gate: gateVal,
           shopFee: (s.shopFee as MarketplaceSettings['shopFee']) ?? {
             wallet: '',
             makerFlatFee: 0,
@@ -399,7 +470,8 @@ watch(tab, (t) => {
   if (t === 'marketplace') fetchSubscription('marketplace')
   if (t === 'discord') fetchSubscription('discord')
   if (t === 'raffle') fetchSubscription('raffles')
-  if (t === 'addressbook') fetchSubscription('addressbook')
+  if (t === 'gates') fetchSubscription('gates')
+  if (t === 'watchtower') fetchSubscription('watchtower')
   if (t === 'modules') {
     for (const id of moduleIds.value) {
       if (id !== 'admin' && getModuleCatalogEntry(id)?.pricing) fetchSubscription(id)
@@ -432,7 +504,15 @@ async function handleReactivate(moduleId: string, period: BillingPeriod) {
   }
 }
 
-function confirmModuleActivate() {
+function onActivationModalClose(open: boolean) {
+  if (!open && activationModalModuleId.value) {
+    form.modulesById[activationModalModuleId.value] = 'off'
+  }
+  showActivationModal.value = open
+  if (!open) activationModalModuleId.value = null
+}
+
+async function confirmModuleActivate() {
   const id = activationModalModuleId.value
   if (!id) return
   const entry = getModuleCatalogEntry(id)
@@ -443,6 +523,7 @@ function confirmModuleActivate() {
   }
   showActivationModal.value = false
   activationModalModuleId.value = null
+  await save()
 }
 </script>
 
@@ -466,98 +547,139 @@ function confirmModuleActivate() {
 .admin__panel {
   margin-bottom: var(--theme-space-lg);
 }
+.admin__panel [data-slot="card"] {
+  border-color: var(--theme-border, hsl(var(--border)));
+  background-color: var(--theme-bg-card);
+  color: var(--theme-text-primary);
+}
 .admin__panel h3 {
   font-size: var(--theme-font-lg);
   margin-bottom: var(--theme-space-md);
 }
+.admin__panel .form-input,
 .admin__panel .text-input,
-.admin__panel .toggle {
+.admin__panel .toggle,
+.admin__panel [data-slot="switch"] {
   margin-bottom: var(--theme-space-md);
 }
-.admin__tenant-id {
+.admin__ids-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: var(--theme-space-sm);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--theme-space-lg) var(--theme-space-xl);
   margin-bottom: var(--theme-space-md);
+}
+.admin__slug-field {
+  margin-left: auto;
+}
+.admin__ids-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-xs);
   font-size: var(--theme-font-sm);
 }
-.admin__tenant-id-label {
+.admin__ids-label {
   font-weight: 500;
   color: var(--theme-text-secondary);
 }
-.admin__tenant-id code,
-.admin__tenant-id-hint code {
+.admin__ids-item code {
   background: var(--theme-bg-secondary);
   padding: 2px var(--theme-space-xs);
   border-radius: var(--theme-radius-sm);
   font-size: var(--theme-font-xs);
 }
-.admin__tenant-id-hint {
-  color: var(--theme-text-muted);
-}
-.admin__slug-row {
+.admin__slug-field .admin__slug-input-row {
   display: flex;
-  align-items: flex-end;
-  gap: var(--theme-space-md);
+  align-items: center;
+  gap: var(--theme-space-sm);
 }
-.admin__slug-row .text-input {
+.admin__slug-field .admin__slug-input-row .form-input {
   flex: 1;
+  min-width: 0;
   margin-bottom: 0;
 }
-.admin__slug-enable-btn {
+.admin__slug-check-btn {
   flex-shrink: 0;
 }
-.admin__slug-unlock {
-  margin-top: var(--theme-space-md);
-  padding: var(--theme-space-md);
-  background: var(--theme-surface-secondary);
-  border-radius: var(--theme-radius-md);
-}
-.admin__slug-unlock .text-input {
-  margin-bottom: var(--theme-space-sm);
-}
-.admin__slug-actions {
-  display: flex;
-  gap: var(--theme-space-sm);
-  margin-top: var(--theme-space-sm);
-}
-.admin__slug-available {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-xs);
-  color: var(--theme-success);
-}
-.admin__slug-taken {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-xs);
-  color: var(--theme-error);
-}
-.admin__slug-check-icon {
+.admin__slug-check-btn .admin__slug-check-icon {
   width: 1.25rem;
   height: 1.25rem;
 }
-.admin__module {
+.admin__slug-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  animation: admin-spin 1s linear infinite;
+}
+.admin__slug-check-icon--success {
+  color: var(--theme-success);
+}
+.admin__slug-check-icon--taken {
+  color: var(--theme-error);
+}
+.admin__slug-available-hint {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-success);
+  margin-top: var(--theme-space-xs);
+}
+@keyframes admin-spin {
+  to { transform: rotate(360deg); }
+}
+.admin__module-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.admin__module-row {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(8rem, 1fr) minmax(14rem, 18rem) auto;
+  align-items: center;
+  gap: var(--theme-space-md);
+  padding: var(--theme-space-xs) 0;
+  border-bottom: var(--theme-border-thin) solid var(--theme-border);
+  min-height: 2.5rem;
+}
+.admin__module-row:last-child {
+  border-bottom: none;
+}
+.admin__module-cell {
+  min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--theme-space-sm) 0;
-  border-bottom: var(--theme-border-thin) solid var(--theme-border);
 }
-.admin__module:last-child {
-  border-bottom: none;
+.admin__module-cell--toggle {
+  justify-content: center;
+  align-items: center;
+}
+.admin__module-cell--toggle :deep([data-slot="switch"]) {
+  flex-shrink: 0;
+  margin: 0;
+}
+.admin__module-cell--name {
+  min-width: 0;
+  line-height: 1.25rem;
+}
+.admin__module-cell--status {
+  min-width: 0;
+  line-height: 1.25rem;
+}
+.admin__module-cell--actions {
+  justify-content: flex-end;
+  align-items: center;
 }
 .admin__module-name {
   display: inline-flex;
   align-items: center;
   gap: var(--theme-space-xs);
+  line-height: 1.25rem;
 }
 .admin__module-info-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
   background: none;
   border: none;
   color: var(--theme-text-muted);
@@ -568,7 +690,8 @@ function confirmModuleActivate() {
   color: var(--theme-primary);
 }
 .admin__module-info-icon {
-  font-size: 1rem;
+  font-size: 0.875rem;
+  line-height: 1;
 }
 .admin__module-info-modal {
   display: flex;
@@ -595,12 +718,6 @@ function confirmModuleActivate() {
   font-size: var(--theme-font-sm);
   font-weight: 500;
   color: var(--theme-warning);
-}
-.admin__module-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-md);
-  flex-wrap: wrap;
 }
 .admin__module-date,
 .admin__module-always-on {
@@ -749,9 +866,9 @@ function confirmModuleActivate() {
   margin-top: var(--theme-space-sm);
 }
 
-/* Staging: toggle uses warning color */
-.admin__module--staging :deep(.toggle__input:checked + .toggle__track) {
-  background-color: var(--theme-warning);
-  border-color: var(--theme-warning);
+/* Staging: switch uses warning color */
+.admin__module-row--staging :deep([data-slot="switch"][data-state="checked"]) {
+  background-color: var(--theme-warning) !important;
+  border-color: var(--theme-warning) !important;
 }
 </style>

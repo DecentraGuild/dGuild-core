@@ -47,7 +47,7 @@
             >
               <option value="any">Any</option>
               <option value="public">Public</option>
-              <option value="whitelist">Whitelist gated</option>
+              <option value="gates">Gated</option>
             </select>
           </div>
         </div>
@@ -63,7 +63,7 @@
           :key="t.id"
           :tenant="t"
           :tenant-url="tenantUrl"
-          :has-whitelist="hasWhitelist(t)"
+          :has-gate="hasGates(t)"
           :active-modules-with-gate="activeModulesWithGate(t)"
         />
       </div>
@@ -77,20 +77,22 @@ import { Icon } from '@iconify/vue'
 import type { TenantConfig } from '@decentraguild/core'
 import DiscoveryCard from '~/components/DiscoveryCard.vue'
 import { useDiscoveryFilters } from '~/composables/useDiscoveryFilters'
-import { useApiBase } from '~/composables/useApiBase'
+import { useSupabase } from '~/composables/useSupabase'
 
 const config = useRuntimeConfig()
-const apiBase = useApiBase()
 const tenants = ref<TenantConfig[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
 onMounted(async () => {
   try {
-    const res = await fetch(`${apiBase.value}/api/v1/tenants`)
-    if (!res.ok) throw new Error('Failed to fetch')
-    const data = await res.json()
-    tenants.value = data.tenants ?? []
+    const supabase = useSupabase()
+    const { data, error: dbError } = await supabase
+      .from('tenant_config')
+      .select('id, slug, name, description, branding, modules')
+      .order('created_at', { ascending: false })
+    if (dbError) throw new Error(dbError.message)
+    tenants.value = (data ?? []) as TenantConfig[]
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load tenants'
   } finally {
@@ -110,7 +112,7 @@ const {
   searchQuery,
   moduleFilter,
   accessFilter,
-  hasWhitelist,
+  hasGates,
   activeModulesWithGate,
   moduleFilterOptions,
   filteredTenants,

@@ -6,13 +6,13 @@ export type {
   TenantModuleEntry,
   TenantModulesMap,
   ModuleState,
-  ModuleWhitelistModuleId,
+  ModuleGateModuleId,
   MarketplaceGroupPath,
   MarketplaceSettings,
   MarketplaceCollectionMint,
   MarketplaceCurrencyMint,
   MarketplaceSplAsset,
-  MarketplaceWhitelistSettings,
+  MarketplaceGateSettings,
   MarketplaceShopFee,
 } from './types.js'
 export {
@@ -20,12 +20,13 @@ export {
   isModuleVisibleToMembers,
   isModuleVisibleInAdmin,
   getModuleState,
-  getEffectiveWhitelist,
-  getModuleWhitelistFromTenant,
+  getEffectiveGate,
+  getModuleGateFromTenant,
+  resolveGateForTransaction,
 } from './types.js'
+export type { EffectiveGateResult, StoredGateValue, TransactionGateOverride } from './types.js'
 export { TENANT_DOMAIN, getTenantSlugFromHost } from './resolver.js'
 export { loadTenantConfig } from './loader.js'
-export { API_V1, normalizeApiBase } from './api.js'
 export {
   BASE_CURRENCY_MINTS,
   BASE_CURRENCY_MINT_ADDRESSES,

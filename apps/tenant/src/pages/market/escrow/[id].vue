@@ -6,6 +6,7 @@
 
 <script setup lang="ts">
 definePageMeta({ layout: 'default' })
+import { useTenantInLinks } from '~/composables/core/useTenantInLinks'
 
 const route = useRoute()
 const tenantStore = useTenantStore()

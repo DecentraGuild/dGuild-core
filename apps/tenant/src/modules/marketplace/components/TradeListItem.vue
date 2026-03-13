@@ -25,11 +25,11 @@
           aria-label="Flip unit price"
           @click="flipped = !flipped"
         >
-          <Icon icon="mdi:swap-horizontal" />
+          <Icon icon="lucide:arrow-left-right" />
         </button>
       </div>
       <div class="trade-list-item__cell trade-list-item__cell--action">
-        <NuxtLink :to="escrowLink" class="trade-list-item__fill">
+        <NuxtLink :to="escrowLink" class="trade-list-item__fill" @click="onFillClick">
           <span class="trade-list-item__fill-line">Fill</span>
           <span class="trade-list-item__fill-line">{{ escrow.account.allowPartialFill ? 'Partial' : 'Full' }}</span>
         </NuxtLink>
@@ -42,10 +42,10 @@
 <script setup lang="ts">
 import { computed, ref, toRef } from 'vue'
 import { Icon } from '@iconify/vue'
-import { TokenAmountWithLabel } from '@decentraguild/ui/components'
-import { sanitizeTokenLabel } from '@decentraguild/display'
+import { formatUiAmount, sanitizeTokenLabel } from '@decentraguild/display'
 import type { EscrowWithAddress } from '@decentraguild/web3'
-import { useEscrowDisplay } from '~/composables/useEscrowDisplay'
+import { useEscrowDisplay } from '~/composables/marketplace/useEscrowDisplay'
+import { useEscrowPreload } from '~/composables/marketplace/useEscrowPreload'
 
 const props = defineProps<{
   escrow: EscrowWithAddress
@@ -54,8 +54,14 @@ const props = defineProps<{
 
 const escrowRef = toRef(props, 'escrow')
 const { data } = useEscrowDisplay(escrowRef)
+const { set } = useEscrowPreload()
 
 const flipped = ref(false)
+
+function onFillClick() {
+  const id = props.escrow.publicKey.toBase58()
+  set(id, props.escrow)
+}
 
 const display = computed(() => data.value)
 const depositMint = computed(() => props.escrow?.account.depositToken.toBase58() ?? '')
@@ -64,8 +70,7 @@ const depositMint = computed(() => props.escrow?.account.depositToken.toBase58()
 const requestedDisplay = computed(() => {
   const d = display.value
   if (!d || !Number.isFinite(d.requestAmount)) return '–'
-  const n = d.requestAmount
-  return Number.isInteger(n) ? String(n) : n.toFixed(6).replace(/\.?0+$/, '')
+  return formatUiAmount(d.requestAmount, 6)
 })
 
 const requestedLabel = computed(() => {
@@ -83,7 +88,7 @@ const unitPriceLabel = computed(() => {
   if (!price || !Number.isFinite(price)) return '–'
   if (flipped.value) {
     const inv = 1 / price
-    const invStr = !Number.isFinite(inv) ? '–' : Number.isInteger(inv) ? String(inv) : inv.toFixed(6).replace(/\.?0+$/, '')
+    const invStr = !Number.isFinite(inv) ? '–' : formatUiAmount(inv, 6)
     return `1 ${reqSym} = ${invStr} ${depSym}`
   }
   return `1 ${depSym} = ${price} ${reqSym}`

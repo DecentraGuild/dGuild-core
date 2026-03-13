@@ -73,6 +73,12 @@ export async function disconnectWallet(): Promise<void> {
   await client.disconnectWallet()
 }
 
+/** True when the connected wallet is Backpack. Use to pick billing tx instruction order (memoFirst) so Backpack shows USDC. */
+export function isBackpackConnector(connectorId: string | null): boolean {
+  if (!connectorId) return false
+  return connectorId.toLowerCase().includes('backpack')
+}
+
 export function getWalletAndAccount(client: ConnectorClient): { wallet: Wallet; account: WalletAccount } | null {
   const state = client.getSnapshot()
   const walletStatus = state.wallet
@@ -90,7 +96,7 @@ export function getWalletAndAccount(client: ConnectorClient): { wallet: Wallet; 
 
 /**
  * Sign a message with the currently connected wallet.
- * Returns the signature as base64 (for sending to POST /auth/verify).
+ * Returns the signature as base64.
  */
 export async function signMessageForAuth(message: string): Promise<{ signature: string; message: string }> {
   const client = getClient()
@@ -112,6 +118,59 @@ export async function signMessageForAuth(message: string): Promise<{ signature: 
       ? btoa(String.fromCharCode(...signatureBytes))
       : String(signatureBytes)
   return { signature, message }
+}
+
+/**
+ * Returns a Supabase signInWithWeb3-compatible wallet adapter.
+ * Use with supabase.auth.signInWithWeb3({ chain: 'solana', wallet, statement }).
+ * Returns null when not connected.
+ */
+export function getSupabaseWalletAdapter(): {
+  publicKey: { toBase58: () => string }
+  signMessage: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
+} | null {
+  const client = getClient()
+  const pair = getWalletAndAccount(client)
+  if (!pair) return null
+  const signer = createTransactionSigner({
+    wallet: pair.wallet,
+    account: pair.account,
+  })
+  if (!signer?.signMessage) return null
+  const signMessage = signer.signMessage
+  return {
+    publicKey: { toBase58: () => pair.account.address },
+    signMessage: async (message: Uint8Array) => {
+      const sig = await signMessage(message)
+      return sig instanceof Uint8Array ? sig : new Uint8Array(Buffer.from(sig as string, 'base64'))
+    },
+  }
+}
+
+/**
+ * Sign a raw message (Uint8Array) with the connected wallet.
+ * Returns the raw signature bytes. Used by Supabase signInWithWeb3.
+ */
+export async function signMessageWithConnector(
+  _connectorId: WalletConnectorId,
+  message: Uint8Array,
+): Promise<Uint8Array> {
+  const client = getClient()
+  const pair = getWalletAndAccount(client)
+  if (!pair) {
+    throw new Error('Wallet not connected')
+  }
+  const signer = createTransactionSigner({
+    wallet: pair.wallet,
+    account: pair.account,
+  })
+  if (!signer?.signMessage) {
+    throw new Error('Connected wallet does not support message signing')
+  }
+  const signatureBytes = await signer.signMessage(message)
+  return signatureBytes instanceof Uint8Array
+    ? signatureBytes
+    : new Uint8Array(Buffer.from(signatureBytes as string, 'base64'))
 }
 
 /**

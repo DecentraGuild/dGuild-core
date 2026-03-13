@@ -3,96 +3,77 @@
   <div class="admin__split">
     <div class="admin__panel">
       <Card>
+        <GateSelectRow
+          :slug="tenant?.slug ?? tenant?.id ?? null"
+          :model-value="form.defaultGate"
+          :title="`${gateLabel} your Community`"
+          hint="Base gate for your community. Use dGuild default, admins only, public, or a specific list."
+          show-admin-only
+          @update:model-value="form.defaultGate = ($event === 'use-default' ? null : $event)"
+        />
         <h3>General</h3>
-        <div class="admin__slug-row">
-          <TextInput
-            :model-value="tenant?.slug ?? tenant?.id ?? ''"
-            :placeholder="tenant?.slug ?? tenant?.id ? undefined : 'Claim to unlock'"
-            label="Slug"
-            disabled
-          />
-          <Button
-            v-if="!tenant?.slug"
-            variant="primary"
-            size="sm"
-            :disabled="slugClaiming"
-            class="admin__slug-enable-btn"
-            @click="$emit('toggle-slug-unlock')"
-          >
-            {{ slugClaiming ? 'Claiming...' : (showSlugUnlock ? 'Cancel' : 'Unlock') }}
-          </Button>
+        <div v-if="tenant?.id" class="admin__ids-row">
+          <div class="admin__ids-item">
+            <span class="admin__ids-label">Tenant ID</span>
+            <code>{{ tenant.id }}</code>
+          </div>
+          <div class="admin__ids-item admin__slug-field">
+            <span class="admin__ids-label">Slug</span>
+            <div class="admin__slug-input-row">
+              <FormInput
+                v-if="tenant?.slug"
+                :model-value="tenant.slug"
+                label=""
+                disabled
+              />
+              <FormInput
+                v-else
+                :model-value="desiredSlug"
+                label=""
+                placeholder="e.g. my-community"
+                @update:model-value="$emit('update:desiredSlug', $event)"
+                @blur="$emit('slug-check-blur')"
+              />
+              <Button
+                v-if="!tenant?.slug && desiredSlug.trim()"
+                variant="secondary"
+                size="sm"
+                :disabled="slugChecking || slugClaiming"
+                class="admin__slug-check-btn"
+                :title="slugCheckStatus === 'available' ? 'Available – pay in sidebar to claim' : (slugCheckStatus === 'taken' ? 'Taken' : 'Check availability')"
+                @click="$emit('check-slug')"
+              >
+                <Icon v-if="slugChecking" icon="lucide:loader-2" class="admin__slug-spinner" />
+                <Icon v-else-if="slugCheckStatus === 'available'" icon="lucide:check-circle" class="admin__slug-check-icon admin__slug-check-icon--success" />
+                <Icon v-else-if="slugCheckStatus === 'taken'" icon="lucide:x-circle" class="admin__slug-check-icon admin__slug-check-icon--taken" />
+                <Icon v-else icon="lucide:check" />
+              </Button>
+            </div>
+            <div v-if="!tenant?.slug && desiredSlug.trim() && slugCheckStatus === 'available'" class="admin__slug-available-hint">
+              Available. Pay in the sidebar to claim.
+            </div>
+          </div>
         </div>
         <p v-if="tenant?.id && isProduction" class="admin__tenant-domain">
-          <code>{{ (tenant.slug ?? tenant.id) }}.dguild.org</code>
+          <code>{{ (tenant.slug ?? (desiredSlug.trim() || tenant.id)) }}.dguild.org</code>
         </p>
-        <div v-if="showSlugUnlock && !tenant?.slug" class="admin__slug-unlock">
-          <TextInput
-            :model-value="desiredSlug"
-            label="Desired slug"
-            placeholder="e.g. my-community"
-            @update:model-value="$emit('update:desiredSlug', $event)"
-            @blur="$emit('slug-check-blur')"
-          />
-          <div v-if="slugCheckStatus === 'available'" class="admin__slug-available">
-            <Icon icon="mdi:check-circle" class="admin__slug-check-icon" />
-            <span>Available</span>
-          </div>
-          <div v-else-if="slugCheckStatus === 'taken'" class="admin__slug-taken">
-            <Icon icon="mdi:close-circle" class="admin__slug-check-icon" />
-            <span>Taken</span>
-          </div>
-          <div class="admin__slug-actions">
-            <Button
-              v-if="slugCheckStatus === 'checking'"
-              variant="secondary"
-              size="sm"
-              disabled
-            >
-              Checking...
-            </Button>
-            <Button
-              v-else-if="slugCheckStatus !== 'available'"
-              variant="secondary"
-              size="sm"
-              :disabled="slugChecking"
-              @click="$emit('check-slug')"
-            >
-              {{ slugChecking ? 'Checking...' : 'Check' }}
-            </Button>
-            <Button
-              v-else
-              variant="primary"
-              size="sm"
-              :disabled="slugClaiming"
-              @click="$emit('claim-slug')"
-            >
-              {{ slugClaiming ? 'Claiming...' : 'Claim slug' }}
-            </Button>
-          </div>
-        </div>
-        <TextInput
+        <FormInput
           v-model="form.name"
           label="Name"
         />
-        <TextInput
+        <FormInput
           v-model="form.description"
           label="Description"
         />
-        <TextInput
+        <FormInput
           v-model="form.branding.logo"
           label="Logo URL"
           placeholder="https://..."
         />
-        <TextInput
+        <FormInput
           v-model="form.discordServerInviteLink"
           label="Invite link to Discord"
           placeholder="https://discord.gg/..."
-        />
-        <WhitelistSelect
-          :slug="tenant?.slug ?? tenant?.id ?? null"
-          :model-value="form.defaultWhitelist"
-          label="Default whitelist"
-          @update:model-value="form.defaultWhitelist = ($event === 'use-default' ? null : $event)"
         />
       </Card>
     </div>
@@ -101,17 +82,20 @@
 </template>
 
 <script setup lang="ts">
-import { Card, TextInput, Button } from '@decentraguild/ui/components'
+import { Card } from '~/components/ui/card'
+import { Button } from '~/components/ui/button'
+import { FormInput } from '~/components/ui/form-input'
 import { Icon } from '@iconify/vue'
-import type { AdminForm } from '~/composables/useAdminForm'
+import { getGateLabel } from '@decentraguild/config'
+import type { AdminForm } from '~/composables/admin/useAdminForm'
 import type { TenantConfig } from '@decentraguild/core'
 
 const isProduction = import.meta.env.PROD
+const gateLabel = getGateLabel()
 
 defineProps<{
   form: AdminForm
   tenant: TenantConfig | null
-  showSlugUnlock: boolean
   desiredSlug: string
   slugCheckStatus: 'idle' | 'checking' | 'available' | 'taken'
   slugChecking: boolean
@@ -119,10 +103,8 @@ defineProps<{
 }>()
 
 defineEmits<{
-  'toggle-slug-unlock': []
   'update:desiredSlug': [value: string]
   'slug-check-blur': []
   'check-slug': []
-  'claim-slug': []
 }>()
 </script>

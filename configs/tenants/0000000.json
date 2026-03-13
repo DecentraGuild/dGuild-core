@@ -1,172 +1,1190 @@
 {
   "id": "0000000",
+  "slug": "our",
   "name": "Decentra Guild",
-  "description": "Decentra Guild Envirement",
+  "description": "Decentra Guild Environment",
   "branding": {
     "logo": "https://www.decentraguild.com/logo/dguild-logo.svg",
     "theme": {
-      "colors": {
-        "primary": {
-          "main": "#00951a",
-          "hover": "#008918",
-          "light": "#33aa48",
-          "dark": "#007f16"
-        },
-        "secondary": {
-          "main": "#007014",
-          "hover": "#006712",
-          "light": "#338d43",
-          "dark": "#005f11"
-        },
-        "accent": {
-          "main": "#00951a",
-          "hover": "#008617"
-        },
-        "background": {
-          "primary": "#3c3434",
-          "secondary": "#443c3c",
-          "card": "#4a4242",
-          "muted": "#534c4c",
-          "backdrop": "rgba(60, 52, 52, 0.78)"
-        },
-        "text": {
-          "primary": "#ffffff",
-          "secondary": "#b5b5c0",
-          "muted": "#6b6b80"
-        },
-        "border": {
-          "default": "#2a2a3e",
-          "light": "#3b3b4d"
-        },
-        "status": {
-          "success": "#00951a",
-          "error": "#cf0000",
-          "warning": "#ff6b35",
-          "info": "#00d4ff"
-        },
-        "trade": {
-          "buy": "#00ff00",
-          "buyHover": "#00e600",
-          "buyLight": "#26ff26",
-          "sell": "#ff0000",
-          "sellHover": "#e60000",
-          "sellLight": "#ff2626",
-          "trade": "#ffaa00",
-          "tradeHover": "#e69900",
-          "tradeLight": "#ffb726",
-          "swap": "#00951a",
-          "swapHover": "#008617",
-          "swapLight": "#33aa48"
-        },
-        "window": {
-          "background": "#4a4242",
-          "border": "#2a2a3e",
-          "header": "#443c3c"
-        }
-      },
-      "fontSize": {
-        "xs": "0.7875rem",
-        "sm": "0.875rem",
-        "base": "1rem",
-        "lg": "1.125rem",
-        "xl": "1.2375rem",
-        "2xl": "1.40625rem",
-        "3xl": "1.6875rem",
-        "4xl": "1.96875rem",
-        "5xl": "2.25rem"
-      },
-      "spacing": {
-        "xs": "0.25rem",
-        "sm": "0.375rem",
-        "md": "0.5rem",
-        "lg": "0.75rem",
-        "xl": "1rem",
-        "2xl": "1.5rem"
-      },
-      "borderRadius": {
-        "sm": "0.5rem",
-        "md": "0.75rem",
-        "lg": "1rem",
-        "xl": "1.25rem",
-        "full": "9999px"
-      },
-      "borderWidth": {
-        "thin": "1px",
-        "medium": "2px",
-        "thick": "4px"
-      },
-      "shadows": {
-        "glow": "0 0 20px rgba(0, 149, 26, 0.28)",
-        "glowHover": "0 0 40px rgba(0, 149, 26, 0.55)",
-        "card": "0 8px 32px rgba(0, 0, 0, 0.4)"
-      },
-      "gradients": {
-        "primary": "linear-gradient(135deg, #00951a 0%, #33aa48 50%, #007f16 100%)",
-        "secondary": "linear-gradient(135deg, #ff6b35 0%, #ff895d 100%)",
-        "accent": "linear-gradient(135deg, #00951a 0%, #007014 100%)"
-      },
       "fonts": {
-        "primary": [
-          "Inter",
-          "-apple-system",
-          "BlinkMacSystemFont",
-          "Segoe UI",
-          "Roboto",
-          "sans-serif"
-        ],
         "mono": [
           "JetBrains Mono",
           "Fira Code",
           "monospace"
+        ],
+        "primary": [
+          "Roboto",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "sans-serif"
         ]
       },
+      "colors": {
+        "text": {
+          "muted": "#9090a2",
+          "primary": "#ffffff",
+          "secondary": "#c8c8d1"
+        },
+        "trade": {
+          "buy": "#972020",
+          "sell": "#0b832f",
+          "swap": "#4a0094",
+          "trade": "#95482d",
+          "buyHover": "#881d1d",
+          "buyLight": "#a74141",
+          "sellHover": "#0a762a",
+          "sellLight": "#30964e",
+          "swapHover": "#430085",
+          "swapLight": "#6e33a9",
+          "tradeHover": "#864129",
+          "tradeLight": "#a5634d"
+        },
+        "accent": {
+          "main": "#4a0094",
+          "hover": "#430085"
+        },
+        "border": {
+          "light": "#4c295e",
+          "default": "#3c1650"
+        },
+        "status": {
+          "info": "#1d859a",
+          "error": "#972020",
+          "success": "#0b832f",
+          "warning": "#95482d",
+          "destructive": "#3d0000"
+        },
+        "window": {
+          "border": "#3c1650",
+          "header": "#1a1721",
+          "background": "#16121c"
+        },
+        "primary": {
+          "dark": "#13155e",
+          "main": "#16196f",
+          "hover": "#141766",
+          "light": "#45478c"
+        },
+        "secondary": {
+          "dark": "#0e1047",
+          "main": "#111353",
+          "hover": "#10114c",
+          "light": "#414275"
+        },
+        "background": {
+          "card": "#16121c",
+          "muted": "#28282c",
+          "primary": "#0b0b0f",
+          "backdrop": "rgba(11, 11, 15, 0.78)",
+          "secondary": "#1a1721"
+        }
+      },
       "effects": {
-        "pattern": "none",
-        "patternSize": 10,
-        "glowIntensity": "none"
+        "pattern": "grid",
+        "patternSize": 18,
+        "glowIntensity": "subtle"
+      },
+      "shadows": {
+        "card": "0 8px 32px rgba(0, 0, 0, 0.4)",
+        "glow": "0 0 20px rgba(22, 25, 111, 0.28)",
+        "glowHover": "0 0 40px rgba(22, 25, 111, 0.55)"
+      },
+      "spacing": {
+        "lg": "0.975rem",
+        "md": "0.65rem",
+        "sm": "0.488rem",
+        "xl": "1.3rem",
+        "xs": "0.325rem",
+        "2xl": "1.95rem"
+      },
+      "fontSize": {
+        "lg": "1.125rem",
+        "sm": "0.875rem",
+        "xl": "1.2375rem",
+        "xs": "0.7875rem",
+        "2xl": "1.40625rem",
+        "3xl": "1.6875rem",
+        "4xl": "1.96875rem",
+        "5xl": "2.25rem",
+        "base": "1rem"
+      },
+      "gradients": {
+        "accent": "linear-gradient(135deg, #16196f 0%, #111353 100%)",
+        "primary": "linear-gradient(135deg, #16196f 0%, #45478c 50%, #13155e 100%)",
+        "secondary": "linear-gradient(135deg, #95482d 0%, #aa6d57 100%)"
+      },
+      "borderWidth": {
+        "thin": "2px",
+        "thick": "8px",
+        "medium": "4px"
+      },
+      "borderRadius": {
+        "lg": "1.25rem",
+        "md": "1rem",
+        "sm": "0.75rem",
+        "xl": "1.5rem",
+        "full": "9999px"
       }
     }
   },
   "modules": {
     "admin": {
       "state": "active",
+      "settingsjson": {},
       "deactivatedate": null,
-      "deactivatingUntil": null,
-      "settingsjson": {}
+      "deactivatingUntil": null
     },
-    "addressbook": {
+    "gates": {
       "state": "active",
+      "settingsjson": {},
       "deactivatedate": null,
-      "deactivatingUntil": null,
-      "settingsjson": {}
-    },
-    "whitelist": {
-      "state": "active",
-      "deactivatedate": null,
-      "deactivatingUntil": null,
-      "settingsjson": {}
+      "deactivatingUntil": null
     },
     "discord": {
       "state": "active",
+      "settingsjson": {},
       "deactivatedate": null,
-      "deactivatingUntil": null,
-      "settingsjson": {}
+      "deactivatingUntil": null
     },
     "raffles": {
       "state": "active",
+      "settingsjson": {},
       "deactivatedate": null,
-      "deactivatingUntil": null,
-      "settingsjson": {}
+      "deactivatingUntil": null
+    },
+    "shipment": {
+      "state": "active",
+      "settingsjson": {},
+      "deactivatedate": null,
+      "deactivatingUntil": null
+    },
+    "watchtower": {
+      "state": "active",
+      "settingsjson": {
+        "gate": "admin-only"
+      },
+      "deactivatedate": null,
+      "deactivatingUntil": null
     },
     "marketplace": {
       "state": "active",
+      "settingsjson": {},
       "deactivatedate": null,
-      "deactivatingUntil": null,
-      "settingsjson": {}
+      "deactivatingUntil": null
     }
   },
   "admins": [
     "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
     "adm1rpWxyo8u9y2Q2wxxfqaVDLE2gD1N9PbZbbhokTP"
+  ],
+  "marketplaceSettings": {
+    "gate": "public",
+    "shopFee": {
+      "wallet": "",
+      "makerFlatFee": 0,
+      "takerFlatFee": 0,
+      "makerPercentFee": 0,
+      "takerPercentFee": 0
+    },
+    "currencyMints": [
+      {
+        "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+      },
+      {
+        "mint": "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh"
+      },
+      {
+        "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+      },
+      {
+        "mint": "So11111111111111111111111111111111111111112"
+      },
+      {
+        "mint": "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx"
+      }
+    ],
+    "splAssetMints": [
+      {
+        "mint": "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q"
+      },
+      {
+        "mint": "C1FxQEMa7ZPmzpP8ak5PYg8iMdYaxZVNHF7pfaAcCx3D"
+      },
+      {
+        "mint": "poLisWXnNRwC6oBu1vHiuKQzFjGL4XDSu4g9qjz9qVk"
+      }
+    ],
+    "collectionMints": [
+      {
+        "mint": "6LomcBw8DVUE3T1XBLK1PZDiRyHYtFYo9E6v9UXeqjHE"
+      },
+      {
+        "mint": "CL2m6JiuV8H7X6cqzMqHNGWbJncj7HZ2BFXd8sQYStQ3"
+      }
+    ]
+  },
+  "raffleSettings": {
+    "defaultGate": "public"
+  },
+  "watchtowerWatches": [
+    {
+      "mint": "C1FxQEMa7ZPmzpP8ak5PYg8iMdYaxZVNHF7pfaAcCx3D",
+      "track_discord": true,
+      "track_snapshot": true,
+      "track_transactions": false,
+      "enabled_at_discord": "2026-03-10T12:14:26.754+00:00",
+      "enabled_at_snapshot": "2026-03-10T12:14:12.971+00:00",
+      "enabled_at_transactions": null,
+      "created_at": "2026-03-11T13:07:55.215456+00:00"
+    },
+    {
+      "mint": "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q",
+      "track_discord": true,
+      "track_snapshot": true,
+      "track_transactions": false,
+      "enabled_at_discord": "2026-03-10T12:14:27.189+00:00",
+      "enabled_at_snapshot": "2026-03-10T12:14:12.483+00:00",
+      "enabled_at_transactions": null,
+      "created_at": "2026-03-11T13:07:55.215456+00:00"
+    },
+    {
+      "mint": "CL2m6JiuV8H7X6cqzMqHNGWbJncj7HZ2BFXd8sQYStQ3",
+      "track_discord": true,
+      "track_snapshot": true,
+      "track_transactions": false,
+      "enabled_at_discord": "2026-03-10T12:14:26.364+00:00",
+      "enabled_at_snapshot": "2026-03-10T12:14:17.453+00:00",
+      "enabled_at_transactions": null,
+      "created_at": "2026-03-11T13:07:55.215456+00:00"
+    },
+    {
+      "mint": "6LomcBw8DVUE3T1XBLK1PZDiRyHYtFYo9E6v9UXeqjHE",
+      "track_discord": true,
+      "track_snapshot": true,
+      "track_transactions": false,
+      "enabled_at_discord": "2026-03-10T12:14:25.913+00:00",
+      "enabled_at_snapshot": "2026-03-10T12:14:15.673+00:00",
+      "enabled_at_transactions": null,
+      "created_at": "2026-03-11T13:07:55.215456+00:00"
+    }
+  ],
+  "mintCatalog": [
+    {
+      "mint": "So11111111111111111111111111111111111111112",
+      "kind": "SPL",
+      "label": "Wrapped SOL"
+    },
+    {
+      "mint": "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx",
+      "kind": "SPL",
+      "label": "Star Atlas"
+    },
+    {
+      "mint": "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q",
+      "kind": "SPL",
+      "label": "DACBloon"
+    },
+    {
+      "mint": "C1FxQEMa7ZPmzpP8ak5PYg8iMdYaxZVNHF7pfaAcCx3D",
+      "kind": "SPL",
+      "label": "DAOBloon"
+    },
+    {
+      "mint": "CL2m6JiuV8H7X6cqzMqHNGWbJncj7HZ2BFXd8sQYStQ3",
+      "kind": "NFT",
+      "label": "S&B Skeleton Crew"
+    },
+    {
+      "mint": "6LomcBw8DVUE3T1XBLK1PZDiRyHYtFYo9E6v9UXeqjHE",
+      "kind": "NFT",
+      "label": "S&B Abyssal Armada"
+    },
+    {
+      "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "kind": "SPL",
+      "label": "Tether USD"
+    },
+    {
+      "mint": "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",
+      "kind": "SPL",
+      "label": "Wrapped Bitcoin (Portal)"
+    },
+    {
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "kind": "SPL",
+      "label": "USD Coin"
+    }
+  ],
+  "marketplaceScope": {
+    "collections": [
+      "6LomcBw8DVUE3T1XBLK1PZDiRyHYtFYo9E6v9UXeqjHE",
+      "CL2m6JiuV8H7X6cqzMqHNGWbJncj7HZ2BFXd8sQYStQ3"
+    ],
+    "splAssets": [
+      "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q",
+      "C1FxQEMa7ZPmzpP8ak5PYg8iMdYaxZVNHF7pfaAcCx3D",
+      "poLisWXnNRwC6oBu1vHiuKQzFjGL4XDSu4g9qjz9qVk"
+    ],
+    "currencies": [
+      "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "So11111111111111111111111111111111111111112",
+      "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx"
+    ]
+  },
+  "gateLists": [
+    {
+      "address": "9Ypa4Gzb7umK96LFoB2dyHqQWvCuXSXqhwzavHvrzQXt",
+      "name": "Founders",
+      "authority": "",
+      "image_url": "https://media.discordapp.net/attachments/933143718112952351/1198103471023460362/20230728_202304.gif?ex=69b3814f&is=69b22fcf&hm=6acd1a9fcbccb60c5d77b285db4a1d87aa28f479f543fbae6c5b673d4819a3db&"
+    }
+  ],
+  "raffleSlots": [
+    {
+      "raffle_pubkey": "2X2WCkurtn6Ciu6aayarzT3MFqmHjgtWWTfDuY1mjfz2",
+      "created_at": "2026-03-09T15:24:27.275465+00:00",
+      "closed_at": null
+    }
+  ],
+  "collectionScope": [
+    "CL2m6JiuV8H7X6cqzMqHNGWbJncj7HZ2BFXd8sQYStQ3",
+    "6LomcBw8DVUE3T1XBLK1PZDiRyHYtFYo9E6v9UXeqjHE"
+  ],
+  "billingSubscriptions": [
+    {
+      "id": "5dede9b4-bdcb-484b-a9aa-c9b51d6066cf",
+      "module_id": "discord",
+      "scope_key": "",
+      "billing_period": "monthly",
+      "recurring_amount_usdc": 0,
+      "period_start": "2026-03-09T15:25:31.046+00:00",
+      "period_end": "2026-04-09T15:25:31.046+00:00",
+      "conditions_snapshot": {},
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "discord",
+        "components": [
+          {
+            "name": "Discord",
+            "type": "recurring",
+            "amount": 0,
+            "quantity": 1,
+            "unitPrice": 0
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": null,
+        "recurringYearly": 0,
+        "recurringMonthly": 0,
+        "appliedYearlyDiscount": null
+      }
+    },
+    {
+      "id": "d859bd99-a316-44a7-ae79-6957b7f76421",
+      "module_id": "marketplace",
+      "scope_key": "",
+      "billing_period": "yearly",
+      "recurring_amount_usdc": 0.0261,
+      "period_start": "2026-03-09T15:50:59.799+00:00",
+      "period_end": "2027-03-09T15:50:59.799+00:00",
+      "conditions_snapshot": {
+        "mintsCount": 5,
+        "monetizeStorefront": false,
+        "baseCurrenciesCount": 4,
+        "customCurrenciesCount": 1
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "marketplace",
+        "components": [
+          {
+            "name": "Growth",
+            "type": "recurring",
+            "amount": 0.0029,
+            "quantity": 1,
+            "unitPrice": 0.0029
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "tier2",
+        "recurringYearly": 0.026099999999999998,
+        "recurringMonthly": 0.0029,
+        "appliedYearlyDiscount": 25
+      }
+    },
+    {
+      "id": "8ee45b0c-e766-44a1-8453-e91d3575898e",
+      "module_id": "raffles",
+      "scope_key": "",
+      "billing_period": "monthly",
+      "recurring_amount_usdc": 0.0015,
+      "period_start": "2026-03-09T15:51:46.655+00:00",
+      "period_end": "2026-04-09T15:51:46.655+00:00",
+      "conditions_snapshot": {
+        "raffleSlotsUsed": 3
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "raffles",
+        "components": [
+          {
+            "name": "Grow",
+            "type": "recurring",
+            "amount": 0.0015,
+            "quantity": 1,
+            "unitPrice": 0.0015
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "grow",
+        "oneTimeUnitName": "Per raffle",
+        "recurringYearly": 0.018000000000000002,
+        "recurringMonthly": 0.0015,
+        "appliedYearlyDiscount": null,
+        "oneTimePerUnitForSelectedTier": 0
+      }
+    },
+    {
+      "id": "fce8f639-cf91-45bf-b25e-93f917a074b6",
+      "module_id": "slug",
+      "scope_key": "",
+      "billing_period": "yearly",
+      "recurring_amount_usdc": 0.0019,
+      "period_start": "2026-03-09T16:47:13.681+00:00",
+      "period_end": "2027-03-09T16:47:13.681+00:00",
+      "conditions_snapshot": {
+        "slugToClaim": "our"
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "slug",
+        "components": [
+          {
+            "name": "Custom slug",
+            "type": "recurring",
+            "amount": 0.00015833333333333332,
+            "quantity": 1,
+            "unitPrice": 0.00015833333333333332
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": null,
+        "recurringYearly": 0.0019,
+        "recurringMonthly": 0.00015833333333333332,
+        "appliedYearlyDiscount": null
+      }
+    },
+    {
+      "id": "d3883526-490a-474c-b0ed-ec146f4b2de3",
+      "module_id": "watchtower",
+      "scope_key": "holders_current",
+      "billing_period": "monthly",
+      "recurring_amount_usdc": 0.002,
+      "period_start": "2026-03-12T08:08:24.389+00:00",
+      "period_end": "2026-04-12T08:08:24.389+00:00",
+      "conditions_snapshot": {
+        "holders_current": 4
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "watchtower",
+        "components": [
+          {
+            "name": "Watchtower",
+            "type": "recurring",
+            "amount": 0,
+            "quantity": 1,
+            "unitPrice": 0
+          },
+          {
+            "name": "Holders (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          },
+          {
+            "name": "Snapshot track (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "tier1",
+        "recurringYearly": 0.048,
+        "recurringMonthly": 0.004,
+        "appliedYearlyDiscount": null
+      }
+    },
+    {
+      "id": "b7524292-29de-447e-901d-96f2035ef2a3",
+      "module_id": "watchtower",
+      "scope_key": "mintsSnapshot",
+      "billing_period": "monthly",
+      "recurring_amount_usdc": 0.002,
+      "period_start": "2026-03-12T08:08:24.389+00:00",
+      "period_end": "2026-04-12T08:08:24.389+00:00",
+      "conditions_snapshot": {
+        "mintsSnapshot": 4
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "watchtower",
+        "components": [
+          {
+            "name": "Watchtower",
+            "type": "recurring",
+            "amount": 0,
+            "quantity": 1,
+            "unitPrice": 0
+          },
+          {
+            "name": "Holders (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          },
+          {
+            "name": "Snapshot track (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "tier1",
+        "recurringYearly": 0.048,
+        "recurringMonthly": 0.004,
+        "appliedYearlyDiscount": null
+      }
+    }
+  ],
+  "billingPayments": [
+    {
+      "id": "35653474-de82-480f-8560-12a6819be62e",
+      "module_id": "watchtower",
+      "scope_key": "",
+      "payment_type": "initial",
+      "amount_usdc": 0.004,
+      "billing_period": "monthly",
+      "period_start": "2026-03-09T15:22:50.995+00:00",
+      "period_end": "2026-04-09T15:22:50.995+00:00",
+      "tx_signature": "3LWiKdu734Jv9iNcxAK8gqwo5PrytSTJ5G6yuMSn79R8uYRoxLNJ1kmtvYmvTgWELwtnvGZrBfmhvFQSuHLjL2Bk",
+      "status": "confirmed",
+      "memo": "dg:1fd576a1ef2e9f9a",
+      "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
+      "conditions_snapshot": {
+        "holders_current": 4,
+        "mintsSnapshot": 4,
+        "mintsTransactions": 0
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "watchtower",
+        "components": [
+          {
+            "name": "Watchtower",
+            "type": "recurring",
+            "amount": 0,
+            "quantity": 1,
+            "unitPrice": 0
+          },
+          {
+            "name": "Holders (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          },
+          {
+            "name": "Snapshot track (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "tier1",
+        "recurringYearly": 0.048,
+        "recurringMonthly": 0.004,
+        "appliedYearlyDiscount": null
+      },
+      "confirmed_at": "2026-03-09T15:23:11.335+00:00",
+      "expires_at": "2026-03-09T15:52:50.995+00:00"
+    },
+    {
+      "id": "288508c5-028b-474b-be62-64b9113bc638",
+      "module_id": "marketplace",
+      "scope_key": "",
+      "payment_type": "initial",
+      "amount_usdc": 0.0261,
+      "billing_period": "yearly",
+      "period_start": "2026-03-09T15:50:59.799+00:00",
+      "period_end": "2027-03-09T15:50:59.799+00:00",
+      "tx_signature": "dNaoX645KAdpfUpuRLMux1ad3Fb6hBRaPqyurHMfLoHJoyyFczoYr3NQUHFCztPFLCpPrHhrCaDyVAFNZv3xTXv",
+      "status": "confirmed",
+      "memo": "dg:91917147eb4a2dd4",
+      "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
+      "conditions_snapshot": {
+        "mintsCount": 5,
+        "monetizeStorefront": false,
+        "baseCurrenciesCount": 4,
+        "customCurrenciesCount": 1
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "marketplace",
+        "components": [
+          {
+            "name": "Growth",
+            "type": "recurring",
+            "amount": 0.0029,
+            "quantity": 1,
+            "unitPrice": 0.0029
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "tier2",
+        "recurringYearly": 0.026099999999999998,
+        "recurringMonthly": 0.0029,
+        "appliedYearlyDiscount": 25
+      },
+      "confirmed_at": "2026-03-09T15:51:10.293+00:00",
+      "expires_at": "2026-03-09T16:20:59.799+00:00"
+    },
+    {
+      "id": "4ab6df9f-060b-42f8-82e8-bf6048bbb5cb",
+      "module_id": "raffles",
+      "scope_key": "",
+      "payment_type": "initial",
+      "amount_usdc": 0.0015,
+      "billing_period": "monthly",
+      "period_start": "2026-03-09T15:51:42.674+00:00",
+      "period_end": "2026-04-09T15:51:42.674+00:00",
+      "tx_signature": "AFontDEigTvq8Fjehh7fJc3W5N7SBRSxDZv6DBeEymLBrE5RzRihtABT4J8j49DcywKtKVHdcZ7uBRpxhf3CMzw",
+      "status": "confirmed",
+      "memo": "dg:fc4dc582a7a849a8",
+      "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
+      "conditions_snapshot": {
+        "raffleSlotsUsed": 3
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "raffles",
+        "components": [
+          {
+            "name": "Grow",
+            "type": "recurring",
+            "amount": 0.0015,
+            "quantity": 1,
+            "unitPrice": 0.0015
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "grow",
+        "oneTimeUnitName": "Per raffle",
+        "recurringYearly": 0.018000000000000002,
+        "recurringMonthly": 0.0015,
+        "appliedYearlyDiscount": null,
+        "oneTimePerUnitForSelectedTier": 0
+      },
+      "confirmed_at": "2026-03-09T15:51:52.344+00:00",
+      "expires_at": "2026-03-09T16:21:42.674+00:00"
+    },
+    {
+      "id": "d78c0263-1fcd-4cd4-87a2-53af5c855760",
+      "module_id": "raffles",
+      "scope_key": "",
+      "payment_type": "initial",
+      "amount_usdc": 0.0015,
+      "billing_period": "monthly",
+      "period_start": "2026-03-09T15:51:46.655+00:00",
+      "period_end": "2026-04-09T15:51:46.655+00:00",
+      "tx_signature": "Rce1QcC8sFHZqkyhrzsXyr1Ys6MYze89twC4CRFm4TYvJrSxBGYLW3DdQmTF6MPCebLxQbAsCWZmezaGv1rMA4e",
+      "status": "confirmed",
+      "memo": "dg:44836c875c93622e",
+      "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
+      "conditions_snapshot": {
+        "raffleSlotsUsed": 3
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "raffles",
+        "components": [
+          {
+            "name": "Grow",
+            "type": "recurring",
+            "amount": 0.0015,
+            "quantity": 1,
+            "unitPrice": 0.0015
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "grow",
+        "oneTimeUnitName": "Per raffle",
+        "recurringYearly": 0.018000000000000002,
+        "recurringMonthly": 0.0015,
+        "appliedYearlyDiscount": null,
+        "oneTimePerUnitForSelectedTier": 0
+      },
+      "confirmed_at": "2026-03-09T15:52:07.914+00:00",
+      "expires_at": "2026-03-09T16:21:46.655+00:00"
+    },
+    {
+      "id": "17cad9f8-b10d-442f-bce3-77af23c91c01",
+      "module_id": "slug",
+      "scope_key": "",
+      "payment_type": "initial",
+      "amount_usdc": 0.0019,
+      "billing_period": "yearly",
+      "period_start": "2026-03-09T16:47:13.681+00:00",
+      "period_end": "2027-03-09T16:47:13.681+00:00",
+      "tx_signature": "3DE6sdwJdmVVfWhK71HZVGMz5Feijb8f33YLcifX9YnEeBEGnmMGXh3Uj3Ndum22rHrTDcPSoVSSNBDEw37WvSPj",
+      "status": "confirmed",
+      "memo": "dg:dd9db0a7c7b0aad7",
+      "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
+      "conditions_snapshot": {
+        "slugToClaim": "our"
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "slug",
+        "components": [
+          {
+            "name": "Custom slug",
+            "type": "recurring",
+            "amount": 0.00015833333333333332,
+            "quantity": 1,
+            "unitPrice": 0.00015833333333333332
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": null,
+        "recurringYearly": 0.0019,
+        "recurringMonthly": 0.00015833333333333332,
+        "appliedYearlyDiscount": null
+      },
+      "confirmed_at": "2026-03-09T16:47:22.857+00:00",
+      "expires_at": "2026-03-09T17:17:13.681+00:00"
+    },
+    {
+      "id": "e9032632-3369-4c65-950e-8958e7b99269",
+      "module_id": "watchtower",
+      "scope_key": "",
+      "payment_type": "upgrade_prorate",
+      "amount_usdc": 0.001661,
+      "billing_period": "monthly",
+      "period_start": "2026-03-12T07:57:41.856+00:00",
+      "period_end": "2026-04-12T07:57:41.856+00:00",
+      "tx_signature": null,
+      "status": "pending",
+      "memo": "dg:b6ee5a7c60994695",
+      "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
+      "conditions_snapshot": {
+        "holders_current": 4,
+        "mintsSnapshot": 4,
+        "mintsTransactions": 0
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "watchtower",
+        "components": [
+          {
+            "name": "Watchtower",
+            "type": "recurring",
+            "amount": 0,
+            "quantity": 1,
+            "unitPrice": 0
+          },
+          {
+            "name": "Holders (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          },
+          {
+            "name": "Snapshot track (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "tier1",
+        "recurringYearly": 0.048,
+        "recurringMonthly": 0.004,
+        "appliedYearlyDiscount": null
+      },
+      "confirmed_at": null,
+      "expires_at": "2026-03-12T08:27:41.856+00:00"
+    },
+    {
+      "id": "2ea6fa50-042c-4ca3-8298-8d4116f987c0",
+      "module_id": "watchtower",
+      "scope_key": "",
+      "payment_type": "upgrade_prorate",
+      "amount_usdc": 0.001661,
+      "billing_period": "monthly",
+      "period_start": "2026-03-12T08:08:24.389+00:00",
+      "period_end": "2026-04-12T08:08:24.389+00:00",
+      "tx_signature": "5MJxqhceS4aCSTPA7PTwVV17X9QH2Y5CGCVyxqfi7EmKkpMypNCkpt8qLpwDrcADf7FNxppVTKSv5MnpT98enywm",
+      "status": "confirmed",
+      "memo": "dg:4f9490bc3363ce31",
+      "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
+      "conditions_snapshot": {
+        "holders_current": 4,
+        "mintsSnapshot": 4,
+        "mintsTransactions": 0
+      },
+      "price_snapshot": {
+        "billable": true,
+        "moduleId": "watchtower",
+        "components": [
+          {
+            "name": "Watchtower",
+            "type": "recurring",
+            "amount": 0,
+            "quantity": 1,
+            "unitPrice": 0
+          },
+          {
+            "name": "Holders (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          },
+          {
+            "name": "Snapshot track (per mint)",
+            "type": "recurring",
+            "amount": 0.002,
+            "quantity": 4,
+            "unitPrice": 0.0005
+          }
+        ],
+        "oneTimeTotal": 0,
+        "selectedTierId": "tier1",
+        "recurringYearly": 0.048,
+        "recurringMonthly": 0.004,
+        "appliedYearlyDiscount": null
+      },
+      "confirmed_at": "2026-03-12T08:09:05.237+00:00",
+      "expires_at": "2026-03-12T08:38:24.389+00:00"
+    }
+  ],
+  "discordServer": {
+    "discord_guild_id": "1055746765061640252",
+    "guild_name": null,
+    "bot_invite_state": null,
+    "bot_role_position": 4
+  },
+  "discordRoleRules": [
+    {
+      "discord_role_id": "1477677520512880780",
+      "operator": "AND",
+      "conditions": [
+        {
+          "type": "HOLDING",
+          "payload": {
+            "mint": "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q",
+            "amount": 1000000000
+          },
+          "logic_to_next": "AND"
+        },
+        {
+          "type": "HOLDING",
+          "payload": {
+            "mint": "C1FxQEMa7ZPmzpP8ak5PYg8iMdYaxZVNHF7pfaAcCx3D",
+            "amount": 1000000000
+          },
+          "logic_to_next": "AND"
+        },
+        {
+          "type": "HOLDING",
+          "payload": {
+            "mint": "6LomcBw8DVUE3T1XBLK1PZDiRyHYtFYo9E6v9UXeqjHE",
+            "amount": 1
+          },
+          "logic_to_next": null
+        }
+      ]
+    },
+    {
+      "discord_role_id": "1477676152029188226",
+      "operator": "AND",
+      "conditions": [
+        {
+          "type": "SNAPSHOTS",
+          "payload": {
+            "days": 5,
+            "mint": "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q",
+            "amount": 1000000000
+          },
+          "logic_to_next": null
+        }
+      ]
+    },
+    {
+      "discord_role_id": "1469172832066998424",
+      "operator": "AND",
+      "conditions": [
+        {
+          "type": "HOLDING",
+          "payload": {
+            "mint": "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q",
+            "amount": 100000000
+          },
+          "logic_to_next": "AND"
+        },
+        {
+          "type": "TRAIT",
+          "payload": {
+            "mint": "6LomcBw8DVUE3T1XBLK1PZDiRyHYtFYo9E6v9UXeqjHE",
+            "amount": 1,
+            "trait_key": "drop",
+            "trait_value": "1"
+          },
+          "logic_to_next": "AND"
+        },
+        {
+          "type": "WHITELIST",
+          "payload": {
+            "list_address": "9Ypa4Gzb7umK96LFoB2dyHqQWvCuXSXqhwzavHvrzQXt"
+          },
+          "logic_to_next": "AND"
+        },
+        {
+          "type": "SNAPSHOTS",
+          "payload": {
+            "days": 1,
+            "mint": "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q",
+            "amount": 100000000
+          },
+          "logic_to_next": null
+        }
+      ]
+    }
+  ],
+  "mintMetadata": [
+    {
+      "mint": "So11111111111111111111111111111111111111112",
+      "name": "Wrapped SOL",
+      "symbol": null,
+      "image": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
+      "decimals": 9,
+      "traits": null,
+      "trait_index": null,
+      "update_authority": "AqH29mZfQFgRpfwaPoTMWSKJ5kqauoc1FwVBRksZyQrt",
+      "uri": null,
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "FungibleToken"
+    },
+    {
+      "mint": "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx",
+      "name": "Star Atlas",
+      "symbol": null,
+      "image": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx/logo.png",
+      "decimals": 8,
+      "traits": null,
+      "trait_index": null,
+      "update_authority": "GgYtnDJMHQG4gpVzy2KHukSvHfFJcs1jLXASsBCQE83P",
+      "uri": null,
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "FungibleToken"
+    },
+    {
+      "mint": "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q",
+      "name": "DACBloon",
+      "symbol": null,
+      "image": "https://skullnbonesdao.github.io/tokens.skullnbones/DACB/DACB.gif",
+      "decimals": 8,
+      "traits": null,
+      "trait_index": null,
+      "update_authority": "8BbUNDPNAyoxHFH7pKuQJQjWdF59rdfUtFZ71y82xxv9",
+      "uri": "https://skullnbonesdao.github.io/tokens.skullnbones/DACB/DACB.json",
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "FungibleToken"
+    },
+    {
+      "mint": "C1FxQEMa7ZPmzpP8ak5PYg8iMdYaxZVNHF7pfaAcCx3D",
+      "name": "DAOBloon",
+      "symbol": null,
+      "image": "https://skullnbonesdao.github.io/tokens.skullnbones/DAOB/DAOB.gif",
+      "decimals": 8,
+      "traits": null,
+      "trait_index": null,
+      "update_authority": "DMgNLsBtT8kjwNAycGWUc3JttiMMT4PnaxptUkTspiH4",
+      "uri": "https://skullnbonesdao.github.io/tokens.skullnbones/DAOB/DAOB.json",
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "FungibleToken"
+    },
+    {
+      "mint": "CL2m6JiuV8H7X6cqzMqHNGWbJncj7HZ2BFXd8sQYStQ3",
+      "name": "S&B Skeleton Crew",
+      "symbol": null,
+      "image": "https://arweave.net/lItAZK5BHJpMrwT97pc8osfy1kcoNkIj-iA3qW3s7pE?ext=png",
+      "decimals": null,
+      "traits": null,
+      "trait_index": {
+        "trait_keys": [
+          "drop",
+          "type",
+          "anniversary",
+          "year",
+          "crew"
+        ],
+        "trait_options": {
+          "crew": [
+            "Legendary"
+          ],
+          "drop": [
+            "1"
+          ],
+          "type": [
+            "Anniversary"
+          ],
+          "year": [
+            "2022/2023"
+          ],
+          "anniversary": [
+            "Year 2"
+          ]
+        }
+      },
+      "update_authority": "snbV1PVSmktbUmLUgs14gVjmApuTLsynWtiN8aE3CDD",
+      "uri": "https://arweave.net/Y96PWpDfum1t6b2F5ejII_UAugO8ZjzQwzAQZCdJZTU",
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "V1_NFT"
+    },
+    {
+      "mint": "6LomcBw8DVUE3T1XBLK1PZDiRyHYtFYo9E6v9UXeqjHE",
+      "name": "S&B Abyssal Armada",
+      "symbol": null,
+      "image": "https://gateway.irys.xyz/Yzy6JBBf7_bkTR2dZqKIDRAYYuEYg2vRj78uPoSjmHI?ext=png",
+      "decimals": null,
+      "traits": null,
+      "trait_index": {
+        "trait_keys": [
+          "drop",
+          "type",
+          "anniversary",
+          "year",
+          "crew"
+        ],
+        "trait_options": {
+          "crew": [
+            "Legendary"
+          ],
+          "drop": [
+            "1"
+          ],
+          "type": [
+            "Anniversary"
+          ],
+          "year": [
+            "2023/2024"
+          ],
+          "anniversary": [
+            "Year 3"
+          ]
+        }
+      },
+      "update_authority": "mntdaCdxJ2DgvothqX9VmXZQ2yMUpTDfJB5ESiG1uSr",
+      "uri": "https://gateway.irys.xyz/eUN3ova_a_im-zhkDG2cUwDNjNK06ntnUTOdvGv7vUU",
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "V1_NFT"
+    },
+    {
+      "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "name": "USDT",
+      "symbol": null,
+      "image": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.svg",
+      "decimals": 6,
+      "traits": null,
+      "trait_index": null,
+      "update_authority": "Q6XprfkF8RQQKoQVG33xT88H7wi8Uk1B1CC7YAs69Gi",
+      "uri": null,
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "FungibleToken"
+    },
+    {
+      "mint": "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",
+      "name": "Wrapped BTC (Wormhole)",
+      "symbol": null,
+      "image": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh/logo.png",
+      "decimals": 8,
+      "traits": null,
+      "trait_index": null,
+      "update_authority": "BCD75RNBHrJJpW4dXVagL5mPjzRLnVZq4YirJdjEYMV7",
+      "uri": null,
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "FungibleToken"
+    },
+    {
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "name": "USD Coin",
+      "symbol": null,
+      "image": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png",
+      "decimals": 6,
+      "traits": null,
+      "trait_index": null,
+      "update_authority": "2wmVCSfPxGPjrnMMn7rchp4uaeoTqN39mXFC2zhPdri9",
+      "uri": null,
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "FungibleToken"
+    },
+    {
+      "mint": "poLisWXnNRwC6oBu1vHiuKQzFjGL4XDSu4g9qjz9qVk",
+      "name": "Star Atlas DAO",
+      "symbol": null,
+      "image": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/poLisWXnNRwC6oBu1vHiuKQzFjGL4XDSu4g9qjz9qVk/logo.png",
+      "decimals": 8,
+      "traits": null,
+      "trait_index": null,
+      "update_authority": "GgYtnDJMHQG4gpVzy2KHukSvHfFJcs1jLXASsBCQE83P",
+      "uri": null,
+      "seller_fee_basis_points": 0,
+      "primary_sale_happened": false,
+      "is_mutable": null,
+      "edition_nonce": null,
+      "token_standard": "FungibleToken"
+    }
   ]
 }

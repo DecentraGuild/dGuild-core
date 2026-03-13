@@ -20,11 +20,11 @@
           Connect your wallet to link it to your Discord account for role verification.
         </p>
         <Button
-          variant="primary"
+          variant="default"
           :disabled="loading"
           @click="connectedWallet ? doLink(connectedWallet) : (showConnectModal = true)"
         >
-          <Icon v-if="loading" icon="mdi:loading" class="verify-page__spinner" />
+          <Icon v-if="loading" icon="lucide:loader-2" class="verify-page__spinner" />
           {{ connectedWallet ? 'Link this wallet' : 'Connect wallet' }}
         </Button>
         <p v-if="linkError" class="verify-page__error">{{ linkError }}</p>
@@ -45,20 +45,20 @@
 </template>
 
 <script setup lang="ts">
-import { Card, Button, ConnectWalletModal } from '@decentraguild/ui/components'
+import { Card } from '~/components/ui/card'
+import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import {
   getConnectorState,
   connectWallet,
-  signMessageForAuth,
   subscribeToConnectorState,
 } from '@decentraguild/web3/wallet'
 import type { WalletConnectorId } from '@solana/connector/headless'
-import { API_V1 } from '~/utils/apiBase'
-import { useApiBase } from '~/composables/useApiBase'
+import { useAuth } from '@decentraguild/auth'
+import { useSupabase } from '~/composables/core/useSupabase'
 
 const route = useRoute()
-const apiBase = useApiBase()
+const auth = useAuth()
 
 const token = computed(() => (route.query.token as string) ?? '')
 
@@ -87,60 +87,58 @@ onUnmounted(() => {
 async function checkSession() {
   if (!token.value) return
   try {
-    const res = await fetch(
-      `${apiBase.value}${API_V1}/discord/verify/session?token=${encodeURIComponent(token.value)}`,
-      { credentials: 'include' }
-    )
-    if (!res.ok) {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('discord-verify', {
+      body: { action: 'session-status', token: token.value },
+    })
+    if (error) {
       sessionError.value = 'This link is invalid or has expired.'
       return
     }
-    const data = (await res.json()) as { valid?: boolean }
-    if (!data.valid) {
-      sessionError.value = 'This link has expired. Use /verify in Discord to get a new one.'
+    const result = data as { valid?: boolean; reason?: string }
+    if (!result.valid) {
+      sessionError.value =
+        result.reason === 'expired'
+          ? 'This link has expired. Use /verify in Discord to get a new one.'
+          : 'This link is invalid or has expired.'
     }
   } catch {
     sessionError.value = 'Could not verify link. Check your connection.'
   }
 }
 
-async function doLink(wallet: string) {
+async function doLink(_wallet: string) {
   if (!token.value) return
   linkError.value = null
   loading.value = true
   try {
-    const base = apiBase.value.replace(/\/$/, '')
-
-    const nonceRes = await fetch(`${base}${API_V1}/auth/nonce`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet }),
-      credentials: 'include',
-    })
-    if (!nonceRes.ok) {
-      const data = await nonceRes.json().catch(() => ({}))
-      linkError.value = (data.error as string) ?? 'Failed to get nonce'
+    const state = getConnectorState()
+    const connectorId = state.connectorId as WalletConnectorId | null
+    if (!connectorId) {
+      linkError.value = 'Wallet not connected'
       return
     }
-    const { nonce } = (await nonceRes.json()) as { nonce: string }
 
-    const { signature, message } = await signMessageForAuth(nonce)
+    // Sign into Supabase with this wallet — this proves ownership without a separate nonce flow.
+    if (!auth.wallet.value) {
+      const ok = await auth.connectAndSignIn(connectorId)
+      if (!ok) {
+        linkError.value = auth.error.value ?? 'Sign-in failed'
+        return
+      }
+    }
 
-    const linkRes = await fetch(`${base}${API_V1}/discord/verify/link`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        verify_token: token.value,
-        wallet,
-        message,
-        signature,
-      }),
-      credentials: 'include',
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('discord-verify', {
+      body: { action: 'link', token: token.value },
     })
-
-    if (!linkRes.ok) {
-      const data = await linkRes.json().catch(() => ({}))
-      linkError.value = (data.error as string) ?? 'Link failed'
+    if (error) {
+      linkError.value = error.message ?? 'Link failed'
+      return
+    }
+    const result = data as { ok?: boolean; error?: string }
+    if (result.error) {
+      linkError.value = result.error
       return
     }
     success.value = true

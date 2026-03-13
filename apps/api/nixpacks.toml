@@ -1,3 +1,0 @@
-# Add pg_dump for worker DB backups. Railway/Nixpacks.
-[phases.setup]
-nixPkgs = ["nodejs_20", "postgresql"]

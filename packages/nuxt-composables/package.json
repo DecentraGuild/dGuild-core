@@ -1,0 +1,26 @@
+{
+  "name": "@decentraguild/nuxt-composables",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./useSupabase": "./src/useSupabase.ts",
+    "./useRpc": "./src/useRpc.ts",
+    "./useExplorerLinks": "./src/useExplorerLinks.ts"
+  },
+  "scripts": {
+    "build": "echo 'source-only package'",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@decentraguild/auth": "workspace:*"
+  },
+  "peerDependencies": {
+    "nuxt": "^3.0.0 || ^4.0.0",
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

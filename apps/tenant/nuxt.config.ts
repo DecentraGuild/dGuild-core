@@ -16,18 +16,26 @@ export default defineNuxtConfig({
       viewport: 'width=device-width, initial-scale=1',
     },
   },
-  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
+  components: [
+    { path: '~/components/admin', pathPrefix: false },
+    { path: '~/components/gates', pathPrefix: false },
+    { path: '~/components/mint', pathPrefix: false },
+    { path: '~/components/shared', pathPrefix: false },
+    { path: '~/components', pathPrefix: true },
+  ],
+  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', 'shadcn-nuxt'],
+  shadcn: {
+    prefix: '',
+    componentDir: './src/components/ui',
+  },
   css: [uiVarsCss, '~/assets/global.css'],
-  plugins: ['~/plugins/buffer.server', '~/plugins/tenant.server', '~/plugins/theme-inject.server', '~/plugins/buffer.client', '~/plugins/tenant.client', '@decentraguild/auth/plugin.client'],
-  routeRules:
-    process.env.NODE_ENV === 'development'
-      ? { '/api/**': { proxy: 'http://localhost:3001' } }
-      : {},
+  plugins: ['~/plugins/buffer.server', '~/plugins/tenant.server', '~/plugins/theme-inject.server', '~/plugins/buffer.client', '~/plugins/tenant.client', '@decentraguild/auth/plugin.server', '@decentraguild/auth/plugin.client'],
+  routeRules: {},
   nitro: {
     preset: 'static',
   },
   build: {
-    transpile: ['@decentraguild/ui', '@decentraguild/auth', '@decentraguild/web3', '@decentraguild/contracts'],
+    transpile: ['@decentraguild/ui', '@decentraguild/auth', '@decentraguild/web3', '@decentraguild/contracts', '@decentraguild/shipment'],
   },
   hooks: {
     'vite:extendConfig'(config) {
@@ -72,8 +80,9 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      // In dev, default to local API so CORS and auth work without setting env. No trailing slash.
-      apiUrl: (process.env.NUXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? 'https://api.dguild.org' : 'http://localhost:3001')).replace(/\/$/, ''),
+      // Supabase project URL and anon key (safe to expose in browser).
+      supabaseUrl: process.env.NUXT_PUBLIC_SUPABASE_URL ?? '',
+      supabaseAnonKey: process.env.NUXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
       heliusRpc: process.env.NUXT_PUBLIC_HELIUS_RPC ?? '',
       // Default tenant when running on localhost without subdomain (e.g. 0000000 or decentraguild). Set NUXT_PUBLIC_DEV_TENANT or use ?tenant=.
       devTenantSlug: process.env.NUXT_PUBLIC_DEV_TENANT ?? '',

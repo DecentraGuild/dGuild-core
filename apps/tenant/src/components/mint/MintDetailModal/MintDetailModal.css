@@ -1,0 +1,638 @@
+.mint-modal {
+  position: fixed;
+  inset: 0;
+  background: var(--theme-backdrop, rgba(0, 0, 0, 0.6));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  padding: var(--theme-space-lg);
+}
+
+.mint-modal__panel {
+  background: var(--theme-bg-card);
+  color: var(--theme-text-primary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  max-width: min(95vw, 30rem);
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--theme-shadow-card);
+}
+
+.mint-modal__panel--wide {
+  max-width: min(95vw, 56rem);
+}
+
+.mint-modal__loading,
+.mint-modal__error {
+  padding: var(--theme-space-xl);
+  text-align: center;
+  color: var(--theme-text-muted);
+}
+
+.mint-modal__error {
+  color: var(--theme-text-error);
+}
+
+.mint-modal__spinner {
+  animation: mint-modal-spin 0.8s linear infinite;
+}
+
+@keyframes mint-modal-spin {
+  to { transform: rotate(360deg); }
+}
+
+.mint-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--theme-space-md);
+  padding: var(--theme-space-md) var(--theme-space-lg);
+  border-bottom: var(--theme-border-thin) solid var(--theme-border);
+  flex-shrink: 0;
+}
+
+.mint-modal__header-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-md);
+  min-width: 0;
+}
+
+.mint-modal__thumb {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--theme-radius-md);
+  overflow: hidden;
+  background: var(--theme-bg-secondary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.mint-modal__thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mint-modal__thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--theme-text-muted);
+  font-size: 1.75rem;
+}
+
+.mint-modal__header-text {
+  min-width: 0;
+}
+
+.mint-modal__title {
+  margin: 0 0 var(--theme-space-xs);
+  font-size: var(--theme-font-lg);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mint-modal__header-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-sm);
+  flex-wrap: wrap;
+}
+
+.mint-modal__kind-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--theme-space-xs);
+  border-radius: var(--theme-radius-full);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  font-size: var(--theme-font-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--theme-text-muted);
+}
+
+.mint-modal__symbol {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-muted);
+  font-weight: 500;
+}
+
+.mint-modal__track-badge {
+  font-size: var(--theme-font-xs);
+  padding: 2px 6px;
+  border-radius: var(--theme-radius-sm);
+  background: color-mix(in srgb, var(--theme-primary) 20%, transparent);
+  color: var(--theme-primary);
+}
+
+.mint-modal__header-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  flex-shrink: 0;
+}
+
+.mint-modal__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  border-radius: var(--theme-radius-sm);
+  text-decoration: none;
+  font-size: 1rem;
+  transition: color 0.12s, background 0.12s;
+}
+
+.mint-modal__icon-btn:hover {
+  color: var(--theme-text-primary);
+  background: var(--theme-bg-secondary);
+}
+
+.mint-modal__icon-btn--success {
+  color: var(--theme-success);
+}
+
+.mint-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  border-radius: var(--theme-radius-sm);
+  font-size: 1rem;
+  transition: color 0.12s, background 0.12s;
+}
+
+.mint-modal__close:hover {
+  color: var(--theme-text-primary);
+  background: var(--theme-bg-secondary);
+}
+
+.mint-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  color: var(--theme-text-primary);
+}
+
+.mint-modal__section {
+  padding: var(--theme-space-md) var(--theme-space-lg);
+  flex-shrink: 0;
+}
+
+.mint-modal__section--bordered {
+  border-top: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.mint-modal__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-md);
+  margin-bottom: var(--theme-space-sm);
+}
+.mint-modal__section-title {
+  margin: 0;
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.mint-modal__view-toggle {
+  display: flex;
+  gap: 2px;
+}
+.mint-modal__view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  border-radius: var(--theme-radius-sm);
+  font-size: 1rem;
+}
+.mint-modal__view-btn:hover {
+  color: var(--theme-text-primary);
+  background: var(--theme-bg-secondary);
+}
+.mint-modal__view-btn--active {
+  color: var(--theme-primary);
+  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
+}
+.mint-modal__nft-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.mint-modal__nft-list-header {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(3rem, auto) minmax(8rem, 2fr);
+  gap: var(--theme-space-sm);
+  padding: var(--theme-space-xs) 0;
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: var(--theme-border-thin) solid var(--theme-border);
+}
+.mint-modal__nft-list-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(3rem, auto) minmax(8rem, 2fr);
+  gap: var(--theme-space-sm);
+  align-items: center;
+  padding: var(--theme-space-xs) 0;
+  border-bottom: var(--theme-border-thin) solid var(--theme-border);
+  font-size: var(--theme-font-sm);
+}
+.mint-modal__nft-list-row:last-child {
+  border-bottom: none;
+}
+.mint-modal__nft-list-col {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  min-width: 0;
+}
+.mint-modal__nft-list-value {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mint-modal__nft-list-value--mono {
+  font-family: var(--theme-font-mono, monospace);
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+}
+.mint-modal__nft-list-col--nfts {
+  flex-wrap: wrap;
+  gap: var(--theme-space-xs);
+}
+.mint-modal__nft-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--theme-font-xs);
+}
+.mint-modal__icon-btn--sm {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.mint-modal__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+}
+
+.mint-modal__field {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  align-items: start;
+  gap: var(--theme-space-sm);
+  padding: var(--theme-space-xs) 0;
+  border-bottom: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.mint-modal__field:last-child {
+  border-bottom: none;
+}
+
+.mint-modal__field--address {
+  align-items: center;
+}
+
+.mint-modal__field-label {
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 2px;
+}
+
+.mint-modal__field-value {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--theme-space-xs);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-primary);
+  min-width: 0;
+  margin: 0;
+}
+
+.mint-modal__field-muted {
+  color: var(--theme-text-muted);
+  font-size: var(--theme-font-xs);
+}
+
+.mint-modal__field-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.mint-modal__mono {
+  font-family: var(--theme-font-mono, monospace);
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+  background: var(--theme-bg-secondary);
+  padding: 2px 6px;
+  border-radius: var(--theme-radius-sm);
+  word-break: break-all;
+}
+
+.mint-modal__tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: var(--theme-radius-full);
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: var(--theme-border-thin) solid transparent;
+}
+
+.mint-modal__tier-badge--base {
+  background: var(--theme-bg-secondary);
+  color: var(--theme-text-muted);
+  border-color: var(--theme-border);
+}
+
+.mint-modal__tier-badge--grow {
+  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
+  color: var(--theme-primary);
+  border-color: color-mix(in srgb, var(--theme-primary) 30%, transparent);
+}
+
+.mint-modal__tier-badge--pro {
+  background: color-mix(in srgb, var(--theme-warning) 12%, transparent);
+  color: var(--theme-warning);
+  border-color: color-mix(in srgb, var(--theme-warning) 30%, transparent);
+}
+
+.mint-modal__json {
+  margin: 0;
+  font-family: var(--theme-font-mono, monospace);
+  font-size: var(--theme-font-xs);
+  line-height: 1.6;
+  color: var(--theme-text-secondary);
+  background: var(--theme-bg-secondary);
+  padding: var(--theme-space-md);
+  border-radius: var(--theme-radius-md);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.mint-modal__trait-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-space-xs);
+}
+
+.mint-modal__trait-pill {
+  font-size: var(--theme-font-xs);
+  padding: 2px 8px;
+  background: var(--theme-bg-secondary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  color: var(--theme-text-secondary);
+}
+
+.mint-modal__empty,
+.mint-modal__muted {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-muted);
+  margin: 0;
+}
+
+.mint-modal__link {
+  color: var(--theme-primary);
+  text-decoration: none;
+}
+
+.mint-modal__link:hover {
+  text-decoration: underline;
+}
+
+.mint-modal__count {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+  margin-top: var(--theme-space-xs);
+}
+
+.mint-modal__nft-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--theme-space-md);
+}
+
+.mint-modal__nft-card {
+  background: var(--theme-bg-secondary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+a.mint-modal__nft-card:hover {
+  border-color: var(--theme-primary);
+}
+
+.mint-modal__nft-media {
+  aspect-ratio: 1;
+  background: var(--theme-bg-primary);
+}
+
+.mint-modal__nft-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mint-modal__nft-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-muted);
+  font-size: 2rem;
+}
+
+.mint-modal__nft-info {
+  padding: var(--theme-space-sm);
+}
+
+.mint-modal__nft-name {
+  margin: 0 0 2px;
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mint-modal__nft-mint {
+  margin: 0 0 var(--theme-space-xs);
+  font-size: 10px;
+  font-family: var(--theme-font-mono, monospace);
+  color: var(--theme-text-muted);
+}
+
+.mint-modal__nft-traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.mint-modal__nft-trait {
+  font-size: 9px;
+  padding: 1px 4px;
+  background: var(--theme-bg-primary);
+  border-radius: 2px;
+  color: var(--theme-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.mint-modal__snapshot-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.mint-modal__snapshot-item {
+  border-bottom: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.mint-modal__snapshot-item:last-child {
+  border-bottom: none;
+}
+
+.mint-modal__snapshot-row {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-sm);
+  width: 100%;
+  padding: var(--theme-space-xs) 0;
+  text-align: left;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--theme-text-primary);
+  cursor: pointer;
+}
+
+.mint-modal__snapshot-row:hover {
+  color: var(--theme-text-primary);
+}
+
+.mint-modal__snapshot-count {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+  margin-left: auto;
+}
+
+.mint-modal__wallets {
+  padding: var(--theme-space-sm) 0 var(--theme-space-sm) var(--theme-space-md);
+}
+
+.mint-modal__wallet-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--theme-font-mono, monospace);
+  font-size: var(--theme-font-xs);
+}
+
+.mint-modal__wallet-item {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-sm);
+  padding: var(--theme-space-xs) var(--theme-space-sm);
+  border-radius: var(--theme-radius-sm);
+  background: var(--theme-bg-secondary);
+  color: var(--theme-text-primary);
+}
+.mint-modal__holder-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  min-width: 4rem;
+}
+.mint-modal__holder-wallet {
+  font-family: var(--theme-font-mono, monospace);
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+  flex: 1;
+  min-width: 0;
+}
+
+.mint-modal__wallet-more {
+  color: var(--theme-text-muted);
+  margin-top: var(--theme-space-xs);
+  font-size: var(--theme-font-xs);
+}
+
+.mint-modal__shipment-banner-row {
+  display: flex;
+  gap: var(--theme-space-sm);
+  align-items: center;
+  margin-top: var(--theme-space-sm);
+}
+
+.mint-modal__input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--theme-space-sm) var(--theme-space-md);
+  font-size: var(--theme-font-sm);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-bg-primary);
+  color: var(--theme-text-primary);
+}

@@ -6,8 +6,8 @@
 
 <script setup lang="ts">
 import { toRef, computed } from 'vue'
-import { sanitizeTokenLabel } from '@decentraguild/display'
-import { useTokenDisplay } from '~/composables/useTokenDisplay'
+import { sanitizeTokenLabel, truncateAddress } from '@decentraguild/display'
+import { useTokenDisplay } from '~/composables/core/useTokenDisplay'
 
 const props = defineProps<{ mint: string }>()
 
@@ -20,7 +20,7 @@ const label = computed(() => {
   const symbol = sanitizeTokenLabel(d?.symbol ?? null)
   if (name) return name
   if (symbol) return symbol
-  return d?.mintShort ?? props.mint.slice(0, 8) + '...'
+  return d?.mintShort ?? truncateAddress(props.mint, 8, 4)
 })
 </script>
 

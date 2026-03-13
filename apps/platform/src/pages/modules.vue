@@ -18,11 +18,11 @@
               <Icon :icon="entry.icon" height="none" class="modules__card-bg-icon-svg" />
             </span>
             <button
+              :id="`module-trigger-${entry.id}`"
               type="button"
               class="modules__card-trigger"
               :aria-expanded="expandedModuleId === entry.id"
               :aria-controls="`module-detail-${entry.id}`"
-              :id="`module-trigger-${entry.id}`"
               @click="toggleModule(entry.id)"
             >
               <span class="modules__card-header">
@@ -83,10 +83,10 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Modules' })
 import { Icon } from '@iconify/vue'
+import { formatUsdc } from '@decentraguild/core'
 import { PageSection } from '@decentraguild/ui/components'
 import { getModuleCatalogList } from '@decentraguild/config'
 import type { ModuleCatalogEntry } from '@decentraguild/config'
-import type { PricingModel } from '@decentraguild/billing'
 import DguildCenter from '~/components/DguildCenter.vue'
 
 const config = useRuntimeConfig()
@@ -100,10 +100,6 @@ function toggleModule(id: string) {
 
 function docsUrl(entry: ModuleCatalogEntry) {
   return `${platformDocsBase.replace(/\/$/, '')}/modules/${entry.id}`
-}
-
-function formatUsdc(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
 }
 
 function getFromPrice(entry: ModuleCatalogEntry): string | null {

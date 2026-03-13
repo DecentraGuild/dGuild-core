@@ -88,7 +88,7 @@ export interface TenantThemeColors {
   background?: { primary?: string; secondary?: string; card?: string; muted?: string; backdrop?: string }
   text?: { primary?: string; secondary?: string; muted?: string }
   border?: { default?: string; light?: string }
-  status?: { success?: string; error?: string; warning?: string; info?: string }
+  status?: { success?: string; error?: string; warning?: string; info?: string; destructive?: string }
   trade?: {
     buy?: string
     buyHover?: string
@@ -108,7 +108,7 @@ export interface TenantThemeColors {
 
 export interface TenantThemeEffects {
   /** Background pattern overlay. Default: 'none'. */
-  pattern?: 'none' | 'dots' | 'grid' | 'noise'
+  pattern?: 'none' | 'dots' | 'grid'
   /**
    * Pattern tile size in pixels. Dots: dot spacing. Grid: cell size. Noise: grain pitch.
    * Reasonable range: 4–64. Default: 24.
@@ -149,8 +149,8 @@ export interface TenantConfig {
   description?: string
   /** Discord server invite link (for users to join the community). General setting, editable in Admin > General. */
   discordServerInviteLink?: string
-  /** Default whitelist for the tenant. When set, becomes base for transactions unless module/transaction overrides. Empty account = no default. */
-  defaultWhitelist?: MarketplaceWhitelistSettings | null
+  /** Default gate for the tenant. When set, becomes base for transactions unless module/transaction overrides. 'admin-only' = admins only; null = public; object = specific list. */
+  defaultGate?: MarketplaceGateSettings | null | 'admin-only'
   branding: TenantBranding
   /** Modules keyed by id. Use normalizeModules() when reading from JSON that may be a legacy array. */
   modules: TenantModulesMap
@@ -193,7 +193,8 @@ export interface MarketplaceSplAsset {
   groupPath?: MarketplaceGroupPath
 }
 
-export interface MarketplaceWhitelistSettings {
+/** Gate (access list) settings: programId + account address. Alias: MarketplaceWhitelistSettings for backward compat. */
+export interface MarketplaceGateSettings {
   programId: string
   account: string
 }
@@ -212,52 +213,97 @@ export interface MarketplaceSettings {
   splAssetMints?: MarketplaceSplAsset[]
   currencyMints: MarketplaceCurrencyMint[]
   /** undefined = use dGuild default, null = public (no list), object = specific list */
-  whitelist?: MarketplaceWhitelistSettings | null
+  gate?: MarketplaceGateSettings | null
+  /** @deprecated Use gate */
+  whitelist?: MarketplaceGateSettings | null
   shopFee: MarketplaceShopFee
 }
 
+/** Effective gate result: list, public (null), or admin-only. */
+export type EffectiveGateResult = MarketplaceGateSettings | null | 'admin-only'
+
 /**
- * Effective whitelist for a module. Three-way:
- * - moduleWhitelist === null → Public (no list), returns null
- * - moduleWhitelist === undefined (or 'use-default') → follow dGuild setting, returns tenantDefault or null
- * - moduleWhitelist === { programId, account } → use that list (or null if account is empty)
+ * Effective gate for a module. Four-way:
+ * - moduleGate === 'admin-only' → returns 'admin-only'
+ * - moduleGate === null | 'public' → Public (no list), returns null
+ * - moduleGate === undefined (or 'use-default') → follow dGuild setting, returns tenantDefault or null or 'admin-only'
+ * - moduleGate === { programId, account } → use that list (or null if account is empty)
  */
-export function getEffectiveWhitelist(
-  tenantDefault: MarketplaceWhitelistSettings | null | undefined,
-  moduleWhitelist: MarketplaceWhitelistSettings | null | undefined
-): MarketplaceWhitelistSettings | null {
-  if (moduleWhitelist === null) return null
-  if (moduleWhitelist !== undefined && typeof moduleWhitelist === 'object') {
-    return moduleWhitelist.account?.trim() ? moduleWhitelist : null
+export function getEffectiveGate(
+  tenantDefault: MarketplaceGateSettings | null | 'admin-only' | undefined,
+  moduleGate: MarketplaceGateSettings | null | 'admin-only' | 'use-default' | 'public' | undefined
+): EffectiveGateResult {
+  if (moduleGate === 'admin-only') return 'admin-only'
+  if (moduleGate === null || moduleGate === 'public') return null
+  if (moduleGate !== undefined && typeof moduleGate === 'object') {
+    return moduleGate.account?.trim() ? moduleGate : null
   }
+  if (tenantDefault === 'admin-only') return 'admin-only'
   if (tenantDefault !== undefined && tenantDefault !== null && tenantDefault.account?.trim()) {
     return tenantDefault
   }
   return null
 }
 
-/** Module id that stores whitelist in tenant.modules[].settingsjson. */
-export type ModuleWhitelistModuleId = 'marketplace' | 'raffles'
+/** Module id that stores gate in tenant.modules[].settingsjson. */
+export type ModuleGateModuleId = 'gates' | 'marketplace' | 'raffles' | 'watchtower'
+
+/** Stored gate value: list object, null (public), or sentinel string. */
+export type StoredGateValue = MarketplaceGateSettings | null | 'use-default' | 'admin-only' | 'public'
 
 /**
- * Read module whitelist setting from tenant (available at first fetch).
- * Marketplace: tenant.modules.marketplace.settingsjson.whitelist
- * Raffles: tenant.modules.raffles.settingsjson.defaultWhitelist ('use-default' → undefined for effective)
+ * Read module gate setting from tenant (available at first fetch).
+ * Gates: tenant.modules.gates.settingsjson.gate
+ * Marketplace: tenant.modules.marketplace.settingsjson.gate
+ * Raffles: tenant.modules.raffles.settingsjson.defaultGate
+ * Watchtower: tenant.modules.watchtower.settingsjson.gate
  */
-export function getModuleWhitelistFromTenant(
+export function getModuleGateFromTenant(
   tenant: { modules?: TenantModulesMap } | null | undefined,
-  moduleId: ModuleWhitelistModuleId
-): MarketplaceWhitelistSettings | null | undefined {
+  moduleId: ModuleGateModuleId
+): StoredGateValue | undefined {
   const entry = tenant?.modules?.[moduleId]
   const sj = entry?.settingsjson as Record<string, unknown> | undefined
   if (!sj) return undefined
-  if (moduleId === 'marketplace') {
-    return sj.whitelist as MarketplaceWhitelistSettings | null | undefined
+  if (moduleId === 'gates' || moduleId === 'marketplace' || moduleId === 'watchtower') {
+    const v = sj.gate
+    if (v === 'admin-only') return 'admin-only'
+    if (v === 'public') return 'public'
+    return v as MarketplaceGateSettings | null | undefined
   }
   if (moduleId === 'raffles') {
-    const v = sj.defaultWhitelist
+    const v = sj.defaultGate
     if (v === 'use-default') return undefined
-    return v as MarketplaceWhitelistSettings | null | undefined
+    if (v === 'admin-only') return 'admin-only'
+    if (v === 'public') return 'public'
+    return v as MarketplaceGateSettings | null | undefined
   }
   return undefined
 }
+
+/** Per-transaction gate override: use effective, public, or specific list. */
+export type TransactionGateOverride = MarketplaceGateSettings | null | 'use-default'
+
+/**
+ * Resolve the final gate config for a transaction (escrow, raffle, etc.).
+ * Given effective gate (from getEffectiveGate/useEffectiveGate) and per-transaction override.
+ * Returns { programId, account } for the tx, or null for public.
+ */
+export function resolveGateForTransaction(
+  effective: EffectiveGateResult,
+  formOverride: TransactionGateOverride
+): MarketplaceGateSettings | null {
+  if (effective && typeof effective === 'object' && effective.account?.trim()) {
+    return { programId: effective.programId ?? '', account: effective.account }
+  }
+  if (formOverride === 'use-default' && effective && typeof effective === 'object') {
+    return effective.account?.trim()
+      ? { programId: effective.programId ?? '', account: effective.account }
+      : null
+  }
+  if (formOverride && typeof formOverride === 'object' && formOverride.account?.trim()) {
+    return formOverride
+  }
+  return null
+}
+

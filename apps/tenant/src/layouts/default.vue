@@ -22,20 +22,76 @@
             aria-label="Open menu"
             @click="mobileNavOpen = true"
           >
-            <Icon icon="mdi:menu" />
+            <Icon icon="lucide:menu" />
           </button>
         </template>
         <template #nav>
           <nav v-if="subnavTabs.length" class="layout-subnav">
-            <NuxtLink
-              v-for="tab in subnavTabs"
-              :key="tab.id"
-              :to="tab.path ? linkTo(tab.path) : linkToWithTab(route.path, tab.id)"
-              class="layout-subnav__tab"
-              :class="{ 'layout-subnav__tab--active': isSubnavTabActive(tab) }"
-            >
-              {{ tab.label }}
-            </NuxtLink>
+            <template v-if="isAdminSubnav">
+              <NuxtLink
+                v-for="tab in adminPrimaryTabs"
+                :key="tab.id"
+                :to="tab.path ? linkTo(tab.path) : linkToWithTab(route.path, tab.id)"
+                class="layout-subnav__tab"
+                :class="{ 'layout-subnav__tab--active': isSubnavTabActive(tab) }"
+              >
+                {{ tab.label }}
+              </NuxtLink>
+              <div
+                v-if="adminShowMoreDropdown"
+                ref="adminMoreWrapRef"
+                class="layout-subnav__more-wrap"
+                :aria-expanded="adminMoreOpen"
+              >
+                <button
+                  type="button"
+                  class="layout-subnav__tab layout-subnav__tab--more"
+                  :class="{ 'layout-subnav__tab--active': adminMoreTabs.some((t) => isSubnavTabActive(t)) }"
+                  aria-haspopup="true"
+                  :aria-expanded="adminMoreOpen"
+                  @click="adminMoreOpen = !adminMoreOpen"
+                >
+                  More
+                  <Icon icon="lucide:chevron-down" class="layout-subnav__more-icon" />
+                </button>
+                <Teleport v-if="adminMoreOpen" to="body">
+                  <div
+                    class="layout-subnav__dropdown layout-subnav__dropdown--fixed"
+                    :style="adminMoreDropdownStyle"
+                    @click="closeAdminMore"
+                  >
+                    <NuxtLink
+                      v-for="tab in adminMoreTabs"
+                      :key="tab.id"
+                      :to="tab.path ? linkTo(tab.path) : linkToWithTab(route.path, tab.id)"
+                      class="layout-subnav__dropdown-tab"
+                      :class="{ 'layout-subnav__dropdown-tab--active': isSubnavTabActive(tab) }"
+                    >
+                      {{ tab.label }}
+                    </NuxtLink>
+                  </div>
+                </Teleport>
+              </div>
+              <NuxtLink
+                v-if="adminBillingTab"
+                :to="adminBillingTab.path ? linkTo(adminBillingTab.path) : linkToWithTab(route.path, adminBillingTab.id)"
+                class="layout-subnav__tab"
+                :class="{ 'layout-subnav__tab--active': isSubnavTabActive(adminBillingTab) }"
+              >
+                {{ adminBillingTab.label }}
+              </NuxtLink>
+            </template>
+            <template v-else>
+              <NuxtLink
+                v-for="tab in subnavTabs"
+                :key="tab.id"
+                :to="tab.path ? linkTo(tab.path) : linkToWithTab(route.path, tab.id)"
+                class="layout-subnav__tab"
+                :class="{ 'layout-subnav__tab--active': isSubnavTabActive(tab) }"
+              >
+                {{ tab.label }}
+              </NuxtLink>
+            </template>
           </nav>
         </template>
         <template #actions>
@@ -46,7 +102,7 @@
     <template v-if="!showTenantGatedMessage" #nav>
       <div class="layout-nav">
         <AppNav>
-          <NavLink :to="linkTo('/')" icon="mdi:home">Home</NavLink>
+          <NavLink :to="linkTo('/')" icon="lucide:home">Home</NavLink>
           <NavLink
             v-for="mod in navModules"
             :key="mod.id"
@@ -62,7 +118,7 @@
           rel="noopener"
           class="layout-nav__discover"
         >
-          <Icon icon="mdi:compass-outline" class="layout-nav__discover-icon" />
+          <Icon icon="lucide:compass" class="layout-nav__discover-icon" />
           <span>Discover</span>
         </a>
       </div>
@@ -72,7 +128,10 @@
     </div>
     <slot v-else />
     <ClientOnly>
-      <TransactionToastContainer />
+      <TransactionToastContainer
+        :store="useTransactionNotificationsStore()"
+        :get-tx-url="(s) => useExplorerLinks().txUrl(s)"
+      />
     </ClientOnly>
   </AppShell>
 </template>
@@ -80,22 +139,20 @@
 <script setup lang="ts">
 import { AuthWidget, useAuth } from '@decentraguild/auth'
 import { Icon } from '@iconify/vue'
-import {
-  AppShell,
-  AppHeader,
-  AppNav,
-  NavLink,
-} from '@decentraguild/ui/components'
-import TransactionToastContainer from '~/components/TransactionToastContainer.vue'
 import { useThemeStore } from '@decentraguild/ui'
 import { useTenantStore } from '~/stores/tenant'
-import { isModuleVisibleToMembers, getModuleState, getEffectiveWhitelist, getModuleWhitelistFromTenant } from '@decentraguild/core'
-import { MODULE_NAV, IMPLEMENTED_MODULES, NAV_ORDER, getModuleSubnavForPath } from '~/config/modules'
-import { useWhitelistListed } from '~/composables/useWhitelistListed'
-import { useWalletOnList } from '~/composables/useWalletOnList'
+import { isModuleVisibleToMembers, getModuleState } from '@decentraguild/core'
+import { getModuleSubnavForPath, ADMIN_PRIMARY_TAB_IDS, ADMIN_MORE_TAB_IDS } from '~/config/modules'
+import { onClickOutside, useEventListener } from '@vueuse/core'
+import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
+import { useWalletOnList } from '~/composables/gates/useWalletOnList'
+import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
+import { useNavModules } from '~/composables/core/useNavModules'
+import { useTenantInLinks } from '~/composables/core/useTenantInLinks'
+import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 
 const config = useRuntimeConfig()
-const discoverUrl = `${(config.public.platformBaseUrl as string).replace(/\/$/, '')}/directory`
+const discoverUrl = (config.public.platformBaseUrl as string)?.replace(/\/$/, '') || (import.meta.env.PROD ? 'https://dguild.org' : 'http://localhost:3000')
 
 const route = useRoute()
 const tenantStore = useTenantStore()
@@ -104,6 +161,7 @@ const mobileNavOpen = ref(false)
 
 watch(() => route.path, () => {
   mobileNavOpen.value = false
+  adminMoreOpen.value = false
 })
 
 const tenant = computed(() => tenantStore.tenant)
@@ -125,42 +183,29 @@ watch(
   updateHeaderBranding
 )
 
-const auth = useAuth()
-const isAdmin = computed(() => {
-  const w = auth.wallet.value
-  const admins = tenant.value?.admins ?? []
-  return !!(w && admins.includes(w))
-})
-
-// Avoid hydration mismatch: isAdmin is only known after client mount (wallet from /me).
-// Server and first client paint both use false; after mount we update.
-const navReady = ref(false)
-onMounted(() => { navReady.value = true })
-const isAdminForNav = computed(() => navReady.value && isAdmin.value)
-
-const slug = computed(() => tenantStore.slug ?? null)
-const wallet = computed(() => auth.wallet.value ?? null)
-const { listed: whitelistListed } = useWhitelistListed(slug, wallet)
-
 const tenantDefaultListAddress = computed(() => {
-  const acc = tenant.value?.defaultWhitelist?.account
+  const g = tenant.value?.defaultGate
+  if (g === 'admin-only') return null
+  const acc = g?.account
   return (acc && acc.trim()) || null
 })
-const { listed: isOnTenantDefaultList } = useWalletOnList(slug, tenantDefaultListAddress, wallet)
 
-const effectiveMarketplaceWhitelist = computed(() => {
-  const moduleWhitelist = getModuleWhitelistFromTenant(tenant.value, 'marketplace')
-  return getEffectiveWhitelist(tenant.value?.defaultWhitelist ?? null, moduleWhitelist)
+const tenantDefaultIsAdminOnly = computed(() => tenant.value?.defaultGate === 'admin-only')
+
+const marketplaceSettings = computed(() => tenantStore.marketplaceSettings)
+const raffleSettings = computed(() => tenantStore.raffleSettings)
+
+const effectiveMarketplaceWhitelist = useEffectiveGate(tenant, 'marketplace', {
+  marketplaceSettings,
+  raffleSettings,
 })
-const marketplaceListAddress = computed(() => effectiveMarketplaceWhitelist.value?.account?.trim() || null)
-const { listed: isOnMarketplaceList } = useWalletOnList(slug, marketplaceListAddress, wallet)
 
-const raffleModuleWhitelistForEffective = computed(() => getModuleWhitelistFromTenant(tenant.value, 'raffles'))
-const effectiveRaffleWhitelist = computed(() =>
-  getEffectiveWhitelist(tenant.value?.defaultWhitelist ?? null, raffleModuleWhitelistForEffective.value)
-)
-const raffleListAddress = computed(() => effectiveRaffleWhitelist.value?.account?.trim() || null)
-const { listed: isOnRaffleList } = useWalletOnList(slug, raffleListAddress, wallet)
+const effectiveRaffleWhitelist = useEffectiveGate(tenant, 'raffles', {
+  marketplaceSettings,
+  raffleSettings,
+})
+
+const { isListed: isOnTenantDefaultList } = useWalletOnList(tenantDefaultListAddress)
 
 const hasAnyPublicModule = computed(() => {
   if (tenant.value?.modules?.marketplace && isModuleVisibleToMembers(getModuleState(tenant.value.modules.marketplace)) && effectiveMarketplaceWhitelist.value === null) return true
@@ -168,42 +213,80 @@ const hasAnyPublicModule = computed(() => {
   return false
 })
 
+const isAdmin = computed(() => {
+  const w = useAuth().wallet.value
+  const admins = tenant.value?.admins ?? []
+  return !!(w && admins.includes(w))
+})
+
 const showTenantGatedMessage = computed(() => {
+  if (tenantDefaultIsAdminOnly.value && isAdmin.value) return false
+  if (tenantDefaultIsAdminOnly.value && !isAdmin.value) return true
   if (!tenantDefaultListAddress.value) return false
   if (isOnTenantDefaultList.value === true) return false
   if (hasAnyPublicModule.value) return false
   return true
 })
 
-const navModules = computed(() => {
-  const mods = tenant.value?.modules ?? {}
-  const entries = Object.entries(mods)
-    .filter(([id, e]) => isModuleVisibleToMembers(getModuleState(e)) && IMPLEMENTED_MODULES.has(id))
-    .filter(([id]) => id !== 'admin' || isAdminForNav.value)
-    .filter(([id]) => {
-      if (id === 'whitelist') return whitelistListed.value === true
-      if (id === 'marketplace' && effectiveMarketplaceWhitelist.value && !isOnMarketplaceList.value) return false
-      if (id === 'raffles' && effectiveRaffleWhitelist.value && !isOnRaffleList.value) return false
-      return true
-    })
-    .map(([id]) => {
-      const entry = MODULE_NAV[id]
-      return {
-        id,
-        path: entry?.path ?? '#',
-        label: entry?.label ?? id,
-        icon: entry?.icon ?? 'mdi:circle',
-      }
-    })
-  entries.sort((a, b) => {
-    const ai = NAV_ORDER.indexOf(a.id)
-    const bi = NAV_ORDER.indexOf(b.id)
-    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
-  })
-  return entries
-})
+const { navModules } = useNavModules()
 
 const subnavTabs = computed(() => getModuleSubnavForPath(route.path, tenant.value) ?? [])
+
+const isAdminSubnav = computed(() => {
+  const tabs = subnavTabs.value
+  return tabs.length > 0 && route.path === '/admin'
+})
+
+const adminPrimaryTabs = computed(() =>
+  subnavTabs.value.filter((t) => ADMIN_PRIMARY_TAB_IDS.includes(t.id))
+)
+const adminMoreTabs = computed(() =>
+  subnavTabs.value.filter((t) => ADMIN_MORE_TAB_IDS.includes(t.id))
+)
+const adminBillingTab = computed(() =>
+  subnavTabs.value.find((t) => t.id === 'billing')
+)
+const adminShowMoreDropdown = computed(() => isAdminSubnav.value && adminMoreTabs.value.length > 0)
+
+const adminMoreOpen = ref(false)
+const adminMoreWrapRef = ref<HTMLElement | null>(null)
+const adminMoreDropdownPosition = ref({ top: 0, left: 0 })
+
+function updateAdminMoreDropdownPosition() {
+  const el = adminMoreWrapRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  adminMoreDropdownPosition.value = {
+    top: rect.bottom + 2,
+    left: rect.left,
+  }
+}
+
+const adminMoreDropdownStyle = computed(() => {
+  const { top, left } = adminMoreDropdownPosition.value
+  return { top: `${top}px`, left: `${left}px` }
+})
+
+watch(adminMoreOpen, (open) => {
+  if (open) {
+    updateAdminMoreDropdownPosition()
+  }
+})
+
+onClickOutside(adminMoreWrapRef, () => {
+  adminMoreOpen.value = false
+})
+
+useEventListener('scroll', () => {
+  if (adminMoreOpen.value) updateAdminMoreDropdownPosition()
+}, true)
+useEventListener('resize', () => {
+  if (adminMoreOpen.value) updateAdminMoreDropdownPosition()
+})
+
+function closeAdminMore() {
+  adminMoreOpen.value = false
+}
 
 const { shouldAppendTenantToLinks } = useTenantInLinks()
 
@@ -252,6 +335,7 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   gap: var(--theme-space-xs);
   align-items: center;
   flex-wrap: nowrap;
+  border-bottom: var(--theme-border-thin) solid var(--theme-border);
 }
 
 .layout-subnav__tab {
@@ -262,28 +346,91 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   border-radius: var(--theme-radius-md);
   font-size: var(--theme-font-sm);
   transition: color 0.15s, background-color 0.15s;
+  border: var(--theme-border-thin) solid transparent;
 }
 
 .layout-subnav__tab:hover {
   color: var(--theme-text-primary);
   background: var(--theme-bg-card);
+  border-color: var(--theme-border);
 }
 
 .layout-subnav__tab--active {
   color: var(--theme-primary);
   background: var(--theme-bg-card);
   position: relative;
+  border-color: var(--theme-border);
 }
 
 .layout-subnav__tab--active::after {
   content: '';
   position: absolute;
-  bottom: 0;
+  bottom: calc(-1 * var(--theme-border-thin, 1px));
   left: var(--theme-space-md);
   right: var(--theme-space-md);
   height: 2px;
   background: var(--theme-gradient-primary, var(--theme-primary));
   border-radius: var(--theme-radius-full);
+}
+
+.layout-subnav__more-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.layout-subnav__tab--more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.layout-subnav__more-icon {
+  font-size: 1rem;
+  opacity: 0.8;
+  transition: transform 0.15s;
+}
+
+.layout-subnav__more-wrap[aria-expanded='true'] .layout-subnav__more-icon {
+  transform: rotate(180deg);
+}
+
+.layout-subnav__dropdown {
+  min-width: 10rem;
+  padding: var(--theme-space-xs);
+  background: var(--theme-bg-card);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  box-shadow: var(--theme-shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.layout-subnav__dropdown--fixed {
+  position: fixed;
+  z-index: 9999;
+}
+
+.layout-subnav__dropdown-tab {
+  display: block;
+  padding: var(--theme-space-sm) var(--theme-space-md);
+  color: var(--theme-text-secondary);
+  text-decoration: none;
+  border-radius: var(--theme-radius-sm);
+  font-size: var(--theme-font-sm);
+  transition: color 0.15s, background 0.15s;
+}
+
+.layout-subnav__dropdown-tab:hover {
+  color: var(--theme-text-primary);
+  background: var(--theme-bg-secondary);
+}
+
+.layout-subnav__dropdown-tab--active {
+  color: var(--theme-primary);
+  background: var(--theme-bg-secondary);
 }
 
 .layout-nav-toggle {

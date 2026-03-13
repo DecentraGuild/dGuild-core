@@ -1,433 +1,184 @@
 <template>
-  <Teleport to="body">
-    <div v-if="modelValue" class="escrow-modal-overlay" @click.self="close">
-      <div class="escrow-modal">
-        <header class="escrow-modal__header">
-          <h2 class="escrow-modal__title">{{ isMaker ? 'Your trade' : 'Trade details' }}</h2>
-          <div class="escrow-modal__header-actions">
-            <button
-              v-if="escrow && !isMaker"
-              type="button"
-              class="escrow-modal__icon-btn"
-              aria-label="Copy link"
-              @click="copyShareLinkAndNotify"
-            >
-              <Icon icon="mdi:share-variant" />
-            </button>
-            <button
-              type="button"
-              class="escrow-modal__icon-btn escrow-modal__close"
-              aria-label="Close"
-              @click="close"
-            >
-              <Icon icon="mdi:close" />
-            </button>
-          </div>
-        </header>
+  <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
+    <DialogContent :class="['escrow-modal gap-0 max-h-[90vh] overflow-y-auto sm:max-w-[42rem]']" :show-close-button="false">
+        <EscrowDetailHeader
+          :is-maker="isMaker"
+          :escrow="detailEscrow"
+          @copy-share-link="detail.copyShareLinkAndNotify"
+          @close="close"
+        />
         <StatusBanner
-          v-if="rpcError && !apiAvailable"
+          v-if="detailRpcError && !detail.apiAvailable"
           variant="error"
-          :message="rpcError"
+          :message="detailRpcError"
         >
           <template #hint>
             <p class="escrow-modal__rpc-hint">Set NUXT_PUBLIC_HELIUS_RPC in your environment.</p>
           </template>
         </StatusBanner>
         <StatusBanner
-          v-else-if="rpcError && apiAvailable"
-          variant="info"
-          message="RPC is not configured. You can view this trade, but filling requires NUXT_PUBLIC_HELIUS_RPC."
-        />
-        <StatusBanner
-          v-else-if="loading"
+          v-else-if="detailLoading"
           variant="loading"
           message="Loading escrow..."
         />
         <StatusBanner
-          v-else-if="!escrow"
+          v-else-if="!detailEscrow"
           variant="empty"
           message="Escrow not found."
         />
         <template v-else>
+          <StatusBanner
+            v-if="detailRpcError && detail.apiAvailable && (isMaker || detail.canFill)"
+            variant="info"
+            message="To fill or cancel, add NUXT_PUBLIC_HELIUS_RPC to your .env. Viewing works without it."
+          />
           <div class="escrow-modal__body">
-            <!-- Owner block: Fill (folded), Cancel, Details 2-col -->
             <section v-if="isMaker" class="escrow-modal__owner">
               <section class="escrow-modal__details">
                 <button
                   type="button"
                   class="escrow-modal__details-toggle"
-                  :aria-expanded="ownerFillOpen"
-                  @click="ownerFillOpen = !ownerFillOpen"
+                  :aria-expanded="unref(detail.ownerFillOpen)"
+                  @click="detail.toggleOwnerFillOpen"
                 >
                   <span>Fill trade</span>
-                  <Icon :icon="ownerFillOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'" />
+                  <Icon :icon="unref(detail.ownerFillOpen) ? 'lucide:chevron-up' : 'lucide:chevron-down'" />
                 </button>
-                <div v-show="ownerFillOpen" class="escrow-modal__details-content">
-                  <div v-if="!display" class="escrow-modal__fill-loading">Loading trade details...</div>
-                  <div v-else class="escrow-modal__fill-content">
-                    <div class="escrow-modal__rate">
-                      <span class="escrow-modal__rate-label">Rate</span>
-                      <button
-                        type="button"
-                        class="escrow-modal__rate-value"
-                        :title="ratioFlipped ? 'Show 1 deposit per X request' : 'Show 1 request per X deposit'"
-                        @click="ratioFlipped = !ratioFlipped"
-                      >
-                        <template v-if="!ratioFlipped">
-                          1 {{ depositSymbolDisplay }}
-                          <span class="escrow-modal__rate-approx">≈</span>
-                          {{ chainPrice }}
-                          {{ priceSymbolDisplay }}
-                        </template>
-                        <template v-else>
-                          1 {{ priceSymbolDisplay }}
-                          <span class="escrow-modal__rate-approx">≈</span>
-                          {{ chainPrice ? (1 / chainPrice) : '–' }}
-                          {{ depositSymbolDisplay }}
-                        </template>
-                        <Icon icon="mdi:swap-horizontal" class="escrow-modal__rate-icon" />
-                      </button>
-                    </div>
-                    <div class="escrow-modal__pay-receive">
-                      <div class="escrow-modal__pay-receive-row">
-                        <span class="escrow-modal__pay-receive-label">You pay</span>
-                        <span class="escrow-modal__pay-receive-value">
-                          {{ fillRequestAmountDisplay }}
-                          <span class="escrow-modal__pay-receive-token">({{ priceSymbolDisplay }}) {{ requestNameDisplay }}</span>
-                        </span>
-                      </div>
-                      <div class="escrow-modal__pay-receive-row">
-                        <span class="escrow-modal__pay-receive-label">You receive</span>
-                        <span class="escrow-modal__pay-receive-value">
-                          {{ fillDepositAmountDisplay }}
-                          <span class="escrow-modal__pay-receive-token">({{ depositSymbolDisplay }}) {{ depositNameDisplay }}</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                <div v-show="unref(detail.ownerFillOpen)" class="escrow-modal__details-content">
+                  <div v-if="!detailDisplay" class="escrow-modal__fill-loading">Loading trade details...</div>
+                  <EscrowDetailTradeFlow
+                    v-else
+                    :escrow="detailEscrow!"
+                    :display="detailDisplay"
+                    :show-amount-controls="false"
+                    :show-fill-actions="false"
+                    :wallet-address="unref(detail.walletAddress)"
+                    :can-fill="unref(detail.canFill)"
+                    :can-sign-transactions="unref(detail.canSignTransactions)"
+                    :insufficient-balance="unref(detail.insufficientBalance)"
+                    :filling="unref(detail.filling)"
+                    :fill-percent="unref(detail.fillPercent)"
+                    :fill-amount-input="unref(detail.fillAmountInput)"
+                    :ratio-flipped="unref(detail.ratioFlipped)"
+                    :chain-price="unref(detail.chainPrice)"
+                    :deposit-symbol-display="unref(detail.depositSymbolDisplay)"
+                    :price-symbol-display="unref(detail.priceSymbolDisplay)"
+                    :deposit-name-display="unref(detail.depositNameDisplay)"
+                    :request-name-display="unref(detail.requestNameDisplay)"
+                    :fill-request-amount-display="unref(detail.fillRequestAmountDisplay)"
+                    :fill-deposit-amount-display="unref(detail.fillDepositAmountDisplay)"
+                    :request-token-balance="unref(detail.requestTokenBalance)"
+                    cannot-fill-reason=""
+                    @update:fill-percent="detail.setFillPercent"
+                    @fill-amount-input="detail.onFillAmountInput"
+                    @focus-amount-input="detail.onFocusAmountInput"
+                    @toggle-ratio="detail.toggleRatio"
+                  />
                 </div>
               </section>
-              <div class="escrow-modal__owner-actions">
-                <Button
-                  variant="secondary"
-                  :disabled="cancelling"
-                  @click="handleCancel"
-                >
-                  {{ cancelling ? 'Cancelling...' : 'Cancel' }}
-                </Button>
-              </div>
+              <EscrowDetailActions
+                :cancelling="unref(detail.cancelling)"
+                @cancel="() => detail.handleCancel(close)"
+              />
               <h3 class="escrow-modal__section-title">Details</h3>
-              <div class="escrow-modal__details-cols">
-                <div class="escrow-modal__details-col-left">
-                  <dl class="escrow-modal__details-list">
-                    <dt>Escrow</dt>
-                    <dd>
-                      <code>{{ truncateAddress(props.escrowId ?? '', 8, 8) }}</code>
-                      <a
-                        v-if="props.escrowId"
-                        :href="explorerLinks.accountUrl(props.escrowId)"
-                        target="_blank"
-                        rel="noopener"
-                        class="escrow-modal__link"
-                        title="View on Solscan"
-                      >
-                        <Icon icon="mdi:open-in-new" />
-                      </a>
-                      <button type="button" class="escrow-modal__copy" aria-label="Copy escrow address" @click="copyToClipboard(props.escrowId ?? '', 'Escrow address')">
-                        <Icon icon="mdi:content-copy" />
-                      </button>
-                    </dd>
-                    <dt>Maker</dt>
-                    <dd>
-                      <code>{{ truncateAddress(escrow.account.maker.toBase58(), 8, 8) }}</code>
-                      <a :href="explorerLinks.accountUrl(escrow.account.maker.toBase58())" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="mdi:open-in-new" /></a>
-                      <button type="button" class="escrow-modal__copy" aria-label="Copy maker address" @click="copyToClipboard(escrow.account.maker.toBase58(), 'Maker address')"><Icon icon="mdi:content-copy" /></button>
-                    </dd>
-                    <dt>Deposit token</dt>
-                    <dd>
-                      <code>{{ truncateAddress(escrow.account.depositToken.toBase58(), 8, 8) }}</code>
-                      <a :href="explorerLinks.tokenUrl(escrow.account.depositToken.toBase58())" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="mdi:open-in-new" /></a>
-                      <button type="button" class="escrow-modal__copy" aria-label="Copy mint" @click="copyToClipboard(escrow.account.depositToken.toBase58(), 'Deposit token mint')"><Icon icon="mdi:content-copy" /></button>
-                    </dd>
-                    <dt>Request token</dt>
-                    <dd>
-                      <code>{{ truncateAddress(escrow.account.requestToken.toBase58(), 8, 8) }}</code>
-                      <a :href="explorerLinks.tokenUrl(escrow.account.requestToken.toBase58())" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="mdi:open-in-new" /></a>
-                      <button type="button" class="escrow-modal__copy" aria-label="Copy mint" @click="copyToClipboard(escrow.account.requestToken.toBase58(), 'Request token mint')"><Icon icon="mdi:content-copy" /></button>
-                    </dd>
-                    <dt>Price (chain)</dt>
-                    <dd><code>{{ escrow.account.price }}</code></dd>
-                    <dt>Remaining (deposit)</dt>
-                    <dd>
-                      <TokenAmountWithLabel v-if="display" :amount="display.depositAmount" :decimals="display.depositDecimals" :symbol="display.depositSymbol" :name="display.depositName" :mint="escrow.account.depositToken.toBase58()" :show-mint-short="false" />
-                    </dd>
-                    <dt>Recipient</dt>
-                    <dd>{{ isPublicRecipient ? 'Any wallet' : truncateAddress(escrow.account.recipient.toBase58(), 8, 8) }}</dd>
-                  </dl>
-                </div>
-                <div class="escrow-modal__details-col-right">
-                  <div v-if="shareUrlValue" class="escrow-modal__owner-qr">
-                    <img v-if="shareQrDataUrl" :src="shareQrDataUrl" alt="QR code" class="escrow-modal__owner-qr-img" />
-                  </div>
-                  <div class="escrow-modal__owner-link-row">
-                    <input :value="shareUrlValue" type="text" readonly class="escrow-modal__owner-input" />
-                    <button type="button" class="escrow-modal__owner-copy" aria-label="Copy link" @click="copyShareLinkAndNotify">
-                      <Icon icon="mdi:content-copy" />
-                    </button>
-                  </div>
-                  <dl class="escrow-modal__details-list escrow-modal__details-list--rest">
-                    <dt>Whitelist only</dt>
-                    <dd>{{ escrow.account.onlyWhitelist ? 'Yes' : 'No' }}</dd>
-                    <dt>Partial fill</dt>
-                    <dd>{{ escrow.account.allowPartialFill ? 'Yes' : 'No' }}</dd>
-                    <dt>Expires</dt>
-                    <dd>{{ expireLabel }}</dd>
-                  </dl>
-                </div>
-              </div>
+              <EscrowDetailMetadata
+                :escrow="detailEscrow!"
+                :escrow-id="props.escrowId"
+                :display="detailDisplay"
+                :is-public-recipient="unref(detail.isPublicRecipient)"
+                :expire-label="unref(detail.expireLabel)"
+                :share-url-value="unref(detail.shareUrlValue)"
+                :share-qr-data-url="unref(detail.shareQrDataUrl)"
+                :show-qr-and-link="true"
+                :truncate-address="detail.truncateAddress"
+                :explorer-links="unref(detail.explorerLinks)"
+                :copy-to-clipboard="detail.copyToClipboard"
+                @copy-share-link="detail.copyShareLinkAndNotify"
+              />
             </section>
 
-            <!-- Fill section: visible when not maker -->
             <section v-if="!isMaker" class="escrow-modal__fill">
               <h3 class="escrow-modal__section-title">Fill trade</h3>
               <p v-if="props.fillDisabled" class="escrow-modal__fill-winding-down">
                 Marketplace is winding down; only cancel is allowed.
               </p>
-              <p v-else-if="!display" class="escrow-modal__fill-loading">Loading trade details...</p>
-              <div v-else class="escrow-modal__fill-content">
-                <!-- Rate: 1 line, label + value + swap -->
-                <div class="escrow-modal__rate">
-                  <span class="escrow-modal__rate-label">Rate</span>
-                  <button
-                    type="button"
-                    class="escrow-modal__rate-value"
-                    :title="ratioFlipped ? 'Show 1 deposit per X request' : 'Show 1 request per X deposit'"
-                    @click="ratioFlipped = !ratioFlipped"
-                  >
-                    <template v-if="!ratioFlipped">
-                      1 {{ depositSymbolDisplay }}
-                      <span class="escrow-modal__rate-approx">≈</span>
-                      {{ chainPrice }}
-                      {{ priceSymbolDisplay }}
-                    </template>
-                    <template v-else>
-                      1 {{ priceSymbolDisplay }}
-                      <span class="escrow-modal__rate-approx">≈</span>
-                      {{ chainPrice ? (1 / chainPrice) : '–' }}
-                      {{ depositSymbolDisplay }}
-                    </template>
-                    <Icon icon="mdi:swap-horizontal" class="escrow-modal__rate-icon" />
-                  </button>
-                </div>
-                <!-- Amount to fill: label left, wallet balance top right; then slider -->
-                <div class="escrow-modal__fill-amount">
-                  <div class="escrow-modal__fill-amount-header">
-                    <label class="escrow-modal__label">Amount to fill</label>
-                    <div class="escrow-modal__balance-inline">
-                      <span class="escrow-modal__balance-label">Balance</span>
-                      <template v-if="walletAddress">
-                        <TokenAmountWithLabel
-                          :amount="requestTokenBalance"
-                          :decimals="display.requestDecimals"
-                          :symbol="display.priceSymbol"
-                          :name="display.requestName"
-                          :mint="escrow.account.requestToken.toBase58()"
-                          :show-mint-short="false"
-                        />
-                      </template>
-                      <span v-else class="escrow-modal__balance-placeholder">Connect to see</span>
-                    </div>
-                  </div>
-                  <div class="escrow-modal__slider-row">
-                    <input
-                      v-model.number="fillPercent"
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="1"
-                      class="escrow-modal__range"
-                      :disabled="!escrow.account.allowPartialFill || !walletAddress"
-                    />
-                    <span class="escrow-modal__slider-value">{{ fillPercent }}%</span>
-                  </div>
-                  <div class="escrow-modal__fill-amount-input-row">
-                    <input
-                      v-model="fillAmountInput"
-                      type="text"
-                      inputmode="decimal"
-                      class="escrow-modal__fill-amount-input"
-                      :disabled="!escrow.account.allowPartialFill || !walletAddress"
-                      @input="onFillAmountInput"
-                      @focus="fillAmountInputFocused = true"
-                      @blur="fillAmountInputFocused = false; syncFillAmountInputFromPercent()"
-                    />
-                    <span class="escrow-modal__fill-amount-token">
-                      ({{ depositSymbolDisplay }}) {{ depositNameDisplay }}
-                    </span>
-                  </div>
-                </div>
-                <!-- You pay / You receive -->
-                <div class="escrow-modal__pay-receive">
-                  <div class="escrow-modal__pay-receive-row">
-                    <span class="escrow-modal__pay-receive-label">You pay</span>
-                    <span class="escrow-modal__pay-receive-value">
-                      {{ fillRequestAmountDisplay }}
-                      <span class="escrow-modal__pay-receive-token">({{ priceSymbolDisplay }}) {{ requestNameDisplay }}</span>
-                    </span>
-                  </div>
-                  <div class="escrow-modal__pay-receive-row">
-                    <span class="escrow-modal__pay-receive-label">You receive</span>
-                    <span class="escrow-modal__pay-receive-value">
-                      {{ fillDepositAmountDisplay }}
-                      <span class="escrow-modal__pay-receive-token">({{ depositSymbolDisplay }}) {{ depositNameDisplay }}</span>
-                    </span>
-                  </div>
-                </div>
-                <div v-if="walletAddress && insufficientBalance" class="escrow-modal__insufficient">
-                  Insufficient balance to fill this amount.
-                </div>
-                <div v-if="!props.fillDisabled" class="escrow-modal__fill-actions">
-                  <Button
-                    v-if="walletAddress && canFill && canSignTransactions"
-                    variant="primary"
-                    class="escrow-modal__fill-btn"
-                    :disabled="filling || insufficientBalance"
-                    @click="handleFill"
-                  >
-                    {{ filling ? 'Processing...' : 'Fill' }}
-                  </Button>
-                  <template v-else-if="walletAddress && canFill && !canSignTransactions">
-                    <p class="escrow-modal__cannot-fill">
-                      Your wallet does not support signing transactions. Try another wallet.
-                    </p>
-                    <Button
-                      variant="primary"
-                      class="escrow-modal__fill-btn"
-                      @click="openConnectModal"
-                    >
-                      Change wallet
-                    </Button>
-                  </template>
-                  <p v-else-if="walletAddress && !canFill" class="escrow-modal__cannot-fill">
-                    {{ escrow?.account.onlyWhitelist && isOnEscrowWhitelist !== true ? 'Only whitelisted members can fill this trade.' : 'You cannot fill this trade (restrictions or expired).' }}
-                  </p>
-                  <Button
-                    v-else
-                    variant="primary"
-                    class="escrow-modal__fill-btn"
-                    @click="openConnectModal"
-                  >
-                    Connect wallet
-                  </Button>
-                </div>
-              </div>
+              <p v-else-if="!detailDisplay" class="escrow-modal__fill-loading">Loading trade details...</p>
+              <EscrowDetailTradeFlow
+                v-else
+                :escrow="detailEscrow!"
+                :display="detailDisplay"
+                :show-amount-controls="true"
+                :show-fill-actions="true"
+                :wallet-address="unref(detail.walletAddress)"
+                :can-fill="unref(detail.canFill)"
+                :can-sign-transactions="unref(detail.canSignTransactions)"
+                :insufficient-balance="unref(detail.insufficientBalance)"
+                :filling="unref(detail.filling)"
+                :fill-percent="unref(detail.fillPercent)"
+                :fill-amount-input="unref(detail.fillAmountInput)"
+                :ratio-flipped="unref(detail.ratioFlipped)"
+                :chain-price="unref(detail.chainPrice)"
+                :deposit-symbol-display="unref(detail.depositSymbolDisplay)"
+                :price-symbol-display="unref(detail.priceSymbolDisplay)"
+                :deposit-name-display="unref(detail.depositNameDisplay)"
+                :request-name-display="unref(detail.requestNameDisplay)"
+                :fill-request-amount-display="unref(detail.fillRequestAmountDisplay)"
+                :fill-deposit-amount-display="unref(detail.fillDepositAmountDisplay)"
+                :request-token-balance="unref(detail.requestTokenBalance)"
+                :cannot-fill-reason="cannotFillReason"
+                @update:fill-percent="detail.setFillPercent"
+                @fill-amount-input="detail.onFillAmountInput"
+                @focus-amount-input="detail.onFocusAmountInput"
+                @toggle-ratio="detail.toggleRatio"
+                @fill="detail.handleFill(close)"
+                @connect-wallet="auth.openConnectModal()"
+              />
             </section>
 
-            <!-- Collapsible details (filler only): 2-col with QR in second column -->
             <section v-if="!isMaker" class="escrow-modal__details">
               <button
                 type="button"
                 class="escrow-modal__details-toggle"
-                :aria-expanded="detailsOpen"
-                @click="detailsOpen = !detailsOpen"
+                :aria-expanded="unref(detail.detailsOpen)"
+                @click="detail.toggleDetailsOpen"
               >
                 <span>Details</span>
-                <Icon :icon="detailsOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'" />
+                <Icon :icon="unref(detail.detailsOpen) ? 'lucide:chevron-up' : 'lucide:chevron-down'" />
               </button>
-              <div v-show="detailsOpen" class="escrow-modal__details-content">
-                <div class="escrow-modal__details-cols">
-                  <div class="escrow-modal__details-col-left">
-                    <dl class="escrow-modal__details-list">
-                      <dt>Escrow</dt>
-                      <dd>
-                        <code>{{ truncateAddress(props.escrowId ?? '', 8, 8) }}</code>
-                        <a v-if="props.escrowId" :href="explorerLinks.accountUrl(props.escrowId)" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="mdi:open-in-new" /></a>
-                        <button type="button" class="escrow-modal__copy" aria-label="Copy escrow address" @click="copyToClipboard(props.escrowId ?? '', 'Escrow address')"><Icon icon="mdi:content-copy" /></button>
-                      </dd>
-                      <dt>Maker</dt>
-                      <dd>
-                        <code>{{ truncateAddress(escrow.account.maker.toBase58(), 8, 8) }}</code>
-                        <a :href="explorerLinks.accountUrl(escrow.account.maker.toBase58())" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="mdi:open-in-new" /></a>
-                        <button type="button" class="escrow-modal__copy" aria-label="Copy maker address" @click="copyToClipboard(escrow.account.maker.toBase58(), 'Maker address')"><Icon icon="mdi:content-copy" /></button>
-                      </dd>
-                      <dt>Deposit token</dt>
-                      <dd>
-                        <code>{{ truncateAddress(escrow.account.depositToken.toBase58(), 8, 8) }}</code>
-                        <a :href="explorerLinks.tokenUrl(escrow.account.depositToken.toBase58())" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="mdi:open-in-new" /></a>
-                        <button type="button" class="escrow-modal__copy" aria-label="Copy mint" @click="copyToClipboard(escrow.account.depositToken.toBase58(), 'Deposit token mint')"><Icon icon="mdi:content-copy" /></button>
-                      </dd>
-                      <dt>Request token</dt>
-                      <dd>
-                        <code>{{ truncateAddress(escrow.account.requestToken.toBase58(), 8, 8) }}</code>
-                        <a :href="explorerLinks.tokenUrl(escrow.account.requestToken.toBase58())" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="mdi:open-in-new" /></a>
-                        <button type="button" class="escrow-modal__copy" aria-label="Copy mint" @click="copyToClipboard(escrow.account.requestToken.toBase58(), 'Request token mint')"><Icon icon="mdi:content-copy" /></button>
-                      </dd>
-                      <dt>Price (chain)</dt>
-                      <dd><code>{{ escrow.account.price }}</code></dd>
-                      <dt>Remaining (deposit)</dt>
-                      <dd>
-                        <TokenAmountWithLabel v-if="display" :amount="display.depositAmount" :decimals="display.depositDecimals" :symbol="display.depositSymbol" :name="display.depositName" :mint="escrow.account.depositToken.toBase58()" :show-mint-short="false" />
-                      </dd>
-                      <dt>Recipient</dt>
-                      <dd>{{ isPublicRecipient ? 'Any wallet' : truncateAddress(escrow.account.recipient.toBase58(), 8, 8) }}</dd>
-                    </dl>
-                  </div>
-                  <div class="escrow-modal__details-col-right">
-                    <div v-if="shareUrlValue" class="escrow-modal__owner-qr">
-                      <img v-if="shareQrDataUrl" :src="shareQrDataUrl" alt="QR code" class="escrow-modal__owner-qr-img" />
-                    </div>
-                    <div class="escrow-modal__owner-link-row">
-                      <input :value="shareUrlValue" type="text" readonly class="escrow-modal__owner-input" />
-                      <button type="button" class="escrow-modal__owner-copy" aria-label="Copy link" @click="copyShareLinkAndNotify">
-                        <Icon icon="mdi:content-copy" />
-                      </button>
-                    </div>
-                    <dl class="escrow-modal__details-list escrow-modal__details-list--rest">
-                      <dt>Whitelist only</dt>
-                      <dd>{{ escrow.account.onlyWhitelist ? 'Yes' : 'No' }}</dd>
-                      <dt>Partial fill</dt>
-                      <dd>{{ escrow.account.allowPartialFill ? 'Yes' : 'No' }}</dd>
-                      <dt>Expires</dt>
-                      <dd>{{ expireLabel }}</dd>
-                    </dl>
-                  </div>
-                </div>
+              <div v-show="unref(detail.detailsOpen)" class="escrow-modal__details-content">
+                <EscrowDetailMetadata
+                  :escrow="detailEscrow!"
+                  :escrow-id="props.escrowId"
+                  :display="detailDisplay"
+                  :is-public-recipient="unref(detail.isPublicRecipient)"
+                  :expire-label="unref(detail.expireLabel)"
+                  :share-url-value="unref(detail.shareUrlValue)"
+                  :share-qr-data-url="unref(detail.shareQrDataUrl)"
+                  :show-qr-and-link="true"
+                  :truncate-address="detail.truncateAddress"
+                  :explorer-links="unref(detail.explorerLinks)"
+                  :copy-to-clipboard="detail.copyToClipboard"
+                  @copy-share-link="detail.copyShareLinkAndNotify"
+                />
               </div>
             </section>
           </div>
         </template>
-      </div>
-    </div>
-  </Teleport>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { storeToRefs } from 'pinia'
+import { computed, toRef, unref } from 'vue'
 import { Icon } from '@iconify/vue'
-import { Button, TokenAmountWithLabel, StatusBanner } from '@decentraguild/ui/components'
-import { truncateAddress, toRawUnits, escrowPriceToHuman } from '@decentraguild/display'
-import { useEscrowDisplay } from '~/composables/useEscrowDisplay'
-import { useTenantStore } from '~/stores/tenant'
-import { API_V1 } from '~/utils/apiBase'
-import { useApiBase } from '~/composables/useApiBase'
-import { useMarketplaceEscrowLinks } from '~/composables/useMarketplaceEscrowLinks'
+import StatusBanner from '~/components/ui/status-banner/StatusBanner.vue'
 import { useAuth } from '@decentraguild/auth'
-import {
-  fetchEscrowByAddress,
-  buildCancelTransaction,
-  buildExchangeTransaction,
-  sendAndConfirmTransaction,
-  getEscrowWalletFromConnector,
-} from '@decentraguild/web3'
-import { ESCROW_PROGRAM_ID } from '@decentraguild/contracts'
-import { SystemProgram, PublicKey } from '@solana/web3.js'
-import BN from 'bn.js'
-import { useSolanaConnection } from '~/composables/useSolanaConnection'
-import { useExplorerLinks } from '~/composables/useExplorerLinks'
-import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
-import { fetchWalletTokenBalances, type TokenBalance } from '~/composables/useWalletTokenBalances'
-import { useWalletOnList } from '~/composables/useWalletOnList'
+import EscrowDetailHeader from './EscrowDetailHeader.vue'
+import EscrowDetailMetadata from './EscrowDetailMetadata.vue'
+import EscrowDetailActions from './EscrowDetailActions.vue'
+import EscrowDetailTradeFlow from './EscrowDetailTradeFlow.vue'
+import { Dialog, DialogContent } from '~/components/ui/dialog'
+import { useEscrowDetail } from '../composables/useEscrowDetail'
 
 const props = withDefaults(
   defineProps<{
@@ -442,442 +193,35 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const tenantStore = useTenantStore()
-const { slug, tenantId } = storeToRefs(tenantStore)
-const { shareUrl: getShareUrl } = useMarketplaceEscrowLinks(slug)
 const auth = useAuth()
-const openConnectModal = auth.openConnectModal
-const { connection, rpcUrl, rpcError } = useSolanaConnection()
-const txNotifications = useTransactionNotificationsStore()
-const apiBase = useApiBase()
-const explorerLinks = useExplorerLinks()
 
-const apiAvailable = computed(() => Boolean(apiBase.value && slug.value))
-
-const escrow = ref<Awaited<ReturnType<typeof fetchEscrowByAddress>> | null>(null)
-const loading = ref(true)
-const filling = ref(false)
-const cancelling = ref(false)
-const detailsOpen = ref(false)
-const ownerFillOpen = ref(false)
-const ratioFlipped = ref(false)
-const fillPercent = ref(100)
-const fillAmountInput = ref('')
-const fillAmountInputFocused = ref(false)
-const walletBalances = ref<TokenBalance[]>([])
-const shareQrDataUrl = ref('')
-
-const shareUrlValue = computed(() =>
-  props.escrowId ? getShareUrl(props.escrowId) : ''
-)
-
-async function copyShareLinkAndNotify() {
-  const url = shareUrlValue.value
-  if (!url) return
-  try {
-    await navigator.clipboard.writeText(url)
-    notifyCopied('Link')
-  } catch {
-    // ignore
-  }
-}
-
-const SYSTEM_PROGRAM = '11111111111111111111111111111111'
-
-interface EscrowApiShape {
-  publicKey: string
-  account: {
-    maker: string
-    depositToken: string
-    requestToken: string
-    tokensDepositInit: string
-    tokensDepositRemaining: string
-    price: number
-    decimals: number
-    slippage: number
-    seed: string
-    expireTimestamp: string
-    recipient: string
-    onlyRecipient: boolean
-    onlyWhitelist: boolean
-    allowPartialFill: boolean
-    whitelist: string
-  }
-}
-
-function apiEscrowToFull(e: EscrowApiShape) {
-  const acc = e.account
-  return {
-    publicKey: new PublicKey(e.publicKey),
-    account: {
-      maker: new PublicKey(acc.maker),
-      depositToken: new PublicKey(acc.depositToken),
-      requestToken: new PublicKey(acc.requestToken),
-      tokensDepositInit: new BN(acc.tokensDepositInit),
-      tokensDepositRemaining: new BN(acc.tokensDepositRemaining),
-      price: escrowPriceToHuman(acc.price),
-      decimals: acc.decimals,
-      slippage: acc.slippage,
-      seed: new BN(acc.seed),
-      authBump: 0,
-      vaultBump: 0,
-      escrowBump: 0,
-      expireTimestamp: new BN(acc.expireTimestamp),
-      recipient: new PublicKey(acc.recipient),
-      onlyRecipient: acc.onlyRecipient,
-      onlyWhitelist: acc.onlyWhitelist,
-      allowPartialFill: acc.allowPartialFill,
-      whitelist: new PublicKey(acc.whitelist),
-    },
-  }
-}
-
-const walletAddress = computed(() => auth.connectorState.value?.account ?? null)
-
-const escrowWhitelistAddress = computed(() =>
-  escrow.value?.account.onlyWhitelist ? escrow.value.account.whitelist.toBase58() : null
-)
-const { listed: isOnEscrowWhitelist } = useWalletOnList(slug, escrowWhitelistAddress, walletAddress)
-
-/** True only when the connector can actually sign transactions (not just "connected"). Re-runs when connectorState changes. */
-const canSignTransactions = computed(() => {
-  const _ = auth.connectorState.value
-  return getEscrowWalletFromConnector() != null
-})
-const isMaker = computed(
-  () =>
-    escrow.value &&
-    walletAddress.value &&
-    escrow.value.account.maker.toBase58() === walletAddress.value
-)
-
-const isPublicRecipient = computed(() => {
-  if (!escrow.value) return true
-  const rec = escrow.value.account.recipient.toBase58()
-  return rec === SYSTEM_PROGRAM
+const detail = useEscrowDetail({
+  escrowId: toRef(props, 'escrowId'),
+  fillDisabled: toRef(props, 'fillDisabled'),
+  modelValue: toRef(props, 'modelValue'),
 })
 
-const expireLabel = computed(() => {
-  if (!escrow.value) return 'Never'
-  const ts = escrow.value.account.expireTimestamp?.toNumber?.() ?? 0
-  if (ts <= 0) return 'Never'
-  const date = new Date(ts * 1000)
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-})
+const detailLoading = computed(() => detail.loading.value)
+const detailEscrow = computed(() => detail.escrow.value)
+const detailDisplay = computed(() => detail.display.value)
+const detailRpcError = computed(() => detail.rpcError.value ?? null)
 
-const canFill = computed(() => {
-  if (!escrow.value || !walletAddress.value) return false
-  if (escrow.value.account.maker.toBase58() === walletAddress.value) return false
-  if ((escrow.value.account.tokensDepositRemaining?.toNumber() ?? 0) <= 0) return false
-  if (escrow.value.account.onlyWhitelist && isOnEscrowWhitelist.value !== true) return false
-  if (escrow.value.account.onlyRecipient) {
-    const rec = escrow.value.account.recipient.toBase58()
-    if (rec !== SYSTEM_PROGRAM && rec !== walletAddress.value) return false
-  }
-  const ts = escrow.value.account.expireTimestamp?.toNumber?.() ?? 0
-  if (ts > 0 && ts < Math.floor(Date.now() / 1000)) return false
-  return true
-})
-
-const { data } = useEscrowDisplay(escrow)
-const display = computed(() => data.value)
-
-/** Chain price (human per unit). Use this for Rate and You pay so they match Details. */
-const chainPrice = computed(() => {
-  const p = escrow.value?.account?.price
-  return p != null && Number.isFinite(p) ? Number(p) : 0
-})
-
-/** Display labels; values are already sanitized when stored in mint_metadata. */
-const depositSymbolDisplay = computed(() =>
-  display.value ? (display.value.depositSymbol ?? display.value.depositMintShort ?? '') : ''
-)
-const priceSymbolDisplay = computed(() =>
-  display.value ? (display.value.priceSymbol ?? display.value.requestMintShort ?? '') : ''
-)
-const depositNameDisplay = computed(() =>
-  display.value ? (display.value.depositName ?? display.value.depositSymbol ?? 'Deposit') : 'Deposit'
-)
-const requestNameDisplay = computed(() =>
-  display.value ? (display.value.requestName ?? display.value.priceSymbol ?? 'Request') : 'Request'
-)
-
-const fillDepositAmount = computed(() => {
-  if (!display.value) return 0
-  return (display.value.depositAmount * fillPercent.value) / 100
-})
-
-function formatFillAmountForInput(amount: number, decimals: number): string {
-  if (amount === 0) return '0'
-  if (decimals === 0) return String(Math.round(amount))
-  return amount.toFixed(decimals).replace(/\.?0+$/, '')
-}
-
-function syncFillAmountInputFromPercent() {
-  if (display.value) {
-    fillAmountInput.value = formatFillAmountForInput(
-      fillDepositAmount.value,
-      display.value.depositDecimals
-    )
-  }
-}
-
-function onFillAmountInput() {
-  const d = display.value
-  if (!d || d.depositAmount <= 0) return
-  const parsed = parseFloat(fillAmountInput.value)
-  if (Number.isNaN(parsed) || parsed < 0) return
-  const pct = Math.min(100, Math.max(0, (parsed / d.depositAmount) * 100))
-  fillPercent.value = pct
-}
-
-const fillRequestAmount = computed(() => {
-  if (!display.value) return 0
-  return fillDepositAmount.value * chainPrice.value
-})
-
-function rawAmountDisplay(amount: number): string {
-  if (!Number.isFinite(amount)) return '0'
-  return Number.isInteger(amount) ? String(amount) : amount.toFixed(6).replace(/\.?0+$/, '')
-}
-
-const fillRequestAmountDisplay = computed(() => rawAmountDisplay(fillRequestAmount.value))
-const fillDepositAmountDisplay = computed(() => rawAmountDisplay(fillDepositAmount.value))
-
-const requestTokenBalance = computed(() => {
-  if (!escrow.value) return 0
-  const mint = escrow.value.account.requestToken.toBase58()
-  const b = walletBalances.value.find((x) => x.mint === mint)
-  return b?.uiAmount ?? 0
-})
-
-const insufficientBalance = computed(() => {
-  if (!canFill.value || !display.value) return false
-  return requestTokenBalance.value < fillRequestAmount.value
-})
-
-const escrowMints = computed(() => {
-  if (!escrow.value) return new Set<string>()
-  return new Set([
-    escrow.value.account.depositToken.toBase58(),
-    escrow.value.account.requestToken.toBase58(),
-  ])
-})
+const isMaker = computed(() => !!unref(detail.isMaker))
 
 function close() {
   emit('update:modelValue', false)
 }
 
-function notifyCopied(label: string) {
-  const id = `copy-${Date.now()}`
-  txNotifications.add(id, { status: 'success', message: `Copied: ${label}` })
-}
-
-async function copyToClipboard(text: string, label: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    notifyCopied(label)
-  } catch {
-    // ignore
+const cannotFillReason = computed(() => {
+  if (!detail.escrow.value) return ''
+  if (detail.escrow.value.account.onlyWhitelist && detail.isOnEscrowWhitelist.value !== true) {
+    return 'Only whitelisted members can fill this trade.'
   }
-}
-
-async function handleFill() {
-  const wallet = getEscrowWalletFromConnector()
-  if (!wallet?.publicKey || !escrow.value || !props.escrowId) {
-    const id = `fill-error-${Date.now()}`
-    txNotifications.add(id, {
-      status: 'error',
-      message: walletAddress.value
-        ? 'Wallet cannot sign transactions. Try reconnecting or use another wallet.'
-        : 'Connect a wallet to fill this trade.',
-    })
-    return
-  }
-  const depDecimals = display.value?.depositDecimals ?? 0
-  const amountRaw = toRawUnits(fillDepositAmount.value, depDecimals)
-  const amountBN = new BN(amountRaw)
-  if (amountBN.lte(new BN(0))) {
-    txNotifications.add(`fill-amount-${Date.now()}`, {
-      status: 'error',
-      message: 'Enter a valid amount to fill.',
-    })
-    return
-  }
-
-  filling.value = true
-  const txId = `fill-${props.escrowId}-${Date.now()}`
-  txNotifications.add(txId, { status: 'pending', message: 'Filling escrow...' })
-  try {
-    if (!connection.value) throw new Error('RPC not configured')
-    const whitelistKey = escrow.value.account.whitelist
-    const escrowProgramId = new PublicKey(ESCROW_PROGRAM_ID)
-    const hasWhitelist =
-      whitelistKey &&
-      !whitelistKey.equals(SystemProgram.programId) &&
-      !whitelistKey.equals(escrowProgramId)
-    const tx = await buildExchangeTransaction({
-      maker: escrow.value.account.maker,
-      taker: wallet.publicKey,
-      depositTokenMint: escrow.value.account.depositToken,
-      requestTokenMint: escrow.value.account.requestToken,
-      amount: amountBN,
-      seed: escrow.value.account.seed,
-      connection: connection.value,
-      wallet,
-      whitelist: hasWhitelist ? whitelistKey.toBase58() : null,
-    })
-    const sig = await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
-    txNotifications.update(txId, { status: 'success', message: 'Escrow filled', signature: sig })
-    escrow.value = null
-    close()
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Fill failed'
-    txNotifications.update(txId, {
-      status: 'error',
-      message: msg,
-    })
-  } finally {
-    filling.value = false
-  }
-}
-
-async function handleCancel() {
-  const wallet = getEscrowWalletFromConnector()
-  if (!wallet || !escrow.value || !props.escrowId) return
-  cancelling.value = true
-  const txId = `cancel-${props.escrowId}-${Date.now()}`
-  txNotifications.add(txId, { status: 'pending', message: 'Cancelling escrow...' })
-  try {
-    if (!connection.value) throw new Error('RPC not configured')
-    const tx = await buildCancelTransaction({
-      maker: escrow.value.account.maker,
-      depositTokenMint: escrow.value.account.depositToken,
-      requestTokenMint: escrow.value.account.requestToken,
-      seed: escrow.value.account.seed,
-      connection: connection.value,
-      wallet,
-    })
-    const sig = await sendAndConfirmTransaction(
-      connection.value,
-      tx,
-      wallet,
-      escrow.value.account.maker
-    )
-    txNotifications.update(txId, { status: 'success', message: 'Escrow cancelled', signature: sig })
-    escrow.value = null
-    close()
-  } catch (e) {
-    txNotifications.update(txId, {
-      status: 'error',
-      message: e instanceof Error ? e.message : 'Cancel failed',
-    })
-  } finally {
-    cancelling.value = false
-  }
-}
-
-async function loadEscrow(id: string) {
-  if (!id) return
-  loading.value = true
-  escrow.value = null
-  fillPercent.value = 100
-  try {
-    const base = apiBase.value
-    const idForApi = tenantId.value
-    if (base && idForApi) {
-      const url = `${base}${API_V1}/tenant/${encodeURIComponent(idForApi)}/marketplace/escrows/${encodeURIComponent(id)}`
-      const res = await fetch(url)
-      if (res.ok) {
-        const json = (await res.json()) as { escrow?: EscrowApiShape }
-        if (json.escrow) escrow.value = apiEscrowToFull(json.escrow)
-      }
-    }
-    if (!escrow.value && connection.value) {
-      const fromChain = await fetchEscrowByAddress(connection.value, id)
-      escrow.value = fromChain
-    }
-  } finally {
-    loading.value = false
-  }
-}
-
-watch(
-  () => props.modelValue,
-  (open) => {
-    if (open) auth.refreshConnectorState()
-  }
-)
-watch(
-  () => [props.escrowId, slug.value, apiBase.value] as const,
-  ([id, tenantSlug, base]) => {
-    if (id && tenantSlug && base) void loadEscrow(id)
-    else escrow.value = null
-  },
-  { immediate: true }
-)
-
-watch(
-  [fillPercent, display],
-  () => {
-    if (!fillAmountInputFocused.value && display.value) {
-      syncFillAmountInputFromPercent()
-    }
-  },
-  { immediate: true }
-)
-
-watch(
-  [walletAddress, rpcUrl, escrowMints],
-  async () => {
-    if (!walletAddress.value || !rpcUrl.value || escrowMints.value.size === 0) {
-      walletBalances.value = []
-      return
-    }
-    try {
-      walletBalances.value = await fetchWalletTokenBalances(
-        rpcUrl.value,
-        walletAddress.value,
-        escrowMints.value
-      )
-    } catch {
-      walletBalances.value = []
-    }
-  },
-  { immediate: true }
-)
-
-watch(
-  () => [props.modelValue, props.escrowId, shareUrlValue.value] as const,
-  async ([open, id, url]) => {
-    if (!open || !id || !url) {
-      shareQrDataUrl.value = ''
-      return
-    }
-    try {
-      const QRCode = await import('qrcode')
-      shareQrDataUrl.value = await QRCode.toDataURL(url, { width: 200, margin: 1 })
-    } catch {
-      shareQrDataUrl.value = ''
-    }
-  },
-  { immediate: true }
-)
-
+  return 'You cannot fill this trade (restrictions or expired).'
+})
 </script>
 
 <style scoped>
-.escrow-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--theme-backdrop, rgba(0, 0, 0, 0.6));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: var(--theme-space-md);
-}
-
 .escrow-modal {
   background: var(--theme-bg-primary);
   border: var(--theme-border-thin) solid var(--theme-border);
@@ -890,7 +234,9 @@ watch(
   overflow-y: auto;
   padding: var(--theme-space-xl);
 }
+</style>
 
+<style>
 .escrow-modal__header {
   display: flex;
   align-items: center;
@@ -987,6 +333,56 @@ watch(
   min-width: 0;
 }
 
+.escrow-modal__token-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-md);
+  margin-bottom: var(--theme-space-lg);
+  padding: var(--theme-space-md);
+  background: var(--theme-bg-secondary);
+  border-radius: var(--theme-radius-md);
+}
+
+.escrow-modal__token-preview-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--theme-space-xs);
+}
+
+.escrow-modal__token-img {
+  width: 3rem;
+  height: 3rem;
+  object-fit: cover;
+  border-radius: var(--theme-radius-sm);
+}
+
+.escrow-modal__token-placeholder {
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--theme-bg-muted);
+  border-radius: var(--theme-radius-sm);
+  color: var(--theme-text-muted);
+  font-size: 1.25rem;
+}
+
+.escrow-modal__token-label {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+  max-width: 6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.escrow-modal__token-arrow {
+  color: var(--theme-text-muted);
+  flex-shrink: 0;
+}
+
 .escrow-modal__details-col-right {
   min-width: 0;
   display: flex;
@@ -1055,13 +451,6 @@ watch(
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
   padding: var(--theme-space-lg);
-}
-
-.escrow-modal__section-title {
-  margin: 0 0 var(--theme-space-md);
-  font-size: var(--theme-font-lg);
-  font-weight: 600;
-  color: var(--theme-text-primary);
 }
 
 .escrow-modal__fill-loading,
@@ -1197,7 +586,6 @@ watch(
   color: var(--theme-text-muted);
 }
 
-
 .escrow-modal__insufficient {
   margin: 0 auto var(--theme-space-sm);
   font-size: var(--theme-font-sm);
@@ -1224,18 +612,6 @@ watch(
   color: var(--theme-text-muted);
   text-align: center;
   width: 30%;
-}
-
-.escrow-modal__balance-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: var(--theme-font-sm);
-  margin-bottom: var(--theme-space-sm);
-}
-
-.escrow-modal__balance-label {
-  color: var(--theme-text-muted);
 }
 
 .escrow-modal__pay-receive {
@@ -1269,22 +645,6 @@ watch(
   font-weight: 400;
   color: var(--theme-text-muted);
   margin-left: var(--theme-space-xs);
-}
-
-.escrow-modal__insufficient {
-  font-size: var(--theme-font-sm);
-  color: var(--theme-error);
-  margin-bottom: var(--theme-space-sm);
-}
-
-.escrow-modal__fill-actions {
-  margin-top: var(--theme-space-md);
-}
-
-.escrow-modal__actions {
-  display: flex;
-  gap: var(--theme-space-sm);
-  flex-wrap: wrap;
 }
 
 .escrow-modal__details {
@@ -1357,7 +717,7 @@ watch(
   padding: var(--theme-space-xs);
   background: none;
   border: none;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
   cursor: pointer;
 }
 

@@ -5,15 +5,19 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./plugin.client": "./src/plugin.client.ts"
+    "./plugin.client": "./src/plugin.client.ts",
+    "./plugin.server": "./src/plugin.server.ts"
   },
   "scripts": {
     "build": "echo 'source-only package'",
     "lint": "eslint src"
   },
   "dependencies": {
+    "@decentraguild/display": "workspace:*",
     "@decentraguild/ui": "workspace:*",
-    "@decentraguild/web3": "workspace:*"
+    "@decentraguild/web3": "workspace:*",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.98.0"
   },
   "peerDependencies": {
     "nuxt": "^3.0.0 || ^4.0.0",

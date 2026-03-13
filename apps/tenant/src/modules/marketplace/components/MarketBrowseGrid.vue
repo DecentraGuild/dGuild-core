@@ -1,19 +1,17 @@
 <template>
   <div>
     <div class="market-browse-grid__toolbar">
-      <span class="market-browse-grid__scale-label">Card size</span>
       <div class="market-browse-grid__scale">
         <input
           :model-value="gridScaleRem"
           type="range"
-          min="14"
-          max="25"
-          step="1"
+          :min="gridScaleMin"
+          :max="gridScaleMax"
+          :step="gridScaleStep"
           class="market-browse-grid__scale-slider"
-          aria-label="Grid card size"
+          aria-label="Card size"
           @input="onScaleInput"
         />
-        <span class="market-browse-grid__scale-value">{{ gridScaleRem }}rem</span>
       </div>
     </div>
     <div class="market-browse-grid__grid" :style="gridStyle">
@@ -22,7 +20,7 @@
         :key="asset.mint"
         :mint="asset.mint"
         :asset-type="asset.assetType"
-        :name="asset.metadata?.name ?? null"
+        :name="getDisplayName(asset) ?? null"
         :symbol="getDisplaySymbol(asset)"
         :image="getDisplayImage(asset)"
         :offer-count="asset.offerCount"
@@ -39,16 +37,24 @@
 import { computed } from 'vue'
 import AssetCard from './AssetCard.vue'
 import { normaliseAttributes } from '~/utils/nftFilterHelpers'
-import type { AssetWithCounts } from '~/composables/useAssetWithCounts'
+import type { AssetWithCounts } from '~/composables/mint/useAssetWithCounts'
+
+const GRID_SCALE_MIN = 6
+const GRID_SCALE_MAX = 20
+const GRID_SCALE_STEPS = 5
+const gridScaleStep = (GRID_SCALE_MAX - GRID_SCALE_MIN) / (GRID_SCALE_STEPS - 1)
 
 const props = withDefaults(
   defineProps<{
     assetCards: AssetWithCounts[]
     gridScaleRem: number
+    gridScaleMin?: number
+    gridScaleMax?: number
+    getDisplayName: (asset: AssetWithCounts) => string | null
     getDisplaySymbol: (asset: AssetWithCounts) => string | null
     getDisplayImage: (asset: AssetWithCounts) => string | null
   }>(),
-  {}
+  { gridScaleMin: () => GRID_SCALE_MIN, gridScaleMax: () => GRID_SCALE_MAX }
 )
 
 const emit = defineEmits<{
@@ -60,8 +66,8 @@ const gridStyle = computed(() => ({ '--market-grid-min': `${props.gridScaleRem}r
 
 function onScaleInput(e: Event) {
   const target = e.target as HTMLInputElement
-  const n = target?.value != null ? parseInt(target.value, 10) : NaN
-  if (Number.isFinite(n) && n >= 14 && n <= 25) {
+  const n = target?.value != null ? parseFloat(target.value) : NaN
+  if (Number.isFinite(n) && n >= GRID_SCALE_MIN && n <= GRID_SCALE_MAX) {
     emit('update:gridScaleRem', n)
   }
 }
@@ -88,27 +94,14 @@ function onSelect(asset: AssetWithCounts) {
   margin-bottom: var(--theme-space-sm);
 }
 
-.market-browse-grid__scale-label {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-}
-
 .market-browse-grid__scale {
   display: flex;
   align-items: center;
-  gap: var(--theme-space-sm);
 }
 
 .market-browse-grid__scale-slider {
   width: 6rem;
   accent-color: var(--theme-primary);
-}
-
-.market-browse-grid__scale-value {
-  font-size: var(--theme-font-xs);
-  font-family: ui-monospace, monospace;
-  color: var(--theme-text-muted);
-  min-width: 2.5rem;
 }
 
 .market-browse-grid__grid {

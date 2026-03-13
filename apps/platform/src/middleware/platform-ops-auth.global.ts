@@ -1,22 +1,28 @@
+/**
+ * Guards /ops routes. Same pattern as tenant admin-auth:
+ * - Server: never render protected ops pages; redirect to login so auth is only evaluated on client.
+ * - Client: require session + check_platform_admin(); only then allow access.
+ */
 export default defineNuxtRouteMiddleware(async (to) => {
-  // Only guard /ops routes; other routes remain public.
   if (!to.path.startsWith('/ops')) return
-
-  // Allow reaching the login page without an existing platform session.
   if (to.path === '/ops/login') return
 
-  const config = useRuntimeConfig()
-  const apiBase = config.public.apiUrl as string
+  if (import.meta.server) {
+    return navigateTo('/ops/login', { replace: true })
+  }
+
+  const { useSupabase } = await import('~/composables/useSupabase')
+  const supabase = useSupabase()
 
   try {
-    const res = await $fetch<{ wallet: string }>(`${apiBase.replace(/\/$/, '')}/api/v1/platform/auth/me`, {
-      credentials: 'include',
-    })
-    if (!res?.wallet) {
-      return navigateTo('/ops/login')
-    }
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session) return navigateTo('/ops/login', { replace: true })
+
+    const { data: wallet, error } = await supabase.rpc('check_platform_admin')
+    if (error || !wallet) return navigateTo('/ops/login', { replace: true })
   } catch {
-    return navigateTo('/ops/login')
+    return navigateTo('/ops/login', { replace: true })
   }
 })
-

@@ -10,7 +10,7 @@
       </p>
       <template v-else>
         <div v-if="loading" class="raffle-page__loading">
-          <Icon icon="mdi:loading" class="raffle-page__spinner" />
+          <Icon icon="lucide:loader-2" class="raffle-page__spinner" />
           <span>Loading raffles...</span>
         </div>
         <div v-else-if="visibleRaffles.length === 0" class="raffle-page__empty">
@@ -45,7 +45,7 @@
                   {{ r.chainData.stateDisplay }}
                 </span>
                 <div class="raffle-card__footer">
-                  <code class="raffle-card__pubkey">{{ truncateMint(r.chainData?.ticketMint ?? '') }}</code>
+                  <code class="raffle-card__pubkey">{{ truncateAddress(r.chainData?.ticketMint ?? '', 6, 4) }}</code>
                   <a
                     :href="solscanUrl(r.rafflePubkey)"
                     target="_blank"
@@ -53,7 +53,7 @@
                     class="raffle-card__link"
                     @click.stop
                   >
-                    <Icon icon="mdi:open-in-new" />
+                    <Icon icon="lucide:external-link" />
                   </a>
                 </div>
               </div>
@@ -90,7 +90,7 @@
                   :disabled="!canSubmitBuy || buySubmitting"
                   @click="onBuyTickets"
                 >
-                  <Icon v-if="buySubmitting" icon="mdi:loading" class="raffle-panel__btn-spinner" />
+                  <Icon v-if="buySubmitting" icon="lucide:loader-2" class="raffle-panel__btn-spinner" />
                   <span v-else>Buy tickets</span>
                 </Button>
                 <p v-if="buyTxStatus" class="raffle-panel__status">{{ buyTxStatus }}</p>
@@ -100,7 +100,7 @@
                 {{ selectedRaffle.chainData?.state !== 'running' ? 'This raffle is not currently accepting ticket purchases.' : 'Connect your wallet to buy tickets.' }}
               </p>
               <button type="button" class="raffle-panel__close" @click="selectedRaffle = null">
-                <Icon icon="mdi:close" />
+                <Icon icon="lucide:x" />
               </button>
             </div>
           </aside>
@@ -111,6 +111,7 @@
 </template>
 
 <script setup lang="ts">
+import { truncateAddress, sanitizeTokenLabel } from '@decentraguild/display'
 import type { RaffleChainData } from '@decentraguild/web3'
 import {
   fetchRaffleChainData,
@@ -119,20 +120,18 @@ import {
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
-import { PageSection } from '@decentraguild/ui/components'
-import { Button } from '@decentraguild/ui/components'
+import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import { useTenantStore } from '~/stores/tenant'
-import { useSolanaConnection } from '~/composables/useSolanaConnection'
-import { useMintMetadata } from '~/composables/useMintMetadata'
-import { API_V1 } from '~/utils/apiBase'
+import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
+import { useMintMetadata } from '~/composables/mint/useMintMetadata'
+import { useSupabase } from '~/composables/core/useSupabase'
 
 const tenantStore = useTenantStore()
-const apiBase = useApiBase()
 const tenantId = computed(() => tenantStore.tenantId)
 const { connection } = useSolanaConnection()
 const { fetchMetadata } = useMintMetadata()
-const slug = computed(() => tenantStore.slug ?? '')
+const _slug = computed(() => tenantStore.slug ?? '')
 
 interface RaffleItem {
   id: string
@@ -196,7 +195,7 @@ const formatTotalCost = computed(() => {
   const whole = Number(total / BigInt(divisor))
   const frac = Number(total % BigInt(divisor))
   const fracStr = frac === 0 ? '' : `.${String(frac).padStart(dec, '0').replace(/0+$/, '')}`
-  const symbol = ticketSymbolByMint.value[r.ticketMint] ?? 'tokens'
+  const symbol = sanitizeTokenLabel(ticketSymbolByMint.value[r.ticketMint] ?? 'tokens') || 'tokens'
   return `${whole}${fracStr} ${symbol}`
 })
 
@@ -206,13 +205,8 @@ function formatTicketPrice(data: RaffleChainData): string {
   const whole = Number(data.ticketPrice / BigInt(divisor))
   const frac = Number(data.ticketPrice % BigInt(divisor))
   const fracStr = frac === 0 ? '' : `.${String(frac).padStart(dec, '0').replace(/0+$/, '')}`
-  const symbol = ticketSymbolByMint.value[data.ticketMint] ?? 'tokens'
+  const symbol = sanitizeTokenLabel(ticketSymbolByMint.value[data.ticketMint] ?? 'tokens') || 'tokens'
   return `${whole}${fracStr} ${symbol}`
-}
-
-function truncateMint(mint: string): string {
-  if (!mint || mint.length < 12) return mint
-  return `${mint.slice(0, 6)}...${mint.slice(-4)}`
 }
 
 function solscanUrl(pubkey: string): string {
@@ -230,7 +224,7 @@ function selectRaffle(r: RaffleWithChainData) {
 async function loadTicketSymbol(mint: string) {
   if (ticketSymbolByMint.value[mint]) return
   const meta = await fetchMetadata(mint)
-  if (meta?.symbol) ticketSymbolByMint.value[mint] = meta.symbol
+  if (meta?.symbol) ticketSymbolByMint.value[mint] = sanitizeTokenLabel(meta.symbol)
 }
 
 async function fetchChainData() {
@@ -290,7 +284,7 @@ async function onBuyTickets() {
       sending: 'Sending...',
       confirming: 'Confirming...',
     }
-    const sig = await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey, {
+    const _sig = await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey, {
       onStatus: (s) => {
         buyTxStatus.value = TX_LABELS[s] ?? s
       },
@@ -321,10 +315,20 @@ onMounted(async () => {
   if (!id) return
   loading.value = true
   try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${id}/raffles`, { credentials: 'include' })
-    if (res.ok) {
-      const data = (await res.json()) as { raffles: RaffleItem[] }
-      raffles.value = data.raffles ?? []
+    const supabase = useSupabase()
+    const { data, error } = await supabase
+      .from('tenant_raffles')
+      .select('id, raffle_pubkey, created_at, closed_at')
+      .eq('tenant_id', id)
+      .order('created_at', { ascending: false })
+
+    if (!error && data) {
+      raffles.value = data.map((r) => ({
+        id: r.id as string,
+        rafflePubkey: r.raffle_pubkey as string,
+        createdAt: r.created_at as string,
+        closedAt: r.closed_at as string | null,
+      }))
       await fetchChainData()
     } else {
       raffles.value = []

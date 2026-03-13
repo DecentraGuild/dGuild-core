@@ -30,14 +30,11 @@
           Connected as <span class="ops-login__wallet">{{ auth.wallet.value }}</span>.
         </p>
         <p class="ops-login__hint">
-          Continue to verify that this wallet is authorised for platform admin.
+          Continue to platform operations. Access is restricted to the wallet in platform_owner.
         </p>
-        <Button variant="primary" :disabled="submitting" @click="elevate">
+        <Button variant="primary" @click="goToOps">
           Continue to platform admin
         </Button>
-        <p v-if="error" class="ops-login__error">
-          {{ error }}
-        </p>
       </div>
     </div>
   </PageSection>
@@ -49,14 +46,10 @@ definePageMeta({ title: 'Platform admin login' })
 import { useAuth } from '@decentraguild/auth'
 import { PageSection, Button, ConnectWalletModal } from '@decentraguild/ui/components'
 import type { WalletConnectorId } from '@solana/connector/headless'
-import { useApiBase } from '~/composables/useApiBase'
 
 const auth = useAuth()
-const apiBase = useApiBase()
 
 const showConnectModal = ref(false)
-const submitting = ref(false)
-const error = ref<string | null>(null)
 
 onMounted(() => {
   auth.fetchMe()
@@ -64,31 +57,15 @@ onMounted(() => {
 })
 
 async function handleConnectAndSignIn(connectorId: WalletConnectorId) {
-  error.value = null
   const ok = await auth.connectAndSignIn(connectorId)
-  if (ok) showConnectModal.value = false
+  if (ok) {
+    showConnectModal.value = false
+    await goToOps()
+  }
 }
 
-async function elevate() {
-  error.value = null
-  submitting.value = true
-  try {
-    const base = apiBase.value
-    const res = await fetch(`${base}/api/v1/platform/auth/elevate`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new Error(data.error ?? 'Failed to start platform admin session')
-    }
-    await navigateTo('/ops')
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Failed to start platform admin session'
-    error.value = msg
-  } finally {
-    submitting.value = false
-  }
+function goToOps() {
+  return navigateTo('/ops')
 }
 </script>
 
@@ -138,11 +115,4 @@ async function elevate() {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
 }
-
-.ops-login__error {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-error);
-}
 </style>
-

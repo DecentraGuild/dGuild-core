@@ -16,7 +16,11 @@ export {
   getAddonModuleIds,
   VALID_BILLING_PERIODS,
   getModuleDisplayName,
+  getGateLabel,
+  getGatingScopes,
 } from './load-module-catalog.js'
+
+export type { GatingScope, GatingScopeId } from './load-module-catalog.js'
 
 export type {
   PricingModel,

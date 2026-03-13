@@ -76,6 +76,19 @@ export async function fetchAllWhitelistsByAuthority(
   })
 }
 
+export async function fetchAllWhitelists(connection: Connection): Promise<WhitelistWithAddress[]> {
+  const program = getWhitelistProgramReadOnly(connection)
+  const accountNs = program.account as Record<string, { all: (filters: unknown[]) => Promise<Array<{ publicKey: PublicKey; account: unknown }>> }>
+  const accounts = await accountNs.whitelist.all([])
+  return accounts.map(({ publicKey, account }) => {
+    const a = account as { authority: PublicKey; name: string; hasChilds: boolean; accessCount: number }
+    return {
+      publicKey,
+      account: { authority: a.authority, name: a.name, hasChilds: a.hasChilds, accessCount: a.accessCount },
+    }
+  })
+}
+
 export async function fetchWhitelistEntries(
   connection: Connection,
   whitelistAddress: string | PublicKey

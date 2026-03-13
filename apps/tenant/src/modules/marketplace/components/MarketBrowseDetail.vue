@@ -9,21 +9,32 @@
           class="market-browse-detail__img"
         />
         <div v-else class="market-browse-detail__placeholder">
-          <Icon icon="mdi:image-off" />
+          <Icon icon="lucide:image-off" />
         </div>
+        <a
+          v-if="detailAsset?.metadata?.image"
+          :href="detailAsset.metadata.image"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="market-browse-detail__fullscreen"
+          aria-label="Open image fullscreen"
+        >
+          <Icon icon="lucide:expand" />
+        </a>
       </div>
       <div class="market-browse-detail__info">
         <div class="market-browse-detail__info-text">
           <h2 class="market-browse-detail__name">{{ detailAsset?.metadata?.name ?? truncateAddress(detailMint) }}</h2>
           <div class="market-browse-detail__ticker-row">
             <span v-if="detailAsset?.metadata?.symbol" class="market-browse-detail__symbol">{{ detailAsset.metadata.symbol }}</span>
+            <span v-if="isSpl && detailDecimals != null" class="market-browse-detail__decimals">{{ detailDecimals }} decimals</span>
             <button
               type="button"
               class="market-browse-detail__icon-btn"
               aria-label="Copy address"
               @click="$emit('copy-address')"
             >
-              <Icon icon="mdi:content-copy" />
+              <Icon icon="lucide:copy" />
             </button>
             <a
               :href="solscanTokenUrl"
@@ -32,7 +43,7 @@
               class="market-browse-detail__icon-btn market-browse-detail__solscan"
               aria-label="Jump to Solscan"
             >
-              <Icon icon="mdi:open-in-new" />
+              <Icon icon="lucide:external-link" />
             </a>
           </div>
           <code class="market-browse-detail__address">{{ detailMint }}</code>
@@ -51,7 +62,7 @@
         </div>
         <div class="market-browse-detail__actions">
           <button type="button" class="market-browse-detail__btn market-browse-detail__btn--back" @click="$emit('back')">
-            <Icon icon="mdi:arrow-left" class="market-browse-detail__btn-icon" />
+            <Icon icon="lucide:arrow-left" class="market-browse-detail__btn-icon" />
             <span class="market-browse-detail__btn-label">Back</span>
           </button>
           <button
@@ -61,7 +72,7 @@
             :disabled="createDisabled"
             @click="!createDisabled && $emit('open-create-trade')"
           >
-            <Icon icon="mdi:plus" class="market-browse-detail__btn-icon" />
+            <Icon icon="lucide:plus" class="market-browse-detail__btn-icon" />
             <span class="market-browse-detail__btn-label">Create</span>
           </button>
         </div>
@@ -78,13 +89,14 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { truncateAddress } from '@decentraguild/display'
 import TradeList from './TradeList.vue'
 import type { EscrowWithAddress } from '@decentraguild/web3'
 import type { TraitAttribute } from '~/utils/nftFilterHelpers'
 
-defineProps<{
+const props = defineProps<{
   detailMint: string
   detailAsset: {
     metadata?: {
@@ -93,6 +105,7 @@ defineProps<{
       image?: string | null
       traits?: unknown
     } | null
+    decimals?: number | null
   } | null
   detailTraits: TraitAttribute[]
   detailTrades: { offerTrades: EscrowWithAddress[]; requestTrades: EscrowWithAddress[] }
@@ -100,6 +113,9 @@ defineProps<{
   createDisabled?: boolean
   escrowLink: (id: string) => string | { path: string; query?: Record<string, string> }
 }>()
+
+const isSpl = computed(() => props.detailAsset?.decimals != null)
+const detailDecimals = computed(() => props.detailAsset?.decimals ?? null)
 
 defineEmits<{
   back: []
@@ -139,6 +155,7 @@ defineEmits<{
 }
 
 .market-browse-detail__media {
+  position: relative;
   aspect-ratio: 1;
   background: var(--theme-bg-secondary);
   border-radius: var(--theme-radius-lg);
@@ -149,6 +166,34 @@ defineEmits<{
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+.market-browse-detail__fullscreen {
+  position: absolute;
+  bottom: var(--theme-space-sm);
+  right: var(--theme-space-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  background: var(--theme-bg-primary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  color: var(--theme-text-secondary);
+  text-decoration: none;
+}
+
+.market-browse-detail__fullscreen:hover {
+  color: var(--theme-text-primary);
+  border-color: var(--theme-primary);
+}
+
+.market-browse-detail__decimals {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+  margin-left: var(--theme-space-xs);
 }
 
 .market-browse-detail__placeholder {

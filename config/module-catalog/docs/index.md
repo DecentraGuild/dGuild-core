@@ -21,3 +21,4 @@ A dGuild is a Web3-native organisation built for modern digital communities – 
 - [Admin](/docs/modules/admin) — Settings, branding, domains, and billing
 - [Market](/docs/modules/marketplace) — Peer-to-peer NFT and asset marketplace
 - [Discord](/docs/modules/discord) — Wallet linking and role assignment
+- [Crafter](/docs/modules/crafter) — Create SPL fungible tokens

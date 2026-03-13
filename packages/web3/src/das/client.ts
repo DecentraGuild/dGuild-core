@@ -8,6 +8,7 @@ import type { DasAsset } from './types.js'
 const DAS_METHODS = {
   getAsset: 'getAsset',
   getAssetsByGroup: 'getAssetsByGroup',
+  searchAssets: 'searchAssets',
 } as const
 
 export function getDasRpcUrl(): string {
@@ -53,4 +54,33 @@ export async function fetchAssetsByGroup(
     DAS_METHODS.getAssetsByGroup,
     { groupKey, groupValue, page, limit }
   )
+}
+
+export interface SearchAssetsParams {
+  ownerAddress?: string
+  authorityAddress?: string
+  tokenType?: 'fungible' | 'nonFungible' | 'all'
+  page?: number
+  limit?: number
+}
+
+export interface SearchAssetsResult {
+  items?: DasAsset[]
+  total?: number
+  page?: number
+  limit?: number
+}
+
+export async function searchAssets(
+  params: SearchAssetsParams
+): Promise<SearchAssetsResult | null> {
+  const { ownerAddress, authorityAddress, tokenType = 'fungible', page = 1, limit = 100 } = params
+  const searchParams: Record<string, unknown> = {
+    tokenType,
+    page,
+    limit,
+  }
+  if (ownerAddress) searchParams.ownerAddress = ownerAddress
+  if (authorityAddress) searchParams.authorityAddress = authorityAddress
+  return dasRequest<SearchAssetsResult>(DAS_METHODS.searchAssets, searchParams)
 }

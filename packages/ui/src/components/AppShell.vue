@@ -101,17 +101,6 @@ const patternClass = computed(() => {
   opacity: 0.3;
 }
 
-/* Grain – dot diameter scales with pattern size; clamped so it stays fine */
-.app-shell__pattern--noise {
-  background-image: radial-gradient(
-    circle,
-    var(--theme-border) calc(var(--theme-effect-pattern-size) * 0.08),
-    transparent calc(var(--theme-effect-pattern-size) * 0.08)
-  );
-  background-size: var(--theme-effect-pattern-size) var(--theme-effect-pattern-size);
-  opacity: 0.3;
-}
-
 .app-shell__header {
   position: relative;
   z-index: 1;

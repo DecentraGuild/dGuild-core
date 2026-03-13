@@ -1,0 +1,1 @@
+Discord bot. /verify: wallet–Discord link. Role sync: holder snapshots → rules → add/remove roles. Env: `DISCORD_BOT_TOKEN`, `DISCORD_BOT_API_SECRET`, `API_BASE_URL`. Run: `pnpm run dev`. See `.env.example`.

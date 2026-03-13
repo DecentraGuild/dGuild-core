@@ -1,7 +1,7 @@
 <template>
   <div class="role-cards-carousel">
     <h3 class="role-cards-carousel__title">Role requirements</h3>
-    <div class="role-cards-carousel__scroll" ref="scrollRef">
+    <div ref="scrollRef" class="role-cards-carousel__scroll">
       <article
         v-for="card in roleCards"
         :key="card.role_id"
@@ -23,16 +23,16 @@
           >{{ card.unicode_emoji }}</span>
           <Icon
             v-else
-            icon="mdi:shield-account"
+            icon="lucide:shield"
             class="role-card__icon role-card__icon--fallback"
           />
         </div>
         <h4 class="role-card__name">{{ card.name }}</h4>
         <span v-if="card.eligible === true" class="role-card__badge">
-          <Icon icon="mdi:check-circle" class="role-card__badge-icon" />
+          <Icon icon="lucide:check-circle" class="role-card__badge-icon" />
           You qualify
         </span>
-        <ul class="role-card__requirements" v-if="card.requirements?.length">
+        <ul v-if="card.requirements?.length" class="role-card__requirements">
           <template v-for="(item, idx) in card.requirements" :key="idx">
             <li v-if="item.type === 'text'" class="role-card__req-item">
               {{ item.text }}

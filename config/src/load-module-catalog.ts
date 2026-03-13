@@ -3,17 +3,21 @@ import type { ModuleCatalogEntry, ModuleCatalogAddon } from './module-catalog-ty
 import admin from '../module-catalog/admin.json'
 import marketplace from '../module-catalog/marketplace.json'
 import discord from '../module-catalog/discord.json'
-import whitelist from '../module-catalog/whitelist.json'
+import gates from '../module-catalog/gates.json'
 import raffles from '../module-catalog/raffles.json'
-import addressbook from '../module-catalog/addressbook.json'
+import watchtower from '../module-catalog/watchtower.json'
+import shipment from '../module-catalog/shipment.json'
+import crafter from '../module-catalog/crafter.json'
 
 const entries: ModuleCatalogEntry[] = [
   admin as ModuleCatalogEntry,
   marketplace as ModuleCatalogEntry,
   discord as ModuleCatalogEntry,
-  whitelist as ModuleCatalogEntry,
+  gates as ModuleCatalogEntry,
   raffles as ModuleCatalogEntry,
-  addressbook as ModuleCatalogEntry,
+  watchtower as ModuleCatalogEntry,
+  shipment as ModuleCatalogEntry,
+  crafter as ModuleCatalogEntry,
 ]
 
 const catalog: Record<string, ModuleCatalogEntry> = Object.fromEntries(
@@ -83,4 +87,37 @@ export const VALID_BILLING_PERIODS: ReadonlySet<string> = new Set(['monthly', 'y
 export function getModuleDisplayName(moduleId: string): string {
   const entry = getModuleCatalogEntry(moduleId)
   return entry?.name ?? moduleId
+}
+
+/** App-wide label for gate/whitelist (e.g. "Gate" or "Whitelist"). From gates catalog; default "Gate". */
+export function getGateLabel(): string {
+  const entry = getModuleCatalogEntry('gates')
+  return (entry as { gateLabel?: string } | undefined)?.gateLabel ?? 'Gate'
+}
+
+/** Module ids that have per-module gate settings. Sorted by catalog order. */
+const GATING_MODULE_IDS = ['gates', 'watchtower', 'raffles', 'marketplace'] as const
+
+export type GatingScopeId = 'default' | (typeof GATING_MODULE_IDS)[number]
+
+export interface GatingScope {
+  id: GatingScopeId
+  label: string
+}
+
+/** Ordered list of gate scopes: dGuild default first, then modules by catalog order. */
+export function getGatingScopes(): GatingScope[] {
+  const list = getModuleCatalogList()
+  const byOrder = (a: string, b: string) => {
+    const ea = list.find((m) => m.id === a)
+    const eb = list.find((m) => m.id === b)
+    return (ea?.order ?? 999) - (eb?.order ?? 999)
+  }
+  const sorted = [...GATING_MODULE_IDS].sort(byOrder)
+  const result: GatingScope[] = [{ id: 'default', label: 'dGuild (default)' }]
+  for (const id of sorted) {
+    const entry = getModuleCatalogEntry(id)
+    result.push({ id, label: entry?.name ?? id })
+  }
+  return result
 }

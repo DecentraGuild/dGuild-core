@@ -128,7 +128,7 @@ function encodePrepareArgs(amount: BN, imageUrl: string): Buffer {
 export async function buildPrepareRaffleTransaction(
   params: BuildPrepareRaffleParams
 ): Promise<Transaction> {
-  const { rafflePubkey, prizeMint, amount, imageUrl = '', connection, wallet } = params
+  const { rafflePubkey, prizeMint, amount, imageUrl = '', connection: _connection, wallet } = params
   const creator = wallet.publicKey
   const rafflePk = toPublicKey(rafflePubkey)
   const prizeMintPk = toPublicKey(prizeMint)
@@ -257,7 +257,7 @@ export async function buildClaimPrizeTransaction(params: {
   connection: import('@solana/web3.js').Connection
   wallet: Wallet
 }): Promise<Transaction> {
-  const { rafflePubkey, prizeMint, winnerAta, wallet } = params
+  const { rafflePubkey, prizeMint, winnerAta, wallet: _wallet } = params
   const rafflePk = toPublicKey(rafflePubkey)
   const prizeMintPk = toPublicKey(prizeMint)
   const toAta = toPublicKey(winnerAta)
@@ -314,7 +314,7 @@ export interface BuildBuyTicketsParams {
 }
 
 export async function buildBuyTicketsTransaction(params: BuildBuyTicketsParams): Promise<Transaction> {
-  const { rafflePubkey, ticketAmount, chainData, connection, wallet } = params
+  const { rafflePubkey, ticketAmount, chainData, connection: _connection, wallet } = params
   const buyer = wallet.publicKey
   const rafflePk = toPublicKey(rafflePubkey)
   const ticketMintPk = toPublicKey(chainData.ticketMint)

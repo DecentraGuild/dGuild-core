@@ -15,7 +15,7 @@
         loading="lazy"
       />
       <div v-else class="asset-card__placeholder">
-        <Icon icon="mdi:image-off" class="asset-card__placeholder-icon" />
+        <Icon icon="lucide:image-off" class="asset-card__placeholder-icon" />
       </div>
     </div>
     <div class="asset-card__body">
@@ -187,11 +187,11 @@ defineEmits<{
 }
 
 .asset-card__count--offer {
-  color: var(--theme-trade-buy);
+  color: var(--theme-trade-sell);
 }
 
 .asset-card__count--request {
-  color: var(--theme-trade-sell);
+  color: var(--theme-trade-buy);
 }
 
 .asset-card__count--muted {

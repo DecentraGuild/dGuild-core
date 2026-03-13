@@ -7,7 +7,7 @@
       </Button>
     </template>
     <template v-else>
-      <Button variant="secondary" @click="showConnectModal = true">
+      <Button variant="secondary" @click="openConnectModal">
         Connect wallet
       </Button>
       <ConnectWalletModal
@@ -27,6 +27,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { truncateAddress } from '@decentraguild/display'
 import { Button, ConnectWalletModal } from '@decentraguild/ui/components'
 import type { WalletConnectorId } from '@solana/connector/headless'
 import { subscribeToConnectorState } from '@decentraguild/web3/wallet'
@@ -39,18 +40,19 @@ const showConnectModal = ref(false)
 /** Only show wallet/connect state after mount so server and client first paint match (avoids hydration mismatch). */
 const showAuthState = ref(false)
 
+function openConnectModal() {
+  error.value = null
+  showConnectModal.value = true
+}
+
 watch(openConnectModalRequested, (v) => {
   if (v) {
-    showConnectModal.value = true
+    openConnectModal()
     openConnectModalRequested.value = false
   }
 })
 
-const truncatedAddress = computed(() => {
-  const w = wallet.value
-  if (!w || w.length < 10) return w ?? ''
-  return `${w.slice(0, 4)}...${w.slice(-4)}`
-})
+const truncatedAddress = computed(() => truncateAddress(wallet.value, 4, 4))
 
 let unsubscribeConnector: (() => void) | null = null
 onMounted(async () => {

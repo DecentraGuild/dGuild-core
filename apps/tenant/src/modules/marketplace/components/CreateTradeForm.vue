@@ -8,11 +8,12 @@
 
     <div class="create-trade-form__field">
       <label class="create-trade-form__label">Offer (from wallet)</label>
-      <Select
+      <OptionsSelect
         v-model="selectedDepositKey"
         :option-groups="depositSelectOptionGroups"
         placeholder="Select token to offer..."
         :disabled="loadingBalances"
+        content-class="z-[9999]"
       />
       <p v-if="scopeLoading" class="create-trade-form__field-hint">Loading store scope...</p>
       <p v-else-if="loadingBalances" class="create-trade-form__field-hint">Loading wallet balances...</p>
@@ -38,16 +39,18 @@
 
     <div class="create-trade-form__field">
       <label class="create-trade-form__label">Request (what you want)</label>
-      <Select
+      <OptionsSelect
         v-model="requestMint"
         :option-groups="requestSelectOptionGroups"
         placeholder="Select token you want..."
+        content-class="z-[9999]"
       />
       <div v-if="isRequestCollection && requestMint" class="create-trade-form__nft-pick">
         <button type="button" class="create-trade-form__nft-pick-btn" @click="nftSelectorOpen = true">
-          Select specific NFT from collection
+          {{ requestNftName ? 'Change' : 'Select specific NFT from collection' }}
         </button>
         <span v-if="requestNftName" class="create-trade-form__nft-pick-name">{{ requestNftName }}</span>
+        <p v-else class="create-trade-form__field-hint">Required: pick a specific NFT to complete the trade.</p>
       </div>
     </div>
     <NftInstanceSelectorModal
@@ -58,109 +61,36 @@
       @select="onRequestNftSelect"
     />
 
-    <TextInput
+    <FormInput
       v-model="requestAmount"
       type="text"
       label="Request amount"
       placeholder="Amount or price per unit"
     />
 
-    <div class="create-trade-form__settings">
-      <button
-        type="button"
-        class="create-trade-form__settings-toggle"
-        @click="settingsExpanded = !settingsExpanded"
-      >
-        <Icon icon="mdi:cog" class="create-trade-form__settings-icon" />
-        <span>Additional settings</span>
-        <Icon :icon="settingsExpanded ? 'mdi:chevron-up' : 'mdi:chevron-down'" />
-      </button>
-      <div v-if="settingsExpanded" class="create-trade-form__settings-body">
-        <div class="create-trade-form__settings-row">
-          <div class="create-trade-form__settings-label">
-            <p class="create-trade-form__settings-title">Direct</p>
-            <p class="create-trade-form__settings-hint">Only this wallet can fill the trade.</p>
-          </div>
-          <Toggle v-model="settingsDirect" />
-        </div>
-        <div v-if="settingsDirect" class="create-trade-form__settings-field">
-          <label class="create-trade-form__settings-field-label">Counterparty address</label>
-          <TextInput
-            v-model="settingsDirectAddress"
-            type="text"
-            placeholder="Enter Solana wallet address"
-          />
-        </div>
-        <div class="create-trade-form__settings-row">
-          <div class="create-trade-form__settings-label">
-            <p class="create-trade-form__settings-title">Whitelist</p>
-            <p v-if="effectiveModuleWhitelist" class="create-trade-form__settings-hint">
-              This community requires a whitelist. Only listed addresses can fill this trade.
-            </p>
-            <p v-else class="create-trade-form__settings-hint">
-              Only addresses on this list can fill the trade. Use default, public, or pick a list.
-            </p>
-          </div>
-          <WhitelistSelect
-            v-if="!effectiveModuleWhitelist"
-            :slug="tenantSlugRef"
-            :model-value="settingsWhitelist"
-            show-use-default
-            @update:model-value="settingsWhitelist = $event"
-          />
-          <p v-else class="create-trade-form__settings-fixed">Whitelist is set by the community (dGuild or module).</p>
-        </div>
-        <div class="create-trade-form__settings-row">
-          <div class="create-trade-form__settings-label">
-            <p class="create-trade-form__settings-title">Expire</p>
-            <p class="create-trade-form__settings-hint">Set expiration time (UTC).</p>
-          </div>
-          <Toggle v-model="settingsExpire" />
-        </div>
-        <div v-if="settingsExpire" class="create-trade-form__settings-field">
-          <div class="create-trade-form__expire-presets">
-            <button
-              v-for="preset in expirePresets"
-              :key="preset.label"
-              type="button"
-              class="create-trade-form__preset-btn"
-              @click="applyExpirePreset(preset.minutes)"
-            >
-              {{ preset.label }}
-            </button>
-          </div>
-          <input
-            v-model="settingsExpireDate"
-            type="datetime-local"
-            class="create-trade-form__datetime-input"
-            :min="minExpireDateTime"
-          />
-        </div>
-        <div class="create-trade-form__settings-row">
-          <div class="create-trade-form__settings-label">
-            <p class="create-trade-form__settings-title">Partial fill</p>
-            <p class="create-trade-form__settings-hint">Allow filling part of the order.</p>
-          </div>
-          <Toggle v-model="settingsPartialFill" />
-        </div>
-        <div v-if="settingsPartialFill" class="create-trade-form__settings-row">
-          <div class="create-trade-form__settings-label">
-            <p class="create-trade-form__settings-title">Slippage</p>
-            <p class="create-trade-form__settings-hint">milli% (1 = 0.001%).</p>
-          </div>
-          <input
-            v-model.number="settingsSlippage"
-            type="number"
-            min="0"
-            max="10000"
-            class="create-trade-form__slippage-input"
-          />
-        </div>
-      </div>
-    </div>
+    <CreateTradeSettings
+      :slug="tenantSlugRef"
+      :effective-module-gate="effectiveModuleGate"
+      :expanded="settingsExpanded"
+      :direct="settingsDirect"
+      :direct-address="settingsDirectAddress"
+      :gate="settingsGate"
+      :expire="settingsExpire"
+      :expire-date="settingsExpireDate"
+      :partial-fill="settingsPartialFill"
+      :slippage="settingsSlippage"
+      @update:expanded="settingsExpanded = $event"
+      @update:direct="settingsDirect = $event"
+      @update:direct-address="settingsDirectAddress = $event"
+      @update:gate="settingsGate = $event"
+      @update:expire="settingsExpire = $event"
+      @update:expire-date="settingsExpireDate = $event"
+      @update:partial-fill="settingsPartialFill = $event"
+      @update:slippage="settingsSlippage = $event"
+    />
 
     <div class="create-trade-form__actions">
-      <Button variant="primary" :disabled="creating || !canCreate" @click="create">
+      <Button variant="default" :disabled="creating || !canCreate" @click="create">
         {{ creating ? 'Creating...' : 'Create escrow' }}
       </Button>
       <p v-if="createError" class="create-trade-form__error">{{ createError }}</p>
@@ -169,13 +99,17 @@
 </template>
 
 <script setup lang="ts">
-import { TextInput, Button, Select, Toggle, TokenAmountInput } from '@decentraguild/ui/components'
-import { Icon } from '@iconify/vue'
+import { formatUiAmount, truncateAddress } from '@decentraguild/display'
+import FormInput from '~/components/ui/form-input/FormInput.vue'
+import { Button } from '~/components/ui/button'
+import OptionsSelect from '~/components/ui/options-select/OptionsSelect.vue'
+import CreateTradeSettings from './CreateTradeSettings.vue'
 import NftInstanceSelectorModal from './NftInstanceSelectorModal.vue'
+import { useCollectionMembers } from '~/composables/mint/useCollectionMembers'
 import { storeToRefs } from 'pinia'
 import { useAuth } from '@decentraguild/auth'
 import { useTenantStore } from '~/stores/tenant'
-import { getEffectiveWhitelist, getModuleWhitelistFromTenant } from '@decentraguild/core'
+import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
 import {
   buildInitializeTransaction,
   sendAndConfirmTransaction,
@@ -186,10 +120,14 @@ import { ESCROW_PROGRAM_ID, SLIPPAGE_DIVISOR } from '@decentraguild/contracts'
 import { toRawUnits, sanitizeTokenLabel } from '@decentraguild/display'
 import { PublicKey } from '@solana/web3.js'
 import BN from 'bn.js'
-import { fetchWalletTokenBalances, type TokenBalance } from '~/composables/useWalletTokenBalances'
-import { useSolanaConnection } from '~/composables/useSolanaConnection'
-import { useMintMetadata } from '~/composables/useMintMetadata'
-import { useMarketplaceScope } from '~/composables/useMarketplaceScope'
+import { fetchWalletTokenBalances, type TokenBalance } from '~/composables/core/useWalletTokenBalances'
+import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
+import { useMintMetadata } from '~/composables/mint/useMintMetadata'
+import { resolveGateForTransaction } from '@decentraguild/core'
+import { useMintLabels } from '~/composables/mint/useMintLabels'
+import { useStoreMints } from '~/composables/core/useStoreMints'
+import { useTenantInLinks } from '~/composables/core/useTenantInLinks'
+import { buildTokenOptionGroups, type TokenKind } from '~/utils/buildTokenOptionGroups'
 
 const props = withDefaults(
   defineProps<{
@@ -209,41 +147,25 @@ const tenantStore = useTenantStore()
 const { slug: tenantSlugRef } = storeToRefs(tenantStore)
 const router = useRouter()
 
-const { entries: scopeEntries, loading: scopeLoading } = useMarketplaceScope(tenantSlugRef)
+const { allowedMints, requestSelectorMints, scopeEntries, scopeLoading } = useStoreMints()
+const tenantRef = computed(() => tenantStore.tenant)
+const marketplaceSettingsRef = computed(() => tenantStore.marketplaceSettings)
+const effectiveModuleGate = useEffectiveGate(tenantRef, 'marketplace', {
+  marketplaceSettings: marketplaceSettingsRef,
+  raffleSettings: computed(() => tenantStore.raffleSettings),
+})
 const auth = useAuth()
 const { connection, rpcUrl, hasRpc, rpcError } = useSolanaConnection()
 const { fetchMetadata } = useMintMetadata()
 
 const walletAddress = computed(() => auth.connectorState.value?.account ?? null)
 
-/** All mints in scope: currency, SPL, collection roots, and individual NFT mints (collection members). */
-const allowedMints = computed(() => {
-  const mints = new Set<string>()
-  for (const e of scopeEntries.value) {
-    mints.add(e.mint)
-  }
-  return mints
-})
-
-const storeTokenLabels = computed(() => {
-  const settings = tenantStore.marketplaceSettings
-  if (!settings) return new Map<string, string>()
-  const map = new Map<string, string>()
-  for (const c of settings.collectionMints ?? []) {
-    map.set(c.mint, c.name ?? c.mint.slice(0, 8) + '...')
-  }
-  for (const c of settings.currencyMints ?? []) {
-    map.set(c.mint, `${c.name} (${c.symbol})`)
-  }
-  for (const s of settings.splAssetMints ?? []) {
-    map.set(s.mint, s.name ?? s.symbol ?? s.mint.slice(0, 8) + '...')
-  }
-  return map
-})
-
 const walletBalances = ref<TokenBalance[]>([])
 const loadingBalances = ref(false)
-const metadataByMint = ref<Map<string, { name: string; symbol: string }>>(new Map())
+
+const offerMints = computed(() => new Set(walletBalances.value.map((b) => b.mint)))
+const { labelByMint: offerLabelByMint } = useMintLabels(offerMints)
+const { labelByMint: requestLabelByMint } = useMintLabels(requestSelectorMints)
 
 const selectedDepositKey = ref('')
 const selectedDepositBalance = computed(() =>
@@ -261,41 +183,13 @@ const createError = ref<string | null>(null)
 const settingsExpanded = ref(true)
 const settingsDirect = ref(false)
 const settingsDirectAddress = ref('')
-const settingsWhitelist = ref<{ programId: string; account: string } | null | 'use-default'>(null)
+const settingsGate = ref<{ programId: string; account: string } | null | 'use-default'>(null)
 const settingsExpire = ref(false)
 const settingsExpireDate = ref('')
 const settingsPartialFill = ref(false)
-const settingsSlippage = ref(1)
+const settingsSlippage = ref(5000)
 
 const SYSTEM_PROGRAM = '11111111111111111111111111111111'
-
-const expirePresets = [
-  { label: '+12h', minutes: 720 },
-  { label: '+1d', minutes: 1440 },
-  { label: '+3d', minutes: 4320 },
-  { label: '+7d', minutes: 10080 },
-  { label: '+30d', minutes: 43200 },
-]
-
-const minExpireDateTime = computed(() => {
-  const now = new Date()
-  const min = new Date(now.getTime() + 5 * 60 * 1000)
-  return min.toISOString().slice(0, 16)
-})
-
-/** Effective whitelist for this module (tenant only). */
-const effectiveModuleWhitelist = computed(() => {
-  const tenant = tenantStore.tenant
-  const moduleWhitelist = getModuleWhitelistFromTenant(tenant, 'marketplace')
-  return getEffectiveWhitelist(tenant?.defaultWhitelist ?? null, moduleWhitelist)
-})
-
-function applyExpirePreset(minutes: number) {
-  const now = new Date()
-  const future = new Date(now.getTime() + minutes * 60 * 1000)
-  settingsExpireDate.value = future.toISOString().slice(0, 16)
-  settingsExpire.value = true
-}
 
 function validateRecipientAddress(addr: string): { valid: boolean; pubkey?: PublicKey; error?: string } {
   const trimmed = addr?.trim()
@@ -325,72 +219,30 @@ const isOfferFungible = computed(() => {
 
 const depositSelectOptionGroups = computed(() => {
   const settings = tenantStore.marketplaceSettings
-  const nft: { value: string; label: string }[] = []
-  const spl: { value: string; label: string }[] = []
-  const currency: { value: string; label: string }[] = []
-  for (const b of walletBalances.value) {
-    const meta = metadataByMint.value.get(b.mint)
-    const name = sanitizeTokenLabel(meta?.name ?? storeTokenLabels.value.get(b.mint) ?? b.mint.slice(0, 8) + '...')
-    const amt = formatUiAmount(b.uiAmount, b.decimals)
-    const label = `${name} (${amt})`
-    const entry = scopeEntries.value.find((e) => e.mint === b.mint)
-    if (b.decimals > 0) {
-      currency.push({ value: b.mint, label })
-    } else if (entry?.collectionMint && settings) {
-      const coll = settings.collectionMints?.find((c) => c.mint === entry.collectionMint)
-      const collName = coll?.name ? sanitizeTokenLabel(coll.name) + ': ' : ''
-      nft.push({ value: b.mint, label: collName ? `${collName}${name} (${amt})` : label })
-    } else {
-      spl.push({ value: b.mint, label })
-    }
+  const labels = offerLabelByMint.value
+  const baseLabel = (b: TokenBalance) => {
+    const name = sanitizeTokenLabel(labels.get(b.mint) ?? truncateAddress(b.mint, 8, 4))
+    return `${name} (${formatUiAmount(b.uiAmount, b.decimals)})`
   }
-  const sortByName = (a: { value: string; label: string }, b: { value: string; label: string }) =>
-    a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
-  nft.sort(sortByName)
-  spl.sort(sortByName)
-  currency.sort(sortByName)
-  const groups: { groupLabel: string; options: { value: string; label: string }[] }[] = []
-  if (nft.length) groups.push({ groupLabel: 'NFT', options: nft })
-  if (spl.length) groups.push({ groupLabel: 'SPL', options: spl })
-  if (currency.length) groups.push({ groupLabel: 'Currency', options: currency })
-  return groups
+  const classify = (b: TokenBalance): TokenKind => {
+    if (b.decimals > 0) return 'Currency'
+    const entry = scopeEntries.value.find((e) => e.mint === b.mint)
+    if (entry?.collectionMint && settings) return 'NFT'
+    return 'SPL'
+  }
+  const getLabel = (b: TokenBalance) => {
+    const entry = scopeEntries.value.find((e) => e.mint === b.mint)
+    const coll = entry?.collectionMint && settings
+      ? settings.collectionMints?.find((c) => c.mint === entry.collectionMint)
+      : null
+    return coll?.name ? `${sanitizeTokenLabel(coll.name)}: ${baseLabel(b)}` : baseLabel(b)
+  }
+  return buildTokenOptionGroups(walletBalances.value, classify, getLabel)
 })
 
 const depositOptionCount = computed(() =>
   depositSelectOptionGroups.value.reduce((sum, g) => sum + g.options.length, 0)
 )
-
-const requestSelectOptionGroups = computed(() => {
-  const settings = tenantStore.marketplaceSettings
-  if (!settings) return []
-  const nft: { value: string; label: string }[] = []
-  const spl: { value: string; label: string }[] = []
-  const currency: { value: string; label: string }[] = []
-  for (const c of settings.collectionMints ?? []) {
-    const name = sanitizeTokenLabel(c.name ?? c.mint.slice(0, 8) + '...')
-    nft.push({ value: c.mint, label: name })
-  }
-  for (const c of settings.currencyMints ?? []) {
-    const name = sanitizeTokenLabel(c.name ?? '')
-    const sym = sanitizeTokenLabel(c.symbol ?? '')
-    const display = sym ? `${name} (${sym})` : name || c.mint.slice(0, 8) + '...'
-    currency.push({ value: c.mint, label: display })
-  }
-  for (const s of settings.splAssetMints ?? []) {
-    const name = sanitizeTokenLabel(s.name ?? s.symbol ?? s.mint.slice(0, 8) + '...')
-    spl.push({ value: s.mint, label: name })
-  }
-  const sortByName = (a: { value: string; label: string }, b: { value: string; label: string }) =>
-    a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
-  nft.sort(sortByName)
-  spl.sort(sortByName)
-  currency.sort(sortByName)
-  const groups: { groupLabel: string; options: { value: string; label: string }[] }[] = []
-  if (nft.length) groups.push({ groupLabel: 'NFT', options: nft })
-  if (spl.length) groups.push({ groupLabel: 'SPL', options: spl })
-  if (currency.length) groups.push({ groupLabel: 'Currency', options: currency })
-  return groups
-})
 
 const collectionMints = computed(() => tenantStore.marketplaceSettings?.collectionMints?.map((c) => c.mint) ?? [])
 
@@ -399,22 +251,69 @@ const isRequestCollection = computed(() => {
   return collectionMints.value.includes(requestMint.value)
 })
 
+const requestMintForMembers = computed(() => (isRequestCollection.value ? requestMint.value : null))
+const { assets: collectionMemberAssets } = useCollectionMembers(requestMintForMembers)
+
 const requestCollectionName = computed(() => {
   if (!requestMint.value) return ''
   const c = tenantStore.marketplaceSettings?.collectionMints?.find((x) => x.mint === requestMint.value)
-  return c?.name ?? ''
+  return c?.name ?? requestLabelByMint.value.get(requestMint.value) ?? ''
+})
+
+const requestSelectOptionGroups = computed(() => {
+  const settings = tenantStore.marketplaceSettings
+  const labels = requestLabelByMint.value
+  if (!settings) return []
+  const getLabel = (mint: string, name?: string | null, symbol?: string | null) =>
+    sanitizeTokenLabel(name ?? labels.get(mint) ?? truncateAddress(mint, 8, 4))
+  const items: Array<{ mint: string; _kind: TokenKind; name?: string | null; symbol?: string | null }> = []
+  for (const c of settings.collectionMints ?? []) {
+    items.push({ mint: c.mint, _kind: 'NFT', name: c.name })
+  }
+  for (const c of settings.currencyMints ?? []) {
+    items.push({ mint: c.mint, _kind: 'Currency', name: c.name, symbol: c.symbol })
+  }
+  for (const s of settings.splAssetMints ?? []) {
+    items.push({ mint: s.mint, _kind: 'SPL', name: s.name ?? s.symbol })
+  }
+  const groups = buildTokenOptionGroups(
+    items,
+    (item) => item._kind,
+    (item) => {
+      const name = getLabel(item.mint, item.name, item.symbol)
+      if (item._kind === 'Currency' && item.symbol) {
+        return `${name} (${sanitizeTokenLabel(item.symbol)})`
+      }
+      return name || truncateAddress(item.mint, 8, 4)
+    }
+  )
+  if (isRequestCollection.value && collectionMemberAssets.value.length > 0) {
+    const collName = requestCollectionName.value || truncateAddress(requestMint.value, 8, 4)
+    const memberOptions = collectionMemberAssets.value.map((a) => ({
+      value: a.mint,
+      label: sanitizeTokenLabel(a.metadata?.name ?? truncateAddress(a.mint, 8, 4)),
+    }))
+    memberOptions.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+    groups.push({ groupLabel: `Collection: ${collName}`, options: memberOptions })
+  }
+  return groups
 })
 
 const requestNftName = computed(() => requestPickedNftName.value)
 
 const effectiveRequestMint = computed(() => requestPickedNftMint.value ?? requestMint.value)
 
-const canCreate = computed(() =>
-  selectedDepositKey.value.trim() &&
-  effectiveRequestMint.value.trim() &&
-  depositAmount.value.trim() &&
-  requestAmount.value.trim()
-)
+const canCreate = computed(() => {
+  const hasOffer = selectedDepositKey.value.trim()
+  const hasRequest = effectiveRequestMint.value.trim()
+  const hasDepositAmount = depositAmount.value.trim()
+  const hasRequestAmount = requestAmount.value.trim()
+  if (!hasOffer || !hasDepositAmount || !hasRequestAmount) return false
+  if (isRequestCollection.value) {
+    return Boolean(requestPickedNftMint.value?.trim())
+  }
+  return Boolean(hasRequest)
+})
 
 function onRequestNftSelect(mint: string, name?: string | null) {
   requestPickedNftMint.value = mint
@@ -422,16 +321,13 @@ function onRequestNftSelect(mint: string, name?: string | null) {
   nftSelectorOpen.value = false
 }
 
-watch(requestMint, () => {
+watch(requestMint, (mint) => {
   requestPickedNftMint.value = null
   requestPickedNftName.value = null
+  if (mint && collectionMints.value.includes(mint)) {
+    nftSelectorOpen.value = true
+  }
 })
-
-function formatUiAmount(ui: number | null, decimals: number): string {
-  if (ui === null || ui === undefined) return '0'
-  if (decimals === 0) return Math.floor(ui).toString()
-  return ui.toLocaleString(undefined, { maximumFractionDigits: 6 })
-}
 
 function setDepositPercent(pct: number) {
   const b = selectedDepositBalance.value
@@ -464,8 +360,8 @@ watch(
   { immediate: true }
 )
 
-watch(selectedDepositKey, (mint) => {
-  const b = walletBalances.value.find((x) => x.mint === mint)
+watch(selectedDepositKey, () => {
+  const b = walletBalances.value.find((x) => x.mint === selectedDepositKey.value)
   if (b?.decimals === 0 && !depositAmount.value) depositAmount.value = '1'
 })
 
@@ -483,13 +379,6 @@ watch(
         walletAddress.value,
         allowedMints.value
       )
-      const mints = [...new Set(walletBalances.value.map((b) => b.mint))]
-      const metaMap = new Map<string, { name: string; symbol: string }>()
-      for (const mint of mints) {
-        const meta = await fetchMetadata(mint, true)
-        if (meta) metaMap.set(mint, { name: meta.name, symbol: meta.symbol })
-      }
-      metadataByMint.value = metaMap
     } catch {
       walletBalances.value = []
     } finally {
@@ -509,7 +398,15 @@ async function create() {
   const rm = effectiveRequestMint.value.trim()
   const da = depositAmount.value.trim()
   const ra = requestAmount.value.trim()
-  if (!dm || !rm || !da || !ra) {
+  if (!dm || !da || !ra) {
+    createError.value = 'Fill all fields'
+    return
+  }
+  if (isRequestCollection.value && !requestPickedNftMint.value?.trim()) {
+    createError.value = 'Select a specific NFT from the collection'
+    return
+  }
+  if (!rm) {
     createError.value = 'Fill all fields'
     return
   }
@@ -542,21 +439,12 @@ async function create() {
       creating.value = false
       return
     }
-    const seed = new BN(Date.now())
-    const shopFee = tenantStore.marketplaceSettings?.shopFee
-    const tenant = tenantStore.tenant
-    const effective = effectiveModuleWhitelist.value
-    let resolvedWhitelist: { programId: string; account: string } | null = null
-    if (effective) {
-      resolvedWhitelist = effective
-    } else if (settingsWhitelist.value === 'use-default') {
-      const moduleWl = getModuleWhitelistFromTenant(tenant, 'marketplace')
-      resolvedWhitelist = getEffectiveWhitelist(tenant?.defaultWhitelist ?? null, moduleWl)
-    } else if (settingsWhitelist.value && typeof settingsWhitelist.value === 'object' && settingsWhitelist.value.account?.trim()) {
-      resolvedWhitelist = settingsWhitelist.value
-    }
+
+    const resolvedWhitelist = resolveWhitelistForEscrow(
+      effectiveModuleWhitelist.value,
+      settingsWhitelist.value
+    )
     const hasWhitelist = Boolean(resolvedWhitelist?.account?.trim())
-    const whitelist = resolvedWhitelist
 
     let recipientAddr: string | null = null
     if (settingsDirect.value && settingsDirectAddress.value.trim()) {
@@ -569,7 +457,9 @@ async function create() {
         ? Math.floor(new Date(settingsExpireDate.value).getTime() / 1000)
         : 0
 
-    const slippageDecimal = (settingsSlippage.value ?? 1) / SLIPPAGE_DIVISOR
+    const slippageDecimal = (settingsSlippage.value ?? 5000) / SLIPPAGE_DIVISOR
+    const shopFee = tenantStore.marketplaceSettings?.shopFee
+    const seed = new BN(Date.now())
 
     const tx = await buildInitializeTransaction({
       maker: wallet.publicKey,
@@ -580,14 +470,14 @@ async function create() {
       seed,
       expireTimestamp,
       allowPartialFill: settingsPartialFill.value,
-      onlyWhitelist: hasWhitelist,
+      onlyWhitelist: hasGate,
       slippage: slippageDecimal,
       recipient: recipientAddr,
       connection: connection.value,
       wallet,
       shopFee: shopFee ?? null,
-      whitelistProgram: (hasWhitelist && whitelist?.programId) ? whitelist.programId : null,
-      whitelist: hasWhitelist && whitelist?.account ? whitelist.account : null,
+      whitelistProgram: hasGate && resolvedGate?.programId ? resolvedGate.programId : null,
+      whitelist: hasGate && resolvedGate?.account ? resolvedGate.account : null,
     })
 
     await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
@@ -610,12 +500,12 @@ async function create() {
 <style scoped>
 .create-trade-form__error {
   background: var(--theme-status-error, #fcc);
-  color: var(--theme-text-primary, #111);
+  color: var(--theme-status-error, #111);
 }
 
 .create-trade-form__hint {
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary, #c8c8d1);
   margin-bottom: var(--theme-space-md);
 }
 
@@ -626,137 +516,14 @@ async function create() {
 .create-trade-form__label {
   display: block;
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
+  color: var(--theme-text-primary, #ffffff);
   margin-bottom: var(--theme-space-xs);
 }
 
 .create-trade-form__field-hint {
   font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary, #c8c8d1);
   margin-top: var(--theme-space-xs);
-}
-
-.create-trade-form__settings {
-  margin-top: var(--theme-space-md);
-  padding-top: var(--theme-space-md);
-  border-top: var(--theme-border-thin) solid var(--theme-border);
-}
-
-.create-trade-form__settings-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-sm);
-  width: 100%;
-  padding: var(--theme-space-xs) 0;
-  background: none;
-  border: none;
-  font-size: var(--theme-font-sm);
-  font-weight: 600;
-  color: var(--theme-text-primary);
-  cursor: pointer;
-}
-
-.create-trade-form__settings-icon {
-  flex-shrink: 0;
-}
-
-.create-trade-form__settings-body {
-  margin-top: var(--theme-space-sm);
-  padding: var(--theme-space-md);
-  background: var(--theme-bg-secondary);
-  border-radius: var(--theme-radius-md);
-  border: var(--theme-border-thin) solid var(--theme-border);
-}
-
-.create-trade-form__settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--theme-space-md);
-  margin-bottom: var(--theme-space-sm);
-}
-
-.create-trade-form__settings-row--disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.create-trade-form__settings-label {
-  flex: 1;
-}
-
-.create-trade-form__settings-title {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  font-weight: 500;
-  color: var(--theme-text-primary);
-}
-
-.create-trade-form__settings-hint {
-  margin: 2px 0 0;
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-}
-
-.create-trade-form__settings-fixed {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted);
-}
-
-.create-trade-form__settings-field {
-  margin-bottom: var(--theme-space-sm);
-  margin-left: var(--theme-space-md);
-}
-
-.create-trade-form__settings-field-label {
-  display: block;
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-  margin-bottom: var(--theme-space-xs);
-}
-
-.create-trade-form__expire-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--theme-space-xs);
-  margin-bottom: var(--theme-space-xs);
-}
-
-.create-trade-form__preset-btn {
-  padding: 2px 8px;
-  font-size: var(--theme-font-xs);
-  background: var(--theme-bg-primary);
-  border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-sm);
-  color: var(--theme-text-secondary);
-  cursor: pointer;
-}
-
-.create-trade-form__preset-btn:hover {
-  color: var(--theme-text-primary);
-  border-color: var(--theme-primary);
-}
-
-.create-trade-form__datetime-input {
-  width: 100%;
-  padding: var(--theme-space-sm) var(--theme-space-md);
-  font-size: var(--theme-font-sm);
-  border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-md);
-  background: var(--theme-bg-primary);
-  color: var(--theme-text-primary);
-}
-
-.create-trade-form__slippage-input {
-  width: 4rem;
-  padding: var(--theme-space-xs) var(--theme-space-sm);
-  font-size: var(--theme-font-sm);
-  text-align: right;
-  border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-md);
-  background: var(--theme-bg-primary);
-  color: var(--theme-text-primary);
 }
 
 .create-trade-form__actions {

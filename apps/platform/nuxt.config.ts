@@ -13,13 +13,7 @@ export default defineNuxtConfig({
   modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
   css: [uiVarsCss, '~/assets/platform-theme.css'],
   plugins: ['~/plugins/buffer.server', '~/plugins/buffer.client', '@decentraguild/auth/plugin.client'],
-  routeRules:
-    process.env.NODE_ENV === 'development'
-      ? {
-          // Proxy /api to the API server so requests work from same origin in dev.
-          '/api/**': { proxy: 'http://localhost:3001' },
-        }
-      : {},
+  routeRules: {},
   nitro: {
     preset: 'static',
     prerender: {
@@ -76,14 +70,15 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      // In dev, default to local API so CORS and auth work without setting env. No trailing slash.
-      apiUrl: (process.env.NUXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? 'https://api.dguild.org' : 'http://localhost:3001')).replace(/\/$/, ''),
+      supabaseUrl: process.env.NUXT_PUBLIC_SUPABASE_URL ?? '',
+      supabaseAnonKey: process.env.NUXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
       heliusRpc: process.env.NUXT_PUBLIC_HELIUS_RPC ?? '',
-      // Base domain for tenant subdomains (e.g. dguild.org -> https://your-slug.dguild.org). Override via NUXT_PUBLIC_TENANT_BASE_DOMAIN for staging/white-label.
       tenantBaseDomain: process.env.NUXT_PUBLIC_TENANT_BASE_DOMAIN ?? 'dguild.org',
-      // Single host for the tenant app when not using subdomains (e.g. dapp.dguild.org). Visit links use this + ?tenant= so all orgs work without Netlify Pro wildcard. Override via NUXT_PUBLIC_TENANT_APP_HOST.
       tenantAppHost: process.env.NUXT_PUBLIC_TENANT_APP_HOST ?? 'dapp.dguild.org',
       platformDocsUrl: process.env.NUXT_PUBLIC_PLATFORM_DOCS_URL ?? 'https://dguild.org/docs',
+      explorerTxUrl: process.env.NUXT_PUBLIC_EXPLORER_TX_URL ?? 'https://solscan.io/tx',
+      explorerAccountUrl: process.env.NUXT_PUBLIC_EXPLORER_ACCOUNT_URL ?? 'https://solscan.io/account',
+      explorerTokenUrl: process.env.NUXT_PUBLIC_EXPLORER_TOKEN_URL ?? 'https://solscan.io/token',
     },
   },
 })

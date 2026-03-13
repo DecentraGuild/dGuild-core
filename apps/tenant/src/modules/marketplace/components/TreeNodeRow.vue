@@ -8,7 +8,7 @@
         aria-label="Toggle"
         @click.stop="expanded = !expanded"
       >
-        <Icon :icon="expanded ? 'mdi:chevron-down' : 'mdi:chevron-right'" />
+        <Icon :icon="expanded ? 'lucide:chevron-down' : 'lucide:chevron-right'" />
       </button>
       <span v-else class="tree-node-row__spacer" />
       <button
@@ -37,7 +37,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
-import type { TreeNode } from '~/composables/useMarketplaceTree'
+import type { TreeNode } from '~/composables/marketplace/useMarketplaceTree'
 
 const props = defineProps<{
   node: TreeNode
@@ -55,13 +55,13 @@ const expanded = ref(true)
 const kindIcon = computed(() => {
   switch (props.node.kind) {
     case 'type':
-      return 'mdi:folder'
+      return 'lucide:folder'
     case 'group':
-      return 'mdi:folder-outline'
+      return 'lucide:folder-open'
     case 'asset':
-      return 'mdi:file-document-outline'
+      return 'lucide:file-text'
     default:
-      return 'mdi:file'
+      return 'lucide:file'
   }
 })
 </script>

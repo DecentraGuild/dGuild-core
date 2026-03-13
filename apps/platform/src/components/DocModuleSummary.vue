@@ -15,6 +15,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatUsdc } from '@decentraguild/core'
 import { getModuleCatalogEntry } from '@decentraguild/config'
 
 const props = defineProps<{ moduleId: string }>()
@@ -37,10 +38,6 @@ const pricingSummary = computed(() => {
   }
   return null
 })
-
-function formatUsdc(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-}
 </script>
 
 <style scoped>

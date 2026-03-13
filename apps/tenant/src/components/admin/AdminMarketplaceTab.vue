@@ -29,8 +29,8 @@
 import type { ModuleState } from '@decentraguild/core'
 import type { BillingPeriod } from '@decentraguild/billing'
 import { BASE_CURRENCY_MINT_ADDRESSES } from '@decentraguild/core'
-import AdminMarketplaceSettings from '~/components/AdminMarketplaceSettings.vue'
-import AdminPricingWidget from '~/components/AdminPricingWidget.vue'
+import AdminMarketplaceSettings from '~/components/admin/AdminMarketplaceSettings.vue'
+import AdminPricingWidget from '~/components/admin/AdminPricingWidget.vue'
 
 defineProps<{
   slug: string
@@ -45,7 +45,7 @@ defineProps<{
 const emit = defineEmits<{
   saved: [payload: Record<string, unknown>]
   save: [period: BillingPeriod]
-  deploy: [period: BillingPeriod]
+  deploy: [period: BillingPeriod, conditions?: Record<string, number | boolean>]
   reactivate: [period: BillingPeriod]
 }>()
 
@@ -82,7 +82,7 @@ async function onSave(period: BillingPeriod) {
 async function onDeploy(period: BillingPeriod) {
   const ok = await settingsRef.value?.save()
   if (!ok) return
-  emit('deploy', period)
+  emit('deploy', period, liveConditions.value ?? undefined)
 }
 
 function onSaved(payload: Record<string, unknown>) {

@@ -1,9 +1,18 @@
 /**
  * Single source of truth for resolving a mint address from marketplace settings.
  * Used by tree labels, escrow decimals, detail panel, and browse grid augmentation.
+ * Base currencies (SOL, WBTC, USDC, USDT) get name, symbol, decimals from core when missing in settings.
  */
-import type { MarketplaceSettings } from '@decentraguild/core'
-import type { MarketplaceAsset } from '~/composables/useMarketplaceAssets'
+import { truncateAddress } from '@decentraguild/display'
+import { BASE_CURRENCY_MINTS, isBaseCurrencyMint, type MarketplaceSettings } from '@decentraguild/core'
+import type { MarketplaceAsset } from '~/composables/marketplace/useMarketplaceAssets'
+
+const BASE_CURRENCY_DECIMALS: Record<string, number> = {
+  So11111111111111111111111111111111111111112: 9,
+  '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh': 8,
+  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: 6,
+  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: 6,
+}
 
 export interface MintInfoFromSettings {
   name: string | null
@@ -13,7 +22,7 @@ export interface MintInfoFromSettings {
   source: 'collection' | 'currency' | 'spl' | null
 }
 
-const FALLBACK_LABEL_LEN = 8
+const _FALLBACK_LABEL_LEN = 8
 
 /**
  * Resolve name, symbol, decimals, and image for a mint from tenant marketplace settings.
@@ -44,12 +53,25 @@ export function getMintInfoFromSettings(
 
   const curr = settings.currencyMints?.find((c) => c.mint === mint)
   if (curr) {
+    const base = isBaseCurrencyMint(mint) ? BASE_CURRENCY_MINTS.find((b) => b.mint === mint) : null
     return {
-      name: curr.name ?? null,
-      symbol: curr.symbol ?? null,
-      decimals: curr.decimals ?? 0,
+      name: curr.name ?? base?.name ?? null,
+      symbol: curr.symbol ?? base?.symbol ?? null,
+      decimals: curr.decimals ?? base ? BASE_CURRENCY_DECIMALS[mint] ?? 6 : 0,
       image: curr.image ?? null,
       source: 'currency',
+    }
+  }
+  if (isBaseCurrencyMint(mint)) {
+    const base = BASE_CURRENCY_MINTS.find((b) => b.mint === mint)
+    if (base) {
+      return {
+        name: base.name,
+        symbol: base.symbol,
+        decimals: BASE_CURRENCY_DECIMALS[mint] ?? 6,
+        image: null,
+        source: 'currency',
+      }
     }
   }
 
@@ -76,33 +98,49 @@ export function getMintDisplayLabel(
 ): string {
   const info = getMintInfoFromSettings(mint, settings)
   const label = info.name ?? info.symbol ?? null
-  return label ?? `${mint.slice(0, FALLBACK_LABEL_LEN)}...`
+  return label ?? truncateAddress(mint, 8, 4)
 }
 
 /**
  * Build a MarketplaceAsset from settings when the mint is not in the API assets list.
- * Returns null if the mint is not in settings.
+ * Returns null if the mint is not in settings (or not a base currency).
+ * Base currencies get name, symbol, decimals from core when missing in settings.
  */
 export function getMarketplaceAssetFromSettings(
   mint: string,
   settings: MarketplaceSettings | null
 ): MarketplaceAsset | null {
-  if (!settings) return null
-
-  const curr = settings.currencyMints?.find((c) => c.mint === mint)
-  if (curr) {
+  const base = isBaseCurrencyMint(mint) ? BASE_CURRENCY_MINTS.find((b) => b.mint === mint) : null
+  if (settings) {
+    const curr = settings.currencyMints?.find((c) => c.mint === mint)
+    if (curr) {
+      return {
+        assetType: 'CURRENCY',
+        mint: curr.mint,
+        collectionMint: null,
+        metadata: {
+          name: curr.name ?? base?.name ?? null,
+          symbol: curr.symbol ?? base?.symbol ?? null,
+          image: curr.image ?? null,
+          decimals: curr.decimals ?? (base ? BASE_CURRENCY_DECIMALS[mint] ?? 6 : undefined) ?? null,
+        },
+      }
+    }
+  }
+  if (base) {
     return {
       assetType: 'CURRENCY',
-      mint: curr.mint,
+      mint: base.mint,
       collectionMint: null,
       metadata: {
-        name: curr.name ?? null,
-        symbol: curr.symbol ?? null,
-        image: curr.image ?? null,
-        decimals: curr.decimals ?? null,
+        name: base.name,
+        symbol: base.symbol,
+        image: null,
+        decimals: BASE_CURRENCY_DECIMALS[mint] ?? 6,
       },
     }
   }
+  if (!settings) return null
 
   const spl = settings.splAssetMints?.find((s) => s.mint === mint)
   if (spl) {

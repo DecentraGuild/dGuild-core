@@ -19,7 +19,7 @@
 
         <template v-if="loadingMe">
           <p class="discord-page__loading">
-            <Icon icon="mdi:loading" class="discord-page__spinner" />
+            <Icon icon="lucide:loader-2" class="discord-page__spinner" />
             Loading…
           </p>
         </template>
@@ -53,7 +53,7 @@
                 <span v-if="addr === me.session_wallet" class="discord-page__badge">Current</span>
                 <Button
                   variant="ghost"
-                  size="small"
+                  size="sm"
                   :disabled="revoking === addr"
                   @click="revokeWallet(addr)"
                 >
@@ -66,12 +66,12 @@
             <Button
               v-if="!discordDeactivating"
               variant="secondary"
-              size="small"
+              size="sm"
               :disabled="addingWallet"
               class="discord-page__add"
               @click="showConnectModal = true"
             >
-              <Icon v-if="addingWallet" icon="mdi:loading" class="discord-page__spinner" />
+              <Icon v-if="addingWallet" icon="lucide:loader-2" class="discord-page__spinner" />
               Link another wallet
             </Button>
             <p v-if="addError" class="discord-page__error">{{ addError }}</p>
@@ -99,22 +99,13 @@
 
 <script setup lang="ts">
 import { getModuleState, isModuleVisibleToMembers } from '@decentraguild/core'
-import { PageSection, Card, Button, ConnectWalletModal } from '@decentraguild/ui/components'
+import { Card } from '~/components/ui/card'
+import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
-import {
-  getConnectorState,
-  connectWallet,
-  signMessageForAuth,
-  subscribeToConnectorState,
-} from '@decentraguild/web3/wallet'
-import type { WalletConnectorId } from '@solana/connector/headless'
-import { API_V1 } from '~/utils/apiBase'
-import { useApiBase } from '~/composables/useApiBase'
 import DiscordRoleCardsCarousel from '~/components/DiscordRoleCardsCarousel.vue'
-import type { RoleCard } from '~/components/DiscordRoleCardsCarousel.vue'
 import { useTenantStore } from '~/stores/tenant'
+import { useDiscordPage } from '~/composables/discord/useDiscordPage'
 
-const apiBase = useApiBase()
 const tenantStore = useTenantStore()
 const tenant = computed(() => tenantStore.tenant)
 const discordState = computed(() => getModuleState(tenant.value?.modules?.discord))
@@ -125,139 +116,33 @@ const discordServerInviteLink = computed(() => {
   return link && link.trim() ? link.trim() : ''
 })
 
-interface DiscordMe {
-  discord_user_id: string | null
-  linked_wallets: string[]
-  session_wallet: string
-}
+const {
+  me,
+  loadingMe,
+  signedIn,
+  showConnectModal,
+  addingWallet,
+  addError,
+  revoking,
+  roleCards,
+  connectorState,
+  truncate,
+  fetchRoleCards,
+  handleAddWallet,
+  revokeWallet,
+  setup,
+  teardown,
+} = useDiscordPage()
 
-const me = ref<DiscordMe | null>(null)
-const loadingMe = ref(true)
-const signedIn = ref(false)
-const showConnectModal = ref(false)
-const addingWallet = ref(false)
-const addError = ref<string | null>(null)
-const revoking = ref<string | null>(null)
-const roleCards = ref<RoleCard[]>([])
-
-const connectorState = ref(getConnectorState())
-
-function truncate(addr: string): string {
-  if (!addr || addr.length < 12) return addr
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`
-}
-
-async function fetchMe() {
-  loadingMe.value = true
-  try {
-    const res = await fetch(`${apiBase.value}${API_V1}/discord/me`, { credentials: 'include' })
-    if (res.status === 401) {
-      signedIn.value = false
-      me.value = null
-      return
-    }
-    signedIn.value = true
-    const data = (await res.json()) as DiscordMe
-    me.value = data
-  } catch {
-    me.value = null
-  } finally {
-    loadingMe.value = false
-  }
-}
-
-async function fetchRoleCards() {
-  const id = tenantStore.tenantId
-  if (!id) return
-  try {
-    const res = await fetch(`${apiBase.value}${API_V1}/tenant/${encodeURIComponent(id)}/discord/role-cards`, {
-      credentials: 'include',
-    })
-    if (!res.ok) return
-    const data = (await res.json()) as { role_cards: RoleCard[] }
-    roleCards.value = data.role_cards ?? []
-  } catch {
-    roleCards.value = []
-  }
-}
-
-async function doLinkAdditionalWallet(wallet: string) {
-  const base = apiBase.value.replace(/\/$/, '')
-  const nonceRes = await fetch(`${base}${API_V1}/auth/nonce`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wallet }),
-    credentials: 'include',
-  })
-  if (!nonceRes.ok) {
-    const data = await nonceRes.json().catch(() => ({}))
-    throw new Error((data.error as string) ?? 'Failed to get nonce')
-  }
-  const { nonce } = (await nonceRes.json()) as { nonce: string }
-  const { signature, message } = await signMessageForAuth(nonce)
-  const tenantId = tenantStore.tenantId ?? undefined
-  const linkRes = await fetch(`${base}${API_V1}/discord/link-additional-wallet`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wallet, message, signature, tenant_slug: tenantId }),
-    credentials: 'include',
-  })
-  if (!linkRes.ok) {
-    const data = await linkRes.json().catch(() => ({}))
-    throw new Error((data.error as string) ?? 'Link failed')
-  }
-}
-
-async function handleAddWallet(connectorId: WalletConnectorId) {
-  addError.value = null
-  addingWallet.value = true
-  try {
-    await connectWallet(connectorId)
-    connectorState.value = getConnectorState()
-    if (!connectorState.value.account) {
-      addError.value = 'Wallet not connected'
-      return
-    }
-    await doLinkAdditionalWallet(connectorState.value.account)
-    showConnectModal.value = false
-    await fetchMe()
-    await fetchRoleCards()
-  } catch (e) {
-    addError.value = e instanceof Error ? e.message : 'Something went wrong'
-  } finally {
-    addingWallet.value = false
-  }
-}
-
-async function revokeWallet(addr: string) {
-  revoking.value = addr
-  try {
-    const res = await fetch(`${apiBase.value}${API_V1}/discord/verify/revoke`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet: addr }),
-      credentials: 'include',
-    })
-    if (res.ok) {
-      await fetchMe()
-      await fetchRoleCards()
-    }
-  } finally {
-    revoking.value = null
-  }
-}
-
-let unsubscribe: (() => void) | null = null
-onMounted(() => {
-  unsubscribe = subscribeToConnectorState(() => {
-    connectorState.value = getConnectorState()
-  })
-  fetchMe()
-  fetchRoleCards()
-})
-onUnmounted(() => {
-  unsubscribe?.()
-})
+onMounted(setup)
+watch(
+  () => tenantStore.tenantId,
+  (id) => {
+    if (id && discordVisible.value) void fetchRoleCards()
+  },
+  { immediate: false },
+)
+onUnmounted(teardown)
 </script>
 
 <style scoped>
@@ -376,5 +261,10 @@ onUnmounted(() => {
 .discord-page__spinner {
   vertical-align: middle;
   margin-right: var(--theme-space-xs);
+  animation: discord-page-spin 1s linear infinite;
+}
+
+@keyframes discord-page-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

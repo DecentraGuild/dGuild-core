@@ -7,7 +7,7 @@
         :class="{ 'market-tree__home--selected': selectedNodeId === null }"
         @click="selectNode(null)"
       >
-        <Icon icon="mdi:home" class="market-tree__home-icon" />
+        <Icon icon="lucide:home" class="market-tree__home-icon" />
         <span>Home</span>
       </button>
     </div>
@@ -33,7 +33,7 @@
 <script setup lang="ts">
 import TreeNodeRow from './TreeNodeRow.vue'
 import { Icon } from '@iconify/vue'
-import type { TreeNode } from '~/composables/useMarketplaceTree'
+import type { TreeNode } from '~/composables/marketplace/useMarketplaceTree'
 
 defineProps<{
   tree: TreeNode[]

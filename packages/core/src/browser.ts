@@ -7,12 +7,19 @@ export type {
   TenantModuleEntry,
   TenantModulesMap,
   ModuleState,
-  ModuleWhitelistModuleId,
-  MarketplaceWhitelistSettings,
+  ModuleGateModuleId,
+  MarketplaceGateSettings,
+  TransactionGateOverride,
 } from './types.js'
-export { isModuleVisibleToMembers, isModuleVisibleInAdmin, getModuleState, getEffectiveWhitelist, getModuleWhitelistFromTenant } from './types.js'
+export {
+  isModuleVisibleToMembers,
+  isModuleVisibleInAdmin,
+  getModuleState,
+  getEffectiveGate,
+  getModuleGateFromTenant,
+  resolveGateForTransaction,
+} from './types.js'
 export { getTenantSlugFromHost } from './resolver.js'
-export { API_V1, normalizeApiBase } from './api.js'
 export {
   BASE_CURRENCY_MINTS,
   BASE_CURRENCY_MINT_ADDRESSES,

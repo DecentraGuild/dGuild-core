@@ -7,8 +7,8 @@ import { computed } from 'vue'
 import type { MarketplaceSettings } from '@decentraguild/core'
 import { normaliseAttributes } from '~/utils/nftFilterHelpers'
 import { getMarketplaceAssetFromSettings } from '~/utils/mintFromSettings'
-import type { MarketplaceAsset } from '~/composables/useMarketplaceAssets'
-import { useExplorerLinks } from '~/composables/useExplorerLinks'
+import type { MarketplaceAsset } from '~/composables/marketplace/useMarketplaceAssets'
+import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
 
 /** Minimal escrow shape for eligibility check. */
 interface EscrowForEligibility {
@@ -25,6 +25,8 @@ export interface UseMarketBrowseDetailOptions {
   marketplaceSettings: Ref<MarketplaceSettings | null>
   /** Map of mint -> { offerTrades, requestTrades } from useEscrowsForMints. */
   byMint: Ref<Map<string, { offerTrades: unknown[]; requestTrades: unknown[] }>>
+  /** Map of collection_mint -> member mints (for aggregating trades when viewing a collection). */
+  mintsByCollection: Ref<Map<string, string[]>>
   walletAddress: Ref<string | null>
 }
 
@@ -39,14 +41,41 @@ function isEscrowEligibleToFill(e: EscrowForEligibility, wallet: string | null):
 }
 
 export function useMarketBrowseDetail(options: UseMarketBrowseDetailOptions) {
-  const { detailMint, assets, marketplaceSettings, byMint, walletAddress } = options
+  const { detailMint, assets, marketplaceSettings, byMint, mintsByCollection, walletAddress } = options
   const { tokenUrl } = useExplorerLinks()
 
   const detailAsset = computed(() => {
     if (!detailMint.value) return null
     const fromApi = assets.value.find((a) => a.mint === detailMint.value)
-    if (fromApi) return fromApi
-    return getMarketplaceAssetFromSettings(detailMint.value, marketplaceSettings.value)
+    if (fromApi) {
+      const meta = (fromApi as { metadata?: { name?: string; image?: string; traits?: unknown } }).metadata
+      const decimals = (fromApi as { decimals?: number | null }).decimals ?? (meta as { decimals?: number })?.decimals ?? null
+      return {
+        ...fromApi,
+        metadata: {
+          name: meta?.name ?? fromApi.name ?? null,
+          symbol: fromApi.symbol ?? null,
+          image: meta?.image ?? fromApi.image ?? null,
+          traits: meta?.traits ?? undefined,
+        },
+        decimals,
+      }
+    }
+    const fromSettings = getMarketplaceAssetFromSettings(detailMint.value, marketplaceSettings.value)
+    if (fromSettings) {
+      const m = fromSettings as { metadata?: { name?: string; symbol?: string; image?: string; decimals?: number | null } }
+      return {
+        ...fromSettings,
+        metadata: {
+          name: m.metadata?.name ?? null,
+          symbol: m.metadata?.symbol ?? null,
+          image: m.metadata?.image ?? null,
+          traits: undefined,
+        },
+        decimals: m.metadata?.decimals ?? null,
+      }
+    }
+    return null
   })
 
   const detailTraits = computed(() => {
@@ -58,7 +87,30 @@ export function useMarketBrowseDetail(options: UseMarketBrowseDetailOptions) {
   const detailTrades = computed(() => {
     const m = detailMint.value
     if (!m) return { offerTrades: [], requestTrades: [] }
-    return byMint.value.get(m) ?? { offerTrades: [], requestTrades: [] }
+    const direct = byMint.value.get(m) ?? { offerTrades: [], requestTrades: [] }
+    const memberMints = mintsByCollection.value.get(m)
+    if (!memberMints?.length) return direct
+    const seen = new Set<string>()
+    const dedupe = <T extends { publicKey: { toBase58: () => string } }>(list: T[]) =>
+      list.filter((e) => {
+        const id = e.publicKey.toBase58()
+        if (seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+    const offerTrades: unknown[] = [...direct.offerTrades]
+    const requestTrades: unknown[] = [...direct.requestTrades]
+    for (const member of memberMints) {
+      const entry = byMint.value.get(member)
+      if (entry) {
+        offerTrades.push(...entry.offerTrades)
+        requestTrades.push(...entry.requestTrades)
+      }
+    }
+    return {
+      offerTrades: dedupe(offerTrades as { publicKey: { toBase58: () => string } }[]),
+      requestTrades: dedupe(requestTrades as { publicKey: { toBase58: () => string } }[]),
+    }
   })
 
   const detailTradesFiltered = computed(() => {

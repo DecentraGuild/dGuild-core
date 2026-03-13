@@ -34,13 +34,22 @@ export interface ModuleSubnavTab {
   path?: string
 }
 
+/** Admin tabs shown as primary (always visible). */
+export const ADMIN_PRIMARY_TAB_IDS = ['general', 'theming', 'addressbook', 'modules']
+/** Admin tabs grouped under "More" dropdown (between Modules and Billing). */
+export const ADMIN_MORE_TAB_IDS = ['watchtower', 'gates', 'gating', 'shipment-list', 'plan-shipment', 'discord', 'raffle', 'marketplace']
+
 export const MODULE_SUBNAV: Record<string, ModuleSubnavTab[]> = {
   admin: [
     { id: 'general', label: 'General' },
     { id: 'theming', label: 'Theming' },
-    { id: 'modules', label: 'Modules' },
     { id: 'addressbook', label: 'Address Book' },
-    { id: 'whitelist', label: 'Whitelist' },
+    { id: 'modules', label: 'Modules' },
+    { id: 'watchtower', label: 'Watchtower' },
+    { id: 'gates', label: 'Member lists' },
+    { id: 'gating', label: 'Gates' },
+    { id: 'shipment-list', label: 'Shipment List' },
+    { id: 'plan-shipment', label: 'Plan Shipment' },
     { id: 'discord', label: 'Discord' },
     { id: 'raffle', label: 'Raffle' },
     { id: 'marketplace', label: 'Marketplace' },
@@ -72,14 +81,16 @@ export function getModuleSubnavForPath(
   const marketplaceVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.marketplace))
   const discordVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.discord))
   const raffleVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.raffles))
-  const whitelistVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.whitelist))
-  const addressbookVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.addressbook))
+  const gatesVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.gates))
+  const watchtowerVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.watchtower))
+  const shipmentVisible = isModuleVisibleInAdmin(getModuleState(tenant.modules.shipment))
   return tabs.filter((t) => {
     if (t.id === 'marketplace' && !marketplaceVisible) return false
     if (t.id === 'discord' && !discordVisible) return false
     if (t.id === 'raffle' && !raffleVisible) return false
-    if (t.id === 'whitelist' && !whitelistVisible) return false
-    if (t.id === 'addressbook' && !addressbookVisible) return false
+    if (t.id === 'gates' && !gatesVisible) return false
+    if (t.id === 'watchtower' && !watchtowerVisible) return false
+    if ((t.id === 'shipment-list' || t.id === 'plan-shipment') && !shipmentVisible) return false
     return true
   })
 }

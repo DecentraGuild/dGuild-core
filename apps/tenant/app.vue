@@ -13,7 +13,7 @@ import { useTenantStore } from '~/stores/tenant'
 
 const tenantStore = useTenantStore()
 const config = useRuntimeConfig()
-const devTenantSlug = (config.public.devTenantSlug as string) ?? ''
+const _devTenantSlug = (config.public.devTenantSlug as string) ?? ''
 </script>
 
 <style scoped>

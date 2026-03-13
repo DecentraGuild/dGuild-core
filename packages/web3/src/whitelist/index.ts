@@ -2,6 +2,7 @@ export { deriveWhitelistPda, deriveWhitelistEntryPda } from './accounts.js'
 export { getWhitelistProgram, getWhitelistProgramReadOnly } from './provider.js'
 export {
   fetchWhitelist,
+  fetchAllWhitelists,
   fetchAllWhitelistsByAuthority,
   fetchWhitelistEntries,
   isWalletOnWhitelist,

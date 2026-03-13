@@ -86,6 +86,36 @@ export function contrastColor(bg: string): string {
   return contrastWhite >= 4.5 ? '#ffffff' : '#000000'
 }
 
+/**
+ * Convert hex to HSL values for shadcn/Tailwind.
+ * Returns "H S% L%" (no hsl() wrapper) for use with hsl(var(--name)).
+ */
+export function hexToHsl(hex: string): string {
+  const rgb = parseHex(hex)
+  if (!rgb) return ''
+  const r = rgb.r / 255
+  const g = rgb.g / 255
+  const b = rgb.b / 255
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  let h = 0
+  let s = 0
+  const l = (max + min) / 2
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break
+      case g: h = ((b - r) / d + 2) / 6; break
+      case b: h = ((r - g) / d + 4) / 6; break
+    }
+  }
+  const hDeg = Math.round(h * 360)
+  const sPct = Math.round(s * 100)
+  const lPct = Math.round(l * 100)
+  return `${hDeg} ${sPct}% ${lPct}%`
+}
+
 /** Build an rgba string from a hex color and an alpha. */
 export function hexToRgba(hex: string, alpha: number): string {
   const rgb = parseHex(hex)

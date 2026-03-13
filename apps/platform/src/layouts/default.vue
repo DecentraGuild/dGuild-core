@@ -62,7 +62,10 @@
       <slot />
     </main>
     <ClientOnly>
-      <TransactionToastContainer />
+      <TransactionToastContainer
+        :store="useTransactionNotificationsStore()"
+        :get-tx-url="(s) => useExplorerLinks().txUrl(s)"
+      />
     </ClientOnly>
   </div>
 </template>
@@ -70,7 +73,7 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
 import { AuthWidget } from '@decentraguild/auth'
-import TransactionToastContainer from '~/components/TransactionToastContainer.vue'
+import { TransactionToastContainer } from '@decentraguild/ui/components'
 
 const route = useRoute()
 const mobileNavOpen = ref(false)

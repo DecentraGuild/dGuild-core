@@ -1,10 +1,10 @@
 import type { Ref } from 'vue'
-import type { TenantConfig, ModuleWhitelistModuleId } from '@decentraguild/core'
+import type { TenantConfig, ModuleGateModuleId } from '@decentraguild/core'
 import {
   getModuleState,
   isModuleVisibleToMembers,
-  getEffectiveWhitelist,
-  getModuleWhitelistFromTenant,
+  getEffectiveGate,
+  getModuleGateFromTenant,
 } from '@decentraguild/core'
 import { getModuleCatalogList, getModuleDisplayName, isModuleNavigable } from '@decentraguild/config'
 
@@ -13,7 +13,7 @@ export interface ActiveModuleWithGate {
   hasGate: boolean
 }
 
-export type AccessFilter = 'any' | 'public' | 'whitelist'
+export type AccessFilter = 'any' | 'public' | 'gates'
 
 export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
   const searchQuery = ref('')
@@ -30,8 +30,8 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
     }, 300)
   }, { immediate: true })
 
-  function hasWhitelist(tenant: TenantConfig): boolean {
-    const account = tenant.defaultWhitelist?.account?.trim()
+  function hasGates(tenant: TenantConfig): boolean {
+    const account = tenant.defaultGate?.account?.trim()
     return Boolean(account)
   }
 
@@ -42,22 +42,23 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
       .map(([id]) => id)
   }
 
-  /** Whitelist for a module: from getModuleWhitelistFromTenant (marketplace/raffles) or module.settingsjson.whitelist. */
-  function getModuleWhitelist(
+  /** Gate for a module: from getModuleGateFromTenant (marketplace/raffles) or module.settingsjson.gate. */
+  function getModuleGate(
     tenant: TenantConfig,
     moduleId: string
   ): { programId: string; account: string } | null | undefined {
     if (moduleId === 'marketplace' || moduleId === 'raffles') {
-      const fromCore = getModuleWhitelistFromTenant(tenant, moduleId as ModuleWhitelistModuleId)
+      const fromCore = getModuleGateFromTenant(tenant, moduleId as ModuleGateModuleId)
       return fromCore
     }
     const entry = tenant.modules?.[moduleId]
     const sj = entry?.settingsjson as Record<string, unknown> | undefined
     if (!sj) return undefined
-    const direct = sj.whitelist as { programId?: string; account?: string } | null | undefined
+    const direct = sj.gate as { programId?: string; account?: string } | null | undefined
     if (!direct) return direct
+    const defaultGate = tenant.defaultGate
     return {
-      programId: direct.programId ?? tenant.defaultWhitelist?.programId ?? '',
+      programId: direct.programId ?? defaultGate?.programId ?? '',
       account: direct.account ?? '',
     }
   }
@@ -65,8 +66,9 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
   function activeModulesWithGate(tenant: TenantConfig): ActiveModuleWithGate[] {
     const ids = activeModuleIds(tenant)
     return ids.map((id) => {
-      const moduleWhitelist = getModuleWhitelist(tenant, id)
-      const effective = getEffectiveWhitelist(tenant.defaultWhitelist, moduleWhitelist)
+      const moduleGate = getModuleGate(tenant, id)
+      const defaultGate = tenant.defaultGate
+      const effective = getEffectiveGate(defaultGate, moduleGate)
       return {
         name: getModuleDisplayName(id),
         hasGate: effective !== null,
@@ -95,8 +97,8 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
         const active = activeModuleIds(t)
         if (!active.includes(moduleId)) return false
       }
-      if (access === 'public' && hasWhitelist(t)) return false
-      if (access === 'whitelist' && !hasWhitelist(t)) return false
+      if (access === 'public' && hasGates(t)) return false
+      if (access === 'gates' && !hasGates(t)) return false
       return true
     })
   })
@@ -105,7 +107,7 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
     searchQuery,
     moduleFilter,
     accessFilter,
-    hasWhitelist,
+    hasGates,
     activeModuleIds,
     activeModulesWithGate,
     getModuleDisplayName,

@@ -25,7 +25,7 @@
         <span v-else class="manage-escrow-card__loading">Loading...</span>
       </div>
       <div class="manage-escrow-card__actions">
-        <NuxtLink :to="escrowLink" class="manage-escrow-card__link">
+        <NuxtLink :to="escrowLink" class="manage-escrow-card__link" @click="onDetailsClick">
           <Button variant="ghost">Details</Button>
         </NuxtLink>
         <Button
@@ -42,10 +42,11 @@
 </template>
 
 <script setup lang="ts">
-import { toRef } from 'vue'
-import { Button, TokenAmountWithLabel } from '@decentraguild/ui/components'
+import { computed, toRef } from 'vue'
+import { Button } from '~/components/ui/button'
 import type { EscrowWithAddress } from '@decentraguild/web3'
-import { useEscrowDisplay } from '~/composables/useEscrowDisplay'
+import { useEscrowDisplay } from '~/composables/marketplace/useEscrowDisplay'
+import { useEscrowPreload } from '~/composables/marketplace/useEscrowPreload'
 
 const props = defineProps<{
   escrow: EscrowWithAddress
@@ -56,7 +57,13 @@ const props = defineProps<{
 
 defineEmits<{ cancel: [] }>()
 
+const { set } = useEscrowPreload()
 const escrowRef = toRef(props, 'escrow')
+
+function onDetailsClick() {
+  const id = props.escrow.publicKey.toBase58()
+  set(id, props.escrow)
+}
 const { data } = useEscrowDisplay(escrowRef)
 const display = computed(() => data.value)
 </script>

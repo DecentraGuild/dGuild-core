@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import AdminThemeSettings from '~/components/AdminThemeSettings.vue'
+import AdminThemeSettings from '~/components/admin/AdminThemeSettings.vue'
 
 defineProps<{
   branding: { logo: string; theme: Record<string, unknown> }

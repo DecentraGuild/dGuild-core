@@ -7,8 +7,8 @@
     <div class="discovery-card__content">
       <span
         class="discovery-card__gate"
-        :class="{ 'discovery-card__gate--active': hasWhitelist }"
-        :aria-label="hasWhitelist ? 'Whitelist gated' : 'Public'"
+        :class="{ 'discovery-card__gate--active': hasGate }"
+        :aria-label="hasGate ? 'Gated' : 'Public'"
       >
         <Icon icon="mdi:gate" class="discovery-card__gate-icon" />
       </span>
@@ -29,7 +29,7 @@
             <span
               v-if="mod.hasGate"
               class="discovery-card__module-gate discovery-card__module-gate--active"
-              aria-label="Whitelist gated"
+              aria-label="Gated"
             >
               <Icon icon="mdi:gate" class="discovery-card__module-gate-icon" />
             </span>
@@ -66,7 +66,7 @@ import type { ActiveModuleWithGate } from '~/composables/useDiscoveryFilters'
 const props = defineProps<{
   tenant: TenantConfig
   tenantUrl: (idOrSlug: string) => string
-  hasWhitelist: boolean
+  hasGate: boolean
   activeModulesWithGate: ActiveModuleWithGate[]
 }>()
 

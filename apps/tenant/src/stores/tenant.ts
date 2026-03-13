@@ -1,25 +1,33 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { TenantConfig, MarketplaceSettings, MarketplaceWhitelistSettings } from '@decentraguild/core'
+import type { TenantConfig, MarketplaceSettings, MarketplaceGateSettings } from '@decentraguild/core'
 import { useThemeStore } from '@decentraguild/ui'
-import { API_V1, normalizeApiBase } from '~/utils/apiBase'
+import { getBrowserClient } from '@decentraguild/auth'
 
 export type { MarketplaceSettings } from '@decentraguild/core'
 
 export interface RaffleSettings {
-  defaultWhitelist?: MarketplaceWhitelistSettings | 'use-default' | null
+  defaultGate?: MarketplaceGateSettings | 'use-default' | 'admin-only' | null
 }
 
 export const useTenantStore = defineStore('tenant', () => {
   const tenant = ref<TenantConfig | null>(null)
   const marketplaceSettings = ref<MarketplaceSettings | null>(null)
   const raffleSettings = ref<RaffleSettings | null>(null)
-  /** Route identifier from URL (subdomain or ?tenant=). Can be id (e.g. 0000000) or slug. API accepts both. */
+  /** Subdomain/URL param for routing only (display). Never use for API or billing — use tenantId. */
   const slug = ref<string | null>(null)
-  /** Canonical tenant id when tenant is loaded. Use for display of permanent identity. */
+  /** Permanent tenant id (tenant_config.id). Use this for all API calls, billing, and DB. */
   const tenantId = computed(() => tenant.value?.id ?? null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  function getSupabase() {
+    const config = useRuntimeConfig()
+    return getBrowserClient(
+      config.public.supabaseUrl as string,
+      config.public.supabaseAnonKey as string,
+    )
+  }
 
   async function fetchTenantContext(slugParam: string) {
     loading.value = true
@@ -28,21 +36,41 @@ export const useTenantStore = defineStore('tenant', () => {
     marketplaceSettings.value = null
     raffleSettings.value = null
 
-    const config = useRuntimeConfig()
-    const apiBase = normalizeApiBase(config.public.apiUrl as string) // same formula as useApiBase()
-    const url = `${apiBase}${API_V1}/tenant-context?slug=${slugParam}`
     try {
-      const res = await fetch(url, { credentials: 'include' })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        const msg = (data.error as string) || `HTTP ${res.status}`
-        throw new Error(`${msg} (${url})`)
+      const supabase = getSupabase()
+
+      // Use the tenant_context_view which joins tenant_config, marketplace_settings, raffle_settings.
+      // The view uses tenant_id as FK; resolve by id or slug.
+      const { data, error: dbError } = await supabase
+        .from('tenant_context_view')
+        .select('*')
+        .or(`id.eq.${slugParam},slug.eq.${slugParam}`)
+        .maybeSingle()
+
+      if (dbError) throw new Error(dbError.message)
+      if (!data) throw new Error(`Tenant not found: ${slugParam}`)
+
+      const tenantData: TenantConfig = {
+        id: data.id as string,
+        slug: data.slug as string | undefined,
+        name: data.name as string,
+        description: data.description as string | undefined,
+        discordServerInviteLink: data.discord_server_invite_link as string | undefined,
+        defaultGate: data.default_gate as MarketplaceGateSettings | undefined,
+        branding: data.branding as TenantConfig['branding'],
+        modules: data.modules as TenantConfig['modules'],
+        admins: data.admins as string[],
+        treasury: data.treasury as string | undefined,
       }
-      const data = await res.json()
+
       applyTenantContext(slugParam, {
-        tenant: data.tenant as TenantConfig,
-        marketplaceSettings: (data.marketplaceSettings as MarketplaceSettings) ?? null,
-        raffleSettings: (data.raffleSettings as RaffleSettings) ?? null,
+        tenant: tenantData,
+        marketplaceSettings: data.marketplace_settings
+          ? (data.marketplace_settings as MarketplaceSettings)
+          : null,
+        raffleSettings: data.raffle_settings
+          ? (data.raffle_settings as RaffleSettings)
+          : null,
       })
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load tenant'
@@ -54,7 +82,6 @@ export const useTenantStore = defineStore('tenant', () => {
     }
   }
 
-  /** Re-fetch tenant context for current slug (e.g. after cron may have changed module state). */
   async function refetchTenantContext() {
     const currentSlug = slug.value
     if (!currentSlug) return
@@ -85,8 +112,14 @@ export const useTenantStore = defineStore('tenant', () => {
     slug.value = slugParam
   }
 
-  /** Apply fetched tenant context (used by SSR and after fetch). No document access. */
-  function applyTenantContext(slugParam: string, data: { tenant: TenantConfig; marketplaceSettings?: MarketplaceSettings | null; raffleSettings?: RaffleSettings | null }) {
+  function applyTenantContext(
+    slugParam: string,
+    data: {
+      tenant: TenantConfig
+      marketplaceSettings?: MarketplaceSettings | null
+      raffleSettings?: RaffleSettings | null
+    },
+  ) {
     slug.value = slugParam
     tenant.value = data.tenant
     marketplaceSettings.value = data.marketplaceSettings ?? null

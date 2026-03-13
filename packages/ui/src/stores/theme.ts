@@ -7,7 +7,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { TenantTheme, TenantBranding } from '@decentraguild/core'
 import { DEFAULT_TENANT_THEME } from '../theme/defaults'
-import { hexToRgba, lightenHex, darkenHex, contrastColor } from '../theme/color-utils'
+import { hexToRgba, hexToHsl, lightenHex, darkenHex, contrastColor } from '../theme/color-utils'
 
 export function mergeTheme(base: TenantTheme, override: Partial<TenantTheme>): TenantTheme {
   const colors: NonNullable<TenantTheme['colors']> = {
@@ -45,12 +45,16 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
   const shadows = theme.shadows ?? {}
   const gradients = theme.gradients ?? {}
 
+  const primaryMain = colors.accent?.main ?? colors.primary?.main ?? ''
+  const primaryHover = colors.accent?.hover ?? colors.primary?.hover ?? ''
+  const primaryLight = colors.accent?.main ? lightenHex(colors.accent.main, 0.2) : (colors.primary?.light ?? '')
+  const primaryDark = colors.accent?.main ? darkenHex(colors.accent.main, 0.1) : (colors.primary?.dark ?? '')
   return {
-    '--theme-primary': colors.primary?.main ?? '',
-    '--theme-primary-hover': colors.primary?.hover ?? '',
-    '--theme-primary-light': colors.primary?.light ?? '',
-    '--theme-primary-dark': colors.primary?.dark ?? '',
-    '--theme-primary-inverse': colors.primary?.main ? contrastColor(colors.primary.main) : '',
+    '--theme-primary': primaryMain,
+    '--theme-primary-hover': primaryHover,
+    '--theme-primary-light': primaryLight,
+    '--theme-primary-dark': primaryDark,
+    '--theme-primary-inverse': primaryMain ? contrastColor(primaryMain) : '',
     '--theme-secondary': colors.secondary?.main ?? '',
     '--theme-secondary-hover': colors.secondary?.hover ?? '',
     '--theme-secondary-light': colors.secondary?.light ?? '',
@@ -77,13 +81,14 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-status-error': colors.status?.error ?? '',
     '--theme-status-warning': colors.status?.warning ?? '',
     '--theme-status-info': colors.status?.info ?? '',
-    '--theme-trade-buy': colors.trade?.buy ?? '',
+    '--theme-destructive': (colors.status?.destructive ?? colors.status?.error) ?? '',
+    '--theme-trade-buy': colors.trade?.buy ?? colors.status?.error ?? '',
     '--theme-trade-buy-hover': colors.trade?.buyHover ?? '',
     '--theme-trade-buy-light': colors.trade?.buyLight ?? '',
-    '--theme-trade-sell': colors.trade?.sell ?? '',
+    '--theme-trade-sell': colors.trade?.sell ?? colors.status?.success ?? '',
     '--theme-trade-sell-hover': colors.trade?.sellHover ?? '',
     '--theme-trade-sell-light': colors.trade?.sellLight ?? '',
-    '--theme-trade-trade': colors.trade?.trade ?? '',
+    '--theme-trade-trade': colors.trade?.trade ?? colors.status?.warning ?? '',
     '--theme-trade-trade-hover': colors.trade?.tradeHover ?? '',
     '--theme-trade-trade-light': colors.trade?.tradeLight ?? '',
     '--theme-trade-swap': colors.trade?.swap ?? '',
@@ -121,6 +126,30 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-gradient-primary': gradients.primary ?? '',
     '--theme-gradient-secondary': gradients.secondary ?? '',
     '--theme-gradient-accent': gradients.accent ?? '',
+
+    // Shadcn/Tailwind variables (HSL format) - so Card, Button, Alert etc. use tenant theme
+    ...(colors.background?.primary ? { '--background': hexToHsl(colors.background.primary) } : {}),
+    ...(colors.text?.primary ? { '--foreground': hexToHsl(colors.text.primary) } : {}),
+    ...(colors.background?.card ? { '--card': hexToHsl(colors.background.card) } : {}),
+    ...(colors.text?.primary ? { '--card-foreground': hexToHsl(colors.text.primary) } : {}),
+    ...(colors.background?.card ? { '--popover': hexToHsl(colors.background.card) } : {}),
+    ...(colors.text?.primary ? { '--popover-foreground': hexToHsl(colors.text.primary) } : {}),
+    ...(primaryMain ? { '--primary': hexToHsl(primaryMain) } : {}),
+    ...(primaryMain ? { '--primary-foreground': hexToHsl(contrastColor(primaryMain)) } : {}),
+    ...(colors.background?.secondary ? { '--secondary': hexToHsl(colors.background.secondary) } : {}),
+    ...(colors.text?.primary ? { '--secondary-foreground': hexToHsl(colors.text.primary) } : {}),
+    ...(colors.background?.muted ? { '--muted': hexToHsl(colors.background.muted) } : {}),
+    ...(colors.text?.muted ? { '--muted-foreground': hexToHsl(colors.text.muted) } : {}),
+    ...(colors.background?.secondary ? { '--accent': hexToHsl(colors.background.secondary) } : {}),
+    ...(colors.text?.primary ? { '--accent-foreground': hexToHsl(colors.text.primary) } : {}),
+    ...((colors.status?.destructive ?? colors.status?.error)
+      ? { '--destructive': hexToHsl(colors.status.destructive ?? colors.status.error!) } : {}),
+    ...((colors.status?.destructive ?? colors.status?.error)
+      ? { '--destructive-foreground': hexToHsl(contrastColor(colors.status.destructive ?? colors.status.error!)) } : {}),
+    ...(colors.border?.default ? { '--border': hexToHsl(colors.border.default) } : {}),
+    ...(colors.background?.muted ? { '--input': hexToHsl(colors.background.muted) } : {}),
+    ...(colors.primary?.main ? { '--ring': hexToHsl(colors.primary.main) } : {}),
+    ...(borderRadius.md ? { '--radius': borderRadius.md } : {}),
   }
 }
 

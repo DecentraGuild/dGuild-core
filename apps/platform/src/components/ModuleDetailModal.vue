@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
+import { formatUsdc } from '@decentraguild/core'
 import { Modal } from '@decentraguild/ui/components'
 import type { ModuleCatalogEntry } from '@decentraguild/config'
 import type { PricingModel } from '@decentraguild/billing'
@@ -48,10 +49,6 @@ const docsUrl = computed(() =>
     ? `${platformDocsBase.replace(/\/$/, '')}/modules/${props.entry.id}`
     : ''
 )
-
-function formatUsdc(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-}
 
 function getFromPrice(p: PricingModel): string | null {
   if (p.modelType === 'flat_one_time') {
@@ -77,8 +74,8 @@ function getFromPrice(p: PricingModel): string | null {
     return null
   }
   if (p.modelType === 'add_unit') {
-    const isWhitelist = p.conditionKey === 'listsCount'
-    const unitLabel = isWhitelist ? 'per list' : 'per unit'
+    const isGates = p.conditionKey === 'listsCount'
+    const unitLabel = isGates ? 'per list' : 'per unit'
     if (p.pricePerUnit) {
       return `${formatUsdc(p.pricePerUnit)} USDC ${unitLabel}`
     }

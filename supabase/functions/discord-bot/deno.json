@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@decentraguild/condition-engine": "../../../packages/condition-engine/dist/index.js"
+  }
+}

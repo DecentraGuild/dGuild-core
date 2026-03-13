@@ -26,7 +26,7 @@
       </button>
     </nav>
     <StatusBanner
-      v-if="rpcError && !apiBase"
+      v-if="rpcError && !supabaseConfigured"
       variant="error"
       :message="rpcError"
     />
@@ -67,14 +67,15 @@
         @clear-filters="clearBrowseTraitFilters"
       />
       <StatusBanner
-        v-if="!assetCards.length"
+        v-if="!(assetCards ?? []).length"
         variant="empty"
         :message="emptyGridMessage"
       />
       <MarketBrowseGrid
         v-else
-        :asset-cards="assetCards"
         v-model:grid-scale-rem="gridScaleRem"
+        :asset-cards="assetCards ?? []"
+        :get-display-name="getDisplayName"
         :get-display-symbol="getDisplaySymbol"
         :get-display-image="getDisplayImage"
         @select="onAssetSelect"
@@ -85,15 +86,15 @@
 
 <script setup lang="ts">
 import { computed, toRef } from 'vue'
-import { StatusBanner } from '@decentraguild/ui/components'
+import StatusBanner from '~/components/ui/status-banner/StatusBanner.vue'
 import { useAuth } from '@decentraguild/auth'
-import { useMarketplaceEscrowLinks } from '~/composables/useMarketplaceEscrowLinks'
+import { useMarketplaceEscrowLinks } from '~/composables/marketplace/useMarketplaceEscrowLinks'
 import { useMarketBrowseData } from '../composables/useMarketBrowseData'
 import { useMarketBrowseDetail } from '../composables/useMarketBrowseDetail'
 import MarketBrowseToolbar from './MarketBrowseToolbar.vue'
 import MarketBrowseDetail from './MarketBrowseDetail.vue'
 import MarketBrowseGrid from './MarketBrowseGrid.vue'
-import type { TreeNode } from '~/composables/useMarketplaceTree'
+import type { TreeNode } from '~/composables/marketplace/useMarketplaceTree'
 import type { EscrowWithAddress } from '@decentraguild/web3'
 
 const props = withDefaults(
@@ -116,17 +117,21 @@ defineEmits<{ 'open-create-trade': [] }>()
 const selectedNodeRef = toRef(props, 'selectedNode')
 const descendantAssetNodesRef = toRef(props, 'descendantAssetNodes')
 
+const config = useRuntimeConfig()
+const supabaseConfigured = computed(() => Boolean(config.public.supabaseUrl && config.public.supabaseAnonKey))
+
 const {
   slug,
   marketplaceSettings,
-  apiBase,
   rpcError,
   scopeLoading,
   scopeError,
   scopeRetry,
   assetsLoading,
-  assets,
+  assets: _assets,
+  detailAssets,
   byMint,
+  mintsByCollectionMerged,
   isCollectionSelected,
   browseSearchQuery,
   browseSelectedTraits,
@@ -139,6 +144,7 @@ const {
   gridScaleRem,
   assetCards,
   emptyGridMessage,
+  getDisplayName,
   getDisplaySymbol,
   getDisplayImage,
 } = useMarketBrowseData({
@@ -161,9 +167,10 @@ const {
   copyDetailMint,
 } = useMarketBrowseDetail({
   detailMint,
-  assets,
+  assets: detailAssets,
   marketplaceSettings,
   byMint,
+  mintsByCollection: mintsByCollectionMerged,
   walletAddress,
 })
 

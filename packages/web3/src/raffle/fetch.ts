@@ -146,6 +146,31 @@ export async function fetchRaffleChainData(
   }
 }
 
+export interface RaffleWithAddress {
+  publicKey: string
+  name: string
+  state: RaffleState
+}
+
+export async function fetchAllRaffles(connection: Connection): Promise<RaffleWithAddress[]> {
+  const { getRaffleProgramReadOnly } = await import('./provider.js')
+  const program = getRaffleProgramReadOnly(connection)
+  const accountNs = program.account as Record<string, { all: (filters: unknown[]) => Promise<Array<{ publicKey: PublicKey; account: unknown }>> }>
+  const raffleAccount = accountNs.raffle ?? accountNs.Raffle
+  if (!raffleAccount) throw new Error('Raffle account not found in program')
+  const accounts = await raffleAccount.all([])
+  return accounts.map(({ publicKey, account }) => {
+    const a = account as { name: string; state: Record<string, unknown> }
+    const stateKey = Object.keys(a.state ?? {})[0] ?? 'created'
+    const state = (STATE_NAMES.includes(stateKey as (typeof STATE_NAMES)[number]) ? stateKey : 'created') as RaffleState
+    return {
+      publicKey: publicKey.toBase58(),
+      name: a.name ?? '',
+      state,
+    }
+  })
+}
+
 /** States visible to end users (running and after). */
 export const USER_VISIBLE_STATES: RaffleState[] = [
   'running',

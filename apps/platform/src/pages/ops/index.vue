@@ -102,6 +102,47 @@
           </div>
         </section>
 
+        <section class="ops__panel" aria-label="Mint metadata refresh">
+          <h2 class="ops__panel-title">Mint metadata</h2>
+          <div class="ops__panel-body">
+            <p class="ops__panel-desc">
+              After db reset, run <strong>Seed from configs</strong> first to populate <code>mint_metadata</code> from tenant catalog, watchtower, and marketplace scope. Then use <strong>Refresh</strong> to refetch from chain.
+            </p>
+            <div class="ops__metadata-actions">
+              <Button
+                size="sm"
+                variant="default"
+                :disabled="metadataRefreshLoading"
+                @click="seedMetadataFromConfigs"
+              >
+                {{ metadataRefreshLoading ? 'Seeding…' : 'Seed from configs' }}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                :disabled="metadataRefreshLoading"
+                @click="refreshMetadata(200)"
+              >
+                {{ metadataRefreshLoading ? 'Refreshing…' : 'Refresh batch (200)' }}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="metadataRefreshLoading"
+                @click="refreshMetadata(500)"
+              >
+                Refresh batch (500)
+              </Button>
+            </div>
+            <p v-if="metadataRefreshResult" class="ops__metadata-result">
+              {{ metadataRefreshResult }}
+            </p>
+            <p v-if="metadataRefreshError" class="ops__metadata-error">
+              {{ metadataRefreshError }}
+            </p>
+          </div>
+        </section>
+
         <section class="ops__panel ops__panel--full" aria-label="Recent platform changes">
           <h2 class="ops__panel-title">Audit log</h2>
           <div v-if="auditLoading" class="ops__panel-body">Loading audit log…</div>
@@ -149,9 +190,12 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Platform operations' })
 
+import { useAuth } from '@decentraguild/auth'
 import { formatDate, formatDateTime, formatUsdc } from '@decentraguild/core'
 import { PageSection, Button } from '@decentraguild/ui/components'
-import { useApiBase } from '~/composables/useApiBase'
+import { useSupabase } from '~/composables/useSupabase'
+
+const auth = useAuth()
 
 interface TenantSummary {
   id: string
@@ -190,8 +234,6 @@ interface AuditEntry {
   createdAt: string
 }
 
-const apiBase = useApiBase()
-
 const tenants = ref<TenantSummary[]>([])
 const tenantsLoading = ref(true)
 const tenantsError = ref<string | null>(null)
@@ -205,6 +247,11 @@ const auditEntries = ref<AuditEntry[]>([])
 const auditLoading = ref(true)
 const auditError = ref<string | null>(null)
 
+const metadataRefreshLoading = ref(false)
+const metadataRefreshResult = ref<string | null>(null)
+const metadataRefreshError = ref<string | null>(null)
+const metadataRefreshOffset = ref(0)
+
 onMounted(async () => {
   await Promise.all([loadTenants(), loadBilling(), loadAudit()])
 })
@@ -213,12 +260,12 @@ async function loadTenants() {
   tenantsLoading.value = true
   tenantsError.value = null
   try {
-    const res = await fetch(`${apiBase.value}/api/v1/platform/tenants`, {
-      credentials: 'include',
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('platform', {
+      body: { action: 'tenants-list' },
     })
-    if (!res.ok) throw new Error('Failed to load tenants')
-    const data = (await res.json()) as { tenants?: TenantSummary[] }
-    tenants.value = data.tenants ?? []
+    if (error) throw new Error(error.message)
+    tenants.value = (data as { tenants?: TenantSummary[] }).tenants ?? []
   } catch (e) {
     tenantsError.value = e instanceof Error ? e.message : 'Failed to load tenants'
   } finally {
@@ -230,16 +277,17 @@ async function loadBilling() {
   billingLoading.value = true
   billingError.value = null
   try {
-    const res = await fetch(`${apiBase.value}/api/v1/platform/billing`, {
-      credentials: 'include',
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('platform', {
+      body: { action: 'billing-summary' },
     })
-    if (!res.ok) throw new Error('Failed to load billing overview')
-    const data = (await res.json()) as {
-      summary?: BillingSummary
-      recentPayments?: BillingPaymentSummary[]
+    if (error) throw new Error(error.message)
+    const result = data as { activeSubscriptions?: number; totalMrrUsdc?: number; recentPayments?: BillingPaymentSummary[] }
+    billingSummary.value = {
+      totalMrrUsdc: result.totalMrrUsdc ?? 0,
+      activeSubscriptions: result.activeSubscriptions ?? 0,
     }
-    billingSummary.value = data.summary ?? { totalMrrUsdc: 0, activeSubscriptions: 0 }
-    recentPayments.value = data.recentPayments ?? []
+    recentPayments.value = result.recentPayments ?? []
   } catch (e) {
     billingError.value = e instanceof Error ? e.message : 'Failed to load billing overview'
   } finally {
@@ -247,16 +295,71 @@ async function loadBilling() {
   }
 }
 
+async function seedMetadataFromConfigs() {
+  metadataRefreshLoading.value = true
+  metadataRefreshResult.value = null
+  metadataRefreshError.value = null
+  try {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('marketplace', {
+      body: { action: 'metadata-seed-from-configs', limit: 100 },
+    })
+    if (error) throw new Error(error.message)
+    const res = data as { seeded?: number; total?: number; message?: string; remaining?: number }
+    metadataRefreshResult.value = res.message ?? `Seeded ${res.seeded ?? 0} mints.`
+    if ((res.remaining ?? 0) > 0) {
+      metadataRefreshResult.value += ' Click again to continue.'
+    }
+  } catch (e) {
+    metadataRefreshError.value = e instanceof Error ? e.message : 'Failed to seed metadata'
+  } finally {
+    metadataRefreshLoading.value = false
+  }
+}
+
+async function refreshMetadata(limit: number) {
+  metadataRefreshLoading.value = true
+  metadataRefreshResult.value = null
+  metadataRefreshError.value = null
+  try {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('marketplace', {
+      body: { action: 'metadata-refresh-all', limit, offset: metadataRefreshOffset.value },
+    })
+    if (error) throw new Error(error.message)
+    const res = data as { refreshed?: number; total?: number; message?: string; nextOffset?: number | null }
+    metadataRefreshResult.value = res.message ?? `Refreshed ${res.refreshed ?? 0} of ${res.total ?? 0} mints.`
+    if (res.nextOffset != null) {
+      metadataRefreshOffset.value = res.nextOffset
+      metadataRefreshResult.value += ` Click again to continue.`
+    } else {
+      metadataRefreshOffset.value = 0
+    }
+  } catch (e) {
+    metadataRefreshError.value = e instanceof Error ? e.message : 'Failed to refresh metadata'
+  } finally {
+    metadataRefreshLoading.value = false
+  }
+}
+
 async function loadAudit() {
   auditLoading.value = true
   auditError.value = null
   try {
-    const res = await fetch(`${apiBase.value}/api/v1/platform/audit?limit=50`, {
-      credentials: 'include',
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('platform', {
+      body: { action: 'audit-log', limit: 50 },
     })
-    if (!res.ok) throw new Error('Failed to load audit log')
-    const data = (await res.json()) as { entries?: AuditEntry[] }
-    auditEntries.value = data.entries ?? []
+    if (error) throw new Error(error.message)
+    auditEntries.value = ((data as { entries?: AuditEntry[] }).entries ?? []).map((e) => ({
+      id: (e as Record<string, unknown>).id as string,
+      actorWallet: (e as Record<string, unknown>).actor_wallet as string,
+      action: (e as Record<string, unknown>).action as string,
+      targetType: (e as Record<string, unknown>).target_type as string | null,
+      targetId: (e as Record<string, unknown>).target_id as string | null,
+      details: (e as Record<string, unknown>).details as Record<string, unknown> | null,
+      createdAt: (e as Record<string, unknown>).created_at as string,
+    }))
   } catch (e) {
     auditError.value = e instanceof Error ? e.message : 'Failed to load audit log'
   } finally {
@@ -265,14 +368,8 @@ async function loadAudit() {
 }
 
 async function logout() {
-  try {
-    await fetch(`${apiBase.value}/api/v1/platform/auth/logout`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-  } finally {
-    await navigateTo('/ops/login')
-  }
+  await auth.signOut()
+  await navigateTo('/ops/login')
 }
 
 function goToTenant(t: TenantSummary) {
@@ -335,6 +432,38 @@ function formatDetails(details: Record<string, unknown> | null): string {
   padding: var(--theme-space-md) var(--theme-space-lg) 0;
   font-size: var(--theme-font-md);
   font-weight: 600;
+}
+
+.ops__panel-desc {
+  margin: 0 0 var(--theme-space-md);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+}
+
+.ops__panel-desc code {
+  font-size: 0.9em;
+  background: var(--theme-bg-secondary);
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--theme-radius-sm);
+}
+
+.ops__metadata-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-space-sm);
+  margin-bottom: var(--theme-space-sm);
+}
+
+.ops__metadata-result {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+}
+
+.ops__metadata-error {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-error);
 }
 
 .ops__panel-body {

@@ -1,0 +1,37 @@
+{
+  "id": "shipment",
+  "status": "available",
+  "alwaysOn": true,
+  "name": "Shipment",
+  "icon": "mdi:package-variant",
+  "image": null,
+  "shortDescription": "Create shipment lists from conditions and airdrop compressed tokens to recipients.",
+  "longDescription": "Shipment lets you build recipient lists using the condition engine (holders, traits, whitelists), generate JSON, and ship tokens via ZK compression. Members can view and decompress received tokens on the Shipments page.",
+  "detailedDescription": "Admin creates shipment lists in Shipment List (condition set + snapshot + mint) or pastes JSON. Plan Shipment uses a dedicated ship wallet (create or import) to sign compress transactions in-page. Main wallet funds the ship wallet. Lists stay in memory until dropped; only executed shipments are persisted. Pricing: 0 USDC per recipient (placeholder for future 5 USDC).",
+  "keyInfo": [
+    "Condition-based JSON generator",
+    "Ship wallet: create or import, stored locally",
+    "ZK compression for cost-effective airdrops",
+    "In-page signing, no plugin for ship step",
+    "Member page: view and decompress received tokens"
+  ],
+  "routePath": "/shipment",
+  "order": 6,
+  "goActiveImmediately": true,
+  "activationInstructions": {
+    "intro": "Create shipment lists and ship tokens to your community.",
+    "steps": [
+      "Create a ship wallet (or import) in Plan Shipment",
+      "Fund it with SOL and tokens from your main wallet",
+      "Build a list in Shipment List (conditions or paste JSON)",
+      "Load the list in Plan Shipment and ship"
+    ],
+    "note": "Module is active immediately; pricing is per recipient when enabled."
+  },
+  "pricing": {
+    "modelType": "one_time_per_unit",
+    "conditionKey": "recipientsCount",
+    "name": "Per recipient",
+    "pricePerUnit": 0
+  }
+}

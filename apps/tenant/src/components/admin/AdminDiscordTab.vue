@@ -4,7 +4,7 @@
       <AdminDiscordSettings
         ref="settingsRef"
         :slug="slug"
-        @conditions-changed="(e: { mintsCount: number }) => liveConditions = e"
+        @conditions-changed="(e: { holders_current: number }) => liveConditions = e"
       />
     </div>
     <AdminPricingWidget
@@ -26,8 +26,8 @@
 <script setup lang="ts">
 import type { ModuleState } from '@decentraguild/core'
 import type { BillingPeriod } from '@decentraguild/billing'
-import AdminDiscordSettings from '~/components/AdminDiscordSettings.vue'
-import AdminPricingWidget from '~/components/AdminPricingWidget.vue'
+import AdminDiscordSettings from '~/components/admin/AdminDiscordSettings.vue'
+import AdminPricingWidget from '~/components/admin/AdminPricingWidget.vue'
 
 defineProps<{
   slug: string
@@ -47,5 +47,5 @@ const emit = defineEmits<{
 const settingsRef = ref<InstanceType<typeof AdminDiscordSettings> | null>(null)
 const pricingRef = ref<InstanceType<typeof AdminPricingWidget> | null>(null)
 
-const liveConditions = ref<{ mintsCount: number } | null>(null)
+const liveConditions = ref<{ holders_current: number } | null>(null)
 </script>

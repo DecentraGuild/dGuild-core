@@ -56,16 +56,16 @@
   --theme-status-warning: var(--theme-warning);
   --theme-status-info: var(--theme-info);
 
-  /* Trade */
-  --theme-trade-buy: #00ff00;
-  --theme-trade-buy-hover: #00cc00;
-  --theme-trade-buy-light: #33ff33;
-  --theme-trade-sell: #ff0000;
-  --theme-trade-sell-hover: #cc0000;
-  --theme-trade-sell-light: #ff3333;
-  --theme-trade-trade: #ffaa00;
-  --theme-trade-trade-hover: #cc8800;
-  --theme-trade-trade-light: #ffbb33;
+  /* Trade (derived from status: Sell=Positive, Buy=Negative, Trade=Warning) */
+  --theme-trade-buy: var(--theme-error);
+  --theme-trade-buy-hover: #cc0000;
+  --theme-trade-buy-light: #ff3333;
+  --theme-trade-sell: var(--theme-success);
+  --theme-trade-sell-hover: #007a14;
+  --theme-trade-sell-light: #00cc22;
+  --theme-trade-trade: var(--theme-warning);
+  --theme-trade-trade-hover: #cc5500;
+  --theme-trade-trade-light: #ff8844;
   --theme-trade-swap: #6366f1;
   --theme-trade-swap-hover: #4f46e5;
   --theme-trade-swap-light: #818cf8;
