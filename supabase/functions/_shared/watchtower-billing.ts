@@ -6,19 +6,19 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 export type PaidCountsByScope = {
-  holders_current: number
+  mints_current: number
   mintsSnapshot: number
   mintsTransactions: number
 }
 
-const SCOPE_KEYS = ['holders_current', 'mintsSnapshot', 'mintsTransactions'] as const
+const SCOPE_KEYS = ['mints_current', 'mintsSnapshot', 'mintsTransactions'] as const
 const SCOPE_TO_ENABLED_AT = {
-  holders_current: 'enabled_at_discord',
+  mints_current: 'enabled_at_holders',
   mintsSnapshot: 'enabled_at_snapshot',
   mintsTransactions: 'enabled_at_transactions',
 } as const
 const SCOPE_TO_TRACK = {
-  holders_current: 'track_discord',
+  mints_current: 'track_holders',
   mintsSnapshot: 'track_snapshot',
   mintsTransactions: 'track_transactions',
 } as const
@@ -32,7 +32,7 @@ export async function getPaidCountsByScope(
     .select('scope_key, conditions_snapshot')
     .eq('tenant_id', tenantId)
     .eq('module_id', 'watchtower')
-  const result: PaidCountsByScope = { holders_current: 0, mintsSnapshot: 0, mintsTransactions: 0 }
+  const result: PaidCountsByScope = { mints_current: 0, mintsSnapshot: 0, mintsTransactions: 0 }
   for (const row of rows ?? []) {
     const cond = (row.conditions_snapshot as Record<string, number> | null) ?? {}
     const scopeKey = (row.scope_key as string) ?? ''

@@ -31,13 +31,14 @@ defineProps<{
 .condition-catalog-shell__grid {
   display: grid;
   grid-template-columns: 1fr 3fr;
-  gap: var(--theme-space-lg);
+  gap: var(--theme-space-xl);
   min-height: 16rem;
 }
 
 @media (max-width: 768px) {
   .condition-catalog-shell__grid {
     grid-template-columns: 1fr;
+    gap: var(--theme-space-lg);
   }
 }
 
@@ -48,12 +49,23 @@ defineProps<{
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
   padding: var(--theme-space-md);
+}
+
+.condition-catalog-shell__col--mint {
   background: var(--theme-bg-muted);
 }
 
+.condition-catalog-shell__col--rules {
+  background: var(--theme-bg-secondary);
+}
+
 .condition-catalog-shell__col-title {
-  font-size: var(--theme-font-md);
-  margin: 0 0 var(--theme-space-xs);
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--theme-text-muted);
+  margin: 0 0 var(--theme-space-sm);
 }
 
 .condition-catalog-shell__col-hint {

@@ -43,13 +43,31 @@
           </template>
         </ul>
         <p v-else class="role-card__empty">No requirements</p>
+        <div v-if="admin" class="role-card__actions">
+          <Button variant="ghost" size="icon" aria-label="Edit rule" @click="emit('edit', card)">
+            <Icon icon="lucide:pencil" />
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="Delete rule" @click="emit('delete', card)">
+            <Icon icon="lucide:trash-2" />
+          </Button>
+        </div>
       </article>
+      <button
+        v-if="admin"
+        type="button"
+        class="role-card role-card--create"
+        @click="emit('create')"
+      >
+        <Icon icon="lucide:plus" class="role-card__create-icon" />
+        <span class="role-card__create-label">Create role</span>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
+import { Button } from '~/components/ui/button'
 
 export interface RoleCardRequirementText {
   type: 'text'
@@ -73,10 +91,21 @@ export interface RoleCard {
   requirements: RoleCardRequirementItem[]
   /** When signed in with Discord linked: true = qualifies, false = does not qualify, undefined = not computed */
   eligible?: boolean
+  /** Admin only: rule id from discord_role_rules */
+  rule_id?: number
+  /** Admin only: condition_set_id for edit/navigate */
+  condition_set_id?: number
 }
 
 defineProps<{
   roleCards: RoleCard[]
+  admin?: boolean
+}>()
+
+const emit = defineEmits<{
+  edit: [card: RoleCard]
+  delete: [card: RoleCard]
+  create: []
 }>()
 
 const scrollRef = ref<HTMLElement | null>(null)
@@ -235,5 +264,45 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
   text-align: center;
+}
+
+.role-card__actions {
+  display: flex;
+  gap: var(--theme-space-xs);
+  margin-top: auto;
+  padding-top: var(--theme-space-md);
+}
+
+.role-card--create {
+  cursor: pointer;
+  border: 2px dashed var(--theme-border);
+  background: var(--theme-bg-muted);
+  justify-content: center;
+  min-height: 20rem;
+}
+
+.role-card--create:hover {
+  border-color: var(--theme-primary);
+  background: var(--theme-bg-secondary);
+}
+
+.role-card__create-icon {
+  font-size: 3rem;
+  color: var(--theme-text-muted);
+  margin-bottom: var(--theme-space-sm);
+}
+
+.role-card--create:hover .role-card__create-icon {
+  color: var(--theme-primary);
+}
+
+.role-card__create-label {
+  font-size: var(--theme-font-sm);
+  font-weight: 500;
+  color: var(--theme-text-secondary);
+}
+
+.role-card--create:hover .role-card__create-label {
+  color: var(--theme-primary);
 }
 </style>

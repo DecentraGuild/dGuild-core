@@ -119,7 +119,7 @@ async function main() {
     supabase.from('addressbook_settings').select('settings').eq('tenant_id', tenantId).maybeSingle(),
     supabase
       .from('watchtower_watches')
-      .select('mint, track_discord, track_snapshot, track_transactions, enabled_at_discord, enabled_at_snapshot, enabled_at_transactions, created_at')
+      .select('mint, track_holders, track_snapshot, track_transactions, enabled_at_holders, enabled_at_snapshot, enabled_at_transactions, created_at')
       .eq('tenant_id', tenantId),
     supabase
       .from('tenant_mint_catalog')
@@ -183,7 +183,7 @@ async function main() {
   }
   if (watchtowerRes.data?.length) {
     json.watchtowerWatches = watchtowerRes.data.map((r) =>
-      pick(r, ['mint', 'track_discord', 'track_snapshot', 'track_transactions', 'enabled_at_discord', 'enabled_at_snapshot', 'enabled_at_transactions', 'created_at'])
+      pick(r, ['mint', 'track_holders', 'track_snapshot', 'track_transactions', 'enabled_at_holders', 'enabled_at_snapshot', 'enabled_at_transactions', 'created_at'])
     )
   }
   if (mintCatalogRes.data?.length) {

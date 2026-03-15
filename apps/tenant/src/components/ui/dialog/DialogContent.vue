@@ -41,7 +41,6 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
       "
     >
       <slot />
-
       <DialogClose
         v-if="showCloseButton"
         data-slot="dialog-close"

@@ -123,7 +123,26 @@ export function useCrafter() {
 
       const headers = await getAuthHeaders()
       if (!headers) return { success: false, error: 'Sign in required' }
-      const { data: createData, error: createErr } = await supabase.functions.invoke('crafter', {
+
+      const { data: intentData, error: intentErr } = await supabase.functions.invoke('billing', {
+        body: {
+          action: 'crafter-intent',
+          tenantId: id,
+          payerWallet: wallet.publicKey.toBase58(),
+        },
+        headers,
+      })
+      if (intentErr) throw intentErr
+      if (!intentData?.paymentId || !intentData?.memo || intentData?.amountUsdc == null || !intentData?.recipientAta) {
+        throw new Error('Invalid response from crafter-intent')
+      }
+
+      const paymentId = intentData.paymentId as string
+      const memo = intentData.memo as string
+      const amountUsdc = intentData.amountUsdc as number
+      const recipientAta = new PublicKey(intentData.recipientAta as string)
+
+      const { error: createErr } = await supabase.functions.invoke('crafter', {
         body: {
           action: 'create',
           tenantId: id,
@@ -131,22 +150,15 @@ export function useCrafter() {
           name: form.name.trim(),
           symbol: form.symbol.trim(),
           decimals: form.decimals,
+          memo,
         },
         headers,
       })
-
       if (createErr) throw createErr
-      if (!createData?.memo || createData?.recipientAta == null) {
-        throw new Error('Invalid response from crafter create')
-      }
-
-      const memo = createData.memo as string
-      const amountUsdc = (createData.amountUsdc as number) ?? 5
-      const recipientAta = new PublicKey(createData.recipientAta as string)
 
       const tx = await buildCreateMintAndBillingTransaction({
         mintKeypair,
-        decimals: form.decimals,
+        decimals: Number(form.decimals) || 6,
         memo,
         amountUsdc,
         recipientAta,
@@ -168,8 +180,12 @@ export function useCrafter() {
       })
 
       createTxStatus.value = 'Confirming payment...'
-      const confirmHeaders = await getAuthHeaders()
-      if (!confirmHeaders) throw new Error('Session expired')
+      const { error: billingConfirmErr } = await supabase.functions.invoke('billing', {
+        body: { action: 'confirm', tenantId: id, paymentId, txSignature },
+        headers,
+      })
+      if (billingConfirmErr) throw billingConfirmErr
+
       const { data: confirmData, error: confirmErr } = await supabase.functions.invoke('crafter', {
         body: {
           action: 'confirm',
@@ -178,9 +194,8 @@ export function useCrafter() {
           txSignature,
           memo,
         },
-        headers: confirmHeaders,
+        headers,
       })
-
       if (confirmErr) throw confirmErr
       if (!confirmData?.success) throw new Error('Confirm failed')
 

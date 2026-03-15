@@ -9,7 +9,7 @@
  *   remove – Remove mint.
  *   sync   – Batch upsert mints (for Marketplace, etc.).
  *   catalog-refresh-traits – Refresh trait_index for an NFT collection (id required).
- *   list-discord – List mints with track_discord=true (for Discord module).
+ *   list-discord – List mints with track_holders=true (for Discord module).
  */
 
 const BASE_CURRENCY_MINTS = new Set([
@@ -190,20 +190,20 @@ Deno.serve(async (req: Request) => {
   }
 
   // ---------------------------------------------------------------------------
-  // list-discord – mints with any track enabled (Holders, Snapshot, or Transactions)
+  // list-discord – mints with any track enabled (Current holders, Snapshot, or Transactions)
   // ---------------------------------------------------------------------------
   if (action === 'list-discord') {
     const { data: watches } = await db
       .from('watchtower_watches')
-      .select('mint, track_discord, track_snapshot, track_transactions')
+      .select('mint, track_holders, track_snapshot, track_transactions')
       .eq('tenant_id', tenantId)
-      .or('track_discord.eq.true,track_snapshot.eq.true,track_transactions.eq.true')
+      .or('track_holders.eq.true,track_snapshot.eq.true,track_transactions.eq.true')
     if (!watches?.length) return jsonResponse({ entries: [] }, req)
 
-    const watchByMint = new Map<string, { track_discord: boolean; track_snapshot: boolean; track_transactions: boolean }>()
+    const watchByMint = new Map<string, { track_holders: boolean; track_snapshot: boolean; track_transactions: boolean }>()
     for (const w of watches) {
       watchByMint.set(w.mint as string, {
-        track_discord: w.track_discord === true,
+        track_holders: w.track_holders === true,
         track_snapshot: w.track_snapshot === true,
         track_transactions: w.track_transactions === true,
       })
@@ -238,7 +238,7 @@ Deno.serve(async (req: Request) => {
         image: meta?.image ?? null,
         trait_index: meta?.trait_index ?? null,
         decimals: meta?.decimals ?? null,
-        track_discord: w?.track_discord ?? false,
+        track_holders: w?.track_holders ?? false,
         track_snapshot: w?.track_snapshot ?? false,
         track_transactions: w?.track_transactions ?? false,
       }

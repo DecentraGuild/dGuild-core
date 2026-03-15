@@ -74,14 +74,6 @@
       <AdminDiscordTab
         v-else-if="tab === 'discord'"
         :slug="slug ?? ''"
-        :module-state="discordModuleState"
-        :subscription="subscriptions.discord ?? null"
-        :saving="saving"
-        :deploying="deploying"
-        :save-error="saveError"
-        @save="(p: BillingPeriod) => saveWithBilling('discord', p)"
-        @deploy="(p: BillingPeriod) => deployModule('discord', p)"
-        @reactivate="(p: BillingPeriod) => handleReactivate('discord', p)"
       />
 
       <AdminRaffleTab
@@ -124,8 +116,8 @@
         @reactivate="(p: BillingPeriod) => handleReactivate('watchtower', p)"
       />
 
-      <AdminShipmentListTab
-        v-else-if="tab === 'shipment-list'"
+      <AdminConditionsTab
+        v-else-if="tab === 'conditions'"
         :slug="slug ?? ''"
       />
 
@@ -140,7 +132,7 @@
         :slug="slug"
       />
 
-      <div v-if="!hasWidgetTab && tab !== 'billing' && tab !== 'addressbook' && tab !== 'modules' && tab !== 'gating'" class="admin__actions">
+      <div v-if="!hasWidgetTab && tab !== 'billing' && tab !== 'addressbook' && tab !== 'modules' && tab !== 'gating' && tab !== 'conditions'" class="admin__actions">
         <Button variant="default" :disabled="saving" @click="save">
           Save
         </Button>
@@ -203,7 +195,7 @@ const AdminGatingTab = defineAsyncComponent(() => import('~/components/admin/Adm
 const AdminGatesTab = defineAsyncComponent(() => import('~/components/admin/AdminGatesTab.vue'))
 const AdminAddressbookTab = defineAsyncComponent(() => import('~/components/admin/AdminAddressbookTab.vue'))
 const AdminWatchtowerTab = defineAsyncComponent(() => import('~/components/admin/AdminWatchtowerTab.vue'))
-const AdminShipmentListTab = defineAsyncComponent(() => import('~/components/admin/AdminShipmentListTab.vue'))
+const AdminConditionsTab = defineAsyncComponent(() => import('~/components/admin/AdminConditionsTab.vue'))
 const AdminPlanShipmentTab = defineAsyncComponent(() => import('~/components/admin/AdminPlanShipmentTab.vue'))
 const AdminBillingTab = defineAsyncComponent(() => import('~/components/admin/AdminBillingTab.vue'))
 const AdminModuleActivationModal = defineAsyncComponent(() => import('~/components/admin/AdminModuleActivationModal.vue'))
@@ -285,12 +277,12 @@ const slugModuleState = computed((): 'off' | 'staging' | 'active' | 'deactivatin
 
 const showSlugPricingWidget = computed(() => Boolean(tenant.value))
 
-const WIDGET_TABS = new Set(['marketplace', 'discord', 'raffle', 'gates', 'watchtower'])
+const WIDGET_TABS = new Set(['marketplace', 'raffle', 'gates', 'watchtower'])
 const tab = computed(() => {
   const q = route.query.tab
   return typeof q === 'string' && VALID_TABS.has(q) ? q : 'general'
 })
-const hasWidgetTab = computed(() => WIDGET_TABS.has(tab.value) || tab.value === 'shipment-list' || tab.value === 'plan-shipment')
+const hasWidgetTab = computed(() => WIDGET_TABS.has(tab.value) || tab.value === 'plan-shipment')
 
 async function saveWithBilling(moduleId: string, billingPeriod: BillingPeriod) {
   await save()
@@ -468,7 +460,6 @@ onMounted(() => {
 watch(tab, (t) => {
   if (t === 'general') fetchSubscription('slug')
   if (t === 'marketplace') fetchSubscription('marketplace')
-  if (t === 'discord') fetchSubscription('discord')
   if (t === 'raffle') fetchSubscription('raffles')
   if (t === 'gates') fetchSubscription('gates')
   if (t === 'watchtower') fetchSubscription('watchtower')

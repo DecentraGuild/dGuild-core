@@ -478,7 +478,7 @@ Deno.serve(async (req: Request) => {
     const guildId = body.guildId as string
     if (!guildId) return errorResponse('guildId required', req)
 
-    // Resolve tenant_id from guild, then fetch mints with track_discord from watchtower_watches
+    // Resolve tenant_id from guild, then fetch mints with track_holders from watchtower_watches
     const { data: srvRow } = await db
       .from('discord_servers')
       .select('tenant_id')
@@ -491,7 +491,7 @@ Deno.serve(async (req: Request) => {
       .from('watchtower_watches')
       .select('mint')
       .eq('tenant_id', srvRow.tenant_id)
-      .eq('track_discord', true)
+      .eq('track_holders', true)
 
     if (!watches?.length) return jsonResponse({ synced: 0 }, req)
 

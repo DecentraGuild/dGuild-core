@@ -16,7 +16,7 @@ export const CONDITION_LABELS: Record<string, string> = {
   mintsBase: 'Metadata mints',
   mintsGrow: 'Snapshot mints',
   mintsPro: 'Transaction mints',
-  holders_current: 'Holders',
+  mints_current: 'Current holders',
   mintsSnapshot: 'Snapshot track',
   mintsTransactions: 'Transactions track',
 }

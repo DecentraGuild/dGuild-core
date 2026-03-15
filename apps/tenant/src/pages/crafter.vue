@@ -106,7 +106,7 @@
             <p class="crafter-create-form__hint crafter-create-form__hint--stages">
               Stage 1: Create mint + pay. Then add metadata (stage 2), then mint/burn/edit (stage 3).
             </p>
-            <p class="crafter-create-form__fee">5 USDC one-time per token</p>
+            <p class="crafter-create-form__fee">{{ crafterPricePerToken != null ? `${crafterPricePerToken} USDC one-time per token` : '…' }}</p>
             <p v-if="createError" class="crafter-create-form__error">{{ createError }}</p>
             <p v-if="createTxStatus" class="crafter-create-form__status">{{ createTxStatus }}</p>
             <div class="crafter-create-form__actions">
@@ -272,8 +272,15 @@ import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import { useTenantStore } from '~/stores/tenant'
 import { useAuth } from '@decentraguild/auth'
 import { getModuleState, isModuleVisibleInAdmin } from '@decentraguild/core'
+import { getModuleCatalogEntry } from '@decentraguild/config'
 
 definePageMeta({ middleware: 'admin-auth' })
+
+const crafterPricePerToken = computed(() => {
+  const entry = getModuleCatalogEntry('crafter')
+  const pricing = entry?.pricing as { pricePerUnit?: number } | undefined
+  return pricing?.pricePerUnit ?? null
+})
 
 const clampBasisPoints = (v: unknown) => Math.max(0, Math.min(10000, Number(v) || 0))
 const tenantStore = useTenantStore()

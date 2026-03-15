@@ -1,7 +1,8 @@
 <template>
   <div class="marketplace-settings">
     <Card>
-      <GateSelectRow
+      <GateSelectRowModule
+        layout="stacked"
         :slug="slug"
         :model-value="marketplaceGateSelectValue"
         title="Who can see Marketplace"

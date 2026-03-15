@@ -129,14 +129,6 @@
   font-weight: 500;
 }
 
-.mint-modal__track-badge {
-  font-size: var(--theme-font-xs);
-  padding: 2px 6px;
-  border-radius: var(--theme-radius-sm);
-  background: color-mix(in srgb, var(--theme-primary) 20%, transparent);
-  color: var(--theme-primary);
-}
-
 .mint-modal__header-controls {
   display: flex;
   align-items: center;

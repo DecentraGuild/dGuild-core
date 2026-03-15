@@ -230,40 +230,40 @@
   "watchtowerWatches": [
     {
       "mint": "C1FxQEMa7ZPmzpP8ak5PYg8iMdYaxZVNHF7pfaAcCx3D",
-      "track_discord": true,
+      "track_holders": true,
       "track_snapshot": true,
       "track_transactions": false,
-      "enabled_at_discord": "2026-03-10T12:14:26.754+00:00",
+      "enabled_at_holders": "2026-03-10T12:14:26.754+00:00",
       "enabled_at_snapshot": "2026-03-10T12:14:12.971+00:00",
       "enabled_at_transactions": null,
       "created_at": "2026-03-11T13:07:55.215456+00:00"
     },
     {
       "mint": "4WN4y9zxqRrYtUTFkB3svJsYFVg2zo24tLTouLErnq9q",
-      "track_discord": true,
+      "track_holders": true,
       "track_snapshot": true,
       "track_transactions": false,
-      "enabled_at_discord": "2026-03-10T12:14:27.189+00:00",
+      "enabled_at_holders": "2026-03-10T12:14:27.189+00:00",
       "enabled_at_snapshot": "2026-03-10T12:14:12.483+00:00",
       "enabled_at_transactions": null,
       "created_at": "2026-03-11T13:07:55.215456+00:00"
     },
     {
       "mint": "CL2m6JiuV8H7X6cqzMqHNGWbJncj7HZ2BFXd8sQYStQ3",
-      "track_discord": true,
+      "track_holders": true,
       "track_snapshot": true,
       "track_transactions": false,
-      "enabled_at_discord": "2026-03-10T12:14:26.364+00:00",
+      "enabled_at_holders": "2026-03-10T12:14:26.364+00:00",
       "enabled_at_snapshot": "2026-03-10T12:14:17.453+00:00",
       "enabled_at_transactions": null,
       "created_at": "2026-03-11T13:07:55.215456+00:00"
     },
     {
       "mint": "6LomcBw8DVUE3T1XBLK1PZDiRyHYtFYo9E6v9UXeqjHE",
-      "track_discord": true,
+      "track_holders": true,
       "track_snapshot": true,
       "track_transactions": false,
-      "enabled_at_discord": "2026-03-10T12:14:25.913+00:00",
+      "enabled_at_holders": "2026-03-10T12:14:25.913+00:00",
       "enabled_at_snapshot": "2026-03-10T12:14:15.673+00:00",
       "enabled_at_transactions": null,
       "created_at": "2026-03-11T13:07:55.215456+00:00"
@@ -480,13 +480,13 @@
     {
       "id": "d3883526-490a-474c-b0ed-ec146f4b2de3",
       "module_id": "watchtower",
-      "scope_key": "holders_current",
+      "scope_key": "mints_current",
       "billing_period": "monthly",
       "recurring_amount_usdc": 0.002,
       "period_start": "2026-03-12T08:08:24.389+00:00",
       "period_end": "2026-04-12T08:08:24.389+00:00",
       "conditions_snapshot": {
-        "holders_current": 4
+        "mints_current": 4
       },
       "price_snapshot": {
         "billable": true,
@@ -581,7 +581,7 @@
       "memo": "dg:1fd576a1ef2e9f9a",
       "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
       "conditions_snapshot": {
-        "holders_current": 4,
+        "mints_current": 4,
         "mintsSnapshot": 4,
         "mintsTransactions": 0
       },
@@ -789,7 +789,7 @@
       "memo": "dg:b6ee5a7c60994695",
       "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
       "conditions_snapshot": {
-        "holders_current": 4,
+        "mints_current": 4,
         "mintsSnapshot": 4,
         "mintsTransactions": 0
       },
@@ -842,7 +842,7 @@
       "memo": "dg:4f9490bc3363ce31",
       "payer_wallet": "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
       "conditions_snapshot": {
-        "holders_current": 4,
+        "mints_current": 4,
         "mintsSnapshot": 4,
         "mintsTransactions": 0
       },

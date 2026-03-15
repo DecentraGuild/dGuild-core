@@ -137,10 +137,10 @@ async function syncTenant(supabase, config) {
     (r) => ({
       tenant_id: tenantId,
       mint: r.mint,
-      track_discord: r.track_discord ?? false,
+      track_holders: r.track_holders ?? false,
       track_snapshot: r.track_snapshot ?? false,
       track_transactions: r.track_transactions ?? false,
-      enabled_at_discord: r.enabled_at_discord ?? null,
+      enabled_at_holders: r.enabled_at_holders ?? null,
       enabled_at_snapshot: r.enabled_at_snapshot ?? null,
       enabled_at_transactions: r.enabled_at_transactions ?? null,
     })

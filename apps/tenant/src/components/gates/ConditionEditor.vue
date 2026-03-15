@@ -1,118 +1,133 @@
 <template>
   <div class="condition-editor">
-    <div class="condition-editor__row">
-      <OptionsSelect
-        v-model="typeModel"
-        :options="conditionTypeOptions"
-        placeholder="Type"
-        class="condition-editor__type"
-        @update:model-value="emit('update:type', $event)"
-      />
-      <OptionsSelect
-        v-if="needsMintOrList"
-        :model-value="cond.mint_or_group"
-        :options="mintOrListOptions"
-        :placeholder="mintOrListPlaceholder"
-        class="condition-editor__mint"
-        @update:model-value="onMintOrListChange"
-      />
-      <FormInput
-        v-if="needsAmount"
-        v-model="amountModel"
-        type="number"
-        placeholder="Amount"
-        class="condition-editor__amount"
-        @update:model-value="emit('update:amount', $event)"
-      />
-      <template v-if="cond.type === 'TRAIT'">
-        <OptionsSelect
-          v-model="traitKeyModel"
-          :options="traitKeyOptions"
-          placeholder="Trait"
-          class="condition-editor__trait-key"
-          @update:model-value="emit('update:trait_key', $event)"
-        />
-        <OptionsSelect
-          v-model="traitValueModel"
-          :options="traitValueSelectOptions"
-          placeholder="Value"
-          class="condition-editor__trait-value"
-          @update:model-value="emit('update:trait_value', $event)"
-        />
-      </template>
-      <template v-if="cond.type === 'SHIPMENT'">
-        <select
-          v-model="beginDateModel"
-          class="condition-editor__date"
-          @change="emit('update:begin_date', beginDateModel)"
+    <div class="condition-editor__card">
+      <div class="condition-editor__card-header">
+        <Button
+          v-if="!isWeightedMode"
+          variant="ghost"
+          size="icon"
+          class="condition-editor__remove"
+          aria-label="Remove condition"
+          @click="emit('remove')"
         >
-          <option value="">Begin date</option>
-          <option v-for="d in snapshotDatesForMint" :key="d" :value="d">{{ d }}</option>
-        </select>
-        <select
-          v-model="endDateModel"
-          class="condition-editor__date"
-          @change="emit('update:end_date', endDateModel)"
-        >
-          <option value="">End date</option>
-          <option v-for="d in snapshotDatesForMint" :key="d" :value="d">{{ d }}</option>
-        </select>
-      </template>
-      <FormInput
-        v-if="cond.type === 'SNAPSHOTS'"
-        v-model="daysModel"
-        type="number"
-        placeholder="Days"
-        min="1"
-        class="condition-editor__days"
-        @update:model-value="emit('update:days', $event)"
-      />
-      <template v-if="cond.type === 'TIME_WEIGHTED'">
-        <select
-          v-model="beginSnapshotAtModel"
-          class="condition-editor__date"
-          @change="emit('update:begin_snapshot_at', beginSnapshotAtModel)"
-        >
-          <option value="">Begin snapshot</option>
-          <option v-for="s in snapshotAtForMint" :key="s" :value="s">{{ formatSnapshotAt(s) }}</option>
-        </select>
-        <select
-          v-model="endSnapshotAtModel"
-          class="condition-editor__date"
-          @change="emit('update:end_snapshot_at', endSnapshotAtModel)"
-        >
-          <option value="">End snapshot</option>
-          <option v-for="s in snapshotAtForMint" :key="s" :value="s">{{ formatSnapshotAt(s) }}</option>
-        </select>
-      </template>
-      <OptionsSelect
-        v-if="cond.type === 'DISCORD' && showRoleSelector"
-        v-model="roleModel"
-        :options="guildRoleOptions"
-        placeholder="Role"
-        class="condition-editor__role"
-        @update:model-value="emit('update:required_role_id', $event)"
-      />
-      <div v-if="!isLast && !isWeightedMode" class="condition-editor__logic">
-        <select
-          :value="cond.logic_to_next ?? 'AND'"
-          class="condition-editor__logic-select"
-          @change="onLogicChange"
-        >
-          <option value="AND">AND</option>
-          <option value="OR">OR</option>
-        </select>
+          <Icon icon="lucide:trash-2" />
+        </Button>
       </div>
-      <Button
-        v-if="!isWeightedMode"
-        variant="ghost"
-        size="icon"
-        class="condition-editor__remove"
-        aria-label="Remove condition"
-        @click="emit('remove')"
+      <div
+        class="condition-editor__row condition-editor__row--primary"
+        :class="{ 'condition-editor__row--primary-spaced': hasSecondaryRow }"
       >
-        <Icon icon="lucide:trash-2" />
-      </Button>
+        <OptionsSelect
+          v-model="typeModel"
+          :options="conditionTypeOptions"
+          placeholder="Type"
+          class="condition-editor__type"
+          @update:model-value="emit('update:type', $event)"
+        />
+        <OptionsSelect
+          v-if="needsMintOrList"
+          :model-value="cond.mint_or_group"
+          :options="mintOrListOptions"
+          :placeholder="mintOrListPlaceholder"
+          class="condition-editor__mint"
+          @update:model-value="onMintOrListChange"
+        />
+        <FormInput
+          v-if="needsAmount"
+          v-model="amountModel"
+          type="number"
+          placeholder="Amount"
+          class="condition-editor__amount"
+          @update:model-value="emit('update:amount', $event)"
+        />
+      </div>
+      <div v-if="hasSecondaryRow" class="condition-editor__row condition-editor__row--secondary">
+        <template v-if="cond.type === 'TRAIT'">
+          <OptionsSelect
+            v-model="traitKeyModel"
+            :options="traitKeyOptions"
+            placeholder="Trait"
+            class="condition-editor__trait-key"
+            @update:model-value="emit('update:trait_key', $event)"
+          />
+          <OptionsSelect
+            v-model="traitValueModel"
+            :options="traitValueSelectOptions"
+            placeholder="Value"
+            class="condition-editor__trait-value"
+            @update:model-value="emit('update:trait_value', $event)"
+          />
+        </template>
+        <template v-if="cond.type === 'SHIPMENT'">
+          <OptionsSelect
+            v-model="beginDateModel"
+            :options="beginDateOptions"
+            placeholder="Begin date"
+            class="condition-editor__date"
+            @update:model-value="emit('update:begin_date', $event)"
+          />
+          <OptionsSelect
+            v-model="endDateModel"
+            :options="endDateOptions"
+            placeholder="End date"
+            class="condition-editor__date"
+            @update:model-value="emit('update:end_date', $event)"
+          />
+        </template>
+        <FormInput
+          v-if="cond.type === 'SNAPSHOTS'"
+          v-model="daysModel"
+          type="number"
+          placeholder="Days"
+          min="1"
+          class="condition-editor__days"
+          @update:model-value="emit('update:days', $event)"
+        />
+        <template v-if="cond.type === 'TIME_WEIGHTED'">
+          <OptionsSelect
+            v-model="beginSnapshotAtModel"
+            :options="beginSnapshotAtOptions"
+            placeholder="Begin snapshot"
+            class="condition-editor__date"
+            @update:model-value="emit('update:begin_snapshot_at', $event)"
+          />
+          <OptionsSelect
+            v-model="endSnapshotAtModel"
+            :options="endSnapshotAtOptions"
+            placeholder="End snapshot"
+            class="condition-editor__date"
+            @update:model-value="emit('update:end_snapshot_at', $event)"
+          />
+        </template>
+        <OptionsSelect
+          v-if="cond.type === 'DISCORD' && showRoleSelector"
+          v-model="roleModel"
+          :options="guildRoleOptions"
+          placeholder="Role"
+          class="condition-editor__role"
+          @update:model-value="emit('update:required_role_id', $event)"
+        />
+        <div v-if="showLogicPills && !isLast && !isWeightedMode" class="condition-editor__logic">
+          <div class="condition-editor__logic-pills" role="group" aria-label="Logic to next condition">
+            <button
+              type="button"
+              class="condition-editor__logic-pill"
+              :class="{ 'condition-editor__logic-pill--active': (cond.logic_to_next ?? 'AND') === 'AND' }"
+              @click="setLogic('AND')"
+            >
+              AND
+            </button>
+            <button
+              type="button"
+              class="condition-editor__logic-pill"
+              :class="{ 'condition-editor__logic-pill--active': (cond.logic_to_next ?? 'AND') === 'OR' }"
+              @click="setLogic('OR')"
+            >
+              OR
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -140,8 +155,10 @@ const props = withDefaults(
     isLast: boolean
     showRoleSelector?: boolean
     isWeightedMode?: boolean
+    /** When false, logic pills (AND/OR) are hidden; parent renders them between cards. */
+    showLogicPills?: boolean
   }>(),
-  { guildRoles: () => [], showRoleSelector: true, snapshotAtForMint: () => [], isWeightedMode: false }
+  { guildRoles: () => [], showRoleSelector: true, snapshotAtForMint: () => [], isWeightedMode: false, showLogicPills: true }
 )
 
 const emit = defineEmits<{
@@ -188,31 +205,55 @@ const traitValueModel = computed({
   set: (v) => emit('update:trait_value', v),
 })
 
-const beginDateModel = ref(props.cond.begin_date ?? '')
-const endDateModel = ref(props.cond.end_date ?? '')
-watch(
-  () => props.cond.begin_date,
-  (v) => { beginDateModel.value = v ?? '' }
-)
-watch(
-  () => props.cond.end_date,
-  (v) => { endDateModel.value = v ?? '' }
-)
+const beginDateModel = computed({
+  get: () => props.cond.begin_date ?? '',
+  set: (v) => emit('update:begin_date', v),
+})
+const endDateModel = computed({
+  get: () => props.cond.end_date ?? '',
+  set: (v) => emit('update:end_date', v),
+})
+
+const beginDateOptions = computed(() => [
+  { value: '', label: 'Begin date' },
+  ...props.snapshotDatesForMint.map((d) => ({ value: d, label: d })),
+])
+const endDateOptions = computed(() => [
+  { value: '', label: 'End date' },
+  ...props.snapshotDatesForMint.map((d) => ({ value: d, label: d })),
+])
 
 const daysModel = computed({
   get: () => props.cond.days ?? '',
   set: (v) => emit('update:days', v),
 })
 
-const beginSnapshotAtModel = ref(props.cond.begin_snapshot_at ?? '')
-const endSnapshotAtModel = ref(props.cond.end_snapshot_at ?? '')
-watch(
-  () => props.cond.begin_snapshot_at,
-  (v) => { beginSnapshotAtModel.value = v ?? '' }
-)
-watch(
-  () => props.cond.end_snapshot_at,
-  (v) => { endSnapshotAtModel.value = v ?? '' }
+const beginSnapshotAtModel = computed({
+  get: () => props.cond.begin_snapshot_at ?? '',
+  set: (v) => emit('update:begin_snapshot_at', v),
+})
+const endSnapshotAtModel = computed({
+  get: () => props.cond.end_snapshot_at ?? '',
+  set: (v) => emit('update:end_snapshot_at', v),
+})
+
+const beginSnapshotAtOptions = computed(() => [
+  { value: '', label: 'Begin snapshot' },
+  ...(props.snapshotAtForMint ?? []).map((s) => ({ value: s, label: formatSnapshotAt(s) })),
+])
+const endSnapshotAtOptions = computed(() => [
+  { value: '', label: 'End snapshot' },
+  ...(props.snapshotAtForMint ?? []).map((s) => ({ value: s, label: formatSnapshotAt(s) })),
+])
+
+const hasSecondaryRow = computed(
+  () =>
+    props.cond.type === 'TRAIT' ||
+    props.cond.type === 'SHIPMENT' ||
+    props.cond.type === 'SNAPSHOTS' ||
+    props.cond.type === 'TIME_WEIGHTED' ||
+    (props.cond.type === 'DISCORD' && props.showRoleSelector) ||
+    (props.showLogicPills && !props.isLast && !props.isWeightedMode)
 )
 
 function formatSnapshotAt(s: string): string {
@@ -270,19 +311,41 @@ function onMintOrListChange(value: string) {
   emit('update:mint_or_group', value)
 }
 
-function onLogicChange(e: Event) {
-  const v = (e.target as HTMLSelectElement).value as 'AND' | 'OR'
-  emit('update:logic_to_next', v)
+function setLogic(value: 'AND' | 'OR') {
+  emit('update:logic_to_next', value)
   emit('logic-change')
 }
 </script>
 
 <style scoped>
+.condition-editor__card {
+  position: relative;
+  padding: var(--theme-space-md);
+  background-color: var(--theme-bg-secondary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+}
+
+.condition-editor__card-header {
+  position: absolute;
+  top: var(--theme-space-sm);
+  right: var(--theme-space-sm);
+}
+
 .condition-editor__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--theme-space-sm);
+}
+
+.condition-editor__row--primary-spaced {
+  margin-bottom: var(--theme-space-sm);
+}
+
+.condition-editor__row--secondary {
+  padding-top: var(--theme-space-xs);
+  border-top: var(--theme-border-thin) solid var(--theme-border);
 }
 
 .condition-editor__type {
@@ -305,13 +368,6 @@ function onLogicChange(e: Event) {
 
 .condition-editor__date {
   min-width: 8rem;
-  height: var(--theme-input-height, 2.25rem);
-  padding: var(--theme-space-sm) var(--theme-space-md);
-  font-size: var(--theme-font-base);
-  color: var(--theme-text-primary);
-  background-color: var(--theme-bg-primary);
-  border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-md);
 }
 
 .condition-editor__days {
@@ -322,20 +378,46 @@ function onLogicChange(e: Event) {
   min-width: 8rem;
 }
 
-.condition-editor__logic-select {
-  min-width: 4rem;
-  height: var(--theme-input-height, 2.25rem);
-  padding: var(--theme-space-sm) var(--theme-space-md);
-  font-size: var(--theme-font-base);
-  color: var(--theme-text-primary);
-  background-color: var(--theme-bg-primary);
+.condition-editor__logic {
+  margin-left: auto;
+}
+
+.condition-editor__logic-pills {
+  display: flex;
+  gap: 0;
+  padding: 2px;
+  background-color: var(--theme-bg-muted);
   border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-md);
+  border-radius: var(--theme-radius-sm);
+}
+
+.condition-editor__logic-pill {
+  padding: 4px 10px;
+  font-size: var(--theme-font-xs);
+  font-weight: 500;
+  color: var(--theme-text-muted);
+  background: none;
+  border: none;
+  border-radius: calc(var(--theme-radius-sm) - 2px);
+  cursor: pointer;
+}
+
+.condition-editor__logic-pill:hover {
+  color: var(--theme-text-primary);
+}
+
+.condition-editor__logic-pill--active {
+  color: var(--theme-primary);
+  background-color: var(--theme-bg-primary);
+}
+
+.condition-editor__logic-pill:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
 }
 
 .condition-editor__remove {
   color: var(--theme-text-muted);
-  flex-shrink: 0;
 }
 
 .condition-editor__remove:hover {

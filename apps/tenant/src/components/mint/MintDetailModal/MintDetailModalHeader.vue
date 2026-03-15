@@ -13,9 +13,11 @@
           <span class="mint-modal__kind-badge">{{ display.kind === 'SPL' ? 'SPL Token' : 'NFT Collection' }}</span>
           <span v-if="display.symbol" class="mint-modal__symbol">{{ display.symbol }}</span>
           <span v-if="display.tier" class="mint-modal__tier-badge" :class="`mint-modal__tier-badge--${display.tier}`">{{ display.tier }}</span>
-          <span v-if="display.track_holders" class="mint-modal__track-badge">Holders</span>
-          <span v-if="display.track_snapshot" class="mint-modal__track-badge">Snapshot</span>
-          <span v-if="display.track_transactions" class="mint-modal__track-badge">Transactions</span>
+          <TrackIndicators
+            :track-holders="display.track_holders"
+            :track-snapshot="display.track_snapshot"
+            :track-transactions="display.track_transactions"
+          />
         </div>
       </div>
     </div>
@@ -50,6 +52,7 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
+import TrackIndicators from '~/components/mint/TrackIndicators.vue'
 
 defineProps<{
   display: {

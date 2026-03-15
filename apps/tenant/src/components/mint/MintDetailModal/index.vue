@@ -218,7 +218,7 @@ const display = computed<DisplayMint | null>(() => {
     traitTypes: m.traitTypes ?? m.traitKeys ?? [],
     tier: props.entry?.tier,
     createdAt: props.entry?.createdAt,
-    track_holders: m.track_discord ?? false,
+    track_holders: m.track_holders ?? false,
     track_snapshot: m.track_snapshot ?? false,
     track_transactions: m.track_transactions ?? false,
   }

@@ -2,9 +2,9 @@
  * Tracker sync cron Edge Function.
  * Called by pg_cron every 5 minutes (testing) or 30 for production.
  *
- * For each mint in watchtower_watches with track_snapshot OR track_discord:
+ * For each mint in watchtower_watches with track_snapshot OR track_holders:
  *   - track_snapshot: holder snapshot in holder_snapshots (time-bucketed).
- *   - track_discord: current holders in holder_current (Holders UI, Discord sync).
+ *   - track_holders: current holders in holder_current (conditions, shipment, Discord).
  *
  * Holders are controlled by Watchtower module payment, not Discord deployment.
  * Processes mints in chunks of 20 per invocation to stay within CPU limits.
@@ -165,18 +165,18 @@ Deno.serve(async (req: Request) => {
   if (syncMint && syncTenantId) {
     const { data: watch } = await db
       .from('watchtower_watches')
-      .select('track_discord, track_snapshot')
+      .select('track_holders, track_snapshot')
       .eq('tenant_id', syncTenantId)
       .eq('mint', syncMint)
       .maybeSingle()
-    if (!watch || (!watch.track_discord && !watch.track_snapshot)) {
+    if (!watch || (!watch.track_holders && !watch.track_snapshot)) {
       return jsonResponse({ processed: 0, synced: 0, message: 'Mint not watched' }, req)
     }
     const [discordWithin, snapshotWithin] = await Promise.all([
-      watch.track_discord ? getWithinLimitMints(db, syncTenantId, 'holders_current') : Promise.resolve(new Set<string>()),
+      watch.track_holders ? getWithinLimitMints(db, syncTenantId, 'mints_current') : Promise.resolve(new Set<string>()),
       watch.track_snapshot ? getWithinLimitMints(db, syncTenantId, 'mintsSnapshot') : Promise.resolve(new Set<string>()),
     ])
-    const syncDiscord = watch.track_discord && discordWithin.has(syncMint)
+    const syncDiscord = watch.track_holders && discordWithin.has(syncMint)
     const syncSnapshot = watch.track_snapshot && snapshotWithin.has(syncMint)
     if (!syncDiscord && !syncSnapshot) {
       return jsonResponse({ processed: 0, synced: 0, message: 'Mint over paid limit' }, req)
@@ -229,11 +229,11 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ processed: 1, synced: 1 }, req)
   }
 
-  // Load mints with track_snapshot OR track_discord (with track flags)
+  // Load mints with track_snapshot OR track_holders (with track flags)
   const { data: allWatches, error: watchErr } = await db
     .from('watchtower_watches')
-    .select('tenant_id, mint, track_discord, track_snapshot')
-    .or('track_snapshot.eq.true,track_discord.eq.true')
+    .select('tenant_id, mint, track_holders, track_snapshot')
+    .or('track_snapshot.eq.true,track_holders.eq.true')
     .range(offset, offset + CHUNK_SIZE - 1)
 
   if (watchErr) return errorResponse(watchErr.message, req, 500)
@@ -243,13 +243,13 @@ Deno.serve(async (req: Request) => {
   console.log('[cron-tracker] batch run', { snapshotAt, offset, mintCount: mints.length })
 
   const tenantIds = [...new Set(mints.map((m) => String(m.tenant_id ?? '')))].filter(Boolean) as string[]
-  const withinByTenant = new Map<string, { holders_current: Set<string>; mintsSnapshot: Set<string> }>()
+  const withinByTenant = new Map<string, { mints_current: Set<string>; mintsSnapshot: Set<string> }>()
   for (const tid of tenantIds) {
-    const [holders_current, mintsSnapshot] = await Promise.all([
-      getWithinLimitMints(db, tid, 'holders_current'),
+    const [mints_current, mintsSnapshot] = await Promise.all([
+      getWithinLimitMints(db, tid, 'mints_current'),
       getWithinLimitMints(db, tid, 'mintsSnapshot'),
     ])
-    withinByTenant.set(tid, { holders_current, mintsSnapshot })
+    withinByTenant.set(tid, { mints_current, mintsSnapshot })
   }
 
   const mintKeys = mints.map((m) => String(m.mint ?? ''))
@@ -267,10 +267,10 @@ Deno.serve(async (req: Request) => {
     const mint = row.mint as string
     const tenantId = row.tenant_id as string
     const kind = kindByMint.get(mint) ?? 'NFT'
-    const trackDiscord = Boolean(row.track_discord)
+    const trackHolders = Boolean(row.track_holders)
     const trackSnapshot = Boolean(row.track_snapshot)
     const within = withinByTenant.get(tenantId)
-    const syncDiscord = trackDiscord && within?.holders_current.has(mint)
+    const syncDiscord = trackHolders && within?.mints_current.has(mint)
     const syncSnapshot = trackSnapshot && within?.mintsSnapshot.has(mint)
     if (!syncDiscord && !syncSnapshot) continue
 
@@ -309,7 +309,7 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // 2. Fetch holders (for track_discord and/or track_snapshot)
+      // 2. Fetch holders (for track_holders and/or track_snapshot)
       let holders: Array<{ wallet: string; amount: string }>
       if (kind === 'SPL') {
         holders = await fetchSplHolders(connection, mint)
@@ -320,7 +320,7 @@ Deno.serve(async (req: Request) => {
         console.warn('[cron-tracker] empty holders', { mint, kind })
       }
 
-      // 3a. Holders: holder_current (Holders UI, Discord sync)
+      // 3a. Holders: holder_current (conditions, shipment, Discord)
       if (syncDiscord) {
         await db.from('holder_current').upsert({
           mint,

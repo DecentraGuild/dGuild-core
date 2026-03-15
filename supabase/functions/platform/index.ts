@@ -486,17 +486,17 @@ Deno.serve(async (req: Request) => {
     if (!check.ok) return check.response
 
     const tenantId = body.tenantId as string
-    const holders_current = typeof body.holders_current === 'number' ? Math.max(0, Math.floor(body.holders_current)) : undefined
+    const mints_current = typeof body.mints_current === 'number' ? Math.max(0, Math.floor(body.mints_current)) : undefined
     const mintsSnapshot = typeof body.mintsSnapshot === 'number' ? Math.max(0, Math.floor(body.mintsSnapshot)) : undefined
     const mintsTransactions = typeof body.mintsTransactions === 'number' ? Math.max(0, Math.floor(body.mintsTransactions)) : undefined
     if (!tenantId) return errorResponse('tenantId required', req)
-    if (holders_current === undefined && mintsSnapshot === undefined && mintsTransactions === undefined) {
-      return errorResponse('At least one track count (holders_current, mintsSnapshot, mintsTransactions) required', req)
+    if (mints_current === undefined && mintsSnapshot === undefined && mintsTransactions === undefined) {
+      return errorResponse('At least one track count (mints_current, mintsSnapshot, mintsTransactions) required', req)
     }
 
-    const SCOPE_KEYS = ['holders_current', 'mintsSnapshot', 'mintsTransactions'] as const
+    const SCOPE_KEYS = ['mints_current', 'mintsSnapshot', 'mintsTransactions'] as const
     const updates: Array<{ scopeKey: string; count: number }> = []
-    if (holders_current !== undefined) updates.push({ scopeKey: 'holders_current', count: holders_current })
+    if (mints_current !== undefined) updates.push({ scopeKey: 'mints_current', count: mints_current })
     if (mintsSnapshot !== undefined) updates.push({ scopeKey: 'mintsSnapshot', count: mintsSnapshot })
     if (mintsTransactions !== undefined) updates.push({ scopeKey: 'mintsTransactions', count: mintsTransactions })
 
@@ -549,7 +549,7 @@ Deno.serve(async (req: Request) => {
       action: 'watchtower_tracks_set',
       target_type: 'subscription',
       target_id: `${tenantId}/watchtower`,
-      details: { holders_current, mintsSnapshot, mintsTransactions },
+      details: { mints_current, mintsSnapshot, mintsTransactions },
     })
 
     return jsonResponse({ ok: true }, req)

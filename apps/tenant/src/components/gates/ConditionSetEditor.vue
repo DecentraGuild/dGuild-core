@@ -24,70 +24,99 @@
           Weighted rule
         </button>
       </div>
-      <FormInput
-        v-model="nameModel"
-        label="Name"
-        placeholder="Rule name"
-        required
-        :error="saveError"
-      />
-      <div v-if="showDiscordRole && (form.ruleType === 'binary' || form.ruleType === 'weighted')" class="condition-set-editor__discord-row">
-        <OptionsSelect
-          v-model="roleModel"
-          :options="discordRoleOptions"
-          label="Discord role"
-          placeholder="None"
-          class="condition-set-editor__role"
-        />
+      <section class="condition-set-editor__section">
+        <h5 class="condition-set-editor__section-title">Rule details</h5>
         <FormInput
-          v-if="form.ruleType === 'weighted'"
-          v-model="minPercentModel"
-          type="number"
-          label="Min %"
-          placeholder="0"
-          min="0"
-          max="100"
-          class="condition-set-editor__min-percent"
+          v-model="nameModel"
+          label="Name"
+          placeholder="Rule name"
+          required
+          :error="saveError"
         />
-      </div>
-      <div class="condition-set-editor__conditions">
-        <h5 class="condition-set-editor__conditions-title">Conditions</h5>
+        <div v-if="showDiscordRole && (form.ruleType === 'binary' || form.ruleType === 'weighted')" class="condition-set-editor__discord-row">
+          <OptionsSelect
+            v-model="roleModel"
+            :options="discordRoleOptions"
+            label="Discord role"
+            placeholder="None"
+            class="condition-set-editor__role"
+          />
+          <FormInput
+            v-if="form.ruleType === 'weighted'"
+            v-model="minPercentModel"
+            type="number"
+            label="Min %"
+            placeholder="0"
+            min="0"
+            max="100"
+            class="condition-set-editor__min-percent"
+          />
+        </div>
+      </section>
+      <section class="condition-set-editor__conditions">
+        <h5 class="condition-set-editor__section-title">Conditions</h5>
         <div v-if="loading" class="condition-set-editor__loading">
           <Icon icon="lucide:loader-2" class="condition-set-editor__spinner" />
           Loading…
         </div>
         <template v-else>
-          <ConditionEditor
-            v-for="(cond, idx) in form.conditions"
-            :key="idx"
-            :cond="cond"
-            :condition-types="conditionTypesForMode"
-            :mints-with-holders="mintsWithHolders"
-            :mints-with-snapshot="mintsWithSnapshot"
-            :gate-lists="gateLists"
-            :guild-roles="discordRoleOptionsAll"
-            :snapshot-dates-for-mint="snapshotDatesForMint(cond.mint_or_group)"
-            :snapshot-at-for-mint="snapshotAtForMint(cond.mint_or_group)"
-            :trait-keys="traitOptionsForCondition(idx).trait_keys"
-            :trait-value-options="traitValueOptionsForCondition(idx)"
-            :is-last="idx === form.conditions.length - 1"
-            :show-role-selector="true"
-            :is-weighted-mode="form.ruleType === 'weighted'"
-            @update:type="(v) => (cond.type = v)"
-            @update:mint_or_group="(v) => { cond.mint_or_group = v; clearTraitWhenTokenChanges(cond); clearDatesWhenMintChanges(cond); clearDaysWhenMintChanges(cond); clearSnapshotsWhenMintChanges(cond); if (cond.type === 'TIME_WEIGHTED' && v?.trim()) fetchSnapshotAtForMint(v) }"
-            @update:amount="(v) => (cond.amount = v)"
-            @update:trait_key="(v) => (cond.trait_key = v)"
-            @update:trait_value="(v) => (cond.trait_value = v)"
-            @update:begin_date="(v) => (cond.begin_date = v)"
-            @update:end_date="(v) => (cond.end_date = v)"
-            @update:days="(v) => (cond.days = v)"
-            @update:begin_snapshot_at="(v) => (cond.begin_snapshot_at = v)"
-            @update:end_snapshot_at="(v) => (cond.end_snapshot_at = v)"
-            @update:required_role_id="(v) => (cond.required_role_id = v)"
-            @update:logic_to_next="(v) => (cond.logic_to_next = v)"
-            @logic-change="onLogicChange(idx)"
-            @remove="removeCondition(idx)"
-          />
+          <template v-for="(cond, idx) in form.conditions" :key="idx">
+            <ConditionEditor
+              :cond="cond"
+              :condition-types="conditionTypesForMode"
+              :mints-with-holders="mintsWithHolders"
+              :mints-with-snapshot="mintsWithSnapshot"
+              :gate-lists="gateLists"
+              :guild-roles="discordRoleOptionsAll"
+              :snapshot-dates-for-mint="snapshotDatesForMint(cond.mint_or_group)"
+              :snapshot-at-for-mint="snapshotAtForMint(cond.mint_or_group)"
+              :trait-keys="traitOptionsForCondition(idx).trait_keys"
+              :trait-value-options="traitValueOptionsForCondition(idx)"
+              :is-last="idx === form.conditions.length - 1"
+              :show-role-selector="true"
+              :is-weighted-mode="form.ruleType === 'weighted'"
+              :show-logic-pills="false"
+              @update:type="(v) => (cond.type = v)"
+              @update:mint_or_group="(v) => { cond.mint_or_group = v; clearTraitWhenTokenChanges(cond); clearDatesWhenMintChanges(cond); clearDaysWhenMintChanges(cond); clearSnapshotsWhenMintChanges(cond); if (cond.type === 'TIME_WEIGHTED' && v?.trim()) fetchSnapshotAtForMint(v) }"
+              @update:amount="(v) => (cond.amount = v)"
+              @update:trait_key="(v) => (cond.trait_key = v)"
+              @update:trait_value="(v) => (cond.trait_value = v)"
+              @update:begin_date="(v) => (cond.begin_date = v)"
+              @update:end_date="(v) => (cond.end_date = v)"
+              @update:days="(v) => (cond.days = v)"
+              @update:begin_snapshot_at="(v) => (cond.begin_snapshot_at = v)"
+              @update:end_snapshot_at="(v) => (cond.end_snapshot_at = v)"
+              @update:required_role_id="(v) => (cond.required_role_id = v)"
+              @update:logic_to_next="(v) => (cond.logic_to_next = v)"
+              @logic-change="onLogicChange(idx)"
+              @remove="removeCondition(idx)"
+            />
+            <div
+              v-if="idx < form.conditions.length - 1 && form.ruleType !== 'weighted'"
+              class="condition-set-editor__logic-connector"
+              role="group"
+              aria-label="Logic to next condition"
+            >
+              <div class="condition-set-editor__logic-pills">
+                <button
+                  type="button"
+                  class="condition-set-editor__logic-pill"
+                  :class="{ 'condition-set-editor__logic-pill--active': (cond.logic_to_next ?? 'AND') === 'AND' }"
+                  @click="setLogicFor(idx, 'AND')"
+                >
+                  AND
+                </button>
+                <button
+                  type="button"
+                  class="condition-set-editor__logic-pill"
+                  :class="{ 'condition-set-editor__logic-pill--active': (cond.logic_to_next ?? 'AND') === 'OR' }"
+                  @click="setLogicFor(idx, 'OR')"
+                >
+                  OR
+                </button>
+              </div>
+            </div>
+          </template>
           <Button
             v-if="form.ruleType !== 'weighted'"
             variant="outline"
@@ -96,10 +125,11 @@
             :disabled="form.conditions.length >= 10"
             @click="addCondition"
           >
+            <Icon icon="lucide:plus" class="condition-set-editor__add-icon" />
             Add condition
           </Button>
         </template>
-      </div>
+      </section>
       <div class="condition-set-editor__actions">
         <Button variant="secondary" @click="$emit('update:open', false)">
           Cancel
@@ -195,6 +225,14 @@ function switchMode(mode: 'binary' | 'weighted') {
   resetForm(mode)
 }
 
+function setLogicFor(idx: number, value: 'AND' | 'OR') {
+  const cond = form.conditions[idx]
+  if (cond) {
+    cond.logic_to_next = value
+    onLogicChange(idx)
+  }
+}
+
 const snapshotAtByMint = ref<Record<string, string[]>>({})
 
 async function fetchSnapshotAtForMint(mint: string) {
@@ -272,14 +310,14 @@ function snapshotDatesForMint(mint: string): string[] {
 }
 
 watch(
-  () => props.open,
-  async (open) => {
+  () => [props.open, props.initialSetId],
+  async ([open, setId]) => {
     if (!open) return
     await fetchGateLists()
     await fetchSnapshotDates()
     snapshotAtByMint.value = {}
-    if (props.initialSetId != null) {
-      await loadFromConditionSet(props.initialSetId)
+    if (setId != null) {
+      await loadFromConditionSet(setId)
       for (const c of form.conditions) {
         if (c.mint_or_group?.trim() && c.type === 'TIME_WEIGHTED') {
           await fetchSnapshotAtForMint(c.mint_or_group)
@@ -288,7 +326,8 @@ watch(
     } else {
       resetForm()
     }
-  }
+  },
+  { immediate: true }
 )
 
 
@@ -311,31 +350,46 @@ async function onSave() {
 }
 
 .condition-set-editor__mode {
-  display: flex;
-  gap: 2px;
-  margin-bottom: var(--theme-space-xs);
+  display: inline-flex;
+  padding: 2px;
+  background-color: var(--theme-bg-muted);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
 }
 
 .condition-set-editor__mode-btn {
-  padding: 6px 12px;
+  padding: 6px 14px;
   font-size: var(--theme-font-sm);
   font-weight: 500;
   color: var(--theme-text-muted);
-  background: var(--theme-bg-secondary);
-  border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-sm);
+  background: none;
+  border: none;
+  border-radius: calc(var(--theme-radius-md) - 2px);
   cursor: pointer;
 }
 
 .condition-set-editor__mode-btn:hover {
   color: var(--theme-text-primary);
-  background: var(--theme-bg-muted);
 }
 
 .condition-set-editor__mode-btn--active {
   color: var(--theme-primary);
-  background: var(--theme-bg-muted);
-  border-color: var(--theme-primary);
+  background-color: var(--theme-bg-primary);
+}
+
+.condition-set-editor__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-md);
+}
+
+.condition-set-editor__section-title {
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  margin: 0;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .condition-set-editor__discord-row {
@@ -356,14 +410,46 @@ async function onSave() {
 .condition-set-editor__conditions {
   display: flex;
   flex-direction: column;
-  gap: var(--theme-space-sm);
+  gap: var(--theme-space-md);
 }
 
-.condition-set-editor__conditions-title {
-  font-size: var(--theme-font-sm);
-  font-weight: 600;
-  margin: 0;
+.condition-set-editor__logic-connector {
+  display: flex;
+  justify-content: center;
+  padding: var(--theme-space-xs) 0;
+}
+
+.condition-set-editor__logic-pills {
+  display: inline-flex;
+  padding: 2px;
+  background-color: var(--theme-bg-muted);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+}
+
+.condition-set-editor__logic-connector .condition-set-editor__logic-pill {
+  padding: 4px 12px;
+  font-size: var(--theme-font-xs);
+  font-weight: 500;
+  color: var(--theme-text-muted);
+  background: none;
+  border: none;
+  border-radius: calc(var(--theme-radius-sm) - 2px);
+  cursor: pointer;
+}
+
+.condition-set-editor__logic-connector .condition-set-editor__logic-pill:hover {
   color: var(--theme-text-primary);
+}
+
+.condition-set-editor__logic-connector .condition-set-editor__logic-pill--active {
+  color: var(--theme-primary);
+  background-color: var(--theme-bg-primary);
+}
+
+.condition-set-editor__logic-connector .condition-set-editor__logic-pill:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
 }
 
 .condition-set-editor__loading {
@@ -392,6 +478,11 @@ async function onSave() {
 .condition-set-editor__add:hover:not(:disabled) {
   background-color: var(--theme-bg-muted);
   color: var(--theme-text-primary);
+}
+
+.condition-set-editor__add-icon {
+  margin-right: var(--theme-space-xs);
+  font-size: 1rem;
 }
 
 .condition-set-editor__actions {

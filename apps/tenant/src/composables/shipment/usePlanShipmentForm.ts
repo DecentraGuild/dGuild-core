@@ -14,7 +14,6 @@ import { getAssociatedTokenAddressSync, getAccount } from '@solana/spl-token'
 import { PublicKey } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
 
-export const SHIPMENT_JSON_KEY = 'shipment-list-json'
 export const JSON_PLACEHOLDER = '{"mint":"...","recipients":[{"address":"...","amount":100}]}'
 
 export interface LoadedShipmentJson {
@@ -110,22 +109,8 @@ export function usePlanShipmentForm(options: UsePlanShipmentFormOptions) {
       !shipping.value
   )
 
-  function loadFromSession() {
-    try {
-      const raw = sessionStorage.getItem(SHIPMENT_JSON_KEY)
-      if (raw) {
-        const parsed = parseShipmentJson(raw)
-        if (parsed) {
-          loadedJson.value = parsed
-          jsonInput.value = raw
-          return
-        }
-      }
-    } catch {
-      // ignore
-    }
-    const parsed = parseShipmentJson(jsonInput.value)
-    if (parsed) loadedJson.value = parsed
+  function setJson(data: LoadedShipmentJson) {
+    jsonInput.value = JSON.stringify(data, null, 2)
   }
 
   watch(jsonInput, (v) => {
@@ -242,7 +227,7 @@ export function usePlanShipmentForm(options: UsePlanShipmentFormOptions) {
     registering,
     registerMessage,
     shipError,
-    loadFromSession,
+    setJson,
     refreshBalance,
     registerMint,
     ship,

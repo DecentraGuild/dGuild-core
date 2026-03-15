@@ -1,7 +1,7 @@
 /**
  * Admin billing subscriptions per module.
  * Reads directly from billing_subscriptions via PostgREST (RLS enforces tenant admin access).
- * Watchtower returns per-track subscriptions keyed by scope (holders_current, mintsSnapshot, mintsTransactions).
+ * Watchtower returns per-track subscriptions keyed by scope (mints_current, mintsSnapshot, mintsTransactions).
  */
 
 import type { BillingPeriod } from '@decentraguild/billing'
@@ -57,7 +57,7 @@ export function useAdminSubscriptions() {
           .eq('module_id', moduleId)
         if (error) throw error
         const byScope: WatchtowerSubscriptionByScope = {}
-        const scopeKeys = ['holders_current', 'mintsSnapshot', 'mintsTransactions']
+        const scopeKeys = ['mints_current', 'mintsSnapshot', 'mintsTransactions']
         for (const row of rows ?? []) {
           const r = row as Record<string, unknown>
           const scopeKey = (r.scope_key as string) ?? ''

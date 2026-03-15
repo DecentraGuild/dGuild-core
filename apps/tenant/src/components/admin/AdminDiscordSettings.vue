@@ -12,99 +12,134 @@
       @link="onLink"
       @disconnect="disconnect"
     />
-    <ConditionCatalogShell
-      v-if="server.connected && !loading"
-      mint-hint="Mints come from Address Book. Enable Holders, Snapshot, or Transactions in Admin &gt; Watchtower."
+
+    <div v-if="server.connected && !loading" class="discord-settings__cards">
+      <DiscordRoleCardsCarousel
+        :role-cards="roleCards"
+        admin
+        @edit="onEditCard"
+        @delete="onDeleteCard"
+        @create="openQuickAssignModal"
+      />
+    </div>
+
+    <SimpleModal
+      :model-value="quickAssignOpen"
+      title="Assign rule to role"
+      @update:model-value="(v: boolean) => (quickAssignOpen = v)"
     >
-      <template #mint-catalog>
-        <AdminMintCatalog
-          :mints="discordCatalogItems"
-          :loading="catalogMintsLoading"
-          readonly
-          item-extra-when-readonly
-          @inspect="onInspectMint"
-        >
-          <template #item-extra="{ item }">
-            <div v-if="item.track_discord || item.track_snapshot || item.track_transactions" class="discord-settings__badges">
-              <span v-if="item.track_discord" class="discord-settings__badge">Holders</span>
-              <span v-if="item.track_snapshot" class="discord-settings__badge">Snapshot</span>
-              <span v-if="item.track_transactions" class="discord-settings__badge">Transactions</span>
-            </div>
-          </template>
-        </AdminMintCatalog>
-      </template>
-      <template #rules-catalog>
+      <div class="discord-quick-assign">
         <ConditionSetCatalog
-          :items="rulesCatalogFilteredItems"
+          :items="rulesCatalogItems"
           :loading="rulesCatalogLoading"
           :error="rulesCatalogError"
-          :filter="rulesCatalogFilter"
-          :show-filter="true"
-          :active-id="null"
-          @select="() => {}"
-          @edit="(item) => openEditor(item.id)"
-          @delete="(item) => deleteConditionSet(item.id)"
-          @create="openEditor(null)"
-          @update:filter="setRulesCatalogFilter"
+          :filter="'all'"
+          :show-filter="false"
+          :filter-unassigned="true"
+          :hide-create-button="true"
+          :hide-delete-button="true"
+          :active-id="quickAssignSetId ?? undefined"
+          @select="(item) => (quickAssignSetId = item.id)"
+          @edit="(item) => goToConditionsEdit(item.id)"
+          @delete="() => {}"
+          @create="goToConditions"
         />
-      </template>
-    </ConditionCatalogShell>
-    <ConditionSetEditor
-      v-model:open="editorOpen"
-      :catalog-mints="catalogMints"
-      :gate-lists="gateLists"
-      :guild-roles="guildRoles"
-      :guild-roles-all="guildRolesAll"
-      :guild-id="server.connected ? server.discord_guild_id : null"
-      :initial-set-id="editingSetId"
-      @saved="fetchRulesCatalog"
-    />
-    <MintDetailModal v-model="showMintModal" :mint="selectedMint" />
+        <div v-if="quickAssignSetId" class="discord-quick-assign__form">
+          <OptionsSelect
+            v-model="quickAssignRoleId"
+            :options="guildRoleOptions"
+            label="Discord role"
+            placeholder="Select role"
+          />
+          <FormInput
+            v-if="selectedRuleForAssign?.ruleType === 'weighted'"
+            v-model="quickAssignMinPercent"
+            type="number"
+            label="Min %"
+            placeholder="0"
+            min="0"
+            max="100"
+          />
+          <Button
+            variant="default"
+            :disabled="!quickAssignRoleId || assigning"
+            @click="onQuickAssignSave"
+          >
+            <Icon v-if="assigning" icon="lucide:loader-2" class="discord-quick-assign__spinner" />
+            Assign
+          </Button>
+        </div>
+        <p class="discord-quick-assign__link">
+          <NuxtLink :to="{ path: '/admin', query: { ...route.query, tab: 'conditions' } }" @click="quickAssignOpen = false">
+            Create new condition set
+          </NuxtLink>
+        </p>
+      </div>
+    </SimpleModal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useSupabase } from '~/composables/core/useSupabase'
-import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
-import { useConditionSet } from '~/composables/conditions/useConditionSet'
-import { useConditionSetCatalog } from '~/composables/conditions/useConditionSetCatalog'
+import { Icon } from '@iconify/vue'
+import { Button } from '~/components/ui/button'
+import FormInput from '~/components/ui/form-input/FormInput.vue'
+import OptionsSelect from '~/components/ui/options-select/OptionsSelect.vue'
+import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import AdminDiscordServerCard from '~/components/AdminDiscordServerCard.vue'
-import AdminMintCatalog from '~/components/admin/AdminMintCatalog.vue'
-import ConditionCatalogShell from '~/components/gates/ConditionCatalogShell.vue'
 import ConditionSetCatalog from '~/components/gates/ConditionSetCatalog.vue'
-import ConditionSetEditor from '~/components/gates/ConditionSetEditor.vue'
-import type { CatalogMint, CatalogMintItem } from '~/types/mints'
-import MintDetailModal from '~/components/mint/MintDetailModal/index.vue'
+import DiscordRoleCardsCarousel from '~/components/DiscordRoleCardsCarousel.vue'
+import type { RoleCard } from '~/components/DiscordRoleCardsCarousel.vue'
+import { useSupabase } from '~/composables/core/useSupabase'
+import { useConditionSet } from '~/composables/conditions/useConditionSet'
+import { useTenantStore } from '~/stores/tenant'
+import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
+import { useConditionSetCatalog } from '~/composables/conditions/useConditionSetCatalog'
+import type { CatalogMint } from '~/types/mints'
 
-defineProps<{
-  slug: string
-}>()
+defineProps<{ slug: string }>()
 
+const route = useRoute()
+const tenantStore = useTenantStore()
+const tenantId = computed(() => tenantStore.tenantId)
+
+const catalog = useTenantCatalog()
 const loading = ref(true)
 const catalogMints = ref<CatalogMint[]>([])
 const catalogMintsRef = computed(() => catalogMints.value)
 const { gateLists, fetchGateLists } = useConditionSet(catalogMintsRef)
 
+async function fetchCatalog() {
+  try {
+    const entries = await catalog.listDiscord()
+    catalogMints.value = entries.map((r) => ({
+      id: r.id,
+      asset_id: r.mint,
+      kind: r.kind,
+      label: (r.label ?? r.name ?? r.mint) ?? '',
+      symbol: null,
+      image: r.image,
+      decimals: (r as { decimals?: number | null }).decimals ?? null,
+      trait_keys: (r.trait_index as { trait_keys?: string[] } | null)?.trait_keys ?? [],
+      trait_options: (r.trait_index as { trait_options?: Record<string, string[]> } | null)?.trait_options ?? {},
+      track_holders: (r as { track_holders?: boolean }).track_holders ?? false,
+      track_snapshot: (r as { track_snapshot?: boolean }).track_snapshot ?? false,
+      track_transactions: (r as { track_transactions?: boolean }).track_transactions ?? false,
+    }))
+  } catch {
+    catalogMints.value = []
+  }
+}
+
 const {
-  filteredItems: rulesCatalogFilteredItems,
-  filter: rulesCatalogFilter,
-  setFilter: setRulesCatalogFilter,
+  items: rulesCatalogItems,
   loading: rulesCatalogLoading,
   error: rulesCatalogError,
   fetchCatalog: fetchRulesCatalog,
-  deleteConditionSet,
 } = useConditionSetCatalog({
   catalogMints: catalogMintsRef,
   gateLists,
 })
 
-const tenantId = computed(() => useTenantStore().tenantId)
-
-const editorOpen = ref(false)
-const editingSetId = ref<number | null>(null)
-const guildRoles = ref<Array<{ role_id: string; name: string }>>([])
-const guildRolesAll = ref<Array<{ role_id: string; name: string }>>([])
-const catalogMintsLoading = ref(false)
 const inviteUrl = ref<string | null>(null)
 const server = ref<{
   connected: boolean
@@ -117,6 +152,27 @@ const guildIdInput = ref('')
 const linking = ref(false)
 const disconnecting = ref(false)
 const linkError = ref<string | null>(null)
+
+const roleCards = ref<RoleCard[]>([])
+const guildRoles = ref<Array<{ role_id: string; name: string }>>([])
+
+const quickAssignOpen = ref(false)
+const quickAssignSetId = ref<number | null>(null)
+const quickAssignRoleId = ref('')
+const quickAssignMinPercent = ref('')
+const assigning = ref(false)
+
+const assignedRoleIds = computed(() => new Set(roleCards.value.map((c) => c.role_id)))
+
+const guildRoleOptions = computed(() =>
+  guildRoles.value
+    .filter((r) => !assignedRoleIds.value.has(r.role_id))
+    .map((r) => ({ value: r.role_id, label: r.name }))
+)
+
+const selectedRuleForAssign = computed(() =>
+  rulesCatalogItems.value.find((r) => r.id === quickAssignSetId.value)
+)
 
 async function fetchInviteUrl() {
   const id = tenantId.value
@@ -147,13 +203,10 @@ async function fetchServer() {
     : { connected: false }
 }
 
-const catalog = useTenantCatalog()
-
 async function fetchGuildRoles() {
   const guildId = server.value.discord_guild_id
   if (!guildId) {
     guildRoles.value = []
-    guildRolesAll.value = []
     return
   }
   const supabase = useSupabase()
@@ -162,11 +215,6 @@ async function fetchGuildRoles() {
     .select('role_id, name, position')
     .eq('discord_guild_id', guildId)
     .order('position')
-  const all = (data ?? []).map((r) => ({
-    role_id: r.role_id as string,
-    name: (r.name as string) ?? '',
-  }))
-  guildRolesAll.value = all
   const botPos = server.value.bot_role_position
   const assignable = (data ?? []).filter((r) => {
     const pos = (r.position as number) ?? 0
@@ -178,31 +226,17 @@ async function fetchGuildRoles() {
   }))
 }
 
-async function fetchMints() {
-  if (!server.value.connected) return
+async function fetchRoleCards() {
   const id = tenantId.value
   if (!id) return
-  catalogMintsLoading.value = true
   try {
-    const entries = await catalog.listDiscord()
-    catalogMints.value = entries.map((r) => ({
-      id: r.id,
-      asset_id: r.mint,
-      kind: r.kind,
-      label: (r.label ?? r.name ?? r.mint) ?? '',
-      symbol: null,
-      image: r.image,
-      decimals: (r as { decimals?: number | null }).decimals ?? null,
-      trait_keys: (r.trait_index as { trait_keys?: string[] } | null)?.trait_keys ?? [],
-      trait_options: (r.trait_index as { trait_options?: Record<string, string[]> } | null)?.trait_options ?? {},
-      track_discord: (r as { track_discord?: boolean }).track_discord ?? false,
-      track_snapshot: (r as { track_snapshot?: boolean }).track_snapshot ?? false,
-      track_transactions: (r as { track_transactions?: boolean }).track_transactions ?? false,
-    }))
+    const supabase = useSupabase()
+    const { data } = await supabase.functions.invoke('discord-server', {
+      body: { action: 'role-cards', tenantId: id, includeAdminFields: true },
+    })
+    roleCards.value = (data as { cards?: RoleCard[] }).cards ?? []
   } catch {
-    catalogMints.value = []
-  } finally {
-    catalogMintsLoading.value = false
+    roleCards.value = []
   }
 }
 
@@ -212,7 +246,7 @@ async function load() {
   try {
     await Promise.all([fetchInviteUrl(), fetchServer()])
     if (server.value.connected) {
-      await Promise.all([fetchMints(), fetchGuildRoles(), fetchGateLists()])
+      await Promise.all([fetchCatalog(), fetchGuildRoles(), fetchGateLists(), fetchRoleCards(), fetchRulesCatalog()])
     }
   } finally {
     loading.value = false
@@ -236,7 +270,7 @@ async function onLink(payload: { guildId: string }) {
     }
     guildIdInput.value = ''
     await fetchServer()
-    await Promise.all([fetchMints(), fetchGuildRoles(), fetchGateLists()])
+    await Promise.all([fetchCatalog(), fetchGuildRoles(), fetchGateLists(), fetchRoleCards(), fetchRulesCatalog()])
   } finally {
     linking.value = false
   }
@@ -252,46 +286,87 @@ async function disconnect() {
       body: { action: 'unlink', tenantId: id },
     })
     server.value = { connected: false }
+    roleCards.value = []
   } finally {
     disconnecting.value = false
   }
 }
 
-const emit = defineEmits<{ 'conditions-changed': [conditions: { holders_current: number }] }>()
-
-const discordCatalogItems = computed<CatalogMintItem[]>(() =>
-  catalogMints.value.map((m) => ({
-    id: m.id,
-    mint: m.asset_id,
-    kind: m.kind,
-    label: m.label,
-    symbol: m.symbol,
-    image: m.image,
-    decimals: m.decimals,
-    traitKeys: m.trait_keys,
-    traitTypes: m.trait_keys,
-    track_discord: m.track_discord ?? false,
-    track_snapshot: m.track_snapshot ?? false,
-    track_transactions: m.track_transactions ?? false,
-  }))
-)
-
-const showMintModal = ref(false)
-const selectedMint = ref<CatalogMintItem | null>(null)
-
-function onInspectMint(item: CatalogMintItem) {
-  selectedMint.value = item
-  showMintModal.value = true
+function onEditCard(card: RoleCard) {
+  const setId = card.condition_set_id
+  if (setId != null) {
+    navigateTo({ path: '/admin', query: { ...route.query, tab: 'conditions', edit: String(setId) } })
+  }
 }
 
-function openEditor(setId: number | null) {
-  editingSetId.value = setId
-  editorOpen.value = true
+async function onDeleteCard(card: RoleCard) {
+  const ruleId = card.rule_id
+  if (ruleId == null) return
+  if (!confirm('Remove this role rule?')) return
+  const supabase = useSupabase()
+  await supabase.from('discord_role_rules').delete().eq('id', ruleId)
+  await fetchRoleCards()
 }
 
-watch(catalogMints, (mints) => {
-  emit('conditions-changed', { holders_current: mints.length })
-}, { immediate: true })
+function openQuickAssignModal() {
+  quickAssignSetId.value = null
+  quickAssignRoleId.value = ''
+  quickAssignMinPercent.value = ''
+  quickAssignOpen.value = true
+}
+
+function goToConditions() {
+  quickAssignOpen.value = false
+  navigateTo({ path: route.path, query: { ...route.query, tab: 'conditions' } })
+}
+
+function goToConditionsEdit(setId: number) {
+  quickAssignOpen.value = false
+  navigateTo({ path: route.path, query: { ...route.query, tab: 'conditions', edit: String(setId) } })
+}
+
+async function onQuickAssignSave() {
+  const setId = quickAssignSetId.value
+  const roleId = quickAssignRoleId.value?.trim()
+  const guildId = server.value.discord_guild_id
+  if (!setId || !roleId || !guildId) return
+
+  assigning.value = true
+  try {
+    const supabase = useSupabase()
+    const { error } = await supabase.from('discord_role_rules').insert({
+      discord_guild_id: guildId,
+      discord_role_id: roleId,
+      condition_set_id: setId,
+    })
+    if (error) throw new Error(error.message)
+
+    const minPercent = Math.max(0, Math.min(100, Math.floor(Number(quickAssignMinPercent.value) || 0)))
+    if (minPercent > 0 && selectedRuleForAssign.value?.ruleType === 'weighted') {
+      const { data: conditions } = await supabase
+        .from('condition_set_conditions')
+        .select('id, payload')
+        .eq('condition_set_id', setId)
+        .eq('type', 'TIME_WEIGHTED')
+      const tw = (conditions ?? [])[0]
+      if (tw) {
+        const payload = (tw.payload as Record<string, unknown>) ?? {}
+        await supabase
+          .from('condition_set_conditions')
+          .update({ payload: { ...payload, min_percent: minPercent } })
+          .eq('id', tw.id)
+      }
+    }
+
+    quickAssignOpen.value = false
+    await fetchRoleCards()
+    await fetchRulesCatalog()
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Failed to assign')
+  } finally {
+    assigning.value = false
+  }
+}
 
 watch(
   () => tenantId.value,
@@ -313,21 +388,45 @@ onMounted(() => {
 .discord-settings {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--theme-space-lg);
 }
 
-.discord-settings__badges {
+.discord-settings__cards {
+  margin-top: var(--theme-space-md);
+}
+
+.discord-quick-assign {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--theme-space-xs);
-  align-items: center;
+  flex-direction: column;
+  gap: var(--theme-space-lg);
+  min-width: 20rem;
 }
 
-.discord-settings__badge {
-  font-size: var(--theme-font-xs);
-  padding: 2px 6px;
-  border-radius: var(--theme-radius-sm);
-  background: var(--theme-bg-secondary);
-  color: var(--theme-text-secondary);
+.discord-quick-assign__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-md);
+}
+
+.discord-quick-assign__link {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+}
+
+.discord-quick-assign__link a {
+  color: var(--theme-primary);
+  text-decoration: none;
+}
+
+.discord-quick-assign__link a:hover {
+  text-decoration: underline;
+}
+
+.discord-quick-assign__spinner {
+  animation: discord-spin 1s linear infinite;
+}
+
+@keyframes discord-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

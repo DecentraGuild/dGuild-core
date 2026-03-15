@@ -35,7 +35,7 @@ Deno.serve(async (req: Request) => {
     if (action === 'catalog') {
       const { data: watches, error: watchesError } = await db
         .from('watchtower_watches')
-        .select('mint, track_discord, track_snapshot, track_transactions')
+        .select('mint, track_holders, track_snapshot, track_transactions')
         .eq('tenant_id', tenantId)
 
       if (watchesError) return errorResponse(watchesError.message, req, 500)
@@ -82,7 +82,7 @@ Deno.serve(async (req: Request) => {
           label,
           name,
           image,
-          track_holders: watchMap.get(row.mint as string)?.track_discord ?? false,
+          track_holders: watchMap.get(row.mint as string)?.track_holders ?? false,
           track_snapshot: watchMap.get(row.mint as string)?.track_snapshot ?? false,
           track_transactions: watchMap.get(row.mint as string)?.track_transactions ?? false,
         }
@@ -119,7 +119,7 @@ Deno.serve(async (req: Request) => {
           .maybeSingle(),
         db
           .from('watchtower_watches')
-          .select('track_discord, track_snapshot, track_transactions')
+          .select('track_holders, track_snapshot, track_transactions')
           .eq('tenant_id', tenantId)
           .eq('mint', mint)
           .maybeSingle(),
@@ -154,13 +154,13 @@ Deno.serve(async (req: Request) => {
       }
       if (!catalogRow) return errorResponse('Mint not found in catalog', req, 404)
 
-      const watch = watchRow as { track_discord?: boolean; track_snapshot?: boolean; track_transactions?: boolean } | null
-      const [holdersWithinDiscord, holdersWithinSnapshot] = await Promise.all([
-        watch?.track_discord ? isMintWithinLimit(db, tenantId, mint, 'holders_current') : Promise.resolve(true),
+      const watch = watchRow as { track_holders?: boolean; track_snapshot?: boolean; track_transactions?: boolean } | null
+      const [holdersWithinCurrent, holdersWithinSnapshot] = await Promise.all([
+        watch?.track_holders ? isMintWithinLimit(db, tenantId, mint, 'mints_current') : Promise.resolve(true),
         watch?.track_snapshot ? isMintWithinLimit(db, tenantId, mint, 'mintsSnapshot') : Promise.resolve(true),
       ])
       const rawHolders = (holderSnapshot as { holder_wallets?: Array<{ wallet?: string; amount?: string } | string> } | null)?.holder_wallets ?? []
-      const holders = holdersWithinDiscord
+      const holders = holdersWithinCurrent
         ? rawHolders
             .map((h) => (typeof h === 'string' ? { wallet: h, amount: '1' } : { wallet: h.wallet ?? '', amount: h.amount ?? '1' }))
             .filter((h) => h.wallet)
@@ -230,7 +230,7 @@ Deno.serve(async (req: Request) => {
 
       const holder = holderSnapshot as { last_updated?: string } | null
       const graceMessage =
-        (watch?.track_discord && !holdersWithinDiscord) || (watch?.track_snapshot && !holdersWithinSnapshot)
+        (watch?.track_holders && !holdersWithinCurrent) || (watch?.track_snapshot && !holdersWithinSnapshot)
           ? 'Pay to activate this track'
           : undefined
       return jsonResponse({
@@ -249,7 +249,7 @@ Deno.serve(async (req: Request) => {
         editionNonce,
         tokenStandard,
         traitTypes,
-        track_holders: watch?.track_discord ?? false,
+        track_holders: watch?.track_holders ?? false,
         track_snapshot: watch?.track_snapshot ?? false,
         track_transactions: watch?.track_transactions ?? false,
         holders: holders.map((h) => ({ wallet: h.wallet, amount: h.amount })),

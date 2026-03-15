@@ -19,7 +19,10 @@
         class="raffle-mint-row__input"
         required
       />
-      <AddressBookBrowser kind="SPL" @select="(mint) => { form.ticketMint = mint }" />
+      <Button variant="outline" size="sm" @click="addressBookModalOpen = true">
+        <Icon icon="lucide:book-open" />
+        Browse
+      </Button>
     </div>
     <FormInput
       v-model="form.ticketPriceDisplay"
@@ -55,16 +58,26 @@
       </slot>
     </div>
   </form>
+
+  <AddressBookModal
+    v-if="addressBookModalOpen"
+    v-model="addressBookModalOpen"
+    kind="SPL"
+    @select="(m) => (form.ticketMint = m)"
+  />
 </template>
 
 <script setup lang="ts">
 import { getGateLabel } from '@decentraguild/config'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import { Button } from '~/components/ui/button'
+import { Icon } from '@iconify/vue'
 import GateSelect from '~/components/gates/GateSelect.vue'
-import AddressBookBrowser from '~/components/shared/AddressBookBrowser.vue'
+import AddressBookModal from '~/components/shared/AddressBookModal.vue'
 
 const gateLabel = getGateLabel()
+
+const addressBookModalOpen = ref(false)
 
 defineProps<{
   form: {

@@ -3,6 +3,7 @@
     <div class="condition-set-catalog__header">
       <h5 class="condition-set-catalog__title">Rules catalog</h5>
       <Button
+        v-if="!hideCreateButton"
         variant="default"
         size="sm"
         class="condition-set-catalog__new"
@@ -13,33 +14,35 @@
       </Button>
     </div>
     <div v-if="showFilter" class="condition-set-catalog__tabs">
-      <button
-        type="button"
-        class="condition-set-catalog__tab"
-        :class="{ 'condition-set-catalog__tab--active': filter === 'all' }"
-        @click="emit('update:filter', 'all')"
-      >
-        All
-      </button>
-      <button
-        type="button"
-        class="condition-set-catalog__tab"
-        :class="{ 'condition-set-catalog__tab--active': filter === 'discord' }"
-        @click="emit('update:filter', 'discord')"
-      >
-        Discord
-      </button>
-      <button
-        type="button"
-        class="condition-set-catalog__tab"
-        :class="{ 'condition-set-catalog__tab--active': filter === 'weighted' }"
-        @click="emit('update:filter', 'weighted')"
-      >
-        Weighted
-      </button>
+      <div class="condition-set-catalog__tabs-pills">
+        <button
+          type="button"
+          class="condition-set-catalog__tab"
+          :class="{ 'condition-set-catalog__tab--active': filter === 'all' }"
+          @click="emit('update:filter', 'all')"
+        >
+          All
+        </button>
+        <button
+          type="button"
+          class="condition-set-catalog__tab"
+          :class="{ 'condition-set-catalog__tab--active': filter === 'discord' }"
+          @click="emit('update:filter', 'discord')"
+        >
+          Discord
+        </button>
+        <button
+          type="button"
+          class="condition-set-catalog__tab"
+          :class="{ 'condition-set-catalog__tab--active': filter === 'weighted' }"
+          @click="emit('update:filter', 'weighted')"
+        >
+          Weighted
+        </button>
+      </div>
     </div>
     <p class="condition-set-catalog__hint">
-      Click a rule to select it. Use edit to change, trash to delete.
+      {{ hideDeleteButton ? 'Click a rule to select it. Use edit to change.' : 'Click a rule to select it. Use edit to change, trash to delete.' }}
     </p>
 
     <div v-if="loading" class="condition-set-catalog__loading">
@@ -49,9 +52,9 @@
 
     <p v-else-if="error" class="condition-set-catalog__error">{{ error }}</p>
 
-    <ul v-else-if="items.length" class="condition-set-catalog__list">
+    <ul v-else-if="displayItems.length" class="condition-set-catalog__list">
       <li
-        v-for="item in items"
+        v-for="item in displayItems"
         :key="item.id"
         class="condition-set-catalog__item"
         :class="{ 'condition-set-catalog__item--active': item.id === activeId }"
@@ -75,39 +78,43 @@
             </span>
           </div>
         </button>
-        <Button
-          variant="ghost"
-          size="icon"
-          class="condition-set-catalog__edit"
-          aria-label="Edit rule"
-          @click.stop="emit('edit', item)"
-        >
-          <Icon icon="lucide:pencil" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          class="condition-set-catalog__trash"
-          aria-label="Delete rule"
-          @click.stop="emit('delete', item)"
-        >
-          <Icon icon="lucide:trash-2" />
-        </Button>
+        <div class="condition-set-catalog__actions">
+          <Button
+            variant="ghost"
+            size="icon"
+            class="condition-set-catalog__edit"
+            aria-label="Edit rule"
+            @click.stop="emit('edit', item)"
+          >
+            <Icon icon="lucide:pencil" />
+          </Button>
+          <Button
+            v-if="!hideDeleteButton"
+            variant="ghost"
+            size="icon"
+            class="condition-set-catalog__trash"
+            aria-label="Delete rule"
+            @click.stop="emit('delete', item)"
+          >
+            <Icon icon="lucide:trash-2" />
+          </Button>
+        </div>
       </li>
     </ul>
 
     <p v-else class="condition-set-catalog__empty">
-      No rules in catalog.
+      {{ filterUnassigned && items.length > 0 ? 'No unassigned rules.' : 'No rules in catalog.' }}
     </p>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { Button } from '~/components/ui/button'
 import type { ConditionSetItem } from '~/composables/conditions/useConditionSetCatalog'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     items: ConditionSetItem[]
     loading: boolean
@@ -115,9 +122,18 @@ withDefaults(
     activeId?: number | null
     filter?: 'all' | 'discord' | 'weighted'
     showFilter?: boolean
+    filterUnassigned?: boolean
+    hideCreateButton?: boolean
+    /** When true, only show edit button (no delete). Use in selection modals. */
+    hideDeleteButton?: boolean
   }>(),
-  { filter: 'all', showFilter: false }
+  { filter: 'all', showFilter: false, filterUnassigned: false, hideCreateButton: false, hideDeleteButton: false }
 )
+
+const displayItems = computed(() => {
+  if (!props.filterUnassigned) return props.items
+  return props.items.filter((i) => !i.discordRoleId)
+})
 
 const emit = defineEmits<{
   select: [item: ConditionSetItem]
@@ -157,30 +173,35 @@ const emit = defineEmits<{
 }
 
 .condition-set-catalog__tabs {
-  display: flex;
-  gap: 2px;
-  margin-bottom: var(--theme-space-xs);
+  margin-bottom: var(--theme-space-sm);
+}
+
+.condition-set-catalog__tabs-pills {
+  display: inline-flex;
+  padding: 2px;
+  background-color: var(--theme-bg-muted);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
 }
 
 .condition-set-catalog__tab {
-  padding: 4px 10px;
-  font-size: var(--theme-font-xs);
+  padding: 6px 12px;
+  font-size: var(--theme-font-sm);
   font-weight: 500;
   color: var(--theme-text-muted);
   background: none;
   border: none;
-  border-radius: var(--theme-radius-sm);
+  border-radius: calc(var(--theme-radius-md) - 2px);
   cursor: pointer;
 }
 
 .condition-set-catalog__tab:hover {
   color: var(--theme-text-primary);
-  background: var(--theme-bg-muted);
 }
 
 .condition-set-catalog__tab--active {
   color: var(--theme-primary);
-  background: var(--theme-bg-muted);
+  background-color: var(--theme-bg-primary);
 }
 
 .condition-set-catalog__hint {
@@ -217,62 +238,52 @@ const emit = defineEmits<{
   padding: 0;
   margin: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-sm);
 }
 
 .condition-set-catalog__item {
   display: flex;
   align-items: center;
-  gap: var(--theme-space-sm);
-  border-bottom: var(--theme-border-thin) solid var(--theme-border);
+  gap: var(--theme-space-md);
+  padding: var(--theme-space-md);
+  background-color: var(--theme-bg-secondary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.condition-set-catalog__item:hover {
+  background-color: var(--theme-bg-muted);
+  border-color: var(--theme-border);
+}
+
+.condition-set-catalog__item--active {
+  border-color: var(--theme-primary);
+  background-color: var(--theme-bg-muted);
 }
 
 .condition-set-catalog__item-btn {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: var(--theme-space-sm);
+  gap: var(--theme-space-md);
   width: 100%;
-  padding: var(--theme-space-sm) 0;
+  padding: 0;
   background: none;
   border: none;
   font: inherit;
   color: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: var(--theme-radius-md);
-}
-
-.condition-set-catalog__item-btn:hover {
-  background: var(--theme-bg-muted);
-}
-
-.condition-set-catalog__edit,
-.condition-set-catalog__trash {
-  flex-shrink: 0;
-  color: var(--theme-text-muted);
-}
-
-.condition-set-catalog__edit:hover {
-  color: var(--theme-primary);
-}
-
-.condition-set-catalog__trash:hover {
-  color: var(--theme-error);
-}
-
-.condition-set-catalog__item:last-child {
-  border-bottom: none;
-}
-
-.condition-set-catalog__item--active .condition-set-catalog__item-btn {
-  background: var(--theme-bg-muted);
-  color: var(--theme-primary);
+  min-width: 0;
 }
 
 .condition-set-catalog__icon {
   flex-shrink: 0;
   color: var(--theme-text-muted);
-  font-size: 1rem;
+  font-size: 1.25rem;
 }
 
 .condition-set-catalog__item--active .condition-set-catalog__icon {
@@ -284,7 +295,7 @@ const emit = defineEmits<{
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--theme-space-xs);
 }
 
 .condition-set-catalog__name-row {
@@ -295,7 +306,7 @@ const emit = defineEmits<{
 }
 
 .condition-set-catalog__name {
-  font-size: var(--theme-font-sm);
+  font-size: var(--theme-font-md);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -310,6 +321,26 @@ const emit = defineEmits<{
   flex-wrap: wrap;
   align-items: center;
   gap: var(--theme-space-xs);
+}
+
+.condition-set-catalog__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  flex-shrink: 0;
+}
+
+.condition-set-catalog__edit,
+.condition-set-catalog__trash {
+  color: var(--theme-text-muted);
+}
+
+.condition-set-catalog__edit:hover {
+  color: var(--theme-primary);
+}
+
+.condition-set-catalog__trash:hover {
+  color: var(--theme-error);
 }
 
 .condition-set-catalog__discord-badge {

@@ -3,7 +3,8 @@
   <div class="admin__split">
     <div class="admin__panel">
       <Card>
-        <GateSelectRow
+        <GateSelectRowModule
+          layout="stacked"
           :slug="tenant?.slug ?? tenant?.id ?? null"
           :model-value="form.defaultGate"
           :title="`${gateLabel} your Community`"

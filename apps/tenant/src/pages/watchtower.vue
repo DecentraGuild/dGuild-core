@@ -55,11 +55,11 @@
                 <div class="watchtower-page__card-body">
                   <h4 class="watchtower-page__card-name">{{ entry.label ?? truncateAddress(entry.mint, 8, 6) }}</h4>
                   <code class="watchtower-page__card-addr">{{ truncateAddress(entry.mint, 8, 6) }}</code>
-                  <div class="watchtower-page__card-badges">
-                    <span v-if="entry.track_holders" class="watchtower-page__badge">Holders</span>
-                    <span v-if="entry.track_snapshot" class="watchtower-page__badge">Snapshot</span>
-                    <span v-if="entry.track_transactions" class="watchtower-page__badge">Transactions</span>
-                  </div>
+                  <TrackIndicators
+                    :track-holders="entry.track_holders"
+                    :track-snapshot="entry.track_snapshot"
+                    :track-transactions="entry.track_transactions"
+                  />
                 </div>
                 <Icon icon="lucide:chevron-right" class="watchtower-page__card-arrow" />
               </Card>
@@ -84,11 +84,11 @@
                 <div class="watchtower-page__card-body">
                   <h4 class="watchtower-page__card-name">{{ entry.label ?? truncateAddress(entry.mint, 8, 6) }}</h4>
                   <code class="watchtower-page__card-addr">{{ truncateAddress(entry.mint, 8, 6) }}</code>
-                  <div class="watchtower-page__card-badges">
-                    <span v-if="entry.track_holders" class="watchtower-page__badge">Holders</span>
-                    <span v-if="entry.track_snapshot" class="watchtower-page__badge">Snapshot</span>
-                    <span v-if="entry.track_transactions" class="watchtower-page__badge">Transactions</span>
-                  </div>
+                  <TrackIndicators
+                    :track-holders="entry.track_holders"
+                    :track-snapshot="entry.track_snapshot"
+                    :track-transactions="entry.track_transactions"
+                  />
                 </div>
                 <Icon icon="lucide:chevron-right" class="watchtower-page__card-arrow" />
               </Card>
@@ -118,6 +118,7 @@ import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { isModuleVisibleToMembers } from '@decentraguild/core'
 import MintDetailModal from '~/components/mint/MintDetailModal/index.vue'
+import TrackIndicators from '~/components/mint/TrackIndicators.vue'
 
 const tenantStore = useTenantStore()
 const watchtowerVisible = computed(() =>
@@ -359,20 +360,6 @@ function openMint(entry: CatalogEntry) {
   color: var(--theme-text-muted);
   display: block;
   margin-bottom: var(--theme-space-xs);
-}
-
-.watchtower-page__card-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--theme-space-xs);
-}
-
-.watchtower-page__badge {
-  font-size: var(--theme-font-xs);
-  padding: 2px 6px;
-  border-radius: var(--theme-radius-sm);
-  background: var(--theme-bg-muted);
-  color: var(--theme-text-secondary);
 }
 
 .watchtower-page__card-arrow {

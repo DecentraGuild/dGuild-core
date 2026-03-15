@@ -69,8 +69,8 @@ export interface CatalogMint {
   decimals: number | null
   trait_keys: string[] | null
   trait_options: Record<string, string[]> | null
-  /** Holders track (15min–6hr sync for role rules). */
-  track_discord?: boolean
+  /** Current holders track (short refresh rate for conditions, shipment, Discord). */
+  track_holders?: boolean
   /** Snapshot track (daily holder snapshots). */
   track_snapshot?: boolean
   /** Transactions track (coming soon). */
@@ -101,10 +101,10 @@ export interface CatalogMintItem {
   traitKeys?: string[] | null
   _loading?: boolean
   _error?: string
-  /** Holders track enabled (Discord mint catalog). */
-  track_discord?: boolean
-  /** Snapshot track enabled (Discord mint catalog). */
+  /** Current holders track enabled. */
+  track_holders?: boolean
+  /** Snapshot track enabled. */
   track_snapshot?: boolean
-  /** Transactions track enabled (Discord mint catalog). */
+  /** Transactions track enabled. */
   track_transactions?: boolean
 }

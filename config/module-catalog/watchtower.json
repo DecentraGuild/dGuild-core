@@ -4,12 +4,12 @@
   "name": "Watchtower",
   "icon": "mdi:tower-fire",
   "image": null,
-  "shortDescription": "Track current holder, take daily snapshots and use these for Discord roles and airdrops.",
-  "longDescription": "Watchtower lets you enable per-mint tracking: Current holders (15min–6hr sync for role rules and holder data), Snapshot (daily holder snapshots), and Transactions (coming soon). Each track is independently billable.",
-  "detailedDescription": "Enable Discord track for mints used in Discord role rules. Enable Snapshot track for daily holder snapshots. Transactions track is coming soon. Pricing: 5 USDC/month per mint for Discord, 5 USDC/month per mint for Snapshot, 20 USDC/month per mint for Transactions.",
+  "shortDescription": "Track current holders, take daily snapshots. Use in conditions, shipment, Discord roles, and airdrops.",
+  "longDescription": "Watchtower lets you enable per-mint tracking: Current holders (short refresh rate for conditions, shipment, Discord), Snapshot (daily holder snapshots), and Transactions (coming soon). Each track is independently billable.",
+  "detailedDescription": "Enable Current holders track for per-mint holder data at short refresh rate. Usable in conditions, shipment, and Discord roles. Snapshot track for daily holder snapshots. Transactions track is coming soon. Pricing: 5 USDC/month per mint for Current holders, 5 USDC/month per mint for Snapshot, 20 USDC/month per mint for Transactions.",
   "keyInfo": [
-    "Per-mint track toggles (Holders, Snapshot, Transactions)",
-    "Holders: 5 USDC/month per mint",
+    "Per-mint track toggles (Current holders, Snapshot, Transactions)",
+    "Current holders: 5 USDC/month per mint",
     "Snapshot: 5 USDC/month per mint",
     "Transactions: 20 USDC/month per mint (coming soon)",
     "Member page to view holder snapshots and results"
@@ -21,24 +21,24 @@
     "intro": "Enable tracking for mints in your address book.",
     "steps": [
       "Add mints in Admin > Address Book",
-      "Enable Holders, Snapshot, or Transactions per mint in Watchtower",
+      "Enable Current holders, Snapshot, or Transactions per mint in Watchtower",
       "Review pricing and deploy"
     ],
-    "note": "Holders track is required for mints used in Discord role rules."
+    "note": "Current holders track powers conditions, shipment, and Discord roles. Enable it for mints used in those features."
   },
   "pricing": {
     "modelType": "tiered_addons",
-    "conditionKeys": ["holders_current", "mintsSnapshot", "mintsTransactions"],
+    "conditionKeys": ["mints_current", "mintsSnapshot", "mintsTransactions"],
     "tiers": [
       {
         "id": "tier1",
         "name": "Watchtower",
         "recurringPrice": 0,
-        "included": { "holders_current": 0, "mintsSnapshot": 0, "mintsTransactions": 0 }
+        "included": { "mints_current": 0, "mintsSnapshot": 0, "mintsTransactions": 0 }
       }
     ],
     "addons": [
-      { "conditionKey": "holders_current", "name": "Holders (per mint)", "unitSize": 1, "recurringPricePerUnit": 0.0005 },
+      { "conditionKey": "mints_current", "name": "Current holders (per mint)", "unitSize": 1, "recurringPricePerUnit": 0.0005 },
       { "conditionKey": "mintsSnapshot", "name": "Snapshot track (per mint)", "unitSize": 1, "recurringPricePerUnit": 0.0005 },
       { "conditionKey": "mintsTransactions", "name": "Transactions track (per mint)", "unitSize": 1, "recurringPricePerUnit": 0.0020 }
     ],

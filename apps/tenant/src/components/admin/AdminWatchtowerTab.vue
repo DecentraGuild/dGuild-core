@@ -2,7 +2,8 @@
   <div class="admin__split">
     <div class="admin__panel">
       <Card>
-        <GateSelectRow
+        <GateSelectRowModule
+          layout="stacked"
           :slug="slug"
           :model-value="gateFormValue"
           title="Who can see Watchtower"
@@ -20,7 +21,7 @@
         />
         <h3>Watchtower</h3>
         <p class="watchtower-tab__hint">
-          Enable tracking per mint. Holders powers role rules and Discord sync (15min–6hr). Snapshot provides daily holder snapshots. Transactions track is coming soon.
+          Enable tracking per mint. Current holders: short refresh rate for conditions, shipment, Discord. Snapshot: daily holder snapshots. Transactions track is coming soon.
         </p>
 
         <div v-if="loading" class="watchtower-tab__loading">
@@ -46,10 +47,10 @@
                 <label class="watchtower-tab__check">
                   <input
                     type="checkbox"
-                    :checked="watchesByMint[mint.mint]?.track_discord ?? false"
-                    @change="onTrackChange(mint.mint, 'track_discord', ($event.target as HTMLInputElement).checked)"
+                    :checked="watchesByMint[mint.mint]?.track_holders ?? false"
+                    @change="onTrackChange(mint.mint, 'track_holders', ($event.target as HTMLInputElement).checked)"
                   />
-                  <span>Holders</span>
+                  <span>Current holders</span>
                 </label>
                 <label class="watchtower-tab__check">
                   <input
@@ -213,10 +214,10 @@ interface MintRow {
 
 interface WatchRow {
   mint: string
-  track_discord: boolean
+  track_holders: boolean
   track_snapshot: boolean
   track_transactions: boolean
-  enabled_at_discord: string | null
+  enabled_at_holders: string | null
   enabled_at_snapshot: string | null
   enabled_at_transactions: string | null
 }
@@ -224,11 +225,11 @@ interface WatchRow {
 const mints = ref<MintRow[]>([])
 const watches = ref<WatchRow[]>([])
 
-const storedConditionsSnapshot = computed((): { holders_current: number; mintsSnapshot: number; mintsTransactions: number } | null => {
+const storedConditionsSnapshot = computed((): { mints_current: number; mintsSnapshot: number; mintsTransactions: number } | null => {
   const scope = byScope.value
   if (!scope) return null
   return {
-    holders_current: scope.holders_current?.conditionsSnapshot?.holders_current ?? 0,
+    mints_current: scope.mints_current?.conditionsSnapshot?.mints_current ?? 0,
     mintsSnapshot: scope.mintsSnapshot?.conditionsSnapshot?.mintsSnapshot ?? 0,
     mintsTransactions: scope.mintsTransactions?.conditionsSnapshot?.mintsTransactions ?? 0,
   }
@@ -243,15 +244,15 @@ const watchesByMint = computed(() => {
 })
 
 const liveConditions = computed(() => {
-  let holders_current = 0
+  let mints_current = 0
   let mintsSnapshot = 0
   let mintsTransactions = 0
   for (const w of watches.value) {
-    if (w.track_discord) holders_current++
+    if (w.track_holders) mints_current++
     if (w.track_snapshot) mintsSnapshot++
     if (w.track_transactions) mintsTransactions++
   }
-  return { holders_current, mintsSnapshot, mintsTransactions }
+  return { mints_current, mintsSnapshot, mintsTransactions }
 })
 
 const byScope = computed((): WatchtowerSubscriptionByScope | null => {
@@ -278,7 +279,7 @@ function entitledForTrack(scopeKey: string): number {
 }
 
 const _trackLimits = computed(() => ({
-  track_discord: { entitled: entitledForTrack('holders_current'), active: isTrackActive('holders_current') },
+  track_holders: { entitled: entitledForTrack('mints_current'), active: isTrackActive('mints_current') },
   track_snapshot: { entitled: entitledForTrack('mintsSnapshot'), active: isTrackActive('mintsSnapshot') },
   track_transactions: { entitled: entitledForTrack('mintsTransactions'), active: isTrackActive('mintsTransactions') },
 }))
@@ -286,8 +287,8 @@ const _trackLimits = computed(() => ({
 const showGraceHint = computed(() => {
   const live = liveConditions.value
   const stored = storedConditionsSnapshot.value
-  if (!stored) return live.holders_current > 0 || live.mintsSnapshot > 0 || live.mintsTransactions > 0
-  return live.holders_current > stored.holders_current || live.mintsSnapshot > stored.mintsSnapshot || live.mintsTransactions > stored.mintsTransactions
+  if (!stored) return live.mints_current > 0 || live.mintsSnapshot > 0 || live.mintsTransactions > 0
+  return live.mints_current > stored.mints_current || live.mintsSnapshot > stored.mintsSnapshot || live.mintsTransactions > stored.mintsTransactions
 })
 
 const widgetSubscription = computed((): SubscriptionInfo | null => {
@@ -318,7 +319,7 @@ async function fetchData() {
     const catalogMints = catalogRows.map((r) => r.mint as string)
 
     const [watchesRes, metaData] = await Promise.all([
-      supabase.from('watchtower_watches').select('mint, track_discord, track_snapshot, track_transactions, enabled_at_discord, enabled_at_snapshot, enabled_at_transactions').eq('tenant_id', id),
+      supabase.from('watchtower_watches').select('mint, track_holders, track_snapshot, track_transactions, enabled_at_holders, enabled_at_snapshot, enabled_at_transactions').eq('tenant_id', id),
       catalogMints.length > 0
         ? supabase.from('mint_metadata').select('mint, name, image').in('mint', catalogMints).then((r) => r.data ?? [])
         : Promise.resolve([] as Array<{ mint: string; name: string | null; image: string | null }>),
@@ -342,10 +343,10 @@ async function fetchData() {
       })
     watches.value = (watchesRes.data ?? []).map((r) => ({
       mint: r.mint as string,
-      track_discord: Boolean(r.track_discord),
+      track_holders: Boolean(r.track_holders),
       track_snapshot: Boolean(r.track_snapshot),
       track_transactions: Boolean(r.track_transactions),
-      enabled_at_discord: (r.enabled_at_discord as string) ?? null,
+      enabled_at_holders: (r.enabled_at_holders as string) ?? null,
       enabled_at_snapshot: (r.enabled_at_snapshot as string) ?? null,
       enabled_at_transactions: (r.enabled_at_transactions as string) ?? null,
     }))
@@ -364,15 +365,15 @@ async function fetchData() {
   }
 }
 
-function onTrackChange(mint: string, field: 'track_discord' | 'track_snapshot' | 'track_transactions', value: boolean) {
+function onTrackChange(mint: string, field: 'track_holders' | 'track_snapshot' | 'track_transactions', value: boolean) {
   const existing = watchesByMint.value[mint]
   const now = new Date().toISOString()
   const next: WatchRow = {
     mint,
-    track_discord: field === 'track_discord' ? value : (existing?.track_discord ?? false),
+    track_holders: field === 'track_holders' ? value : (existing?.track_holders ?? false),
     track_snapshot: field === 'track_snapshot' ? value : (existing?.track_snapshot ?? false),
     track_transactions: field === 'track_transactions' ? value : (existing?.track_transactions ?? false),
-    enabled_at_discord: field === 'track_discord' && value ? (existing?.enabled_at_discord ?? now) : (existing?.enabled_at_discord ?? null),
+    enabled_at_holders: field === 'track_holders' && value ? (existing?.enabled_at_holders ?? now) : (existing?.enabled_at_holders ?? null),
     enabled_at_snapshot: field === 'track_snapshot' && value ? (existing?.enabled_at_snapshot ?? now) : (existing?.enabled_at_snapshot ?? null),
     enabled_at_transactions: field === 'track_transactions' && value ? (existing?.enabled_at_transactions ?? now) : (existing?.enabled_at_transactions ?? null),
   }
@@ -395,16 +396,16 @@ async function saveWatches(): Promise<boolean> {
       const payload = {
         tenant_id: id,
         mint: w.mint,
-        track_discord: w.track_discord,
+        track_holders: w.track_holders,
         track_snapshot: w.track_snapshot,
         track_transactions: w.track_transactions,
-        enabled_at_discord: w.enabled_at_discord,
+        enabled_at_holders: w.enabled_at_holders,
         enabled_at_snapshot: w.enabled_at_snapshot,
         enabled_at_transactions: w.enabled_at_transactions,
         updated_at: now,
       }
       await supabase.from('watchtower_watches').upsert(payload, { onConflict: 'tenant_id,mint' })
-      if (w.track_discord || w.track_snapshot) {
+      if (w.track_holders || w.track_snapshot) {
         await supabase.functions.invoke('cron-tracker', {
           body: { syncMint: w.mint, tenantId: id },
         })

@@ -61,7 +61,7 @@ export function useConditionSet(catalogMints: Ref<CatalogMint[]>) {
   const conditionTypes = computed(() => CONDITION_TYPES)
 
   const mintsWithHolders = computed(() =>
-    catalogMints.value.filter((m) => m.track_discord === true),
+    catalogMints.value.filter((m) => m.track_holders === true),
   )
 
   const mintsWithSnapshot = computed(() =>

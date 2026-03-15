@@ -2,8 +2,8 @@
  * Crafter Edge Function. 3-stage flow: create mint+billing → add metadata → mint/burn/edit.
  *
  * Actions:
- *   create         – Store pending, return memo + amountUsdc + recipientAta
- *   confirm        – Verify tx, create billing_payments, insert crafter_tokens
+ *   create         – Store pending with memo from billing intent (no amount/recipientAta)
+ *   confirm        – Verify tx using billing_payments row, insert crafter_tokens (no billing_payments insert)
  *   list           – List tokens for tenant
  *   remove         – Remove token from crafter_tokens (after user closed their ATA)
  *   prepare-metadata – Upload metadata JSON to dGuild storage, return URI
@@ -14,23 +14,9 @@
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getWalletFromAuthHeader } from '../_shared/auth.ts'
-import { verifyBillingPayment, BILLING_WALLET_ATA } from '../_shared/billing-verify.ts'
-import { getModuleCatalogEntry } from '@decentraguild/config'
+import { verifyBillingPayment } from '../_shared/billing-verify.ts'
 
-const PENDING_EXPIRY_MINUTES = 15
-
-const CRAFTER_FALLBACK_USDC = 5
-
-function getCrafterAmountUsdc(): number {
-  const catalogEntry = getModuleCatalogEntry('crafter')
-  const pricing = catalogEntry?.pricing as { pricePerUnit?: number } | null
-  return pricing?.pricePerUnit ?? CRAFTER_FALLBACK_USDC
-}
-
-function generateMemo(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(8))
-  return `dg:${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')}`
-}
+const PENDING_EXPIRY_MINUTES = 30
 
 async function requireTenantAdmin(
   authHeader: string | null,
@@ -133,18 +119,19 @@ Deno.serve(async (req: Request) => {
   }
 
   // ---------------------------------------------------------------------------
-  // create – store pending, return memo + recipientAta (stage 1: mint + billing only)
+  // create – store pending with memo from billing intent (stage 1: mint + billing only)
   // ---------------------------------------------------------------------------
   if (action === 'create') {
     const mint = (body.mint as string)?.trim()
     const name = (body.name as string)?.trim() || null
     const symbol = (body.symbol as string)?.trim() || null
     const decimals = typeof body.decimals === 'number' ? body.decimals : 6
+    const memo = (body.memo as string)?.trim()
 
     if (!mint) return errorResponse('mint required', req)
     if (!name || !symbol) return errorResponse('name and symbol required', req)
+    if (!memo) return errorResponse('memo required (from crafter-intent)', req)
 
-    const memo = generateMemo()
     const expiresAt = new Date(now.getTime() + PENDING_EXPIRY_MINUTES * 60 * 1000)
 
     const metadataJson = { name, symbol, decimals }
@@ -160,20 +147,11 @@ Deno.serve(async (req: Request) => {
 
     if (insertErr) return errorResponse(insertErr.message, req, 500)
 
-    const amountUsdc = getCrafterAmountUsdc()
-
-    return jsonResponse(
-      {
-        memo,
-        amountUsdc,
-        recipientAta: BILLING_WALLET_ATA.toBase58(),
-      },
-      req,
-    )
+    return jsonResponse({ memo }, req)
   }
 
   // ---------------------------------------------------------------------------
-  // confirm – verify tx, create billing_payments, insert crafter_tokens, upsert address book
+  // confirm – verify tx using billing_payments row, insert crafter_tokens (no billing_payments insert)
   // ---------------------------------------------------------------------------
   if (action === 'confirm') {
     const mint = (body.mint as string)?.trim()
@@ -201,46 +179,33 @@ Deno.serve(async (req: Request) => {
       return errorResponse('Pending record expired', req, 410)
     }
 
-    const meta = (pending as { metadata_json: Record<string, unknown> }).metadata_json
-    const amountUsdc = getCrafterAmountUsdc()
+    const { data: billingPayment, error: payErr } = await db
+      .from('billing_payments')
+      .select('id, amount_usdc, status')
+      .eq('tenant_id', tenantId)
+      .eq('module_id', 'crafter')
+      .eq('memo', memo)
+      .maybeSingle()
+
+    if (payErr || !billingPayment) {
+      return errorResponse('Payment record not found. Call billing confirm first.', req, 404)
+    }
+
+    const pay = billingPayment as { id: string; amount_usdc: number; status: string }
+    if (pay.status !== 'confirmed') {
+      return errorResponse('Payment not confirmed. Call billing confirm first.', req, 400)
+    }
+
     const ver = await verifyBillingPayment({
       txSignature,
-      expectedAmountUsdc: amountUsdc,
+      expectedAmountUsdc: pay.amount_usdc,
       expectedMemo: memo,
     })
 
     if (!ver.valid) return errorResponse(ver.error ?? 'Payment verification failed', req, 400)
 
-    const periodStart = now
-    const periodEnd = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
-
-    const { data: payment, error: payErr } = await db
-      .from('billing_payments')
-      .insert({
-        tenant_id: tenantId,
-        module_id: 'crafter',
-        scope_key: '',
-        payment_type: 'add_unit',
-        amount_usdc: amountUsdc,
-        billing_period: 'monthly',
-        period_start: periodStart.toISOString(),
-        period_end: periodEnd.toISOString(),
-        tx_signature: txSignature,
-        status: 'confirmed',
-        memo,
-        payer_wallet: adminWallet,
-        conditions_snapshot: { tokensCount: 1 },
-        price_snapshot: { oneTimeTotal: amountUsdc },
-        created_at: nowIso,
-        confirmed_at: nowIso,
-        expires_at: expiresAt.toISOString(),
-      })
-      .select('id')
-      .single()
-
-    if (payErr || !payment) return errorResponse(payErr?.message ?? 'Failed to create payment record', req, 500)
-
-    const paymentId = (payment as { id: string }).id
+    const meta = (pending as { metadata_json: Record<string, unknown> }).metadata_json
+    const paymentId = pay.id
     const name = (meta.name as string) ?? ''
     const symbol = (meta.symbol as string) ?? ''
     const decimals = (meta.decimals as number) ?? 6

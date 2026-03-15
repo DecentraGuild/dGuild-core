@@ -2,7 +2,8 @@
   <div class="admin__split">
     <div class="admin__panel">
       <Card>
-        <GateSelectRow
+        <GateSelectRowModule
+          layout="stacked"
           :slug="slug"
           :model-value="whitelistFormValue"
           title="Who can see Raffles"

@@ -246,7 +246,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const role = roleMap.get(rule.discord_role_id as string) as { role_id: string; name: string; position?: number; color?: number; icon?: string; unicode_emoji?: string } | undefined
-      return {
+      const card: Record<string, unknown> = {
         role_id: rule.discord_role_id,
         name: role?.name ?? (rule.discord_role_id as string),
         position: role?.position ?? 0,
@@ -255,6 +255,11 @@ Deno.serve(async (req: Request) => {
         unicode_emoji: role?.unicode_emoji,
         requirements,
       }
+      if (body.includeAdminFields === true) {
+        card.rule_id = rule.id
+        card.condition_set_id = rule.condition_set_id
+      }
+      return card
     })
 
     return jsonResponse({ cards }, req)

@@ -605,12 +605,12 @@ const subscriptions = ref<Record<string, SubscriptionSummary | null>>({})
 const billingSubsRaw = ref<Array<Record<string, unknown>>>([])
 const payments = ref<BillingPayment[]>([])
 
-const watchtowerTrackInputs = ref<Record<string, number>>({ holders_current: 0, mintsSnapshot: 0, mintsTransactions: 0 })
+const watchtowerTrackInputs = ref<Record<string, number>>({ mints_current: 0, mintsSnapshot: 0, mintsTransactions: 0 })
 const watchtowerTracksSaving = ref(false)
 const watchtowerTracksError = ref<string | null>(null)
 
 const WATCHTOWER_SCOPE_LABELS: Record<string, string> = {
-  holders_current: 'Holders',
+  mints_current: 'Current holders',
   mintsSnapshot: 'Snapshot',
   mintsTransactions: 'Transactions',
 }
@@ -622,7 +622,7 @@ const hasWatchtowerModule = computed(() => {
 
 const watchtowerTracks = computed(() => {
   const rows = billingSubsRaw.value.filter(
-    (r) => r.module_id === 'watchtower' && r.scope_key && ['holders_current', 'mintsSnapshot', 'mintsTransactions'].includes(r.scope_key as string),
+    (r) => r.module_id === 'watchtower' && r.scope_key && ['mints_current', 'mintsSnapshot', 'mintsTransactions'].includes(r.scope_key as string),
   )
   if (rows.length) {
     return rows.map((r) => {
@@ -633,7 +633,7 @@ const watchtowerTracks = computed(() => {
     })
   }
   return [
-    { scopeKey: 'holders_current', label: 'Holders', count: 0 },
+    { scopeKey: 'mints_current', label: 'Current holders', count: 0 },
     { scopeKey: 'mintsSnapshot', label: 'Snapshot', count: 0 },
     { scopeKey: 'mintsTransactions', label: 'Transactions', count: 0 },
   ]
@@ -710,7 +710,7 @@ const moduleRows = computed(() =>
 watch(
   watchtowerTracks,
   (tracks) => {
-    const next: Record<string, number> = { holders_current: 0, mintsSnapshot: 0, mintsTransactions: 0 }
+    const next: Record<string, number> = { mints_current: 0, mintsSnapshot: 0, mintsTransactions: 0 }
     for (const t of tracks) {
       next[t.scopeKey] = t.count
     }
@@ -733,7 +733,7 @@ async function saveWatchtowerTracks() {
       body: {
         action: 'billing-set-watchtower-tracks',
         tenantId: tenant.value.id,
-        holders_current: watchtowerTrackInputs.value.holders_current,
+        mints_current: watchtowerTrackInputs.value.mints_current,
         mintsSnapshot: watchtowerTrackInputs.value.mintsSnapshot,
         mintsTransactions: watchtowerTrackInputs.value.mintsTransactions,
       },

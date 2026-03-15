@@ -1,25 +1,25 @@
 # Watchtower
 
-Watchtower provides per-mint tracking with three independently billable tracks: Discord, Snapshot, and Transactions.
+Watchtower provides per-mint tracking with three independently billable tracks: Current holders, Snapshot, and Transactions.
 
 ## Tracks
 
 | Track | Price | What you get |
 |-------|-------|--------------|
-| **Discord** | 5 USDC / mint / month | 15min–6hr holder sync for Discord role rules. Required for mints used in SPL/NFT role conditions. |
+| **Current holders** | 5 USDC / mint / month | Short refresh rate (15min–6hr) for holder data. Usable in conditions, shipment, and Discord roles. |
 | **Snapshot** | 5 USDC / mint / month | Daily holder snapshots. Powers analytics and future features. |
 | **Transactions** | 20 USDC / mint / month | Transfer/mint/burn indexing. *Coming soon.* |
 
 ## How it works
 
 1. **Add mints** — Use Admin > Address Book to add SPL tokens or NFT collections.
-2. **Enable tracks** — In Admin > Watchtower, enable Discord, Snapshot, or Transactions per mint.
+2. **Enable tracks** — In Admin > Watchtower, enable Current holders, Snapshot, or Transactions per mint.
 3. **Review pricing** — The pricing widget updates in real time.
 4. **Deploy** — Activate the module to start tracking.
 
-## Discord track requirement
+## Current holders track
 
-For SPL and NFT role rules in Discord, mints must have `track_discord = true`. Only Discord-tracked mints receive the holder sync that powers role assignments.
+Mints with `track_holders = true` receive holder sync at short refresh intervals. This powers conditions, shipment eligibility, and Discord role rules. Enable it for mints used in those features.
 
 ## Member page
 

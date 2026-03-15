@@ -12,6 +12,7 @@
  *   extend-intent    – Create an extend payment intent.
  *   expire-stale     – (cron) Mark stale pending payments as expired.
  *   raffle-intent    – Create a per-raffle payment intent.
+ *   crafter-intent   – Create a per-token payment intent.
  *   register-intent  – Create a registration (tenant creation) payment intent.
  *   register-confirm – Confirm registration payment and create tenant.
  */
@@ -31,12 +32,7 @@ import type { BillingPeriod, ConditionSet, PriceResult } from '@decentraguild/bi
 // Solana (USDC verification)
 // ---------------------------------------------------------------------------
 
-import { Connection, PublicKey } from 'npm:@solana/web3.js@1'
-import { TOKEN_PROGRAM_ID } from 'npm:@solana/spl-token@0.4'
-
-const BILLING_WALLET = new PublicKey('4CJYmVAcBrgYL6iX4gUKSMeJxTm4hK3eNAzuzaYBZMCv')
-const BILLING_WALLET_ATA = new PublicKey('FoxSYPF93hPnpNoZ3eUjEAii3p6fdEESNZJe6fHbRUxr')
-const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')
+import { verifyBillingPayment, BILLING_WALLET, BILLING_WALLET_ATA } from '../_shared/billing-verify.ts'
 const USDC_DECIMALS = 6
 const PAYMENT_INTENT_TTL_MINUTES = 30
 
@@ -49,14 +45,6 @@ import { getModuleCatalogEntry } from '@decentraguild/config'
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function getSolanaConnection(): Connection {
-  const rpcUrl =
-    Deno.env.get('HELIUS_RPC_URL') ??
-    Deno.env.get('SOLANA_RPC_URL') ??
-    'https://api.mainnet-beta.solana.com'
-  return new Connection(rpcUrl, 'confirmed')
-}
 
 function generateMemo(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(8))
@@ -84,7 +72,7 @@ function periodAmount(price: PriceResult, period: BillingPeriod): number {
   return period === 'yearly' ? price.recurringYearly : price.recurringMonthly
 }
 
-const WATCHTOWER_SCOPE_KEYS = ['holders_current', 'mintsSnapshot', 'mintsTransactions'] as const
+const WATCHTOWER_SCOPE_KEYS = ['mints_current', 'mintsSnapshot', 'mintsTransactions'] as const
 
 function getModuleScopeKeys(moduleId: string): readonly string[] {
   if (moduleId === 'watchtower') return WATCHTOWER_SCOPE_KEYS
@@ -246,13 +234,13 @@ async function getConditions(moduleId: string, tenantId: string): Promise<Condit
   if (moduleId === 'watchtower') {
     const { data: rows } = await db
       .from('watchtower_watches')
-      .select('track_discord, track_snapshot, track_transactions')
+      .select('track_holders, track_snapshot, track_transactions')
       .eq('tenant_id', tenantId)
     const watches = rows ?? []
-    const holders_current = watches.filter((r) => r.track_discord === true).length
+    const mints_current = watches.filter((r) => r.track_holders === true).length
     const mintsSnapshot = watches.filter((r) => r.track_snapshot === true).length
     const mintsTransactions = watches.filter((r) => r.track_transactions === true).length
-    return { holders_current, mintsSnapshot, mintsTransactions }
+    return { mints_current, mintsSnapshot, mintsTransactions }
   }
 
   if (moduleId === 'shipment') {
@@ -268,70 +256,6 @@ async function getConditions(moduleId: string, tenantId: string): Promise<Condit
   }
 
   return {}
-}
-
-// ---------------------------------------------------------------------------
-// On-chain USDC verification
-// ---------------------------------------------------------------------------
-
-async function verifyBillingPayment(params: {
-  txSignature: string
-  expectedAmountUsdc: number
-  expectedMemo: string
-}): Promise<{ valid: boolean; error?: string }> {
-  const { txSignature, expectedAmountUsdc, expectedMemo } = params
-  try {
-    const connection = getSolanaConnection()
-    const tx = await connection.getParsedTransaction(txSignature, {
-      commitment: 'confirmed',
-      maxSupportedTransactionVersion: 0,
-    })
-    if (!tx) return { valid: false, error: 'Transaction not found or not yet confirmed' }
-    if (tx.meta?.err) return { valid: false, error: `Transaction failed on-chain` }
-
-    const expectedBaseUnits = BigInt(Math.round(expectedAmountUsdc * 10 ** USDC_DECIMALS))
-    const expectedAta = BILLING_WALLET_ATA.toBase58()
-    let transferFound = false
-    let memoFound = false
-
-    function scanInstructions(instructions: unknown[]) {
-      for (const ix of instructions) {
-        const i = ix as Record<string, unknown>
-        if ('parsed' in i && (i.programId as PublicKey)?.equals?.(TOKEN_PROGRAM_ID)) {
-          const parsed = i.parsed as { type?: string; info?: { amount?: string; destination?: string; tokenAmount?: { amount?: string } } }
-          if (parsed.type === 'transfer' || parsed.type === 'transferChecked') {
-            const dest = parsed.info?.destination
-            const amount = parsed.info?.tokenAmount?.amount ?? parsed.info?.amount
-            if (dest === expectedAta && amount != null && BigInt(amount) >= expectedBaseUnits) {
-              transferFound = true
-            }
-          }
-        }
-        if ('parsed' in i && (i.programId as PublicKey)?.equals?.(MEMO_PROGRAM_ID)) {
-          const memoData = typeof i.parsed === 'string' ? i.parsed : ''
-          if (memoData === expectedMemo) memoFound = true
-        }
-        if (!('parsed' in i) && (i.programId as PublicKey)?.equals?.(MEMO_PROGRAM_ID)) {
-          try {
-            const raw = (i as { data?: string }).data ?? ''
-            const decoded = new TextDecoder().decode(Uint8Array.from(atob(raw), (c) => c.charCodeAt(0)))
-            if (decoded === expectedMemo) memoFound = true
-          } catch { /* ignore */ }
-        }
-      }
-    }
-
-    scanInstructions(tx.transaction.message.instructions as unknown[])
-    for (const inner of tx.meta?.innerInstructions ?? []) {
-      scanInstructions(inner.instructions as unknown[])
-    }
-
-    if (!transferFound) return { valid: false, error: `USDC transfer not found in transaction` }
-    if (!memoFound) return { valid: false, error: 'Payment memo not found in transaction' }
-    return { valid: true }
-  } catch (e) {
-    return { valid: false, error: e instanceof Error ? e.message : 'Verification failed' }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -858,6 +782,70 @@ Deno.serve(async (req: Request) => {
       noPaymentRequired: false,
       paymentId: (payment as Record<string, unknown>).id,
       amountUsdc: oneTimeAmount,
+      memo,
+      recipientWallet: BILLING_WALLET.toBase58(),
+      recipientAta: BILLING_WALLET_ATA.toBase58(),
+      billingPeriod: 'monthly',
+      periodStart: now.toISOString(),
+      periodEnd: now.toISOString(),
+    }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // crafter-intent – create per-token payment intent
+  // ---------------------------------------------------------------------------
+  if (action === 'crafter-intent') {
+    const tenantId = (body.tenantId as string)?.trim()
+    const payerWallet = (body.payerWallet as string) ?? ''
+    if (!tenantId) return errorResponse('tenantId required', req)
+
+    const catalogEntry = getModuleCatalogEntry('crafter')
+    const pricing = catalogEntry?.pricing
+    if (!pricing || (pricing as Record<string, unknown>).modelType !== 'one_time_per_unit') {
+      return errorResponse('Crafter module pricing not configured', req, 500)
+    }
+
+    const price = computePrice('crafter', { tokensCount: 1 }, pricing)
+    const amountUsdc = roundUsdc(price.oneTimeTotal ?? 0)
+    if (amountUsdc <= 0) return errorResponse('Crafter price must be greater than 0', req, 500)
+
+    await db
+      .from('billing_payments')
+      .update({ status: 'expired' })
+      .eq('tenant_id', tenantId)
+      .eq('module_id', 'crafter')
+      .eq('status', 'pending')
+      .lt('expires_at', new Date().toISOString())
+
+    const memo = generateMemo()
+    const expiresAt = new Date(Date.now() + PAYMENT_INTENT_TTL_MINUTES * 60 * 1000)
+    const now = new Date()
+
+    const { data: payment, error: insertErr } = await db
+      .from('billing_payments')
+      .insert({
+        tenant_id: tenantId,
+        module_id: 'crafter',
+        scope_key: '',
+        payment_type: 'add_unit',
+        amount_usdc: amountUsdc,
+        billing_period: 'monthly',
+        period_start: now.toISOString(),
+        period_end: now.toISOString(),
+        payer_wallet: payerWallet,
+        memo,
+        conditions_snapshot: { tokensCount: 1 },
+        price_snapshot: price,
+        expires_at: expiresAt.toISOString(),
+      })
+      .select()
+      .single()
+
+    if (insertErr) return errorResponse(insertErr.message, req, 500)
+
+    return jsonResponse({
+      paymentId: (payment as Record<string, unknown>).id,
+      amountUsdc,
       memo,
       recipientWallet: BILLING_WALLET.toBase58(),
       recipientAta: BILLING_WALLET_ATA.toBase58(),

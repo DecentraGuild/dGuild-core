@@ -12,11 +12,11 @@
             :key="scope.id"
             class="admin-gating__row"
           >
-            <GateSelectRow
+            <GateSelectRowModule
+              layout="stacked"
               :slug="slug"
               :model-value="getValue(scope.id)"
               :title="scope.label"
-              compact
               :show-use-default="scope.id !== 'default'"
               show-admin-only
               show-save
@@ -38,7 +38,7 @@
 <script setup lang="ts">
 import { getGatingScopes } from '@decentraguild/config'
 import { Card } from '~/components/ui/card'
-import GateSelectRow from '~/components/gates/GateSelectRow.vue'
+import GateSelectRowModule from '~/components/gates/GateSelectRowModule.vue'
 import { useAdminGating } from '~/composables/admin/useAdminGating'
 import type { Ref } from 'vue'
 import type { MarketplaceGateSettings } from '@decentraguild/core'

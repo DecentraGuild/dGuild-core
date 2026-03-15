@@ -37,7 +37,7 @@ export interface ModuleSubnavTab {
 /** Admin tabs shown as primary (always visible). */
 export const ADMIN_PRIMARY_TAB_IDS = ['general', 'theming', 'addressbook', 'modules']
 /** Admin tabs grouped under "More" dropdown (between Modules and Billing). */
-export const ADMIN_MORE_TAB_IDS = ['watchtower', 'gates', 'gating', 'shipment-list', 'plan-shipment', 'discord', 'raffle', 'marketplace']
+export const ADMIN_MORE_TAB_IDS = ['watchtower', 'conditions', 'gates', 'gating', 'plan-shipment', 'discord', 'raffle', 'marketplace']
 
 export const MODULE_SUBNAV: Record<string, ModuleSubnavTab[]> = {
   admin: [
@@ -46,9 +46,9 @@ export const MODULE_SUBNAV: Record<string, ModuleSubnavTab[]> = {
     { id: 'addressbook', label: 'Address Book' },
     { id: 'modules', label: 'Modules' },
     { id: 'watchtower', label: 'Watchtower' },
+    { id: 'conditions', label: 'Conditions' },
     { id: 'gates', label: 'Member lists' },
     { id: 'gating', label: 'Gates' },
-    { id: 'shipment-list', label: 'Shipment List' },
     { id: 'plan-shipment', label: 'Plan Shipment' },
     { id: 'discord', label: 'Discord' },
     { id: 'raffle', label: 'Raffle' },
@@ -89,8 +89,8 @@ export function getModuleSubnavForPath(
     if (t.id === 'discord' && !discordVisible) return false
     if (t.id === 'raffle' && !raffleVisible) return false
     if (t.id === 'gates' && !gatesVisible) return false
-    if (t.id === 'watchtower' && !watchtowerVisible) return false
-    if ((t.id === 'shipment-list' || t.id === 'plan-shipment') && !shipmentVisible) return false
+    if ((t.id === 'watchtower' || t.id === 'conditions') && !watchtowerVisible) return false
+    if (t.id === 'plan-shipment' && !shipmentVisible) return false
     return true
   })
 }

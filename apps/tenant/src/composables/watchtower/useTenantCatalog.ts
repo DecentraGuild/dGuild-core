@@ -41,7 +41,7 @@ export function useTenantCatalog() {
     return (data?.entries ?? []) as CatalogEntry[]
   }
 
-  /** List mints with track_discord=true (Discord module). Uses Edge Function to bypass RLS. */
+  /** List mints with track_holders=true (current holders track). Uses Edge Function to bypass RLS. */
   async function listDiscord(): Promise<CatalogEntry[]> {
     const id = tenantId.value
     if (!id) return []

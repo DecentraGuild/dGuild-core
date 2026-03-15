@@ -1,10 +1,10 @@
 <template>
-  <div v-if="entries.length > 0" ref="rootEl" class="ab-browser">
+  <div ref="rootEl" class="ab-browser">
     <button
       type="button"
       class="ab-browser__trigger"
-      :title="triggerTitle"
-      :aria-label="triggerTitle"
+      :title="entries.length > 0 ? triggerTitle : emptyTitle"
+      :aria-label="entries.length > 0 ? triggerTitle : emptyTitle"
       @click="toggle"
     >
       <Icon icon="lucide:book-open" />
@@ -80,7 +80,7 @@
           </li>
         </ul>
         <p v-else class="ab-browser__state ab-browser__state--empty">
-          {{ loading ? '' : 'No entries' }}
+          {{ loading ? 'Loading…' : 'No mints in Address Book. Add mints in Admin > Address Book first.' }}
         </p>
       </div>
     </Teleport>
@@ -115,6 +115,7 @@ const dropdownEl = ref<HTMLElement | null>(null)
 const searchEl = ref<HTMLInputElement | null>(null)
 
 const triggerTitle = 'Browse address book'
+const emptyTitle = 'No mints in Address Book. Add mints in Admin > Address Book first.'
 
 const DROPDOWN_GAP = 4
 const DROPDOWN_MIN_HEIGHT = 160
@@ -216,7 +217,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside, true))
 
 .ab-browser__dropdown {
   position: fixed;
-  z-index: 500;
+  z-index: 9999;
   width: 18rem;
   background: var(--theme-bg-card);
   color: var(--theme-text-primary);

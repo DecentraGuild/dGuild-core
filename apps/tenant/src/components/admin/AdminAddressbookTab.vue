@@ -69,7 +69,7 @@ const selectedEntry = computed(() => {
   return addressBook.value.find((e) => e.mint === m) ?? null
 })
 
-/** Set of mint addresses with track_discord=true in watchtower_watches. */
+/** Set of mint addresses with track_holders=true in watchtower_watches. */
 const discordMintSet = ref<Set<string>>(new Set())
 
 const catalog = useTenantCatalog()
@@ -117,7 +117,7 @@ async function fetchDiscordMintSet() {
       .from('watchtower_watches')
       .select('mint')
       .eq('tenant_id', id)
-      .eq('track_discord', true)
+      .eq('track_holders', true)
     discordMintSet.value = new Set((data ?? []).map((r) => r.mint as string))
   } catch {
     discordMintSet.value = new Set()
