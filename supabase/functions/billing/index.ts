@@ -6,11 +6,13 @@ import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getWalletFromAuthHeader } from '../_shared/auth.ts'
 import { verifyBillingPayment, BILLING_WALLET_ATA } from '../_shared/billing-verify.ts'
+import { getVoucherRecipientAta, verifyVoucherPayment } from '../_shared/voucher-verify.ts'
 import {
   resolveQuote,
   charge,
   confirm,
   createUSDCTransferProvider,
+  createVoucherTransferProvider,
 } from '@decentraguild/billing'
 
 const BILLING_ACTIONS_LEGACY = [
@@ -73,28 +75,216 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  if (action === 'voucher-quote') {
+    try {
+      const tenantId = (body.tenantId as string)?.trim()
+      const voucherMint = (body.voucherMint as string)?.trim()
+      if (!tenantId || !voucherMint) return errorResponse('tenantId and voucherMint required', req)
+
+      const { data: bundleVoucher } = await db
+        .from('bundle_vouchers')
+        .select('bundle_id, tokens_required, max_redemptions_per_tenant')
+        .eq('token_mint', voucherMint)
+        .maybeSingle()
+
+      if (bundleVoucher) {
+        const bv = bundleVoucher as { bundle_id: string; tokens_required: number; max_redemptions_per_tenant: number | null }
+        if (bv.max_redemptions_per_tenant != null && bv.max_redemptions_per_tenant > 0) {
+          const { data: total } = await db
+            .from('tenant_voucher_redemption_totals')
+            .select('count')
+            .eq('tenant_id', tenantId)
+            .eq('voucher_mint', voucherMint)
+            .eq('bundle_id', bv.bundle_id)
+            .maybeSingle()
+          const count = total ? Number((total as { count: number }).count) : 0
+          if (count >= bv.max_redemptions_per_tenant) {
+            return errorResponse('Max redemptions reached for this voucher', req, 400)
+          }
+        }
+        const { data: ents } = await db
+          .from('bundle_entitlements')
+          .select('meter_key, quantity, duration_days')
+          .eq('bundle_id', bv.bundle_id)
+        const entitlements = (ents ?? []) as Array<{ meter_key: string; quantity: number; duration_days: number }>
+        const lineItems = entitlements.map((e) => ({
+          source: 'bundle' as const,
+          bundleId: bv.bundle_id,
+          meter_key: e.meter_key,
+          quantity: e.quantity,
+          duration_days: e.duration_days,
+          price_usdc: 0,
+        }))
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+        const { data: inserted, error } = await db
+          .from('billing_quotes')
+          .insert({
+            tenant_id: tenantId,
+            line_items: lineItems,
+            price_usdc: 0,
+            meter_snapshot: {},
+            expires_at: expiresAt,
+          })
+          .select('id')
+          .single()
+        if (error || !inserted) throw new Error(error?.message ?? 'Failed to create quote')
+        const quoteId = (inserted as { id: string }).id
+        const memo = `billing:${tenantId}:${quoteId}`
+        const voucherRecipientAta = getVoucherRecipientAta(voucherMint)
+        const voucherWallet = Deno.env.get('VOUCHER_WALLET') ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
+        return jsonResponse({
+          quoteId,
+          quote: { quoteId, lineItems, priceUsdc: 0, meters: {}, expiresAt },
+          memo,
+          voucherRecipientAta,
+          voucherWallet,
+          tokensRequired: bv.tokens_required ?? 1,
+        }, req)
+      }
+
+      const { data: indVoucher } = await db
+        .from('individual_vouchers')
+        .select('max_redemptions_per_tenant')
+        .eq('mint', voucherMint)
+        .maybeSingle()
+
+      if (indVoucher) {
+        const iv = indVoucher as { max_redemptions_per_tenant: number | null }
+        if (iv.max_redemptions_per_tenant != null && iv.max_redemptions_per_tenant > 0) {
+          const { data: total } = await db
+            .from('individual_voucher_redemption_totals')
+            .select('count')
+            .eq('tenant_id', tenantId)
+            .eq('voucher_mint', voucherMint)
+            .maybeSingle()
+          const count = total ? Number((total as { count: number }).count) : 0
+          if (count >= iv.max_redemptions_per_tenant) {
+            return errorResponse('Max redemptions reached for this voucher', req, 400)
+          }
+        }
+        const { data: ents } = await db
+          .from('individual_voucher_entitlements')
+          .select('meter_key, quantity, duration_days')
+          .eq('mint', voucherMint)
+        const entitlements = (ents ?? []) as Array<{ meter_key: string; quantity: number; duration_days: number }>
+        if (entitlements.length === 0) return errorResponse('Voucher has no entitlements', req, 400)
+        const lineItems = entitlements.map((e) => ({
+          source: 'tier' as const,
+          meter_key: e.meter_key,
+          quantity: e.quantity,
+          duration_days: e.duration_days,
+          price_usdc: 0,
+        }))
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+        const { data: inserted, error } = await db
+          .from('billing_quotes')
+          .insert({
+            tenant_id: tenantId,
+            line_items: lineItems,
+            price_usdc: 0,
+            meter_snapshot: {},
+            expires_at: expiresAt,
+          })
+          .select('id')
+          .single()
+        if (error || !inserted) throw new Error(error?.message ?? 'Failed to create quote')
+        const quoteId = (inserted as { id: string }).id
+        const memo = `billing:${tenantId}:${quoteId}`
+        const voucherRecipientAta = getVoucherRecipientAta(voucherMint)
+        const voucherWallet = Deno.env.get('VOUCHER_WALLET') ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
+        return jsonResponse({
+          quoteId,
+          quote: { quoteId, lineItems, priceUsdc: 0, meters: {}, expiresAt },
+          memo,
+          voucherRecipientAta,
+          voucherWallet,
+          tokensRequired: 1,
+        }, req)
+      }
+
+      return errorResponse('Voucher not found', req, 404)
+    } catch (e) {
+      return errorResponse(e instanceof Error ? e.message : 'Voucher quote failed', req, 400)
+    }
+  }
+
+  if (action === 'list-voucher-mints') {
+    try {
+      const { data: bundleMints } = await db
+        .from('bundle_vouchers')
+        .select('token_mint, bundle_id, tokens_required')
+      const { data: indMints } = await db
+        .from('individual_vouchers')
+        .select('mint, label')
+      const bundleList = (bundleMints ?? []) as Array<{ token_mint: string; bundle_id: string; tokens_required: number }>
+      const indList = (indMints ?? []) as Array<{ mint: string; label: string | null }>
+
+      const bundleEntitlements = new Map<string, Array<{ meter_key: string; quantity: number; duration_days: number }>>()
+      for (const b of bundleList) {
+        const { data: ents } = await db
+          .from('bundle_entitlements')
+          .select('meter_key, quantity, duration_days')
+          .eq('bundle_id', b.bundle_id)
+        bundleEntitlements.set(b.token_mint, (ents ?? []) as Array<{ meter_key: string; quantity: number; duration_days: number }>)
+      }
+
+      const indEntitlements = new Map<string, Array<{ meter_key: string; quantity: number; duration_days: number }>>()
+      for (const i of indList) {
+        const { data: ents } = await db
+          .from('individual_voucher_entitlements')
+          .select('meter_key, quantity, duration_days')
+          .eq('mint', i.mint)
+        indEntitlements.set(i.mint, (ents ?? []) as Array<{ meter_key: string; quantity: number; duration_days: number }>)
+      }
+
+      const vouchers = [
+        ...bundleList.map((b) => ({
+          mint: b.token_mint,
+          type: 'bundle' as const,
+          bundleId: b.bundle_id,
+          tokensRequired: b.tokens_required ?? 1,
+          entitlements: bundleEntitlements.get(b.token_mint) ?? [],
+        })),
+        ...indList.map((i) => ({
+          mint: i.mint,
+          type: 'individual' as const,
+          label: i.label,
+          tokensRequired: 1,
+          entitlements: indEntitlements.get(i.mint) ?? [],
+        })),
+      ]
+      return jsonResponse({ vouchers }, req)
+    } catch (e) {
+      return errorResponse(e instanceof Error ? e.message : 'List vouchers failed', req, 400)
+    }
+  }
+
   if (action === 'charge') {
     try {
       const quoteId = (body.quoteId as string)?.trim()
       const payerWallet = (body.payerWallet as string)?.trim()
       if (!quoteId || !payerWallet) return errorResponse('quoteId and payerWallet required', req)
 
+      const paymentMethod = (body.paymentMethod as 'usdc' | 'voucher') ?? 'usdc'
+      const voucherMint = (body.voucherMint as string)?.trim() || undefined
+
       const result = await charge(
         {
           quoteId,
-          paymentMethod: (body.paymentMethod as 'usdc' | 'voucher') ?? 'usdc',
-          voucherMint: body.voucherMint as string | undefined,
+          paymentMethod,
+          voucherMint,
           payerWallet,
         },
         db,
       )
-      return jsonResponse(
-        {
-          ...result,
-          recipientAta: BILLING_WALLET_ATA.toBase58(),
-        },
-        req,
-      )
+
+      const response: Record<string, unknown> = { ...result }
+      if (paymentMethod === 'voucher' && voucherMint) {
+        response.voucherRecipientAta = getVoucherRecipientAta(voucherMint)
+      } else {
+        response.recipientAta = BILLING_WALLET_ATA.toBase58()
+      }
+      return jsonResponse(response, req)
     } catch (e) {
       return errorResponse(e instanceof Error ? e.message : 'Charge failed', req, 400)
     }
@@ -107,7 +297,18 @@ Deno.serve(async (req: Request) => {
       const slugToClaim = (body.slugToClaim as string)?.trim()?.toLowerCase()
       if (!paymentId || !txSignature) return errorResponse('paymentId and txSignature required', req)
 
-      const provider = createUSDCTransferProvider(verifyBillingPayment)
+      const { data: payment } = await db
+        .from('billing_payments')
+        .select('payment_method, voucher_mint')
+        .eq('id', paymentId)
+        .maybeSingle()
+
+      const pm = payment as { payment_method?: string; voucher_mint?: string | null } | null
+      const provider =
+        pm?.payment_method === 'voucher' && pm?.voucher_mint
+          ? createVoucherTransferProvider(verifyVoucherPayment, pm.voucher_mint)
+          : createUSDCTransferProvider(verifyBillingPayment)
+
       const { success } = await confirm({ paymentId, txSignature }, db, provider)
 
       if (success && slugToClaim) {

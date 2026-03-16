@@ -83,6 +83,42 @@ export async function buildCreateMintAndBillingTransaction(
   return combined
 }
 
+export interface BuildCreateMintOnlyParams {
+  mintKeypair: { publicKey: PublicKey }
+  decimals: number
+  payer: PublicKey
+  connection: Connection
+}
+
+/**
+ * Create mint only (no billing). For voucher creation etc.
+ */
+export async function buildCreateMintOnlyTransaction(
+  params: BuildCreateMintOnlyParams
+): Promise<Transaction> {
+  const { mintKeypair, decimals, payer, connection } = params
+  const mint = mintKeypair.publicKey
+
+  const lamports = await getMinimumBalanceForRentExemptMint(connection)
+  const createAccountIx = SystemProgram.createAccount({
+    fromPubkey: payer,
+    newAccountPubkey: mint,
+    space: MINT_SIZE,
+    lamports,
+    programId: TOKEN_PROGRAM_ID,
+  })
+  const createMintIx = createInitializeMint2Instruction(mint, decimals, payer, null, TOKEN_PROGRAM_ID)
+
+  const tx = new Transaction()
+  tx.feePayer = payer
+  tx.add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: CRAFTER_COMPUTE_UNIT_LIMIT }),
+    createAccountIx,
+    createMintIx,
+  )
+  return tx
+}
+
 export interface BuildCreateMetadataParams {
   mint: PublicKey | string
   name: string
@@ -172,6 +208,8 @@ export interface BuildUpdateMetadataTransactionParams {
   newSymbol: string
   /** New metadata URI (required for update) */
   newUri: string
+  /** Royalty in basis points (0–10000). Default 0. */
+  sellerFeeBasisPoints?: number
 }
 
 export function buildUpdateMetadataTransaction(params: BuildUpdateMetadataTransactionParams): Transaction {
@@ -182,6 +220,7 @@ export function buildUpdateMetadataTransaction(params: BuildUpdateMetadataTransa
       : new PublicKey(params.updateAuthority)
 
   const metadata = getMetadataPda(mint)
+  const sellerFeeBasisPoints = Math.max(0, Math.min(10000, params.sellerFeeBasisPoints ?? 0))
 
   const ix = createUpdateMetadataAccountV2Instruction(
     {
@@ -194,7 +233,7 @@ export function buildUpdateMetadataTransaction(params: BuildUpdateMetadataTransa
           name: params.newName,
           symbol: params.newSymbol,
           uri: params.newUri,
-          sellerFeeBasisPoints: 0,
+          sellerFeeBasisPoints,
           creators: null,
           collection: null,
           uses: null,

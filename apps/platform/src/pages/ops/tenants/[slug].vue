@@ -1,63 +1,68 @@
 <template>
   <PageSection>
-    <div class="ops-tenant">
-      <header class="ops-tenant__header">
+    <div class="ops flex flex-col gap-6">
+      <header class="ops__header flex flex-col md:flex-row justify-between items-start gap-4">
         <div>
-          <button type="button" class="ops-tenant__back" @click="back">
+          <Button type="button" variant="ghost" size="sm" class="-ml-2 mb-1 text-muted-foreground hover:text-foreground" @click="back">
             ← Back to overview
-          </button>
-          <h1 class="ops-tenant__title">
+          </Button>
+          <h1 class="ops__title m-0 text-xl font-semibold text-foreground">
             {{ tenant?.name ?? 'Tenant' }}
           </h1>
-          <p class="ops-tenant__subtitle">
+          <p class="ops__subtitle m-0 text-muted-foreground">
             {{ tenantIdentifier }}
           </p>
         </div>
-        <div class="ops-tenant__meta">
-          <div class="ops-tenant__meta-item">
-            <span class="ops-tenant__meta-label">Active modules</span>
-            <span class="ops-tenant__meta-value">{{ stats?.activeModules ?? 0 }}</span>
+        <div class="flex flex-col md:flex-row gap-6 shrink-0">
+          <div class="min-w-[120px]">
+            <span class="block text-xs text-muted-foreground">Active modules</span>
+            <span class="text-lg font-semibold">{{ stats?.activeModules ?? 0 }}</span>
           </div>
-          <div class="ops-tenant__meta-item">
-            <span class="ops-tenant__meta-label">Payments</span>
-            <span class="ops-tenant__meta-value">{{ stats?.totalPayments ?? 0 }}</span>
+          <div class="min-w-[120px]">
+            <span class="block text-xs text-muted-foreground">Payments</span>
+            <span class="text-lg font-semibold">{{ stats?.totalPayments ?? 0 }}</span>
           </div>
         </div>
       </header>
 
-      <div v-if="loading" class="ops-tenant__body">Loading tenant…</div>
-      <div v-else-if="error" class="ops-tenant__body ops-tenant__body--error">
-        {{ error }}
-      </div>
-      <div v-else-if="tenant" class="ops-tenant__body ops-tenant__grid">
-        <section class="ops-tenant__panel" aria-label="Config">
-          <h2 class="ops-tenant__panel-title">Config</h2>
-          <dl class="ops-tenant__config">
+      <Card v-if="loading" class="p-6">
+        <p class="text-muted-foreground text-sm m-0">Loading tenant…</p>
+      </Card>
+      <Card v-else-if="error" class="p-6">
+        <p class="text-destructive text-sm m-0">{{ error }}</p>
+      </Card>
+      <div v-else-if="tenant" class="ops__grid grid gap-4 grid-cols-1 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)]">
+        <Card class="col-span-1" aria-label="Config">
+          <CardHeader>
+            <CardTitle>Config</CardTitle>
+          </CardHeader>
+          <CardContent>
+          <dl class="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
             <div>
-              <dt>ID</dt>
-              <dd><code>{{ tenant.id }}</code></dd>
+              <dt class="text-xs text-muted-foreground">ID</dt>
+              <dd class="m-0"><code class="font-mono text-xs">{{ tenant.id }}</code></dd>
             </div>
             <div>
-              <dt>Slug</dt>
-              <dd>
-                <span v-if="tenant.slug"><code>{{ tenant.slug }}</code></span>
-                <span v-else class="ops-tenant__muted">none</span>
+              <dt class="text-xs text-muted-foreground">Slug</dt>
+              <dd class="m-0">
+                <span v-if="tenant.slug"><code class="font-mono text-xs">{{ tenant.slug }}</code></span>
+                <span v-else class="text-muted-foreground">none</span>
               </dd>
             </div>
-            <div class="ops-tenant__slug-override">
-              <dt>Set slug (ops)</dt>
-              <dd>
-                <input
+            <div class="col-span-full">
+              <dt class="text-xs text-muted-foreground">Set slug (ops)</dt>
+              <dd class="m-0 flex flex-wrap items-center gap-2">
+                <Input
                   v-model="opsSlugInput"
                   type="text"
-                  class="ops-tenant__slug-input"
                   placeholder="e.g. my-community"
+                  class="min-w-[10rem]"
                   :disabled="slugSetLoading"
                   @keydown.enter.prevent="checkOpsSlug()"
                 />
-                <span v-if="opsSlugCheckStatus === 'available'" class="ops-tenant__slug-ok">Available</span>
-                <span v-else-if="opsSlugCheckStatus === 'taken'" class="ops-tenant__slug-taken">Taken</span>
-                <span v-else-if="opsSlugCheckStatus === 'checking'" class="ops-tenant__slug-checking">Checking…</span>
+                <span v-if="opsSlugCheckStatus === 'available'" class="text-xs text-green-600 dark:text-green-500">Available</span>
+                <span v-else-if="opsSlugCheckStatus === 'taken'" class="text-xs text-destructive">Taken</span>
+                <span v-else-if="opsSlugCheckStatus === 'checking'" class="text-xs text-muted-foreground">Checking…</span>
                 <Button
                   size="xs"
                   variant="ghost"
@@ -74,38 +79,38 @@
                 >
                   {{ slugSetLoading ? 'Saving…' : 'Set slug' }}
                 </Button>
-                <span v-if="opsSlugError" class="ops-tenant__error-inline">{{ opsSlugError }}</span>
+                <span v-if="opsSlugError" class="text-xs text-destructive w-full">{{ opsSlugError }}</span>
               </dd>
             </div>
             <div>
-              <dt>Treasury</dt>
-              <dd>
-                <span v-if="tenant.treasury"><code>{{ tenant.treasury }}</code></span>
-                <span v-else class="ops-tenant__muted">none</span>
+              <dt class="text-xs text-muted-foreground">Treasury</dt>
+              <dd class="m-0">
+                <span v-if="tenant.treasury"><code class="font-mono text-xs">{{ tenant.treasury }}</code></span>
+                <span v-else class="text-muted-foreground">none</span>
               </dd>
             </div>
-            <div class="ops-tenant__admins-row">
-              <dt>Admins</dt>
-              <dd>
-                <ul class="ops-tenant__list ops-tenant__admin-list">
-                  <li v-for="a in tenant.admins" :key="a" class="ops-tenant__admin-item">
-                    <code class="ops-tenant__admin-addr">{{ truncateAddress(a, 4, 4) }}</code>
-                    <button type="button" class="ops-tenant__admin-btn" aria-label="Copy" @click="copyAdmin(a)">
-                      <Icon :icon="copiedAdmin === a ? 'lucide:check' : 'lucide:copy'" />
+            <div class="col-span-full">
+              <dt class="text-xs text-muted-foreground">Admins</dt>
+              <dd class="m-0">
+                <ul class="list-none p-0 m-0 flex flex-wrap gap-1.5">
+                  <li v-for="a in tenant.admins" :key="a" class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-1.5 py-0.5">
+                    <code class="font-mono text-xs max-w-[7rem] truncate">{{ truncateAddress(a, 4, 4) }}</code>
+                    <button type="button" class="inline-flex h-6 w-6 items-center justify-center rounded p-0 text-muted-foreground hover:text-primary hover:bg-card" aria-label="Copy" @click="copyAdmin(a)">
+                      <Icon :icon="copiedAdmin === a ? 'lucide:check' : 'lucide:copy'" class="text-sm" />
                     </button>
-                    <a :href="explorerLinks.accountUrl(a)" target="_blank" rel="noopener" class="ops-tenant__admin-btn" aria-label="Solscan">
-                      <Icon icon="lucide:external-link" />
+                    <a :href="explorerLinks.accountUrl(a)" target="_blank" rel="noopener" class="inline-flex h-6 w-6 items-center justify-center rounded p-0 text-muted-foreground hover:text-primary hover:bg-card" aria-label="Solscan">
+                      <Icon icon="lucide:external-link" class="text-sm" />
                     </a>
                   </li>
-                  <li v-if="!tenant.admins?.length" class="ops-tenant__muted">none</li>
+                  <li v-if="!tenant.admins?.length" class="text-muted-foreground">none</li>
                 </ul>
-                <div class="ops-tenant__add-admin">
-                  <div class="ops-tenant__add-admin-row">
-                    <input
+                <div class="mt-2 flex flex-col gap-2">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <Input
                       v-model="addAdminWallet"
                       type="text"
-                      class="ops-tenant__slug-input"
                       placeholder="Wallet address"
+                      class="flex-1 min-w-0"
                       :disabled="addAdminLoading"
                       @keydown.enter.prevent="addAdmin()"
                     />
@@ -118,41 +123,46 @@
                       {{ addAdminLoading ? 'Adding…' : 'Add admin' }}
                     </Button>
                   </div>
-                  <span v-if="addAdminError" class="ops-tenant__error-inline">{{ addAdminError }}</span>
+                  <span v-if="addAdminError" class="text-xs text-destructive">{{ addAdminError }}</span>
                 </div>
               </dd>
             </div>
           </dl>
-        </section>
+          </CardContent>
+        </Card>
 
-        <section class="ops-tenant__panel" aria-label="Modules">
-          <h2 class="ops-tenant__panel-title">Modules</h2>
-          <table class="ops-tenant__table">
+        <Card aria-label="Modules">
+          <CardHeader>
+            <CardTitle>Modules</CardTitle>
+          </CardHeader>
+          <CardContent>
+          <div class="overflow-x-auto">
+          <table class="w-full text-sm">
             <thead>
-              <tr>
-                <th>Module</th>
-                <th>State</th>
-                <th>Subscription</th>
-                <th>Actions</th>
+              <tr class="border-b border-border">
+                <th class="h-9 px-4 text-left font-medium">Module</th>
+                <th class="h-9 px-4 text-left font-medium">State</th>
+                <th class="h-9 px-4 text-left font-medium">Subscription</th>
+                <th class="h-9 px-4 text-left font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="entry in moduleRows" :key="entry.id">
-                <td>{{ entry.id }}</td>
-                <td>{{ entry.state }}</td>
-                <td>
+              <tr v-for="entry in moduleRows" :key="entry.id" class="border-b border-border/50">
+                <td class="p-4">{{ entry.id }}</td>
+                <td class="p-4">{{ entry.state }}</td>
+                <td class="p-4">
                   <span v-if="entry.subscription">
                     {{ entry.subscription.billingPeriod }} until
                     {{ formatDate(entry.subscription.periodEnd) }}
                   </span>
-                  <span v-else class="ops-tenant__muted">none</span>
+                  <span v-else class="text-muted-foreground">none</span>
                 </td>
-                <td class="ops-tenant__actions-cell">
-                  <div v-if="entry.state === 'off'" class="ops-tenant__enable-row">
-                    <input
+                <td class="p-4 flex flex-wrap items-center gap-1.5">
+                  <div v-if="entry.state === 'off'" class="inline-flex items-center gap-1.5">
+                    <Input
                       v-model="endDateByModule[entry.id]"
                       type="date"
-                      class="ops-tenant__date-input"
+                      class="h-8 w-36 text-xs"
                       :min="minDateForNewSub"
                       aria-label="End date (optional)"
                     />
@@ -178,7 +188,7 @@
                   <Button
                     size="xs"
                     variant="ghost"
-                    class="ops-tenant__set-date-btn"
+                    class="ml-0.5"
                     :disabled="setPeriodEndLoading === entry.id"
                     @click="openSetPeriodEnd(entry.id)"
                   >
@@ -188,23 +198,28 @@
               </tr>
             </tbody>
           </table>
-          <p v-if="moduleError" class="ops-tenant__error">
+          </div>
+          <p v-if="moduleError" class="mt-2 text-xs text-destructive">
             {{ moduleError }}
           </p>
-        </section>
+          </CardContent>
+        </Card>
 
-        <section class="ops-tenant__panel ops-tenant__panel--full" aria-label="Whitelists">
-          <h2 class="ops-tenant__panel-title">Whitelists</h2>
-          <p class="ops-tenant__panel-hint">
+        <Card class="col-span-full" aria-label="Whitelists">
+          <CardHeader>
+            <CardTitle>Whitelists</CardTitle>
+            <CardDescription>
             Bind on-chain gates to this tenant when creation succeeded but DB assignment failed.
-          </p>
-          <div class="ops-tenant__bind-grid">
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+          <div class="grid gap-6 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
             <div>
-              <h3 class="ops-tenant__section-subtitle">Bound lists</h3>
-              <ul v-if="whitelists.length" class="ops-tenant__bound-list">
-                <li v-for="w in whitelists" :key="w.address" class="ops-tenant__bound-item">
+              <h3 class="m-0 mb-1 text-sm font-medium">Bound lists</h3>
+              <ul v-if="whitelists.length" class="list-none p-0 m-0 flex flex-col gap-1.5">
+                <li v-for="w in whitelists" :key="w.address" class="flex items-center gap-2 flex-wrap">
                   <span>{{ w.name }}</span>
-                  <code class="ops-tenant__bound-address">{{ truncateAddress(w.address) }}</code>
+                  <code class="font-mono text-xs text-muted-foreground">{{ truncateAddress(w.address) }}</code>
                   <Button
                     size="xs"
                     variant="ghost"
@@ -215,11 +230,11 @@
                   </Button>
                 </li>
               </ul>
-              <p v-else class="ops-tenant__muted">No gates bound.</p>
+              <p v-else class="text-muted-foreground m-0">No gates bound.</p>
             </div>
             <div>
-              <h3 class="ops-tenant__section-subtitle">Bind unbound list</h3>
-              <div class="ops-tenant__bind-row">
+              <h3 class="m-0 mb-1 text-sm font-medium">Bind unbound list</h3>
+              <div class="flex flex-wrap items-center gap-2">
                 <Button
                   size="xs"
                   variant="secondary"
@@ -230,7 +245,7 @@
                 </Button>
                 <select
                   v-model="selectedUnboundWhitelist"
-                  class="ops-tenant__select"
+                  class="flex h-9 min-w-[14rem] rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground"
                   :disabled="!unboundWhitelists.length || whitelistBindLoading"
                 >
                   <option value="">
@@ -253,23 +268,27 @@
                   {{ whitelistBindLoading ? 'Binding…' : 'Bind' }}
                 </Button>
               </div>
-              <p v-if="whitelistError" class="ops-tenant__error">{{ whitelistError }}</p>
+              <p v-if="whitelistError" class="mt-2 text-xs text-destructive">{{ whitelistError }}</p>
             </div>
           </div>
-        </section>
+          </CardContent>
+        </Card>
 
-        <section class="ops-tenant__panel ops-tenant__panel--full" aria-label="Raffles">
-          <h2 class="ops-tenant__panel-title">Raffles</h2>
-          <p class="ops-tenant__panel-hint">
+        <Card class="col-span-full" aria-label="Raffles">
+          <CardHeader>
+            <CardTitle>Raffles</CardTitle>
+            <CardDescription>
             Bind on-chain raffles to this tenant when creation succeeded but DB assignment failed.
-          </p>
-          <div class="ops-tenant__bind-grid">
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+          <div class="grid gap-6 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
             <div>
-              <h3 class="ops-tenant__section-subtitle">Bound raffles</h3>
-              <ul v-if="raffles.length" class="ops-tenant__bound-list">
-                <li v-for="r in raffles" :key="r.raffle_pubkey" class="ops-tenant__bound-item">
-                  <code class="ops-tenant__bound-address">{{ truncateAddress(r.raffle_pubkey) }}</code>
-                  <span v-if="r.closed_at" class="ops-tenant__muted">(closed)</span>
+              <h3 class="m-0 mb-1 text-sm font-medium">Bound raffles</h3>
+              <ul v-if="raffles.length" class="list-none p-0 m-0 flex flex-col gap-1.5">
+                <li v-for="r in raffles" :key="r.raffle_pubkey" class="flex items-center gap-2 flex-wrap">
+                  <code class="font-mono text-xs text-muted-foreground">{{ truncateAddress(r.raffle_pubkey) }}</code>
+                  <span v-if="r.closed_at" class="text-muted-foreground">(closed)</span>
                   <Button
                     size="xs"
                     variant="ghost"
@@ -280,11 +299,11 @@
                   </Button>
                 </li>
               </ul>
-              <p v-else class="ops-tenant__muted">No raffles bound.</p>
+              <p v-else class="text-muted-foreground m-0">No raffles bound.</p>
             </div>
             <div>
-              <h3 class="ops-tenant__section-subtitle">Bind unbound raffle</h3>
-              <div class="ops-tenant__bind-row">
+              <h3 class="m-0 mb-1 text-sm font-medium">Bind unbound raffle</h3>
+              <div class="flex flex-wrap items-center gap-2">
                 <Button
                   size="xs"
                   variant="secondary"
@@ -295,7 +314,7 @@
                 </Button>
                 <select
                   v-model="selectedUnboundRaffle"
-                  class="ops-tenant__select"
+                  class="flex h-9 min-w-[14rem] rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground"
                   :disabled="!unboundRaffles.length || raffleBindLoading"
                 >
                   <option value="">
@@ -318,28 +337,32 @@
                   {{ raffleBindLoading ? 'Binding…' : 'Bind' }}
                 </Button>
               </div>
-              <p v-if="raffleError" class="ops-tenant__error">{{ raffleError }}</p>
+              <p v-if="raffleError" class="mt-2 text-xs text-destructive">{{ raffleError }}</p>
             </div>
           </div>
-        </section>
+          </CardContent>
+        </Card>
 
-        <section class="ops-tenant__panel ops-tenant__panel--full" aria-label="Crafter">
-          <h2 class="ops-tenant__panel-title">Crafter</h2>
-          <p class="ops-tenant__panel-hint">
+        <Card class="col-span-full" aria-label="Crafter">
+          <CardHeader>
+            <CardTitle>Crafter</CardTitle>
+            <CardDescription>
             Import tokens when creation succeeded on-chain but confirm failed (e.g. non-2xx from Edge Function).
-          </p>
-          <div class="ops-tenant__bind-grid">
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+          <div class="grid gap-6 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
             <div>
-              <h3 class="ops-tenant__section-subtitle">Tokens</h3>
-              <ul v-if="crafterTokens.length" class="ops-tenant__bound-list">
-                <li v-for="t in crafterTokens" :key="t.mint" class="ops-tenant__bound-item">
+              <h3 class="m-0 mb-1 text-sm font-medium">Tokens</h3>
+              <ul v-if="crafterTokens.length" class="list-none p-0 m-0 flex flex-col gap-1.5">
+                <li v-for="t in crafterTokens" :key="t.mint" class="flex items-center gap-2 flex-wrap">
                   <span>{{ t.name || t.symbol }}</span>
-                  <code class="ops-tenant__bound-address">{{ truncateAddress(t.mint) }}</code>
+                  <code class="font-mono text-xs text-muted-foreground">{{ truncateAddress(t.mint) }}</code>
                   <a
                     :href="explorerLinks.accountUrl(t.mint)"
                     target="_blank"
                     rel="noopener"
-                    class="ops-tenant__admin-btn"
+                    class="inline-flex h-6 w-6 items-center justify-center rounded p-0 text-muted-foreground hover:text-primary hover:bg-card"
                     aria-label="Solscan"
                   >
                     <Icon icon="lucide:external-link" />
@@ -354,31 +377,31 @@
                   </Button>
                 </li>
               </ul>
-              <p v-else class="ops-tenant__muted">No crafter tokens.</p>
+              <p v-else class="text-muted-foreground m-0">No crafter tokens.</p>
             </div>
             <div>
-              <h3 class="ops-tenant__section-subtitle">Import token</h3>
-              <div class="ops-tenant__bind-row ops-tenant__import-form">
-                <input
+              <h3 class="m-0 mb-1 text-sm font-medium">Import token</h3>
+              <div class="flex flex-wrap items-center gap-2">
+                <Input
                   v-model="crafterImportMint"
                   type="text"
-                  class="ops-tenant__slug-input"
                   placeholder="Mint address"
                   :disabled="crafterImportLoading"
+                  class="min-w-[12rem]"
                 />
-                <input
+                <Input
                   v-model="crafterImportName"
                   type="text"
-                  class="ops-tenant__slug-input ops-tenant__slug-input--short"
                   placeholder="Name (optional)"
                   :disabled="crafterImportLoading"
+                  class="w-28 min-w-0"
                 />
-                <input
+                <Input
                   v-model="crafterImportSymbol"
                   type="text"
-                  class="ops-tenant__slug-input ops-tenant__slug-input--short"
                   placeholder="Symbol (optional)"
                   :disabled="crafterImportLoading"
+                  class="w-28 min-w-0"
                 />
                 <Button
                   size="xs"
@@ -389,27 +412,31 @@
                   {{ crafterImportLoading ? 'Importing…' : 'Import' }}
                 </Button>
               </div>
-              <p v-if="crafterImportError" class="ops-tenant__error">{{ crafterImportError }}</p>
+              <p v-if="crafterImportError" class="mt-2 text-xs text-destructive">{{ crafterImportError }}</p>
             </div>
           </div>
-        </section>
+          </CardContent>
+        </Card>
 
-        <section class="ops-tenant__panel ops-tenant__panel--full" aria-label="Billing">
-          <h2 class="ops-tenant__panel-title">Billing</h2>
-          <div v-if="hasWatchtowerModule" class="ops-tenant__watchtower-tracks">
-            <h3 class="ops-tenant__section-subtitle">Watchtower tracks (ops override)</h3>
-            <p class="ops-tenant__panel-hint">
+        <Card class="col-span-full" aria-label="Billing">
+          <CardHeader>
+            <CardTitle>Billing</CardTitle>
+          </CardHeader>
+          <CardContent>
+          <div v-if="hasWatchtowerModule" class="mb-4 pb-4 border-b border-border/50">
+            <h3 class="m-0 mb-1 text-sm font-medium">Watchtower tracks (ops override)</h3>
+            <p class="m-0 mb-2 text-xs text-muted-foreground">
               Manually set paid track counts when billing sync was wrong. Changes apply immediately.
             </p>
-            <div class="ops-tenant__tracks-row">
-              <div v-for="t in watchtowerTracks" :key="t.scopeKey" class="ops-tenant__track-item">
-                <label :for="`track-${t.scopeKey}`">{{ t.label }}</label>
-                <input
+            <div class="flex flex-wrap items-center gap-4">
+              <div v-for="t in watchtowerTracks" :key="t.scopeKey" class="flex items-center gap-2">
+                <label :for="`track-${t.scopeKey}`" class="text-sm text-muted-foreground">{{ t.label }}</label>
+                <Input
                   :id="`track-${t.scopeKey}`"
                   v-model.number="watchtowerTrackInputs[t.scopeKey]"
                   type="number"
                   min="0"
-                  class="ops-tenant__track-input"
+                  class="w-16"
                 />
               </div>
               <Button
@@ -421,129 +448,134 @@
                 {{ watchtowerTracksSaving ? 'Saving…' : 'Save tracks' }}
               </Button>
             </div>
-            <p v-if="watchtowerTracksError" class="ops-tenant__error">{{ watchtowerTracksError }}</p>
+            <p v-if="watchtowerTracksError" class="mt-2 text-xs text-destructive">{{ watchtowerTracksError }}</p>
           </div>
-          <div class="ops-tenant__billing-grid">
+          <div class="grid gap-4 grid-cols-[repeat(auto-fit,minmax(260px,1fr))]">
             <div>
-              <h3 class="ops-tenant__section-subtitle">Subscriptions</h3>
-              <table class="ops-tenant__table ops-tenant__table--compact">
+              <h3 class="m-0 mb-1 text-sm font-medium">Subscriptions</h3>
+              <div class="overflow-x-auto">
+              <table class="w-full text-sm border-collapse">
                 <thead>
-                  <tr>
-                    <th>Module</th>
-                    <th>Billing</th>
-                    <th>Period end</th>
+                  <tr class="border-b border-border">
+                    <th class="h-9 px-2 py-1 text-left font-medium">Module</th>
+                    <th class="h-9 px-2 py-1 text-left font-medium">Billing</th>
+                    <th class="h-9 px-2 py-1 text-left font-medium">Period end</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="entry in moduleRows" :key="entry.id">
-                    <td>{{ entry.id }}</td>
-                    <td>
+                  <tr v-for="entry in moduleRows" :key="entry.id" class="border-b border-border/50">
+                    <td class="p-2">{{ entry.id }}</td>
+                    <td class="p-2">
                       <span v-if="entry.subscription">
                         {{ entry.subscription.billingPeriod }}
                       </span>
-                      <span v-else class="ops-tenant__muted">none</span>
+                      <span v-else class="text-muted-foreground">none</span>
                     </td>
-                    <td>
+                    <td class="p-2">
                       <span v-if="entry.subscription">
                         {{ formatDate(entry.subscription.periodEnd) }}
                       </span>
-                      <span v-else class="ops-tenant__muted">n/a</span>
+                      <span v-else class="text-muted-foreground">n/a</span>
                     </td>
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
 
             <div>
-              <h3 class="ops-tenant__section-subtitle">Payments</h3>
-              <table class="ops-tenant__table ops-tenant__table--compact">
+              <h3 class="m-0 mb-1 text-sm font-medium">Payments</h3>
+              <div class="overflow-x-auto">
+              <table class="w-full text-sm border-collapse">
                 <thead>
-                  <tr>
-                    <th>Module</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Confirmed</th>
-                    <th>Tx</th>
+                  <tr class="border-b border-border">
+                    <th class="h-9 px-2 py-1 text-left font-medium">Module</th>
+                    <th class="h-9 px-2 py-1 text-left font-medium">Amount</th>
+                    <th class="h-9 px-2 py-1 text-left font-medium">Status</th>
+                    <th class="h-9 px-2 py-1 text-left font-medium">Confirmed</th>
+                    <th class="h-9 px-2 py-1 text-left font-medium">Tx</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="p in payments" :key="p.id">
-                    <td>{{ p.moduleId }}</td>
-                    <td>{{ formatUsdc(p.amountUsdc) }} USDC</td>
-                    <td>{{ p.status }}</td>
-                    <td>
+                  <tr v-for="p in payments" :key="p.id" class="border-b border-border/50">
+                    <td class="p-2">{{ p.moduleId }}</td>
+                    <td class="p-2">{{ formatUsdc(p.amountUsdc) }} USDC</td>
+                    <td class="p-2">{{ p.status }}</td>
+                    <td class="p-2">
                       <span v-if="p.confirmedAt">{{ formatDateTime(p.confirmedAt) }}</span>
-                      <span v-else class="ops-tenant__muted">n/a</span>
+                      <span v-else class="text-muted-foreground">n/a</span>
                     </td>
-                    <td>
+                    <td class="p-2">
                       <a
                         v-if="p.txSignature"
                         :href="`https://solscan.io/tx/${p.txSignature}`"
                         target="_blank"
                         rel="noopener"
-                        class="ops-tenant__tx-link"
+                        class="text-primary hover:underline"
                       >
                         View
                       </a>
-                      <span v-else class="ops-tenant__muted">n/a</span>
+                      <span v-else class="text-muted-foreground">n/a</span>
                     </td>
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
-        </section>
+          </CardContent>
+        </Card>
       </div>
     </div>
 
-    <Modal
-      :model-value="setPeriodEndModuleId !== null"
-      title="Set end date"
-      @update:model-value="(v) => { if (!v) setPeriodEndModuleId = null }"
-    >
-      <form
-        v-if="setPeriodEndModuleId"
-        class="ops-tenant__set-date-form"
-        @submit.prevent="submitSetPeriodEnd"
-      >
-        <p class="ops-tenant__set-date-module">
-          Module: <code>{{ setPeriodEndModuleId }}</code>
-        </p>
-        <div class="ops-tenant__form-row">
-          <label for="set-period-end-date">End date</label>
-          <input
-            id="set-period-end-date"
-            v-model="setPeriodEndForm.periodEnd"
-            type="date"
-            required
-            :min="minDateForNewSub"
-            class="ops-tenant__date-input"
-          />
-        </div>
-        <div class="ops-tenant__form-row">
-          <label for="set-period-end-billing">Billing period (for new subscription)</label>
-          <select
-            id="set-period-end-billing"
-            v-model="setPeriodEndForm.billingPeriod"
-            class="ops-tenant__select"
-          >
-            <option value="monthly">Monthly</option>
-            <option value="yearly">Yearly</option>
-          </select>
-        </div>
-        <p v-if="setPeriodEndError" class="ops-tenant__error">
-          {{ setPeriodEndError }}
-        </p>
-        <div class="ops-tenant__form-actions">
-          <Button type="button" variant="secondary" @click="setPeriodEndModuleId = null">
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" :disabled="setPeriodEndSaving">
-            {{ setPeriodEndSaving ? 'Saving…' : 'Set end date' }}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    <Dialog :open="setPeriodEndModuleId !== null" @update:open="(v) => { if (!v) setPeriodEndModuleId = null }">
+      <DialogContent class="sm:max-w-md">
+        <form
+          v-if="setPeriodEndModuleId"
+          class="flex flex-col gap-4"
+          @submit.prevent="submitSetPeriodEnd"
+        >
+          <DialogHeader>
+            <DialogTitle>Set end date</DialogTitle>
+            <DialogDescription>
+              Module: <code class="font-mono text-xs">{{ setPeriodEndModuleId }}</code>
+            </DialogDescription>
+          </DialogHeader>
+          <div class="flex flex-col gap-2">
+            <label for="set-period-end-date" class="text-sm font-medium text-foreground">End date</label>
+            <Input
+              id="set-period-end-date"
+              v-model="setPeriodEndForm.periodEnd"
+              type="date"
+              required
+              :min="minDateForNewSub"
+            />
+          </div>
+          <div class="flex flex-col gap-2">
+            <label for="set-period-end-billing" class="text-sm font-medium text-foreground">Billing period (for new subscription)</label>
+            <select
+              id="set-period-end-billing"
+              v-model="setPeriodEndForm.billingPeriod"
+              class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground"
+            >
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <p v-if="setPeriodEndError" class="text-xs text-destructive m-0">
+            {{ setPeriodEndError }}
+          </p>
+          <DialogFooter class="gap-2 sm:gap-0">
+            <Button type="button" variant="secondary" @click="setPeriodEndModuleId = null">
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" :disabled="setPeriodEndSaving">
+              {{ setPeriodEndSaving ? 'Saving…' : 'Set end date' }}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   </PageSection>
 </template>
 
@@ -555,7 +587,10 @@ import { formatDate, formatDateTime, formatUsdc } from '@decentraguild/core'
 import { truncateAddress } from '@decentraguild/display'
 import { Icon } from '@iconify/vue'
 import { getModuleCatalogListWithAddons } from '@decentraguild/config'
-import { PageSection, Button, Modal } from '@decentraguild/ui/components'
+import { Button } from '~/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/dialog'
+import { Input } from '~/components/ui/input'
 import { useSupabase } from '~/composables/useSupabase'
 import { useExplorerLinks } from '~/composables/useExplorerLinks'
 
@@ -1098,478 +1133,4 @@ function back() {
   }
 }
 </script>
-
-<style scoped>
-.ops-tenant {
-  display: flex;
-  flex-direction: column;
-  gap: var(--theme-space-lg);
-}
-
-.ops-tenant__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--theme-space-lg);
-}
-
-.ops-tenant__back {
-  border: none;
-  padding: 0;
-  background: none;
-  color: var(--theme-text-secondary);
-  font-size: var(--theme-font-xs);
-  cursor: pointer;
-  margin-bottom: var(--theme-space-xs);
-}
-
-.ops-tenant__title {
-  margin: 0;
-  font-size: var(--theme-font-xl);
-  font-weight: 600;
-}
-
-.ops-tenant__subtitle {
-  margin: 0;
-  color: var(--theme-text-secondary);
-}
-
-.ops-tenant__meta {
-  display: flex;
-  gap: var(--theme-space-lg);
-}
-
-.ops-tenant__meta-item {
-  min-width: 120px;
-}
-
-.ops-tenant__meta-label {
-  display: block;
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-}
-
-.ops-tenant__meta-value {
-  font-size: var(--theme-font-lg);
-  font-weight: 600;
-}
-
-.ops-tenant__body {
-  background: var(--theme-bg-card);
-  border-radius: var(--theme-radius-lg);
-  border: 1px solid var(--theme-border);
-  padding: var(--theme-space-lg);
-}
-
-.ops-tenant__body--error {
-  color: var(--theme-error);
-}
-
-.ops-tenant__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr);
-  grid-auto-rows: minmax(0, auto);
-  gap: var(--theme-space-md);
-  background: none;
-  border: none;
-  padding: 0;
-}
-
-.ops-tenant__panel {
-  background: var(--theme-bg-card);
-  border-radius: var(--theme-radius-lg);
-  border: 1px solid var(--theme-border);
-  padding: var(--theme-space-md) var(--theme-space-lg) var(--theme-space-lg);
-}
-
-.ops-tenant__panel--full {
-  grid-column: 1 / -1;
-}
-
-.ops-tenant__panel-title {
-  margin: 0 0 var(--theme-space-sm);
-  font-size: var(--theme-font-md);
-  font-weight: 600;
-}
-
-.ops-tenant__config {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--theme-space-md);
-}
-
-.ops-tenant__config dt {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-}
-
-.ops-tenant__config dd {
-  margin: 0;
-}
-
-.ops-tenant__slug-override {
-  grid-column: 1 / -1;
-}
-
-.ops-tenant__slug-override dd {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.ops-tenant__slug-input {
-  font-size: var(--theme-font-sm);
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-sm);
-  color: var(--theme-text-primary);
-  background-color: var(--theme-bg-card);
-  min-width: 10rem;
-}
-
-.ops-tenant__slug-input:focus {
-  outline: none;
-  border-color: var(--theme-primary);
-}
-
-.ops-tenant__slug-input--short {
-  min-width: 6rem;
-  max-width: 8rem;
-}
-
-.ops-tenant__import-form {
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.ops-tenant__slug-ok {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-success, green);
-}
-
-.ops-tenant__slug-taken {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-error);
-}
-
-.ops-tenant__slug-checking {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-}
-
-.ops-tenant__error-inline {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-error);
-  width: 100%;
-}
-
-.ops-tenant__list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.ops-tenant__admin-list {
-  flex-wrap: wrap;
-  flex-direction: row;
-  gap: 0.35rem;
-}
-
-.ops-tenant__admin-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.2rem 0.35rem;
-  background: var(--theme-bg-secondary);
-  border-radius: var(--theme-radius-sm);
-  border: 1px solid var(--theme-border);
-}
-
-.ops-tenant__admin-addr {
-  font-size: var(--theme-font-xs);
-  max-width: 7rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ops-tenant__admin-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  padding: 0;
-  background: none;
-  border: none;
-  color: var(--theme-text-secondary);
-  cursor: pointer;
-  border-radius: var(--theme-radius-sm);
-  font-size: 0.875rem;
-  text-decoration: none;
-}
-
-.ops-tenant__admin-btn:hover {
-  color: var(--theme-primary);
-  background: var(--theme-bg-card);
-}
-
-.ops-tenant__admins-row {
-  grid-column: 1 / -1;
-}
-
-.ops-tenant__add-admin {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  min-width: 0;
-}
-
-.ops-tenant__add-admin-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.ops-tenant__add-admin-row .ops-tenant__slug-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.ops-tenant__muted {
-  color: var(--theme-text-muted);
-}
-
-.ops-tenant__table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--theme-font-xs);
-}
-
-.ops-tenant__table th,
-.ops-tenant__table td {
-  padding: 0.35rem 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--theme-border-subtle);
-}
-
-.ops-tenant__table th {
-  font-weight: 500;
-  color: var(--theme-text-secondary);
-}
-
-.ops-tenant__table--compact th,
-.ops-tenant__table--compact td {
-  padding: 0.25rem 0.4rem;
-}
-
-.ops-tenant__watchtower-tracks {
-  margin-bottom: var(--theme-space-md);
-  padding-bottom: var(--theme-space-md);
-  border-bottom: 1px solid var(--theme-border-subtle);
-}
-
-.ops-tenant__tracks-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--theme-space-md);
-}
-
-.ops-tenant__track-item {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-xs);
-}
-
-.ops-tenant__track-item label {
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
-}
-
-.ops-tenant__track-input {
-  width: 4rem;
-  font-size: var(--theme-font-sm);
-  padding: 0.25rem 0.35rem;
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-sm);
-  color: var(--theme-text-primary);
-  background-color: var(--theme-bg-card);
-}
-
-.ops-tenant__track-input:focus {
-  outline: none;
-  border-color: var(--theme-primary);
-}
-
-.ops-tenant__billing-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--theme-space-md);
-}
-
-.ops-tenant__panel-hint {
-  margin: 0 0 var(--theme-space-sm);
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-}
-
-.ops-tenant__bind-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--theme-space-lg);
-}
-
-.ops-tenant__bound-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.ops-tenant__bound-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.ops-tenant__bound-address {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-secondary);
-}
-
-.ops-tenant__bind-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.ops-tenant__bind-row .ops-tenant__select {
-  min-width: 14rem;
-}
-
-.ops-tenant__section-subtitle {
-  margin: 0 0 var(--theme-space-xs);
-  font-size: var(--theme-font-sm);
-  font-weight: 500;
-}
-
-.ops-tenant__error {
-  margin-top: var(--theme-space-sm);
-  font-size: var(--theme-font-xs);
-  color: var(--theme-error);
-}
-
-.ops-tenant__tx-link {
-  color: var(--theme-text-link);
-  text-decoration: none;
-}
-
-.ops-tenant__tx-link:hover {
-  text-decoration: underline;
-}
-
-.ops-tenant__actions-cell {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.ops-tenant__enable-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.ops-tenant__date-input {
-  font-size: var(--theme-font-xs);
-  padding: 0.25rem 0.35rem;
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-sm);
-  color: var(--theme-text-primary);
-  background-color: var(--theme-bg-card);
-}
-
-.ops-tenant__date-input:focus {
-  outline: none;
-  border-color: var(--theme-primary);
-}
-
-.ops-tenant__set-date-btn {
-  margin-left: 0.25rem;
-}
-
-.ops-tenant__set-date-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--theme-space-md);
-}
-
-.ops-tenant__set-date-module {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-}
-
-.ops-tenant__set-date-module code {
-  font-size: var(--theme-font-xs);
-}
-
-.ops-tenant__form-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.ops-tenant__form-row label {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-secondary);
-}
-
-.ops-tenant__select {
-  font-size: var(--theme-font-sm);
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-sm);
-  color: var(--theme-text-primary);
-  background-color: var(--theme-bg-card);
-  max-width: 12rem;
-  cursor: pointer;
-}
-
-.ops-tenant__select:focus {
-  outline: none;
-  border-color: var(--theme-primary);
-}
-
-.ops-tenant__select option {
-  color: var(--theme-text-primary);
-  background-color: var(--theme-bg-card);
-}
-
-.ops-tenant__form-actions {
-  display: flex;
-  gap: var(--theme-space-sm);
-  margin-top: var(--theme-space-sm);
-}
-
-@media (max-width: var(--theme-breakpoint-md)) {
-  .ops-tenant__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .ops-tenant__meta {
-    flex-direction: column;
-  }
-}
-</style>
 

@@ -1,0 +1,27 @@
+/**
+ * Platform app base styles and shadcn CSS variables.
+ * Shadcn components use --background, --foreground, etc.
+ */
+
+:root {
+  --background: 240 10% 4%;
+  --foreground: 210 40% 98%;
+  --card: 240 10% 8%;
+  --card-foreground: 210 40% 98%;
+  --popover: 240 10% 8%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 240 100% 75%;
+  --primary-foreground: 240 10% 4%;
+  --secondary: 240 10% 15%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 240 10% 15%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 240 10% 15%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 240 10% 18%;
+  --input: 240 10% 18%;
+  --ring: 240 100% 75%;
+  --radius: 0.75rem;
+}

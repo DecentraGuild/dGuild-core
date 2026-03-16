@@ -10,11 +10,20 @@ import { useAdminSave } from '~/composables/admin/useAdminSave'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { MODULE_NAV } from '~/config/modules'
 import type { TenantConfig } from '@decentraguild/core'
+import {
+  validateDiscordLink,
+  validateHomepage,
+  validateXLink,
+  validateTelegramLink,
+} from '~/lib/validateSocialLinks'
 
 export interface AdminForm {
   name: string
   description: string
   discordServerInviteLink: string
+  homepage: string
+  xLink: string
+  telegramLink: string
   defaultWhitelist: MarketplaceWhitelistSettings | null
   branding: {
     logo: string
@@ -46,6 +55,9 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
     name: '',
     description: '',
     discordServerInviteLink: '',
+    homepage: '',
+    xLink: '',
+    telegramLink: '',
     defaultGate: null,
     branding: buildBrandingForm(null),
     modulesById: {},
@@ -62,6 +74,9 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
         form.name = ''
         form.description = ''
         form.discordServerInviteLink = ''
+        form.homepage = ''
+        form.xLink = ''
+        form.telegramLink = ''
         form.defaultGate = null
         form.modulesById = Object.fromEntries(moduleIds.value.map((id) => [id, 'off']))
         form.branding = buildBrandingForm(null)
@@ -73,6 +88,9 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
       form.name = t.name ?? ''
       form.description = t.description ?? ''
       form.discordServerInviteLink = t.discordServerInviteLink ?? ''
+      form.homepage = t.homepage ?? ''
+      form.xLink = t.xLink ?? ''
+      form.telegramLink = t.telegramLink ?? ''
       form.defaultGate = t.defaultGate ?? null
       form.branding = buildBrandingForm(t)
       const mods = t.modules ?? {}
@@ -132,6 +150,14 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
     const id = tenantId.value
     if (!id) return
     await withSave(async () => {
+      const d = validateDiscordLink(form.discordServerInviteLink)
+      if (!d.valid) throw new Error(`Discord: ${d.error}`)
+      const h = validateHomepage(form.homepage)
+      if (!h.valid) throw new Error(`Homepage: ${h.error}`)
+      const x = validateXLink(form.xLink)
+      if (!x.valid) throw new Error(`X: ${x.error}`)
+      const t = validateTelegramLink(form.telegramLink)
+      if (!t.valid) throw new Error(`Telegram: ${t.error}`)
       const prevMods = tenant.value?.modules ?? {}
       const modules: Record<
         string,
@@ -162,6 +188,9 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
           name: form.name,
           description: form.description || null,
           discord_server_invite_link: form.discordServerInviteLink || null,
+          homepage: form.homepage || null,
+          x_link: form.xLink || null,
+          telegram_link: form.telegramLink || null,
           default_gate: form.defaultGate ?? null,
           branding: { logo: form.branding.logo, theme: form.branding.theme },
           modules,
@@ -181,6 +210,9 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
         name: updated.name as string,
         description: updated.description as string | undefined,
         discordServerInviteLink: updated.discord_server_invite_link as string | undefined,
+        homepage: updated.homepage as string | undefined,
+        xLink: updated.x_link as string | undefined,
+        telegramLink: updated.telegram_link as string | undefined,
         defaultGate: updated.default_gate as TenantConfig['defaultGate'],
         branding: updated.branding as TenantConfig['branding'],
         modules: updated.modules as TenantConfig['modules'],

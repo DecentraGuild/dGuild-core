@@ -231,10 +231,57 @@
               <FormInput v-model="actionForm.amount" label="Amount" placeholder="e.g. 100" required />
             </template>
             <template v-else-if="actionType === 'edit'">
-              <p class="crafter-create-form__hint">Update on-chain metadata (name, symbol, URI).</p>
-              <FormInput v-model="actionForm.name" label="Name" required />
-              <FormInput v-model="actionForm.symbol" label="Symbol" required />
-              <FormInput v-model="actionForm.metadataUri" label="Metadata URI" required />
+              <p class="crafter-create-form__hint">Update on-chain metadata. Edit any field, then upload or paste URI.</p>
+              <FormInput v-model="editForm.name" label="Name" required />
+              <FormInput v-model="editForm.symbol" label="Symbol" required />
+              <FormInput v-model="editForm.description" label="Description" placeholder="Optional" />
+              <FormInput v-model="editForm.imageUrl" label="Image URL" placeholder="Optional" />
+              <FormInput v-model="editForm.sellerFeeBasisPoints" type="number" label="Royalty (basis points)" placeholder="0" />
+              <OptionsSelect
+                v-model="editForm.storageBackend"
+                label="Storage"
+                :options="[
+                  { value: 'api', label: 'DecentraGuild API' },
+                  { value: 'selfhost', label: 'Self-hosted' },
+                ]"
+                content-class="z-[9999]"
+              />
+              <template v-if="editForm.storageBackend === 'api'">
+                <Button
+                  type="button"
+                  variant="primary"
+                  :disabled="!canEditUpload || editUploadLoading"
+                  @click="onEditUploadMetadata"
+                >
+                  <Icon v-if="editUploadLoading" icon="lucide:loader-2" class="crafter-create-form__spinner" />
+                  <span v-else>Upload to dGuild</span>
+                </Button>
+                <p v-if="editForm.metadataUri" class="crafter-create-form__uri-hint">Metadata uploaded</p>
+              </template>
+              <template v-else>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  :disabled="!canEditUpload"
+                  @click="onGenerateEditJson"
+                >
+                  Generate JSON
+                </Button>
+                <div v-if="generatedEditJson" class="crafter-create-form__output">
+                  <div class="crafter-create-form__json-actions">
+                    <Button variant="secondary" size="sm" @click="copyEditJson">Copy</Button>
+                    <Button variant="secondary" size="sm" @click="downloadEditJson">Download</Button>
+                  </div>
+                  <pre class="crafter-create-form__pre">{{ editJsonPreview }}</pre>
+                </div>
+                <p class="crafter-create-form__selfhost-hint">Host the JSON, then paste the URI below.</p>
+                <FormInput
+                  v-model="editForm.metadataUri"
+                  label="Metadata URI"
+                  placeholder="https://arweave.net/... or IPFS link"
+                  required
+                />
+              </template>
             </template>
             <template v-else-if="actionType === 'close'">
               <p class="crafter-create-form__hint">Close your empty token account to reclaim rent (~0.002 SOL). Account must have zero balance.</p>
@@ -451,6 +498,63 @@ function solscanUrl(mint: string): string {
   return `https://solscan.io/token/${mint}${cluster}`
 }
 
+async function onEditUploadMetadata() {
+  if (!actionToken.value) return
+  editUploadLoading.value = true
+  actionError.value = null
+  try {
+    const result = await prepareMetadata({
+      name: editForm.value.name.trim() || actionToken.value.name || 'Token',
+      symbol: editForm.value.symbol.trim() || actionToken.value.symbol || 'TKN',
+      decimals: actionToken.value.decimals,
+      description: editForm.value.description.trim() || '',
+      imageUrl: editForm.value.imageUrl,
+      sellerFeeBasisPoints: clampBasisPoints(editForm.value.sellerFeeBasisPoints),
+    })
+    if (result.metadataUri) editForm.value.metadataUri = result.metadataUri
+    else if (result.error) actionError.value = result.error
+  } finally {
+    editUploadLoading.value = false
+  }
+}
+
+function onGenerateEditJson() {
+  if (!actionToken.value) return
+  const tenantId = tenantStore.tenantId ?? ''
+  const meta = {
+    name: editForm.value.name.trim() || actionToken.value.name || 'Token',
+    symbol: editForm.value.symbol.trim() || actionToken.value.symbol || 'TKN',
+    description: editForm.value.description.trim() || '',
+    image: editForm.value.imageUrl.trim() || undefined,
+    seller_fee_basis_points: clampBasisPoints(editForm.value.sellerFeeBasisPoints),
+    external_url: '',
+    attributes: [],
+    properties: { files: [], category: 'token' },
+    decentraguild: {
+      tenantId,
+      createdVia: 'crafter',
+      version: 1,
+    },
+  }
+  generatedEditJson.value = meta
+}
+
+function copyEditJson() {
+  if (!generatedEditJson.value) return
+  navigator.clipboard.writeText(JSON.stringify(generatedEditJson.value, null, 2))
+}
+
+function downloadEditJson() {
+  if (!generatedEditJson.value || !actionToken.value) return
+  const blob = new Blob([JSON.stringify(generatedEditJson.value, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `metadata-${actionToken.value.symbol.toLowerCase() || 'token'}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 async function onCreateSubmit() {
   const decimals = Number(createForm.value.decimals) || 6
   const result = await create({ ...createForm.value, decimals })
@@ -467,6 +571,22 @@ const actionError = ref<string | null>(null)
 const actionSubmitting = ref(false)
 const actionForm = ref<Record<string, string>>({})
 
+const editForm = ref({
+  name: '',
+  symbol: '',
+  description: '',
+  imageUrl: '',
+  sellerFeeBasisPoints: '0',
+  storageBackend: 'api' as 'api' | 'selfhost',
+  metadataUri: '',
+})
+const editUploadLoading = ref(false)
+const generatedEditJson = ref<Record<string, unknown> | null>(null)
+const canEditUpload = computed(() => Boolean(actionToken.value))
+const editJsonPreview = computed(() =>
+  generatedEditJson.value ? JSON.stringify(generatedEditJson.value, null, 2) : ''
+)
+
 const actionModalTitle = computed(() =>
   actionType.value === 'edit' ? 'Edit metadata' : actionType.value === 'close' ? 'Close account' : actionType.value ? actionType.value.charAt(0).toUpperCase() + actionType.value.slice(1) : ''
 )
@@ -481,7 +601,7 @@ const canSubmitAction = computed(() => {
     case 'burn':
       return !!actionForm.value.amount?.trim()
     case 'edit':
-      return actionForm.value.name?.trim() && actionForm.value.symbol?.trim() && actionForm.value.metadataUri?.trim()
+      return editForm.value.name?.trim() && editForm.value.symbol?.trim() && editForm.value.metadataUri?.trim()
     case 'close':
       return true
     default:
@@ -495,8 +615,18 @@ function openActionModal(type: ActionType, t: CrafterToken) {
   actionError.value = null
   if (type === 'mint') actionForm.value = { destination: auth.wallet.value ?? '', amount: '' }
   else if (type === 'burn') actionForm.value = { amount: '' }
-  else if (type === 'edit') actionForm.value = { name: t.name || '', symbol: t.symbol || '', metadataUri: t.metadata_uri || '' }
-  else actionForm.value = {}
+  else if (type === 'edit') {
+    editForm.value = {
+      name: t.name || '',
+      symbol: t.symbol || '',
+      description: t.description || '',
+      imageUrl: t.image_url || '',
+      sellerFeeBasisPoints: String(t.seller_fee_basis_points ?? 0),
+      storageBackend: t.storage_backend ?? 'api',
+      metadataUri: t.metadata_uri || '',
+    }
+    generatedEditJson.value = null
+  } else actionForm.value = {}
 }
 
 async function onActionSubmit() {
@@ -554,14 +684,21 @@ async function onActionSubmit() {
   }
 
   if (type === 'edit') {
-    const name = actionForm.value.name?.trim()
-    const symbol = actionForm.value.symbol?.trim()
-    const uri = actionForm.value.metadataUri?.trim()
+    const name = editForm.value.name?.trim()
+    const symbol = editForm.value.symbol?.trim()
+    const uri = editForm.value.metadataUri?.trim()
     if (!name || !symbol || !uri) return
     actionSubmitting.value = true
     actionError.value = null
     try {
-      const result = await doEditMetadata(token.mint, name, symbol, uri)
+      const result = await doEditMetadata(token.mint, {
+        name,
+        symbol,
+        description: editForm.value.description?.trim() || undefined,
+        imageUrl: editForm.value.imageUrl?.trim() || undefined,
+        sellerFeeBasisPoints: clampBasisPoints(editForm.value.sellerFeeBasisPoints),
+        metadataUri: uri,
+      })
       if (result.success) actionType.value = null
       else actionError.value = result.error ?? 'Edit failed'
     } finally {

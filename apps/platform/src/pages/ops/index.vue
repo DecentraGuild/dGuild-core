@@ -14,173 +14,158 @@
       </header>
 
       <div class="ops__grid">
-        <section class="ops__panel" aria-label="Tenant overview">
-          <h2 class="ops__panel-title">Tenants</h2>
-          <div v-if="tenantsLoading" class="ops__panel-body">Loading tenants…</div>
-          <div v-else-if="tenantsError" class="ops__panel-body ops__panel-body--error">
-            {{ tenantsError }}
-          </div>
-          <div v-else class="ops__panel-body">
-            <table class="ops-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Slug</th>
-                  <th>Modules</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="t in tenants"
-                  :key="t.id"
-                  class="ops-table__row"
-                  @click="goToTenant(t)"
-                >
-                  <td>{{ t.name }}</td>
-                  <td>
-                    <span v-if="t.slug" class="ops-table__slug">{{ t.slug }}</span>
-                    <span v-else class="ops-table__slug ops-table__slug--muted">id only</span>
-                  </td>
-                  <td>{{ Object.keys(t.modules ?? {}).length }}</td>
-                  <td>
-                    <span v-if="t.createdAt">{{ formatDate(t.createdAt) }}</span>
-                    <span v-else class="ops-table__muted">n/a</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <OpsTenantsCard
+          :tenants="tenants"
+          :loading="tenantsLoading"
+          :error="tenantsError"
+          @select="goToTenant"
+        />
+        <OpsBillingCard
+          :summary="billingSummary"
+          :recent-payments="recentPayments"
+          :loading="billingLoading"
+          :error="billingError"
+        />
 
-        <section class="ops__panel" aria-label="Billing overview">
-          <h2 class="ops__panel-title">Billing</h2>
-          <div v-if="billingLoading" class="ops__panel-body">Loading billing…</div>
-          <div v-else-if="billingError" class="ops__panel-body ops__panel-body--error">
-            {{ billingError }}
-          </div>
-          <div v-else class="ops__panel-body ops__panel-body--stack">
-            <div class="ops-metrics">
-              <div class="ops-metrics__item">
-                <span class="ops-metrics__label">MRR</span>
-                <span class="ops-metrics__value">
-                  {{ formatUsdc(billingSummary.totalMrrUsdc) }} USDC / month
-                </span>
-              </div>
-              <div class="ops-metrics__item">
-                <span class="ops-metrics__label">Active subscriptions</span>
-                <span class="ops-metrics__value">
-                  {{ billingSummary.activeSubscriptions }}
-                </span>
-              </div>
-            </div>
+        <OpsBundleCreateCard
+          :form="bundleForm"
+          :meters="meters"
+          :loading="bundleCreateLoading"
+          :create-error="bundleCreateError"
+          :create-success="bundleCreateSuccess"
+          @submit="createBundle"
+          @add-entitlement="addEntitlement"
+          @remove-entitlement="removeEntitlement"
+        />
+        <OpsBundlesListCard
+          :bundles="bundles"
+          @select="openBundleEdit"
+        />
 
-            <div class="ops__panel-subtitle">Recent payments</div>
-            <table class="ops-table ops-table--compact">
-              <thead>
-                <tr>
-                  <th>Tenant</th>
-                  <th>Product</th>
-                  <th>Amount</th>
-                  <th>Confirmed</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in recentPayments" :key="p.id">
-                  <td>{{ p.tenantSlug }}</td>
-                  <td>{{ p.moduleId }}</td>
-                  <td>{{ formatUsdc(p.amountUsdc) }} USDC</td>
-                  <td>
-                    <span v-if="p.confirmedAt">{{ formatDateTime(p.confirmedAt) }}</span>
-                    <span v-else class="ops-table__muted">n/a</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <OpsVoucherCreateCard
+          :wallet="voucherWallet"
+          :loading="voucherMintLoading"
+          :error="voucherMintError"
+          :success="voucherMintSuccess"
+          @create-mint="createVoucherMint"
+        />
+        <OpsVouchersListCard
+          :drafts="voucherDrafts"
+          :linked="voucherLinked"
+          :metadata-loading="voucherMetadataLoading"
+          @add-metadata="openMetadataModal"
+          @select="goToVoucher"
+        />
 
-        <section class="ops__panel" aria-label="Mint metadata refresh">
-          <h2 class="ops__panel-title">Mint metadata</h2>
-          <div class="ops__panel-body">
-            <p class="ops__panel-desc">
-              After db reset, run <strong>Seed from configs</strong> first to populate <code>mint_metadata</code> from tenant catalog, watchtower, and marketplace scope. Then use <strong>Refresh</strong> to refetch from chain.
-            </p>
-            <div class="ops__metadata-actions">
-              <Button
-                size="sm"
-                variant="default"
-                :disabled="metadataRefreshLoading"
-                @click="seedMetadataFromConfigs"
-              >
-                {{ metadataRefreshLoading ? 'Seeding…' : 'Seed from configs' }}
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                :disabled="metadataRefreshLoading"
-                @click="refreshMetadata(200)"
-              >
-                {{ metadataRefreshLoading ? 'Refreshing…' : 'Refresh batch (200)' }}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                :disabled="metadataRefreshLoading"
-                @click="refreshMetadata(500)"
-              >
-                Refresh batch (500)
-              </Button>
-            </div>
-            <p v-if="metadataRefreshResult" class="ops__metadata-result">
-              {{ metadataRefreshResult }}
-            </p>
-            <p v-if="metadataRefreshError" class="ops__metadata-error">
-              {{ metadataRefreshError }}
-            </p>
-          </div>
-        </section>
-
-        <section class="ops__panel ops__panel--full" aria-label="Recent platform changes">
-          <h2 class="ops__panel-title">Audit log</h2>
-          <div v-if="auditLoading" class="ops__panel-body">Loading audit log…</div>
-          <div v-else-if="auditError" class="ops__panel-body ops__panel-body--error">
-            {{ auditError }}
-          </div>
-          <div v-else class="ops__panel-body">
-            <table class="ops-table ops-table--compact">
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Actor</th>
-                  <th>Action</th>
-                  <th>Target</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="entry in auditEntries" :key="entry.id">
-                  <td>{{ formatDateTime(entry.createdAt) }}</td>
-                  <td class="ops-table__wallet">{{ entry.actorWallet }}</td>
-                  <td>{{ entry.action }}</td>
-                  <td>
-                    <span v-if="entry.targetType">
-                      {{ entry.targetType }}: {{ entry.targetId ?? 'n/a' }}
-                    </span>
-                    <span v-else class="ops-table__muted">n/a</span>
-                  </td>
-                  <td>
-                    <pre v-if="entry.details" class="ops-table__details">
-{{ formatDetails(entry.details) }}
-                    </pre>
-                    <span v-else class="ops-table__muted">n/a</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <OpsMetadataRefreshCard
+          :loading="metadataRefreshLoading"
+          :result="metadataRefreshResult"
+          :error="metadataRefreshError"
+          @seed="seedMetadataFromConfigs"
+          @refresh="refreshMetadata"
+        />
+        <OpsAuditLogCard
+          :entries="auditEntries"
+          :loading="auditLoading"
+          :error="auditError"
+        />
       </div>
+
+      <Dialog :open="!!metadataModalMint" @update:open="(v: boolean) => !v && (metadataModalMint = null)">
+        <DialogContent class="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add metadata & link: {{ metadataModalMint?.slice(0, 8) }}…</DialogTitle>
+            <DialogDescription>Set voucher type, name, symbol, and link to bundle or entitlements.</DialogDescription>
+          </DialogHeader>
+          <form class="ops__voucher-form space-y-4" @submit.prevent="submitMetadataAndLink">
+              <div class="ops__form-row">
+                <label>Voucher type</label>
+                <select v-model="metadataForm.type">
+                  <option value="bundle">Bundle</option>
+                  <option value="individual">Individual</option>
+                </select>
+              </div>
+              <template v-if="metadataForm.type === 'bundle'">
+                <div class="ops__form-row">
+                  <label>Bundle</label>
+                  <select v-model="metadataForm.bundleId" required>
+                    <option value="">Select bundle</option>
+                    <option v-for="b in bundles" :key="b.id" :value="b.id">{{ b.label }} ({{ b.id }})</option>
+                  </select>
+                </div>
+              </template>
+              <div class="ops__form-row">
+                <label>Name</label>
+                <input v-model="metadataForm.name" type="text" placeholder="Voucher name" required />
+              </div>
+              <div class="ops__form-row">
+                <label>Symbol</label>
+                <input v-model="metadataForm.symbol" type="text" placeholder="e.g. VOUCH" required />
+              </div>
+              <div class="ops__form-row">
+                <label>Image URL (optional)</label>
+                <input v-model="metadataForm.imageUrl" type="url" placeholder="https://…" />
+              </div>
+              <div class="ops__form-row">
+                <label>Royalty (basis points, optional)</label>
+                <input v-model.number="metadataForm.sellerFeeBasisPoints" type="number" min="0" max="10000" placeholder="0" />
+                <span class="ops__form-hint">0–10000 (100 = 1%)</span>
+              </div>
+              <div class="ops__form-row">
+                <label>Tokens required</label>
+                <input v-model.number="metadataForm.tokensRequired" type="number" min="1" />
+              </div>
+              <div class="ops__form-row">
+                <label>Max redemptions per tenant (optional)</label>
+                <input v-model.number="metadataForm.maxRedemptionsPerTenant" type="number" min="0" placeholder="Unlimited" />
+              </div>
+              <template v-if="metadataForm.type === 'individual'">
+                <div class="ops__form-row">
+                  <label>Label (optional)</label>
+                  <input v-model="metadataForm.label" type="text" placeholder="Display label" />
+                </div>
+                <div class="ops__form-section">
+                  <div class="ops__form-section-header">
+                    <span>Entitlements</span>
+                    <Button type="button" size="sm" variant="outline" @click="addMetadataEntitlement">
+                      Add entitlement
+                    </Button>
+                  </div>
+                  <div v-for="(e, i) in metadataForm.entitlements" :key="i" class="ops__entitlement-row">
+                    <select v-model="e.meter_key" required>
+                      <option value="">Select meter</option>
+                      <option v-for="m in meters" :key="m.meter_key" :value="m.meter_key">
+                        {{ m.meter_key }} ({{ m.product_key }})
+                      </option>
+                    </select>
+                    <input v-model.number="e.quantity" type="number" min="1" placeholder="Qty" required />
+                    <input v-model.number="e.duration_days" type="number" min="0" placeholder="Days" required />
+                    <Button type="button" size="sm" variant="ghost" @click="removeMetadataEntitlement(i)">Remove</Button>
+                  </div>
+                </div>
+              </template>
+              <div class="flex flex-wrap items-center gap-2">
+                <Button type="button" size="sm" variant="ghost" @click="metadataModalMint = null">Cancel</Button>
+                <Button type="submit" size="sm" :disabled="voucherMetadataLoading">
+                  Add metadata & link
+                </Button>
+                <p v-if="metadataFormError" class="text-destructive text-sm">{{ metadataFormError }}</p>
+              </div>
+            </form>
+        </DialogContent>
+      </Dialog>
+
+      <OpsBundleEditModal
+        :bundle-id="bundleEditId"
+        :form="bundleEditForm"
+        :meters="meters"
+        :loading="bundleEditLoading"
+        :saving="bundleEditSaving"
+        :error="bundleEditError"
+        @close="bundleEditId = null"
+        @save="saveBundleEdit"
+      />
+
     </div>
   </PageSection>
 </template>
@@ -188,12 +173,24 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Platform operations' })
 
+import { Keypair, PublicKey } from '@solana/web3.js'
 import { useAuth } from '@decentraguild/auth'
 import { formatDate, formatDateTime, formatUsdc } from '@decentraguild/core'
-import { PageSection, Button } from '@decentraguild/ui/components'
+import { Button } from '~/components/ui/button'
+import {
+  buildCreateMintOnlyTransaction,
+  buildCreateMetadataTransaction,
+  sendAndConfirmTransaction,
+  getEscrowWalletFromConnector,
+  createConnection,
+} from '@decentraguild/web3'
 import { useSupabase } from '~/composables/useSupabase'
+import { useRpc } from '~/composables/useRpc'
+import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 
 const auth = useAuth()
+const toastStore = useTransactionNotificationsStore()
 
 interface TenantSummary {
   id: string
@@ -248,9 +245,412 @@ const metadataRefreshResult = ref<string | null>(null)
 const metadataRefreshError = ref<string | null>(null)
 const metadataRefreshOffset = ref(0)
 
-onMounted(async () => {
-  await Promise.all([loadTenants(), loadBilling(), loadAudit()])
+interface MeterOption {
+  meter_key: string
+  product_key: string
+  description?: string | null
+}
+
+const meters = ref<MeterOption[]>([])
+const bundleForm = reactive({
+  id: '',
+  label: '',
+  productKey: '',
+  priceUsdc: 0,
+  entitlements: [] as Array<{ meter_key: string; quantity: number; duration_days: number }>,
 })
+const bundleCreateLoading = ref(false)
+const bundleCreateError = ref<string | null>(null)
+const bundleCreateSuccess = ref<string | null>(null)
+
+interface BundleOption {
+  id: string
+  label: string
+  product_key: string
+}
+
+const bundles = ref<BundleOption[]>([])
+
+const bundleEditId = ref<string | null>(null)
+const bundleEditForm = ref<{
+  label: string
+  productKey: string
+  priceUsdc: number
+  entitlements: Array<{ meter_key: string; quantity: number; duration_days: number }>
+} | null>(null)
+const bundleEditLoading = ref(false)
+const bundleEditSaving = ref(false)
+const bundleEditError = ref<string | null>(null)
+
+const voucherWallet = computed(() => {
+  const w = auth.wallet.value
+  if (!w) return null
+  return typeof w === 'string' ? w : (w as { toBase58?: () => string })?.toBase58?.() ?? null
+})
+
+const voucherDrafts = ref<Array<{ mint: string; created_at: string }>>([])
+const voucherLinked = ref<Array<{ mint: string; type: string; bundleId?: string; label?: string }>>([])
+const voucherMintLoading = ref(false)
+const voucherMintError = ref<string | null>(null)
+const voucherMintSuccess = ref<string | null>(null)
+
+const metadataModalMint = ref<string | null>(null)
+const metadataForm = reactive({
+  type: 'bundle' as 'bundle' | 'individual',
+  bundleId: '',
+  name: '',
+  symbol: '',
+  imageUrl: '',
+  sellerFeeBasisPoints: 0,
+  label: '',
+  tokensRequired: 1,
+  maxRedemptionsPerTenant: null as number | null,
+  entitlements: [] as Array<{ meter_key: string; quantity: number; duration_days: number }>,
+})
+const voucherMetadataLoading = ref<string | false>(false)
+const metadataFormError = ref<string | null>(null)
+
+onMounted(async () => {
+  // Stagger platform requests to avoid worker pool exhaustion (503 InvalidWorkerCreation).
+  // Platform function cold-starts slowly; 6 concurrent requests overwhelm the Edge Runtime.
+  await Promise.all([loadTenants(), loadBilling(), loadAudit()])
+  await Promise.all([loadMeters(), loadBundles(), loadVoucherList()])
+})
+
+async function loadMeters() {
+  try {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('platform', {
+      body: { action: 'meters-list' },
+    })
+    if (error) throw new Error(error.message)
+    meters.value = (data as { meters?: MeterOption[] }).meters ?? []
+  } catch {
+    meters.value = []
+  }
+}
+
+async function loadBundles() {
+  try {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('platform', {
+      body: { action: 'bundles-list' },
+    })
+    if (error) throw new Error(error.message)
+    bundles.value = (data as { bundles?: BundleOption[] }).bundles ?? []
+  } catch {
+    bundles.value = []
+  }
+}
+
+async function loadVoucherList() {
+  try {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('platform', {
+      body: { action: 'voucher-list' },
+    })
+    if (error) throw new Error(error.message)
+    const r = data as { drafts?: Array<{ mint: string; created_at: string }>; linked?: Array<{ mint: string; type: string; bundleId?: string; label?: string }> }
+    voucherDrafts.value = r.drafts ?? []
+    voucherLinked.value = r.linked ?? []
+  } catch {
+    voucherDrafts.value = []
+    voucherLinked.value = []
+  }
+}
+
+function addMetadataEntitlement() {
+  metadataForm.entitlements.push({ meter_key: '', quantity: 1, duration_days: 30 })
+}
+
+function removeMetadataEntitlement(i: number) {
+  metadataForm.entitlements.splice(i, 1)
+}
+
+watch(
+  () => metadataForm.type,
+  (type) => {
+    if (type === 'individual' && metadataForm.entitlements.length === 0) {
+      addMetadataEntitlement()
+    }
+  },
+)
+
+async function openBundleEdit(bundle: { id: string; label: string; product_key: string }) {
+  bundleEditId.value = bundle.id
+  bundleEditForm.value = null
+  bundleEditError.value = null
+  bundleEditLoading.value = true
+  try {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('platform', {
+      body: { action: 'bundle-get', bundleId: bundle.id },
+    })
+    if (error) throw new Error(error.message)
+    const r = data as { bundle?: { id: string; label: string; product_key: string; price_usdc: number }; entitlements?: Array<{ meter_key: string; quantity: number; duration_days: number }> }
+    if (!r.bundle) throw new Error('Bundle not found')
+    bundleEditForm.value = {
+      label: r.bundle.label,
+      productKey: r.bundle.product_key,
+      priceUsdc: r.bundle.price_usdc,
+      entitlements: (r.entitlements ?? []).map((e) => ({ ...e })),
+    }
+    if (bundleEditForm.value.entitlements.length === 0) {
+      bundleEditForm.value.entitlements.push({ meter_key: '', quantity: 1, duration_days: 30 })
+    }
+  } catch (e) {
+    bundleEditError.value = e instanceof Error ? e.message : 'Failed to load bundle'
+  } finally {
+    bundleEditLoading.value = false
+  }
+}
+
+async function saveBundleEdit(form: { label: string; productKey: string; priceUsdc: number; entitlements: Array<{ meter_key: string; quantity: number; duration_days: number }> }) {
+  const id = bundleEditId.value
+  if (!id) return
+  bundleEditSaving.value = true
+  bundleEditError.value = null
+  try {
+    const supabase = useSupabase()
+    const { error } = await supabase.functions.invoke('platform', {
+      body: {
+        action: 'bundle-update',
+        bundleId: id,
+        label: form.label.trim(),
+        productKey: form.productKey.trim(),
+        priceUsdc: form.priceUsdc,
+        entitlements: form.entitlements.filter((e) => e.meter_key?.trim()),
+      },
+    })
+    if (error) throw new Error(error.message)
+    toastStore.add(`bundle-update-${Date.now()}`, { status: 'success', message: `Bundle ${id} updated.` })
+    bundleEditId.value = null
+    await loadBundles()
+  } catch (e) {
+    bundleEditError.value = e instanceof Error ? e.message : 'Failed to update bundle'
+  } finally {
+    bundleEditSaving.value = false
+  }
+}
+
+function goToVoucher(v: { mint: string }) {
+  navigateTo(`/ops/vouchers/${encodeURIComponent(v.mint)}`)
+}
+
+function openMetadataModal(mint: string) {
+  metadataModalMint.value = mint
+  metadataForm.type = 'bundle'
+  metadataForm.bundleId = ''
+  metadataForm.name = ''
+  metadataForm.symbol = ''
+  metadataForm.imageUrl = ''
+  metadataForm.sellerFeeBasisPoints = 0
+  metadataForm.label = ''
+  metadataForm.tokensRequired = 1
+  metadataForm.maxRedemptionsPerTenant = null
+  metadataForm.entitlements = []
+  metadataFormError.value = null
+}
+
+async function createVoucherMint() {
+  const wallet = getEscrowWalletFromConnector()
+  const supabase = useSupabase()
+  const { rpcUrl } = useRpc()
+  if (!wallet?.publicKey || !rpcUrl.value) {
+    voucherMintError.value = 'Connect wallet and ensure RPC is configured'
+    return
+  }
+  const toastId = `voucher-mint-${Date.now()}`
+  toastStore.add(toastId, { status: 'pending', message: 'Creating mint…' })
+  voucherMintLoading.value = true
+  voucherMintError.value = null
+  voucherMintSuccess.value = null
+  try {
+    const mintKeypair = Keypair.generate()
+    const mint = mintKeypair.publicKey.toBase58()
+    const connection = createConnection(rpcUrl.value)
+    const tx = await buildCreateMintOnlyTransaction({
+      mintKeypair,
+      decimals: 0,
+      payer: wallet.publicKey,
+      connection,
+    })
+    const sig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey, {
+      signers: [mintKeypair],
+    })
+    const { error } = await supabase.functions.invoke('platform', {
+      body: { action: 'voucher-register-draft', mint },
+    })
+    if (error) throw new Error(error.message ?? 'Failed to register draft')
+    toastStore.add(toastId, { status: 'success', message: `Mint created: ${mint.slice(0, 8)}…`, signature: sig })
+    voucherMintSuccess.value = `Mint created: ${mint.slice(0, 8)}…`
+    await loadVoucherList()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to create mint'
+    voucherMintError.value = msg
+    toastStore.add(toastId, { status: 'error', message: msg })
+  } finally {
+    voucherMintLoading.value = false
+  }
+}
+
+async function submitMetadataAndLink() {
+  const mint = metadataModalMint.value
+  if (!mint) return
+  const wallet = getEscrowWalletFromConnector()
+  const supabase = useSupabase()
+  const { rpcUrl } = useRpc()
+  if (!wallet?.publicKey || !rpcUrl.value) {
+    metadataFormError.value = 'Connect wallet and ensure RPC is configured'
+    return
+  }
+  if (metadataForm.type === 'individual' && metadataForm.entitlements.length === 0) {
+    metadataFormError.value = 'Add at least one entitlement'
+    return
+  }
+  if (metadataForm.type === 'bundle' && !metadataForm.bundleId?.trim()) {
+    metadataFormError.value = 'Select a bundle'
+    return
+  }
+
+  const toastId = `voucher-metadata-${mint}-${Date.now()}`
+  toastStore.add(toastId, { status: 'pending', message: 'Adding metadata & linking…' })
+  voucherMetadataLoading.value = mint
+  metadataFormError.value = null
+  try {
+    const connection = createConnection(rpcUrl.value)
+
+    const mintInfo = await connection.getAccountInfo(new PublicKey(mint))
+    if (!mintInfo) {
+      throw new Error('Mint account not found on chain. Ensure the mint was created and confirmed.')
+    }
+
+    const { data: metaData, error: metaErr } = await supabase.functions.invoke('platform', {
+      body: {
+        action: 'voucher-prepare-metadata',
+        name: metadataForm.name.trim(),
+        symbol: metadataForm.symbol.trim(),
+        imageUrl: metadataForm.imageUrl?.trim() || undefined,
+        sellerFeeBasisPoints: Math.max(0, Math.min(10000, metadataForm.sellerFeeBasisPoints ?? 0)),
+        voucherType: metadataForm.type,
+        bundleId: metadataForm.type === 'bundle' ? metadataForm.bundleId.trim() : undefined,
+      },
+    })
+    if (metaErr) throw new Error(metaErr.message ?? 'Failed to prepare metadata')
+    const metadataUri = (metaData as { metadataUri?: string })?.metadataUri
+    if (!metadataUri || typeof metadataUri !== 'string' || !metadataUri.trim()) {
+      throw new Error('No metadata URI returned from server')
+    }
+    const uri = metadataUri.trim()
+    if (uri.length > 200) {
+      throw new Error('Metadata URI too long (max 200 chars). Use a shorter storage path.')
+    }
+
+    const name = metadataForm.name.trim().slice(0, 32)
+    const symbol = metadataForm.symbol.trim().slice(0, 10)
+    const sellerFeeBasisPoints = Math.max(0, Math.min(10000, metadataForm.sellerFeeBasisPoints ?? 0))
+    const tx = buildCreateMetadataTransaction({
+      mint,
+      name,
+      symbol,
+      uri,
+      updateAuthority: wallet.publicKey,
+      payer: wallet.publicKey,
+      sellerFeeBasisPoints,
+    })
+    const metaSig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
+
+    if (metadataForm.type === 'bundle') {
+      const { error: linkErr } = await supabase.functions.invoke('platform', {
+        body: {
+          action: 'voucher-create-bundle',
+          mint,
+          bundleId: metadataForm.bundleId.trim(),
+          tokensRequired: metadataForm.tokensRequired,
+          maxRedemptionsPerTenant: metadataForm.maxRedemptionsPerTenant ?? undefined,
+        },
+      })
+      if (linkErr) throw new Error(linkErr.message ?? 'Failed to link voucher')
+    } else {
+      const { error: linkErr } = await supabase.functions.invoke('platform', {
+        body: {
+          action: 'voucher-create-individual',
+          mint,
+          label: metadataForm.label?.trim() || undefined,
+          maxRedemptionsPerTenant: metadataForm.maxRedemptionsPerTenant ?? undefined,
+          entitlements: metadataForm.entitlements.filter((e) => e.meter_key?.trim()),
+        },
+      })
+      if (linkErr) throw new Error(linkErr.message ?? 'Failed to create voucher')
+    }
+
+    toastStore.add(toastId, {
+      status: 'success',
+      message: `Metadata added & voucher linked: ${mint.slice(0, 8)}…`,
+      signature: metaSig,
+    })
+    metadataModalMint.value = null
+    await loadVoucherList()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to add metadata & link'
+    metadataFormError.value = msg
+    toastStore.add(toastId, { status: 'error', message: msg })
+  } finally {
+    voucherMetadataLoading.value = false
+  }
+}
+
+function addEntitlement() {
+  bundleForm.entitlements.push({ meter_key: '', quantity: 1, duration_days: 30 })
+}
+
+function removeEntitlement(i: number) {
+  bundleForm.entitlements.splice(i, 1)
+}
+
+async function createBundle() {
+  if (bundleForm.entitlements.length === 0) {
+    bundleCreateError.value = 'Add at least one entitlement'
+    return
+  }
+  const toastId = `bundle-create-${Date.now()}`
+  toastStore.add(toastId, { status: 'pending', message: 'Creating bundle…' })
+  bundleCreateLoading.value = true
+  bundleCreateError.value = null
+  bundleCreateSuccess.value = null
+  try {
+    const supabase = useSupabase()
+    const { data, error } = await supabase.functions.invoke('platform', {
+      body: {
+        action: 'bundle-create',
+        bundleId: bundleForm.id.trim(),
+        label: bundleForm.label.trim(),
+        productKey: bundleForm.productKey.trim(),
+        priceUsdc: bundleForm.priceUsdc,
+        entitlements: bundleForm.entitlements.filter((e) => e.meter_key?.trim()),
+      },
+    })
+    if (error) throw new Error(error.message)
+    const result = data as { ok?: boolean; bundleId?: string }
+    if (result?.ok) {
+      toastStore.add(toastId, { status: 'success', message: `Bundle ${result.bundleId} created.` })
+      bundleCreateSuccess.value = `Bundle ${result.bundleId} created.`
+      bundleForm.id = ''
+      bundleForm.label = ''
+      bundleForm.productKey = ''
+      bundleForm.priceUsdc = 0
+      bundleForm.entitlements = []
+    } else {
+      throw new Error('Create failed')
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to create bundle'
+    bundleCreateError.value = msg
+    toastStore.add(toastId, { status: 'error', message: msg })
+  } finally {
+    bundleCreateLoading.value = false
+  }
+}
 
 async function loadTenants() {
   tenantsLoading.value = true
@@ -292,6 +692,8 @@ async function loadBilling() {
 }
 
 async function seedMetadataFromConfigs() {
+  const toastId = `metadata-seed-${Date.now()}`
+  toastStore.add(toastId, { status: 'pending', message: 'Seeding metadata from configs…' })
   metadataRefreshLoading.value = true
   metadataRefreshResult.value = null
   metadataRefreshError.value = null
@@ -302,18 +704,24 @@ async function seedMetadataFromConfigs() {
     })
     if (error) throw new Error(error.message)
     const res = data as { seeded?: number; total?: number; message?: string; remaining?: number }
-    metadataRefreshResult.value = res.message ?? `Seeded ${res.seeded ?? 0} mints.`
+    const msg = res.message ?? `Seeded ${res.seeded ?? 0} mints.`
+    metadataRefreshResult.value = msg
     if ((res.remaining ?? 0) > 0) {
       metadataRefreshResult.value += ' Click again to continue.'
     }
+    toastStore.add(toastId, { status: 'success', message: msg })
   } catch (e) {
-    metadataRefreshError.value = e instanceof Error ? e.message : 'Failed to seed metadata'
+    const errMsg = e instanceof Error ? e.message : 'Failed to seed metadata'
+    metadataRefreshError.value = errMsg
+    toastStore.add(toastId, { status: 'error', message: errMsg })
   } finally {
     metadataRefreshLoading.value = false
   }
 }
 
 async function refreshMetadata(limit: number) {
+  const toastId = `metadata-refresh-${Date.now()}`
+  toastStore.add(toastId, { status: 'pending', message: 'Refreshing metadata…' })
   metadataRefreshLoading.value = true
   metadataRefreshResult.value = null
   metadataRefreshError.value = null
@@ -324,15 +732,19 @@ async function refreshMetadata(limit: number) {
     })
     if (error) throw new Error(error.message)
     const res = data as { refreshed?: number; total?: number; message?: string; nextOffset?: number | null }
-    metadataRefreshResult.value = res.message ?? `Refreshed ${res.refreshed ?? 0} of ${res.total ?? 0} mints.`
+    const msg = res.message ?? `Refreshed ${res.refreshed ?? 0} of ${res.total ?? 0} mints.`
+    metadataRefreshResult.value = msg
     if (res.nextOffset != null) {
       metadataRefreshOffset.value = res.nextOffset
       metadataRefreshResult.value += ` Click again to continue.`
     } else {
       metadataRefreshOffset.value = 0
     }
+    toastStore.add(toastId, { status: 'success', message: msg })
   } catch (e) {
-    metadataRefreshError.value = e instanceof Error ? e.message : 'Failed to refresh metadata'
+    const errMsg = e instanceof Error ? e.message : 'Failed to refresh metadata'
+    metadataRefreshError.value = errMsg
+    toastStore.add(toastId, { status: 'error', message: errMsg })
   } finally {
     metadataRefreshLoading.value = false
   }
@@ -372,10 +784,6 @@ function goToTenant(t: TenantSummary) {
   navigateTo(`/ops/tenants/${encodeURIComponent(t.id)}`)
 }
 
-function formatDetails(details: Record<string, unknown> | null): string {
-  if (!details) return ''
-  return JSON.stringify(details, null, 2)
-}
 </script>
 
 <style scoped>
@@ -406,165 +814,80 @@ function formatDetails(details: Record<string, unknown> | null): string {
 
 .ops__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr);
-  grid-auto-rows: minmax(0, auto);
-  gap: var(--theme-space-md);
-}
-
-.ops__panel {
-  background: var(--theme-bg-card);
-  border-radius: var(--theme-radius-lg);
-  border: 1px solid var(--theme-border);
-  display: flex;
-  flex-direction: column;
-}
-
-.ops__panel--full {
-  grid-column: 1 / -1;
-}
-
-.ops__panel-title {
-  margin: 0;
-  padding: var(--theme-space-md) var(--theme-space-lg) 0;
-  font-size: var(--theme-font-md);
-  font-weight: 600;
-}
-
-.ops__panel-desc {
-  margin: 0 0 var(--theme-space-md);
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
-}
-
-.ops__panel-desc code {
-  font-size: 0.9em;
-  background: var(--theme-bg-secondary);
-  padding: 0.1rem 0.3rem;
-  border-radius: var(--theme-radius-sm);
-}
-
-.ops__metadata-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--theme-space-sm);
-  margin-bottom: var(--theme-space-sm);
-}
-
-.ops__metadata-result {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
-}
-
-.ops__metadata-error {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-error);
-}
-
-.ops__panel-body {
-  padding: var(--theme-space-md) var(--theme-space-lg) var(--theme-space-lg);
-}
-
-.ops__panel-body--stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--theme-space-md);
-}
-
-.ops__panel-body--error {
-  color: var(--theme-error);
-}
-
-.ops__panel-subtitle {
-  font-size: var(--theme-font-sm);
-  font-weight: 500;
-  color: var(--theme-text-secondary);
-}
-
-.ops-metrics {
-  display: flex;
-  flex-wrap: wrap;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--theme-space-lg);
 }
 
-.ops-metrics__item {
-  min-width: 160px;
+.ops__bundle-form,
+.ops__voucher-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-md);
 }
 
-.ops-metrics__label {
+.ops__voucher-form .ops__form-row input,
+.ops__voucher-form .ops__form-row select {
+  max-width: 320px;
+}
+
+.ops__form-row label,
+.ops__form-section-header {
   display: block;
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-  margin-bottom: 0.25rem;
-}
-
-.ops-metrics__value {
-  font-size: var(--theme-font-md);
-  font-weight: 600;
-}
-
-.ops-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--theme-font-xs);
-}
-
-.ops-table th,
-.ops-table td {
-  padding: 0.35rem 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--theme-border-subtle);
-}
-
-.ops-table th {
+  font-size: var(--theme-font-sm);
   font-weight: 500;
+  margin-bottom: 0.25rem;
   color: var(--theme-text-secondary);
 }
 
-.ops-table__row {
-  cursor: pointer;
-}
-
-.ops-table__row:hover {
-  background: var(--theme-bg-secondary);
-}
-
-.ops-table--compact th,
-.ops-table--compact td {
-  padding: 0.25rem 0.4rem;
-}
-
-.ops-table__slug {
-  font-family: monospace;
-}
-
-.ops-table__slug--muted {
-  color: var(--theme-text-muted);
-}
-
-.ops-table__muted {
-  color: var(--theme-text-muted);
-}
-
-.ops-table__wallet {
-  max-width: 180px;
-  font-family: monospace;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ops-table__details {
-  margin: 0;
-  max-width: 260px;
-  max-height: 5.5rem;
-  overflow: auto;
-  font-family: monospace;
-  font-size: 0.65rem;
-  background: var(--theme-bg-secondary);
+.ops__form-row input,
+.ops__form-row select {
+  width: 100%;
+  max-width: 280px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-sm);
-  padding: 0.25rem 0.35rem;
+  font-size: var(--theme-font-sm);
+  background: var(--theme-bg-primary);
+  color: var(--theme-text-primary);
+}
+
+.ops__form-section {
+  margin-top: var(--theme-space-sm);
+}
+
+.ops__form-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--theme-space-sm);
+}
+
+.ops__entitlement-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--theme-space-sm);
+  margin-bottom: var(--theme-space-xs);
+}
+
+.ops__entitlement-row select {
+  min-width: 180px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  font-size: var(--theme-font-sm);
+  background: var(--theme-bg-primary);
+  color: var(--theme-text-primary);
+}
+
+.ops__entitlement-row input {
+  width: 4rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  font-size: var(--theme-font-sm);
+  background: var(--theme-bg-primary);
+  color: var(--theme-text-primary);
 }
 
 @media (max-width: var(--theme-breakpoint-md)) {

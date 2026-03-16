@@ -5,7 +5,7 @@
     </span>
     <div class="dguild-center__left">
       <NuxtLink to="/onboard" class="dguild-center__cta">
-        <Button variant="primary" size="sm">Create org</Button>
+        <Button size="sm">Create org</Button>
       </NuxtLink>
     </div>
     <div class="dguild-center__right">
@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { Button } from '@decentraguild/ui/components'
+import { Button } from '~/components/ui/button'
 
 const intro = 'With dGuild BYO, partners can:'
 

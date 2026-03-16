@@ -24,7 +24,7 @@
             <tr v-for="p in payments" :key="p.id">
               <td>{{ formatPaymentDate(p.confirmedAt) }}</td>
               <td>{{ p.productLabel }}</td>
-              <td class="admin__billing-amount">{{ formatUsdc(p.amountUsdc) }} USDC</td>
+              <td class="admin__billing-amount">{{ formatAmount(p) }}</td>
               <td>
                 <a
                   v-if="p.txSignature"
@@ -89,6 +89,7 @@ const METER_TO_PRODUCT: Record<string, string> = {
 interface BillingPaymentRecord {
   id: string
   amountUsdc: number
+  paymentMethod: string
   txSignature: string | null
   confirmedAt: string | null
   productLabel: string
@@ -117,7 +118,7 @@ async function load() {
     const supabase = useSupabase()
     const { data: paymentsData, error } = await supabase
       .from('billing_payments')
-      .select('id, amount_usdc, tx_signature, confirmed_at, quote_id')
+      .select('id, amount_usdc, payment_method, tx_signature, confirmed_at, quote_id')
       .eq('tenant_id', tenantId.value)
       .eq('status', 'confirmed')
       .order('confirmed_at', { ascending: false })
@@ -151,6 +152,7 @@ async function load() {
       return {
         id: r.id as string,
         amountUsdc: Number(r.amount_usdc),
+        paymentMethod: (r.payment_method as string) ?? 'usdc',
         txSignature: r.tx_signature as string | null,
         confirmedAt: r.confirmed_at as string | null,
         productLabel: productLabelFromLineItems(lineItems),
@@ -168,6 +170,11 @@ async function load() {
 watch(tenantId, (id) => {
   if (id) load()
 }, { immediate: true })
+
+function formatAmount(p: BillingPaymentRecord): string {
+  if (p.amountUsdc === 0 && p.paymentMethod === 'voucher') return 'Voucher'
+  return `${formatUsdc(p.amountUsdc)} USDC`
+}
 
 function formatPaymentDate(iso: string | null): string {
   if (!iso) return '--'

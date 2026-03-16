@@ -73,6 +73,14 @@
                 </Teleport>
               </div>
               <NuxtLink
+                v-if="adminVouchersTab"
+                :to="adminVouchersTab.path ? linkTo(adminVouchersTab.path) : linkToWithTab(route.path, adminVouchersTab.id)"
+                class="layout-subnav__tab"
+                :class="{ 'layout-subnav__tab--active': isSubnavTabActive(adminVouchersTab) }"
+              >
+                {{ adminVouchersTab.label }}
+              </NuxtLink>
+              <NuxtLink
                 v-if="adminBillingTab"
                 :to="adminBillingTab.path ? linkTo(adminBillingTab.path) : linkToWithTab(route.path, adminBillingTab.id)"
                 class="layout-subnav__tab"
@@ -242,6 +250,9 @@ const adminPrimaryTabs = computed(() =>
 )
 const adminMoreTabs = computed(() =>
   subnavTabs.value.filter((t) => ADMIN_MORE_TAB_IDS.includes(t.id))
+)
+const adminVouchersTab = computed(() =>
+  subnavTabs.value.find((t) => t.id === 'vouchers')
 )
 const adminBillingTab = computed(() =>
   subnavTabs.value.find((t) => t.id === 'billing')

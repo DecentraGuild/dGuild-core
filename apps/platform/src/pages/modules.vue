@@ -8,7 +8,7 @@
       <section class="modules__section" aria-label="Module list">
         <h2 class="modules__heading">Modules</h2>
         <div class="modules__grid">
-          <div
+          <Card
             v-for="entry in displayModules"
             :key="entry.id"
             class="modules__card"
@@ -17,63 +17,64 @@
             <span class="modules__card-bg-icon" aria-hidden="true">
               <Icon :icon="entry.icon" height="none" class="modules__card-bg-icon-svg" />
             </span>
-            <button
-              :id="`module-trigger-${entry.id}`"
-              type="button"
-              class="modules__card-trigger"
-              :aria-expanded="expandedModuleId === entry.id"
-              :aria-controls="`module-detail-${entry.id}`"
-              @click="toggleModule(entry.id)"
+            <Collapsible
+              :open="expandedModuleId === entry.id"
+              @update:open="(v) => { expandedModuleId = v ? entry.id : null }"
             >
-              <span class="modules__card-header">
-                <span class="modules__card-heading">
-                  <span class="modules__card-name-row">
-                    <span class="modules__card-name">{{ entry.name }}</span>
-                    <span v-if="entry.status === 'coming_soon'" class="modules__card-badge">Coming soon</span>
-                  </span>
-                  <span v-if="getFromPrice(entry)" class="modules__card-pill">
-                    From {{ getFromPrice(entry) }}
+              <CollapsibleTrigger
+                :id="`module-trigger-${entry.id}`"
+                :aria-controls="`module-detail-${entry.id}`"
+                class="modules__card-trigger"
+              >
+                <span class="modules__card-header">
+                  <span class="modules__card-heading">
+                    <span class="modules__card-name-row">
+                      <span class="modules__card-name">{{ entry.name }}</span>
+                      <Badge v-if="entry.status === 'coming_soon'" variant="outline">Coming soon</Badge>
+                    </span>
+                    <Badge v-if="getFromPrice(entry)" variant="secondary" class="modules__card-pill">
+                      From {{ getFromPrice(entry) }}
+                    </Badge>
                   </span>
                 </span>
-              </span>
-              <p v-if="entry.shortDescription && expandedModuleId !== entry.id" class="modules__card-preview">
-                {{ entry.shortDescription }}
-              </p>
-              <span class="modules__card-chevron" aria-hidden="true">
-                <Icon icon="mdi:chevron-down" class="modules__card-chevron-icon" />
-              </span>
-            </button>
+                <p v-if="entry.shortDescription && expandedModuleId !== entry.id" class="modules__card-preview">
+                  {{ entry.shortDescription }}
+                </p>
+                <span class="modules__card-chevron" aria-hidden="true">
+                  <Icon icon="mdi:chevron-down" class="modules__card-chevron-icon" />
+                </span>
+              </CollapsibleTrigger>
 
-            <div
-              :id="`module-detail-${entry.id}`"
-              class="modules__card-detail"
-              role="region"
-              :aria-labelledby="`module-trigger-${entry.id}`"
-              :hidden="expandedModuleId !== entry.id"
-            >
-              <p class="modules__card-desc">
-                {{ entry.detailedDescription || entry.longDescription || entry.shortDescription }}
-              </p>
-              <ul v-if="entry.keyInfo?.length" class="modules__card-key-info">
-                <li v-for="(item, i) in entry.keyInfo" :key="i">{{ item }}</li>
-              </ul>
-              <div v-if="getFromPrice(entry)" class="modules__card-pricing">
-                <span class="modules__card-pricing-label">From</span>
-                {{ getFromPrice(entry) }}
-              </div>
-              <p v-else-if="entry.status === 'coming_soon'" class="modules__card-coming-soon">Coming soon</p>
-              <a
-                :href="docsUrl(entry)"
-                target="_blank"
-                rel="noopener"
-                class="modules__card-learn-more"
-                @click.stop
+              <CollapsibleContent
+                :id="`module-detail-${entry.id}`"
+                class="modules__card-detail"
+                role="region"
+                :aria-labelledby="`module-trigger-${entry.id}`"
               >
-                Learn more
-                <Icon icon="mdi:open-in-new" class="modules__card-learn-more-icon" />
-              </a>
-            </div>
-          </div>
+                <p class="modules__card-desc">
+                  {{ entry.detailedDescription || entry.longDescription || entry.shortDescription }}
+                </p>
+                <ul v-if="entry.keyInfo?.length" class="modules__card-key-info">
+                  <li v-for="(item, i) in entry.keyInfo" :key="i">{{ item }}</li>
+                </ul>
+                <div v-if="getFromPrice(entry)" class="modules__card-pricing">
+                  <span class="modules__card-pricing-label">From</span>
+                  {{ getFromPrice(entry) }}
+                </div>
+                <p v-else-if="entry.status === 'coming_soon'" class="modules__card-coming-soon">Coming soon</p>
+                <a
+                  :href="docsUrl(entry)"
+                  target="_blank"
+                  rel="noopener"
+                  class="modules__card-learn-more inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
+                  @click.stop
+                >
+                  Learn more
+                  <Icon icon="mdi:open-in-new" class="size-4" />
+                </a>
+              </CollapsibleContent>
+            </Collapsible>
+          </Card>
         </div>
       </section>
     </div>
@@ -84,10 +85,12 @@
 definePageMeta({ title: 'Modules' })
 import { Icon } from '@iconify/vue'
 import { formatUsdc } from '@decentraguild/core'
-import { PageSection } from '@decentraguild/ui/components'
 import { getModuleCatalogList } from '@decentraguild/config'
 import type { ModuleCatalogEntry } from '@decentraguild/config'
 import DguildCenter from '~/components/DguildCenter.vue'
+import { Badge } from '~/components/ui/badge'
+import { Card } from '~/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/collapsible'
 
 const config = useRuntimeConfig()
 const platformDocsBase = (config.public.platformDocsUrl as string) ?? 'https://dguild.org/docs'

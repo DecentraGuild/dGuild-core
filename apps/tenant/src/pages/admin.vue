@@ -131,12 +131,16 @@
         :module-state="shipmentModuleState"
       />
 
+      <AdminVouchersTab
+        v-else-if="tab === 'vouchers'"
+      />
+
       <AdminBillingTab
         v-else-if="tab === 'billing'"
         :slug="slug"
       />
 
-      <div v-if="!hasWidgetTab && tab !== 'billing' && tab !== 'addressbook' && tab !== 'modules' && tab !== 'gating' && tab !== 'conditions'" class="admin__actions">
+      <div v-if="!hasWidgetTab && tab !== 'billing' && tab !== 'vouchers' && tab !== 'addressbook' && tab !== 'modules' && tab !== 'gating' && tab !== 'conditions'" class="admin__actions">
         <Button variant="default" :disabled="saving" @click="save">
           Save
         </Button>
@@ -204,6 +208,7 @@ const AdminAddressbookTab = defineAsyncComponent(() => import('~/components/admi
 const AdminWatchtowerTab = defineAsyncComponent(() => import('~/components/admin/AdminWatchtowerTab.vue'))
 const AdminConditionsTab = defineAsyncComponent(() => import('~/components/admin/AdminConditionsTab.vue'))
 const AdminPlanShipmentTab = defineAsyncComponent(() => import('~/components/admin/AdminPlanShipmentTab.vue'))
+const AdminVouchersTab = defineAsyncComponent(() => import('~/components/admin/AdminVouchersTab.vue'))
 const AdminBillingTab = defineAsyncComponent(() => import('~/components/admin/AdminBillingTab.vue'))
 const AdminModuleActivationModal = defineAsyncComponent(() => import('~/components/admin/AdminModuleActivationModal.vue'))
   const AdminPricingWidget = defineAsyncComponent(() => import('~/components/admin/AdminPricingWidget.vue'))

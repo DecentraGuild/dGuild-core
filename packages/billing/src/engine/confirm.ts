@@ -1,5 +1,6 @@
 /**
  * confirm(): Verify payment, grant entitlements from quote line items.
+ * Extend-or-add: if tenant already has active entitlements for a meter, extend expiry; else add.
  */
 import type { DbClient } from '../types.js'
 import type { ConfirmParams, QuoteLineItem } from '../types.js'
@@ -13,6 +14,8 @@ interface PaymentRow {
   memo: string
   status: string
   tx_signature: string | null
+  payment_method?: string
+  voucher_mint?: string | null
 }
 
 interface QuoteRow {
@@ -25,6 +28,85 @@ interface BundleEntitlementRow {
   duration_days: number
 }
 
+interface MeterLimitRow {
+  quantity_total: number
+  expires_at_max: string | null
+}
+
+interface GrantRow {
+  id: string
+  expires_at: string | null
+}
+
+async function grantOrExtend(
+  db: DbClient,
+  tenantId: string,
+  paymentId: string,
+  meterKey: string,
+  quantity: number,
+  durationDays: number,
+  expiresAt: string | null,
+  bundleId: string | null,
+): Promise<void> {
+  if (durationDays === 0 || expiresAt == null) {
+    await db.from('granted_entitlements').insert({
+      tenant_id: tenantId,
+      meter_key: meterKey,
+      quantity,
+      expires_at: expiresAt,
+      payment_id: paymentId,
+      bundle_id: bundleId,
+    })
+    return
+  }
+
+  const { data: limit } = await db
+    .from('tenant_meter_limits')
+    .select('quantity_total, expires_at_max')
+    .eq('tenant_id', tenantId)
+    .eq('meter_key', meterKey)
+    .maybeSingle()
+
+  const lim = limit as MeterLimitRow | null
+  const quantityTotal = lim ? Number(lim.quantity_total) : 0
+  const expiresAtMax = lim?.expires_at_max ? new Date(lim.expires_at_max) : null
+  const now = new Date()
+
+  if (quantityTotal >= quantity && expiresAtMax != null && expiresAtMax > now) {
+    const { data: grant } = await db
+      .from('granted_entitlements')
+      .select('id, expires_at')
+      .eq('tenant_id', tenantId)
+      .eq('meter_key', meterKey)
+      .gt('expires_at', now.toISOString())
+      .order('expires_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    if (grant) {
+      const g = grant as GrantRow
+      const currentExpires = g.expires_at ? new Date(g.expires_at) : null
+      const newExpires = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000)
+      const extended = currentExpires && currentExpires > newExpires ? currentExpires : newExpires
+
+      await db
+        .from('granted_entitlements')
+        .update({ expires_at: extended.toISOString() })
+        .eq('id', g.id)
+      return
+    }
+  }
+
+  await db.from('granted_entitlements').insert({
+    tenant_id: tenantId,
+    meter_key: meterKey,
+    quantity,
+    expires_at: expiresAt,
+    payment_id: paymentId,
+    bundle_id: bundleId,
+  })
+}
+
 export async function confirm(
   params: ConfirmParams,
   db: DbClient,
@@ -34,7 +116,7 @@ export async function confirm(
 
   const { data: payment, error: payErr } = await db
     .from('billing_payments')
-    .select('id, tenant_id, quote_id, amount_usdc, memo, status, tx_signature')
+    .select('id, tenant_id, quote_id, amount_usdc, memo, status, tx_signature, payment_method, voucher_mint')
     .eq('id', paymentId)
     .maybeSingle()
 
@@ -74,29 +156,88 @@ export async function confirm(
         for (const ent of entitlements) {
           const expiresAt =
             ent.duration_days === 0 ? null : new Date(Date.now() + ent.duration_days * 24 * 60 * 60 * 1000).toISOString()
-          await db.from('granted_entitlements').insert({
-            tenant_id: tenantId,
-            meter_key: ent.meter_key,
-            quantity: ent.quantity,
-            expires_at: expiresAt,
-            payment_id: paymentId,
-            bundle_id: item.bundleId,
-          })
+          await grantOrExtend(
+            db,
+            tenantId,
+            paymentId,
+            ent.meter_key,
+            ent.quantity,
+            ent.duration_days,
+            expiresAt,
+            item.bundleId,
+          )
         }
       }
     } else if (item.source === 'tier') {
+      const durationDays = item.duration_days ?? 0
       const expiresAt =
-        item.duration_days === 0
+        durationDays === 0
           ? null
-          : new Date(Date.now() + item.duration_days * 24 * 60 * 60 * 1000).toISOString()
-      await db.from('granted_entitlements').insert({
+          : new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString()
+      await grantOrExtend(
+        db,
+        tenantId,
+        paymentId,
+        item.meter_key,
+        item.quantity,
+        durationDays,
+        expiresAt,
+        null,
+      )
+    }
+  }
+
+  if (p.payment_method === 'voucher' && p.voucher_mint) {
+    const firstItem = lineItems[0]
+    if (firstItem?.source === 'bundle' && firstItem.bundleId) {
+      await db.from('voucher_redemptions').insert({
         tenant_id: tenantId,
-        meter_key: item.meter_key,
-        quantity: item.quantity,
-        expires_at: expiresAt,
+        voucher_mint: p.voucher_mint,
+        bundle_id: firstItem.bundleId,
         payment_id: paymentId,
-        bundle_id: null,
+        quantity: 1,
       })
+      const { data: bundleTotal } = await db
+        .from('tenant_voucher_redemption_totals')
+        .select('count')
+        .eq('tenant_id', tenantId)
+        .eq('voucher_mint', p.voucher_mint)
+        .eq('bundle_id', firstItem.bundleId)
+        .maybeSingle()
+      const nextCount = (bundleTotal ? Number((bundleTotal as { count: number }).count) : 0) + 1
+      await db.from('tenant_voucher_redemption_totals').upsert(
+        {
+          tenant_id: tenantId,
+          voucher_mint: p.voucher_mint,
+          bundle_id: firstItem.bundleId,
+          count: nextCount,
+          updated_at: now,
+        },
+        { onConflict: 'tenant_id,voucher_mint,bundle_id' },
+      )
+    } else {
+      await db.from('individual_voucher_redemptions').insert({
+        tenant_id: tenantId,
+        voucher_mint: p.voucher_mint,
+        payment_id: paymentId,
+        quantity: 1,
+      })
+      const { data: existing } = await db
+        .from('individual_voucher_redemption_totals')
+        .select('count')
+        .eq('tenant_id', tenantId)
+        .eq('voucher_mint', p.voucher_mint)
+        .maybeSingle()
+      const nextCount = (existing ? Number((existing as { count: number }).count) : 0) + 1
+      await db.from('individual_voucher_redemption_totals').upsert(
+        {
+          tenant_id: tenantId,
+          voucher_mint: p.voucher_mint,
+          count: nextCount,
+          updated_at: now,
+        },
+        { onConflict: 'tenant_id,voucher_mint' },
+      )
     }
   }
 

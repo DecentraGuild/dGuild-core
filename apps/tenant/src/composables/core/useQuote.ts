@@ -6,6 +6,7 @@ import type { QuoteResult } from '@decentraguild/billing'
 import { MODULE_TO_PRODUCT } from '@decentraguild/billing'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
+import { getEdgeFunctionErrorMessage } from '~/utils/edgeFunctionError'
 
 export function useQuote(opts: {
   moduleId: Ref<string>
@@ -49,7 +50,7 @@ export function useQuote(opts: {
       }
 
       const { data, error: fnError } = await supabase.functions.invoke('billing', { body })
-      if (fnError) throw new Error(fnError.message ?? 'Quote failed')
+      if (fnError) throw new Error(getEdgeFunctionErrorMessage(fnError, 'Quote failed'))
       if (!data) throw new Error('No quote returned')
 
       quote.value = data as QuoteResult

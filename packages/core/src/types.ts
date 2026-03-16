@@ -149,6 +149,12 @@ export interface TenantConfig {
   description?: string
   /** Discord server invite link (for users to join the community). General setting, editable in Admin > General. */
   discordServerInviteLink?: string
+  /** Homepage URL. General setting, editable in Admin > General. */
+  homepage?: string
+  /** X (Twitter) account URL. General setting, editable in Admin > General. */
+  xLink?: string
+  /** Telegram channel/group URL. General setting, editable in Admin > General. */
+  telegramLink?: string
   /** Default gate for the tenant. When set, becomes base for transactions unless module/transaction overrides. 'admin-only' = admins only; null = public; object = specific list. */
   defaultGate?: MarketplaceGateSettings | null | 'admin-only'
   branding: TenantBranding

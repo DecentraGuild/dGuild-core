@@ -10,8 +10,12 @@ export default defineNuxtConfig({
   srcDir: 'src',
   compatibilityDate: '2025-02-10',
   experimental: { clientNodeCompat: true },
-  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
-  css: [uiVarsCss, '~/assets/platform-theme.css'],
+  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', 'shadcn-nuxt'],
+  shadcn: {
+    prefix: '',
+    componentDir: './src/components/ui',
+  },
+  css: [uiVarsCss, '~/assets/global.css', '~/assets/platform-theme.css'],
   plugins: ['~/plugins/buffer.server', '~/plugins/buffer.client', '@decentraguild/auth/plugin.client'],
   routeRules: {},
   nitro: {

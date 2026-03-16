@@ -49,7 +49,7 @@
           rel="noopener"
           class="discovery-card__visit"
         >
-          <Button variant="primary">Visit</Button>
+          <Button>Visit</Button>
         </a>
       </div>
     </div>
@@ -59,7 +59,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import { Button } from '@decentraguild/ui/components'
+import { Button } from '~/components/ui/button'
 import type { TenantConfig } from '@decentraguild/core'
 import type { ActiveModuleWithGate } from '~/composables/useDiscoveryFilters'
 
@@ -201,8 +201,4 @@ const cardStyle = computed(() => {
   text-decoration: none;
 }
 
-.discovery-card__visit :deep(.btn) {
-  padding: 0.25rem var(--theme-space-sm);
-  font-size: var(--theme-font-xs);
-}
 </style>

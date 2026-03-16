@@ -1,5 +1,6 @@
 export {
   buildCreateMintAndBillingTransaction,
+  buildCreateMintOnlyTransaction,
   buildCreateMetadataTransaction,
   buildMintTransaction,
   buildBurnTransaction,
@@ -8,6 +9,7 @@ export {
 } from './build.js'
 export type {
   BuildCreateMintAndBillingParams,
+  BuildCreateMintOnlyParams,
   BuildCreateMetadataParams,
   BuildMintTransactionParams,
   BuildBurnTransactionParams,

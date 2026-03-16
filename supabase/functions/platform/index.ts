@@ -31,6 +31,9 @@ import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts
 import { getAdminClient, getUserClient } from '../_shared/supabase-admin.ts'
 import { getSolanaConnection } from '../_shared/solana-connection.ts'
 import { PublicKey } from 'npm:@solana/web3.js@1'
+import { TOKEN_PROGRAM_ID } from 'npm:@solana/spl-token@0.4'
+
+const SPL_TOKEN_ACCOUNT_DATA_SIZE = 165
 
 function readU32LE(data: Uint8Array, offset: number): number {
   return data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24)
@@ -941,6 +944,801 @@ Deno.serve(async (req: Request) => {
     })
 
     return jsonResponse({ ok: true }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // bundle-create – create bundle + entitlements (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'bundle-create') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const bundleId = (body.bundleId as string)?.trim()
+    const label = (body.label as string)?.trim()
+    const priceUsdc = typeof body.priceUsdc === 'number' ? body.priceUsdc : Number(body.priceUsdc)
+    const productKey = (body.productKey as string)?.trim()
+    const entitlements = body.entitlements as Array<{ meter_key: string; quantity: number; duration_days: number }>
+
+    if (!bundleId || !label || !productKey) {
+      return errorResponse('bundleId, label, and productKey required', req)
+    }
+    if (!Array.isArray(entitlements) || entitlements.length === 0) {
+      return errorResponse('entitlements array with at least one item (meter_key, quantity, duration_days) required', req)
+    }
+
+    const { error: bundleErr } = await db.from('bundles').insert({
+      id: bundleId,
+      product_key: productKey,
+      price_usdc: priceUsdc,
+      label,
+      version: 1,
+      price_version: 1,
+    })
+    if (bundleErr) {
+      if (bundleErr.code === '23505') return errorResponse('Bundle id already exists', req, 409)
+      return errorResponse(bundleErr.message, req, 500)
+    }
+
+    const rows = entitlements
+      .filter((e) => e.meter_key?.trim())
+      .map((e) => ({
+        bundle_id: bundleId,
+        meter_key: (e.meter_key as string).trim(),
+        quantity: typeof e.quantity === 'number' ? e.quantity : Number(e.quantity) || 1,
+        duration_days: typeof e.duration_days === 'number' ? e.duration_days : Number(e.duration_days) || 30,
+      }))
+    if (rows.length === 0) {
+      await db.from('bundles').delete().eq('id', bundleId)
+      return errorResponse('No valid entitlements', req)
+    }
+
+    const { error: entsErr } = await db.from('bundle_entitlements').insert(rows)
+    if (entsErr) {
+      await db.from('bundles').delete().eq('id', bundleId)
+      return errorResponse(entsErr.message, req, 500)
+    }
+
+    await db.from('platform_audit_log').insert({
+      actor_wallet: check.wallet,
+      action: 'bundle_created',
+      target_type: 'bundle',
+      target_id: bundleId,
+      details: { label, productKey, entitlementsCount: rows.length },
+    })
+
+    return jsonResponse({ ok: true, bundleId }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // bundle-get – fetch bundle by id with entitlements (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'bundle-get') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const bundleId = (body.bundleId as string)?.trim()
+    if (!bundleId) return errorResponse('bundleId required', req)
+
+    const { data: bundle, error: bundleErr } = await db
+      .from('bundles')
+      .select('id, label, product_key, price_usdc')
+      .eq('id', bundleId)
+      .single()
+    if (bundleErr || !bundle) return errorResponse('Bundle not found', req, 404)
+
+    const { data: entitlements, error: entsErr } = await db
+      .from('bundle_entitlements')
+      .select('meter_key, quantity, duration_days')
+      .eq('bundle_id', bundleId)
+    if (entsErr) return errorResponse(entsErr.message, req, 500)
+
+    return jsonResponse({
+      bundle: {
+        id: (bundle as { id: string }).id,
+        label: (bundle as { label: string }).label,
+        product_key: (bundle as { product_key: string }).product_key,
+        price_usdc: Number((bundle as { price_usdc: number }).price_usdc),
+      },
+      entitlements: (entitlements ?? []).map((e) => ({
+        meter_key: (e as { meter_key: string }).meter_key,
+        quantity: Number((e as { quantity: number }).quantity),
+        duration_days: (e as { duration_days: number }).duration_days,
+      })),
+    }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // bundle-update – update bundle label, product_key, price_usdc, entitlements (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'bundle-update') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const bundleId = (body.bundleId as string)?.trim()
+    if (!bundleId) return errorResponse('bundleId required', req)
+
+    const label = (body.label as string)?.trim()
+    const productKey = (body.productKey as string)?.trim()
+    const priceUsdc = body.priceUsdc != null ? Number(body.priceUsdc) : undefined
+    const entitlements = body.entitlements as Array<{ meter_key: string; quantity: number; duration_days: number }> | undefined
+
+    const updates: Record<string, unknown> = {}
+    if (label !== undefined) updates.label = label
+    if (productKey !== undefined) updates.product_key = productKey
+    if (priceUsdc !== undefined) updates.price_usdc = priceUsdc
+
+    if (Object.keys(updates).length > 0) {
+      const { error: updateErr } = await db.from('bundles').update(updates).eq('id', bundleId)
+      if (updateErr) return errorResponse(updateErr.message, req, 500)
+    }
+
+    if (Array.isArray(entitlements)) {
+      const { error: delErr } = await db.from('bundle_entitlements').delete().eq('bundle_id', bundleId)
+      if (delErr) return errorResponse(delErr.message, req, 500)
+
+      if (entitlements.length > 0) {
+        const rows = entitlements
+          .filter((e) => e.meter_key?.trim())
+          .map((e) => ({
+            bundle_id: bundleId,
+            meter_key: (e.meter_key as string).trim(),
+            quantity: typeof e.quantity === 'number' ? e.quantity : Number(e.quantity) || 1,
+            duration_days: typeof e.duration_days === 'number' ? e.duration_days : Number(e.duration_days) || 30,
+          }))
+        if (rows.length > 0) {
+          const { error: insErr } = await db.from('bundle_entitlements').insert(rows)
+          if (insErr) return errorResponse(insErr.message, req, 500)
+        }
+      }
+    }
+
+    await db.from('platform_audit_log').insert({
+      actor_wallet: check.wallet,
+      action: 'bundle_updated',
+      target_type: 'bundle',
+      target_id: bundleId,
+      details: { label, productKey, entitlementsCount: Array.isArray(entitlements) ? entitlements.filter((e) => e.meter_key?.trim()).length : undefined },
+    })
+
+    return jsonResponse({ ok: true, bundleId }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // voucher-prepare-metadata – upload metadata JSON to voucher-metadata bucket (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'voucher-prepare-metadata') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const name = (body.name as string)?.trim()
+    const symbol = (body.symbol as string)?.trim()
+    const imageUrl = (body.imageUrl as string)?.trim() || undefined
+    const rawBps = body.sellerFeeBasisPoints
+    const sellerFeeBasisPoints =
+      typeof rawBps === 'number'
+        ? Math.max(0, Math.min(10000, rawBps))
+        : typeof rawBps === 'string'
+          ? Math.max(0, Math.min(10000, parseInt(rawBps, 10) || 0))
+          : 0
+    const voucherType = (body.voucherType as 'bundle' | 'individual') ?? 'individual'
+    const bundleId = (body.bundleId as string)?.trim() || undefined
+
+    if (!name || !symbol) return errorResponse('name and symbol required', req)
+
+    const decentraguild: Record<string, unknown> = {
+      createdVia: 'voucher',
+      type: voucherType,
+      version: 1,
+    }
+    if (voucherType === 'bundle' && bundleId) decentraguild.bundleId = bundleId
+
+    const metadataJson = {
+      name,
+      symbol,
+      description: '',
+      image: imageUrl ?? undefined,
+      seller_fee_basis_points: sellerFeeBasisPoints,
+      external_url: '',
+      attributes: [],
+      properties: { files: [], category: 'token' },
+      decentraguild,
+    }
+
+    const uuid = crypto.randomUUID()
+    const path = `${uuid}.json`
+    const { error: uploadErr } = await db.storage
+      .from('voucher-metadata')
+      .upload(path, JSON.stringify(metadataJson), {
+        contentType: 'application/json',
+        upsert: false,
+      })
+
+    if (uploadErr) return errorResponse(uploadErr.message, req, 500)
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')?.replace(/\/$/, '') ?? ''
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/voucher-metadata/${path}`
+
+    return jsonResponse({ metadataUri: publicUrl }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // voucher-register-draft – store mint after step 1 (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'voucher-register-draft') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    if (!mint) return errorResponse('mint required', req)
+
+    const { error } = await db.from('voucher_drafts').insert({
+      mint,
+      actor_wallet: check.wallet,
+    })
+    if (error) {
+      if (error.code === '23505') return errorResponse('Mint already registered', req, 409)
+      return errorResponse(error.message, req, 500)
+    }
+    return jsonResponse({ ok: true, mint }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // voucher-list – drafts + linked for OPS (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'voucher-list') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const { data: drafts } = await db
+      .from('voucher_drafts')
+      .select('mint, created_at')
+      .order('created_at', { ascending: false })
+
+    const { data: bundleRows } = await db
+      .from('bundle_vouchers')
+      .select('token_mint, bundle_id')
+    const { data: indRows } = await db
+      .from('individual_vouchers')
+      .select('mint, label')
+
+    const linked = [
+      ...(bundleRows ?? []).map((r) => ({
+        mint: (r as { token_mint: string }).token_mint,
+        type: 'bundle' as const,
+        bundleId: (r as { bundle_id: string }).bundle_id,
+      })),
+      ...(indRows ?? []).map((r) => ({
+        mint: (r as { mint: string }).mint,
+        type: 'individual' as const,
+        label: (r as { label: string | null }).label,
+      })),
+    ]
+
+    return jsonResponse({
+      drafts: drafts ?? [],
+      linked,
+    }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // voucher-remove-draft – remove draft after link or cancel (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'voucher-remove-draft') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    if (!mint) return errorResponse('mint required', req)
+
+    await db.from('voucher_drafts').delete().eq('mint', mint)
+    return jsonResponse({ ok: true }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // voucher-create-bundle – link mint to bundle (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'voucher-create-bundle') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    const bundleId = (body.bundleId as string)?.trim()
+    const tokensRequired = typeof body.tokensRequired === 'number' ? body.tokensRequired : Number(body.tokensRequired) || 1
+    const maxRedemptionsPerTenant =
+      body.maxRedemptionsPerTenant != null
+        ? (typeof body.maxRedemptionsPerTenant === 'number' ? body.maxRedemptionsPerTenant : Number(body.maxRedemptionsPerTenant))
+        : null
+
+    if (!mint || !bundleId) return errorResponse('mint and bundleId required', req)
+
+    const { data: bundle } = await db.from('bundles').select('id').eq('id', bundleId).maybeSingle()
+    if (!bundle) return errorResponse('Bundle not found', req, 404)
+
+    const { error } = await db.from('bundle_vouchers').insert({
+      bundle_id: bundleId,
+      token_mint: mint,
+      decimals: 0,
+      tokens_required: tokensRequired,
+      max_redemptions_per_tenant: maxRedemptionsPerTenant,
+    })
+    if (error) {
+      if (error.code === '23505') return errorResponse('Voucher already linked to this bundle', req, 409)
+      return errorResponse(error.message, req, 500)
+    }
+
+    await db.from('platform_audit_log').insert({
+      actor_wallet: check.wallet,
+      action: 'voucher_bundle_created',
+      target_type: 'bundle_voucher',
+      target_id: mint,
+      details: { bundleId, tokensRequired },
+    })
+
+    await db.from('voucher_drafts').delete().eq('mint', mint)
+
+    return jsonResponse({ ok: true, mint }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // voucher-create-individual – create individual voucher + entitlements (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'voucher-create-individual') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    const label = (body.label as string)?.trim() || null
+    const maxRedemptionsPerTenant =
+      body.maxRedemptionsPerTenant != null
+        ? (typeof body.maxRedemptionsPerTenant === 'number' ? body.maxRedemptionsPerTenant : Number(body.maxRedemptionsPerTenant))
+        : null
+    const entitlements = body.entitlements as Array<{ meter_key: string; quantity: number; duration_days: number }>
+
+    if (!mint) return errorResponse('mint required', req)
+    if (!Array.isArray(entitlements) || entitlements.length === 0) {
+      return errorResponse('entitlements array with at least one item required', req)
+    }
+
+    const { error: voucherErr } = await db.from('individual_vouchers').insert({
+      mint,
+      max_redemptions_per_tenant: maxRedemptionsPerTenant,
+      label,
+    })
+    if (voucherErr) {
+      if (voucherErr.code === '23505') return errorResponse('Voucher mint already exists', req, 409)
+      return errorResponse(voucherErr.message, req, 500)
+    }
+
+    const rows = entitlements
+      .filter((e) => e.meter_key?.trim())
+      .map((e) => ({
+        mint,
+        meter_key: (e.meter_key as string).trim(),
+        quantity: typeof e.quantity === 'number' ? e.quantity : Number(e.quantity) || 1,
+        duration_days: typeof e.duration_days === 'number' ? e.duration_days : Number(e.duration_days) || 30,
+      }))
+    if (rows.length === 0) {
+      await db.from('individual_vouchers').delete().eq('mint', mint)
+      return errorResponse('No valid entitlements', req)
+    }
+
+    const { error: entsErr } = await db.from('individual_voucher_entitlements').insert(rows)
+    if (entsErr) {
+      await db.from('individual_vouchers').delete().eq('mint', mint)
+      return errorResponse(entsErr.message, req, 500)
+    }
+
+    await db.from('platform_audit_log').insert({
+      actor_wallet: check.wallet,
+      action: 'voucher_individual_created',
+      target_type: 'individual_voucher',
+      target_id: mint,
+      details: { label, entitlementsCount: rows.length },
+    })
+
+    await db.from('voucher_drafts').delete().eq('mint', mint)
+
+    return jsonResponse({ ok: true, mint }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // individual-voucher-get – fetch individual voucher by mint (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'individual-voucher-get') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    if (!mint) return errorResponse('mint required', req)
+
+    const { data: voucher, error: vErr } = await db
+      .from('individual_vouchers')
+      .select('mint, label, max_redemptions_per_tenant')
+      .eq('mint', mint)
+      .single()
+    if (vErr || !voucher) return errorResponse('Individual voucher not found', req, 404)
+
+    const { data: entitlements, error: eErr } = await db
+      .from('individual_voucher_entitlements')
+      .select('meter_key, quantity, duration_days')
+      .eq('mint', mint)
+    if (eErr) return errorResponse(eErr.message, req, 500)
+
+    return jsonResponse({
+      voucher: {
+        mint: (voucher as { mint: string }).mint,
+        label: (voucher as { label: string | null }).label,
+        max_redemptions_per_tenant: (voucher as { max_redemptions_per_tenant: number | null }).max_redemptions_per_tenant,
+      },
+      entitlements: (entitlements ?? []).map((e) => ({
+        meter_key: (e as { meter_key: string }).meter_key,
+        quantity: Number((e as { quantity: number }).quantity),
+        duration_days: (e as { duration_days: number }).duration_days,
+      })),
+    }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // bundle-voucher-get – fetch bundle voucher by mint (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'bundle-voucher-get') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    if (!mint) return errorResponse('mint required', req)
+
+    const { data: bv, error: bvErr } = await db
+      .from('bundle_vouchers')
+      .select('bundle_id, token_mint, tokens_required, max_redemptions_per_tenant')
+      .eq('token_mint', mint)
+      .single()
+    if (bvErr || !bv) return errorResponse('Bundle voucher not found', req, 404)
+
+    const { data: bundle } = await db
+      .from('bundles')
+      .select('id, label, product_key')
+      .eq('id', (bv as { bundle_id: string }).bundle_id)
+      .single()
+
+    return jsonResponse({
+      voucher: {
+        mint: (bv as { token_mint: string }).token_mint,
+        bundle_id: (bv as { bundle_id: string }).bundle_id,
+        tokens_required: Number((bv as { tokens_required: number }).tokens_required),
+        max_redemptions_per_tenant: (bv as { max_redemptions_per_tenant: number | null }).max_redemptions_per_tenant,
+      },
+      bundle: bundle ? { id: (bundle as { id: string }).id, label: (bundle as { label: string }).label, product_key: (bundle as { product_key: string }).product_key } : null,
+    }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // individual-voucher-update – update individual voucher (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'individual-voucher-update') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    if (!mint) return errorResponse('mint required', req)
+
+    const label = (body.label as string)?.trim()
+    const maxRedemptionsPerTenant = body.maxRedemptionsPerTenant != null ? Number(body.maxRedemptionsPerTenant) : undefined
+    const entitlements = body.entitlements as Array<{ meter_key: string; quantity: number; duration_days: number }> | undefined
+
+    const updates: Record<string, unknown> = {}
+    if (label !== undefined) updates.label = label
+    if (maxRedemptionsPerTenant !== undefined) updates.max_redemptions_per_tenant = maxRedemptionsPerTenant
+
+    if (Object.keys(updates).length > 0) {
+      const { error: updErr } = await db.from('individual_vouchers').update(updates).eq('mint', mint)
+      if (updErr) return errorResponse(updErr.message, req, 500)
+    }
+
+    if (Array.isArray(entitlements)) {
+      const { error: delErr } = await db.from('individual_voucher_entitlements').delete().eq('mint', mint)
+      if (delErr) return errorResponse(delErr.message, req, 500)
+
+      if (entitlements.length > 0) {
+        const rows = entitlements
+          .filter((e) => e.meter_key?.trim())
+          .map((e) => ({
+            mint,
+            meter_key: (e.meter_key as string).trim(),
+            quantity: typeof e.quantity === 'number' ? e.quantity : Number(e.quantity) || 1,
+            duration_days: typeof e.duration_days === 'number' ? e.duration_days : Number(e.duration_days) || 30,
+          }))
+        if (rows.length > 0) {
+          const { error: insErr } = await db.from('individual_voucher_entitlements').insert(rows)
+          if (insErr) return errorResponse(insErr.message, req, 500)
+        }
+      }
+    }
+
+    return jsonResponse({ ok: true, mint }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // bundle-voucher-update – update bundle voucher (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'bundle-voucher-update') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    if (!mint) return errorResponse('mint required', req)
+
+    const tokensRequired = body.tokensRequired != null ? Number(body.tokensRequired) : undefined
+    const maxRedemptionsPerTenant = body.maxRedemptionsPerTenant != null ? Number(body.maxRedemptionsPerTenant) : undefined
+
+    const updates: Record<string, unknown> = {}
+    if (tokensRequired !== undefined) updates.tokens_required = tokensRequired
+    if (maxRedemptionsPerTenant !== undefined) updates.max_redemptions_per_tenant = maxRedemptionsPerTenant
+
+    if (Object.keys(updates).length === 0) return jsonResponse({ ok: true, mint }, req)
+
+    const { error } = await db.from('bundle_vouchers').update(updates).eq('token_mint', mint)
+    if (error) return errorResponse(error.message, req, 500)
+
+    return jsonResponse({ ok: true, mint }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // bundles-list – list bundles for voucher form (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'bundles-list') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const { data: bundles, error } = await db
+      .from('bundles')
+      .select('id, label, product_key')
+      .order('id')
+    if (error) return errorResponse(error.message, req, 500)
+    return jsonResponse({ bundles: bundles ?? [] }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // meters-list – list meter_key options for bundle/voucher forms (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'meters-list') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const { data: meters, error } = await db
+      .from('meters')
+      .select('meter_key, product_key, description')
+      .order('meter_key')
+    if (error) return errorResponse(error.message, req, 500)
+    return jsonResponse({ meters: meters ?? [] }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // products-list – distinct product_key for voucher product dropdown (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'products-list') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const { data: rows, error } = await db
+      .from('meters')
+      .select('product_key')
+    if (error) return errorResponse(error.message, req, 500)
+    const seen = new Set<string>()
+    const products: Array<{ product_key: string }> = []
+    for (const r of rows ?? []) {
+      const pk = (r as { product_key: string }).product_key
+      if (pk && !seen.has(pk)) {
+        seen.add(pk)
+        products.push({ product_key: pk })
+      }
+    }
+    products.sort((a, b) => a.product_key.localeCompare(b.product_key))
+    return jsonResponse({ products }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // product-tier-defaults – default entitlements for a product (from tier_rules)
+  // Returns one row per meter_key with min quantity from first tier, duration 30
+  // ---------------------------------------------------------------------------
+  if (action === 'product-tier-defaults') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const productKey = (body.productKey as string)?.trim()
+    if (!productKey) return errorResponse('productKey required', req)
+
+    const { data: tiers, error } = await db
+      .from('tier_rules')
+      .select('meter_key, min_quantity')
+      .eq('product_key', productKey)
+      .order('meter_key')
+      .order('min_quantity')
+    if (error) return errorResponse(error.message, req, 500)
+
+    const byMeter = new Map<string, { quantity: number; duration_days: number }>()
+    for (const t of tiers ?? []) {
+      const row = t as { meter_key: string; min_quantity: number }
+      if (!byMeter.has(row.meter_key)) {
+        byMeter.set(row.meter_key, { quantity: row.min_quantity || 1, duration_days: 30 })
+      }
+    }
+    const entitlements = Array.from(byMeter.entries()).map(([meter_key, v]) => ({
+      meter_key,
+      quantity: v.quantity,
+      duration_days: v.duration_days,
+    }))
+    return jsonResponse({ entitlements }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // voucher-detail – fetch voucher config + redemptions (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'voucher-detail') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    if (!mint) return errorResponse('mint required', req)
+
+    const { data: bv } = await db
+      .from('bundle_vouchers')
+      .select('bundle_id, token_mint, tokens_required, max_redemptions_per_tenant')
+      .eq('token_mint', mint)
+      .maybeSingle()
+
+    if (bv) {
+      const bvRow = bv as { bundle_id: string; token_mint: string; tokens_required: number; max_redemptions_per_tenant: number | null }
+      const { data: bundle } = await db.from('bundles').select('id, label, product_key').eq('id', bvRow.bundle_id).single()
+
+      const { data: redemptions } = await db
+        .from('voucher_redemptions')
+        .select('tenant_id, voucher_mint, bundle_id, quantity, redeemed_at, payment_id')
+        .eq('voucher_mint', mint)
+        .order('redeemed_at', { ascending: false })
+        .limit(200)
+
+      const paymentIds = [...new Set((redemptions ?? []).map((r) => (r as { payment_id: string }).payment_id))]
+      const paymentsMap = new Map<string, { payer_wallet: string; status: string }>()
+      if (paymentIds.length > 0) {
+        const { data: payments } = await db
+          .from('billing_payments')
+          .select('id, payer_wallet, status')
+          .in('id', paymentIds)
+        for (const p of payments ?? []) {
+          const row = p as { id: string; payer_wallet: string; status: string }
+          paymentsMap.set(row.id, { payer_wallet: row.payer_wallet, status: row.status })
+        }
+      }
+
+      const redemptionsList = (redemptions ?? []).map((r) => {
+        const row = r as { tenant_id: string; voucher_mint: string; bundle_id: string; quantity: number; redeemed_at: string; payment_id: string }
+        const pay = paymentsMap.get(row.payment_id)
+        return {
+          tenant_id: row.tenant_id,
+          voucher_mint: row.voucher_mint,
+          bundle_id: row.bundle_id,
+          quantity: Number(row.quantity),
+          redeemed_at: row.redeemed_at,
+          payer_wallet: pay?.payer_wallet ?? null,
+          status: pay?.status ?? null,
+        }
+      })
+
+      return jsonResponse({
+        type: 'bundle',
+        voucher: {
+          mint: bvRow.token_mint,
+          bundle_id: bvRow.bundle_id,
+          tokens_required: Number(bvRow.tokens_required),
+          max_redemptions_per_tenant: bvRow.max_redemptions_per_tenant,
+        },
+        bundle: bundle ? { id: (bundle as { id: string }).id, label: (bundle as { label: string }).label, product_key: (bundle as { product_key: string }).product_key } : null,
+        redemptions: redemptionsList,
+      }, req)
+    }
+
+    const { data: iv } = await db
+      .from('individual_vouchers')
+      .select('mint, label, max_redemptions_per_tenant')
+      .eq('mint', mint)
+      .maybeSingle()
+
+    if (iv) {
+      const ivRow = iv as { mint: string; label: string | null; max_redemptions_per_tenant: number | null }
+      const { data: entitlements } = await db
+        .from('individual_voucher_entitlements')
+        .select('meter_key, quantity, duration_days')
+        .eq('mint', mint)
+
+      const { data: redemptions } = await db
+        .from('individual_voucher_redemptions')
+        .select('tenant_id, voucher_mint, quantity, redeemed_at, payment_id')
+        .eq('voucher_mint', mint)
+        .order('redeemed_at', { ascending: false })
+        .limit(200)
+
+      const paymentIds = [...new Set((redemptions ?? []).map((r) => (r as { payment_id: string }).payment_id))]
+      const paymentsMap = new Map<string, { payer_wallet: string; status: string }>()
+      if (paymentIds.length > 0) {
+        const { data: payments } = await db
+          .from('billing_payments')
+          .select('id, payer_wallet, status')
+          .in('id', paymentIds)
+        for (const p of payments ?? []) {
+          const row = p as { id: string; payer_wallet: string; status: string }
+          paymentsMap.set(row.id, { payer_wallet: row.payer_wallet, status: row.status })
+        }
+      }
+
+      const redemptionsList = (redemptions ?? []).map((r) => {
+        const row = r as { tenant_id: string; voucher_mint: string; quantity: number; redeemed_at: string; payment_id: string }
+        const pay = paymentsMap.get(row.payment_id)
+        return {
+          tenant_id: row.tenant_id,
+          voucher_mint: row.voucher_mint,
+          quantity: Number(row.quantity),
+          redeemed_at: row.redeemed_at,
+          payer_wallet: pay?.payer_wallet ?? null,
+          status: pay?.status ?? null,
+        }
+      })
+
+      return jsonResponse({
+        type: 'individual',
+        voucher: {
+          mint: ivRow.mint,
+          label: ivRow.label,
+          max_redemptions_per_tenant: ivRow.max_redemptions_per_tenant,
+        },
+        entitlements: (entitlements ?? []).map((e) => ({
+          meter_key: (e as { meter_key: string }).meter_key,
+          quantity: Number((e as { quantity: number }).quantity),
+          duration_days: (e as { duration_days: number }).duration_days,
+        })),
+        redemptions: redemptionsList,
+      }, req)
+    }
+
+    return errorResponse('Voucher not found', req, 404)
+  }
+
+  // ---------------------------------------------------------------------------
+  // voucher-holders – fetch on-chain token holders for a mint (owner-only)
+  // ---------------------------------------------------------------------------
+  if (action === 'voucher-holders') {
+    const check = await requirePlatformAdmin(authHeader, req)
+    if (!check.ok) return check.response
+
+    const mint = (body.mint as string)?.trim()
+    if (!mint) return errorResponse('mint required', req)
+
+    const mintPk = new PublicKey(mint)
+    const connection = getSolanaConnection()
+    const accounts = await connection.getProgramAccounts(TOKEN_PROGRAM_ID, {
+      commitment: 'confirmed',
+      filters: [
+        { dataSize: SPL_TOKEN_ACCOUNT_DATA_SIZE },
+        { memcmp: { offset: 0, bytes: mintPk.toBase58() } },
+      ],
+    })
+
+    const byWallet = new Map<string, bigint>()
+    for (const { account } of accounts) {
+      const data = account.data as Uint8Array
+      if (data.length < 72) continue
+      const owner = new PublicKey(data.slice(32, 64)).toBase58()
+      const view = new DataView(data.buffer, data.byteOffset)
+      const amount = view.getBigUint64(64, true)
+      if (amount > 0n) byWallet.set(owner, (byWallet.get(owner) ?? 0n) + amount)
+    }
+
+    const holders = [...byWallet.entries()].map(([owner, amount]) => ({
+      owner,
+      amount: String(amount),
+    }))
+
+    return jsonResponse({ holders }, req)
   }
 
   // ---------------------------------------------------------------------------

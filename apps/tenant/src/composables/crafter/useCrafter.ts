@@ -36,6 +36,8 @@ export interface CrafterToken {
   description: string | null
   image_url: string | null
   metadata_uri: string
+  storage_backend?: 'api' | 'selfhost'
+  seller_fee_basis_points?: number
   authority: string
   created_at: string
 }
@@ -397,9 +399,14 @@ export function useCrafter() {
 
   async function editMetadata(
     mint: string,
-    newName: string,
-    newSymbol: string,
-    newUri: string
+    form: {
+      name: string
+      symbol: string
+      description?: string
+      imageUrl?: string
+      sellerFeeBasisPoints?: number
+      metadataUri: string
+    }
   ): Promise<{ success: boolean; error?: string }> {
     const id = tenantId.value
     const conn = connection.value
@@ -407,19 +414,36 @@ export function useCrafter() {
     if (!id || !conn || !wallet?.publicKey) {
       return { success: false, error: 'Connect your wallet' }
     }
+    const name = form.name.trim()
+    const symbol = form.symbol.trim()
+    const uri = form.metadataUri.trim()
+    if (!name || !symbol || !uri) {
+      return { success: false, error: 'Name, symbol, and metadata URI required' }
+    }
     try {
       const tx = buildUpdateMetadataTransaction({
         mint,
         updateAuthority: wallet.publicKey,
-        newName,
-        newSymbol,
-        newUri,
+        newName: name,
+        newSymbol: symbol,
+        newUri: uri,
+        sellerFeeBasisPoints: form.sellerFeeBasisPoints,
       })
       await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
       const headers = await getAuthHeaders()
       if (headers) {
         await supabase.functions.invoke('crafter', {
-          body: { action: 'update-metadata', tenantId: id, mint, name: newName, symbol: newSymbol, metadataUri: newUri },
+          body: {
+            action: 'update-metadata',
+            tenantId: id,
+            mint,
+            name,
+            symbol,
+            description: form.description?.trim() || null,
+            imageUrl: form.imageUrl?.trim() || null,
+            sellerFeeBasisPoints: form.sellerFeeBasisPoints ?? 0,
+            metadataUri: uri,
+          },
           headers,
         })
       }

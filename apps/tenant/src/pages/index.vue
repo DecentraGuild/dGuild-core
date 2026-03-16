@@ -1,44 +1,44 @@
 <template>
   <PageSection>
     <div class="home">
-      <div class="home__brand">
-        <img
-          v-if="brandLogo"
-          :src="brandLogo"
-          :alt="displayName"
-          class="home__logo"
-        >
-        <span v-else class="home__logo-placeholder">{{ displayName.charAt(0) }}</span>
-        <h1 class="home__name">{{ displayName }}</h1>
-      </div>
-      <p v-if="showDescription" class="home__desc">{{ tenant?.description }}</p>
+      <DguildInfoBanner
+        :name="displayName"
+        :description="tenant?.description"
+        :logo="brandLogo"
+        :homepage="tenant?.homepage"
+        :discord="tenant?.discordServerInviteLink"
+        :x-link="tenant?.xLink"
+        :telegram="tenant?.telegramLink"
+      />
       <section v-if="displayModules.length" class="home__modules" aria-label="Module list">
         <div class="home__grid">
           <NuxtLink
             v-for="entry in displayModules"
             :key="entry.id"
             :to="moduleLink(entry)"
-            class="home__card"
+            class="home__card-link"
           >
-            <span class="home__card-bg-icon" aria-hidden="true">
-              <Icon :icon="entry.icon" height="none" class="home__card-bg-icon-svg" />
-            </span>
-            <span class="home__card-trigger">
-              <span class="home__card-header">
-                <span class="home__card-heading">
-                  <span class="home__card-name-row">
-                    <span class="home__card-name">{{ entry.name }}</span>
-                    <span v-if="entry.status === 'coming_soon'" class="home__card-badge">Coming soon</span>
-                  </span>
+            <Card class="home__card !p-0 !gap-0">
+              <span class="home__card-bg-icon" aria-hidden="true">
+                <Icon :icon="entry.icon" height="none" class="home__card-bg-icon-svg" />
+              </span>
+              <CardContent class="home__card-trigger !px-4 !pt-4 !pb-4">
+                <div class="home__card-header">
+                  <div class="home__card-heading">
+                    <span class="home__card-name-row">
+                      <span class="home__card-name">{{ entry.name }}</span>
+                      <Badge v-if="entry.status === 'coming_soon'" variant="outline">Coming soon</Badge>
+                    </span>
+                  </div>
+                </div>
+                <p v-if="entry.shortDescription" class="home__card-preview">
+                  {{ entry.shortDescription }}
+                </p>
+                <span class="home__card-chevron" aria-hidden="true">
+                  <Icon icon="mdi:chevron-right" class="home__card-chevron-icon" />
                 </span>
-              </span>
-              <p v-if="entry.shortDescription" class="home__card-preview">
-                {{ entry.shortDescription }}
-              </p>
-              <span class="home__card-chevron" aria-hidden="true">
-                <Icon icon="mdi:chevron-right" class="home__card-chevron-icon" />
-              </span>
-            </span>
+              </CardContent>
+            </Card>
           </NuxtLink>
         </div>
       </section>
@@ -52,8 +52,11 @@
 </template>
 
 <script setup lang="ts">
+import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
+import { Card, CardContent } from '~/components/ui/card'
 import { Icon } from '@iconify/vue'
+import DguildInfoBanner from '~/components/home/DguildInfoBanner.vue'
 import { useThemeStore } from '@decentraguild/ui'
 import { getModuleCatalogEntry } from '@decentraguild/config'
 import type { ModuleCatalogEntry } from '@decentraguild/config'
@@ -70,7 +73,6 @@ const { navModules } = useNavModules()
 
 const displayName = ref('dGuild')
 const brandLogo = ref('')
-const showDescription = ref(false)
 
 const showConnectCta = computed(() => !auth.wallet.value)
 
@@ -84,7 +86,6 @@ function applyTenant() {
   const t = tenantStore.tenant
   displayName.value = (themeStore.branding.name ?? t?.name) || 'dGuild'
   brandLogo.value = themeStore.branding.logo ?? t?.branding?.logo ?? ''
-  showDescription.value = Boolean(t?.description)
 }
 onMounted(applyTenant)
 watch([tenant, () => themeStore.branding], applyTenant)
@@ -103,43 +104,6 @@ function moduleLink(entry: ModuleCatalogEntry) {
 <style scoped>
 .home {
   max-width: 56rem;
-}
-
-.home__brand {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-md);
-  margin-bottom: var(--theme-space-md);
-}
-
-.home__logo,
-.home__logo-placeholder {
-  width: 3rem;
-  height: 3rem;
-  border-radius: var(--theme-radius-md);
-  object-fit: cover;
-}
-
-.home__logo-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--theme-bg-secondary);
-  color: var(--theme-text-secondary);
-  font-size: var(--theme-font-xl);
-  font-weight: 600;
-}
-
-.home__name {
-  font-size: var(--theme-font-2xl);
-  font-weight: 600;
-  margin: 0;
-}
-
-.home__desc {
-  color: var(--theme-text-secondary);
-  margin: 0 0 var(--theme-space-lg);
-  font-size: var(--theme-font-sm);
 }
 
 .home__modules {
@@ -183,7 +147,13 @@ function moduleLink(entry: ModuleCatalogEntry) {
   color: inherit;
 }
 
-.home__card:hover {
+.home__card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.home__card-link:hover .home__card {
   transform: translateY(-2px);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
 }
@@ -229,7 +199,7 @@ function moduleLink(entry: ModuleCatalogEntry) {
   transition: background-color 0.15s ease;
 }
 
-.home__card:hover .home__card-trigger {
+.home__card-link:hover .home__card-trigger {
   background: var(--theme-bg-secondary);
 }
 
@@ -253,17 +223,6 @@ function moduleLink(entry: ModuleCatalogEntry) {
   align-items: center;
   gap: var(--theme-space-xs);
   flex-wrap: wrap;
-}
-
-.home__card-badge {
-  font-size: 0.6rem;
-  line-height: 1.2;
-  color: var(--theme-text-muted);
-  background: var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
-  padding: 2px 4px;
-  border-radius: var(--theme-radius-sm);
-  white-space: nowrap;
 }
 
 .home__card-name {

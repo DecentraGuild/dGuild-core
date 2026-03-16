@@ -6,7 +6,7 @@
         <p class="onboard-form__prompt">
           Connect your wallet and sign in to create a dGuild.
         </p>
-        <Button variant="primary" @click="showConnectModal = true">
+        <Button @click="showConnectModal = true">
           Connect wallet
         </Button>
         <ConnectWalletModal
@@ -22,16 +22,24 @@
       </template>
       <form v-else class="onboard-form" @submit.prevent="submit">
         <h2 class="onboard-form__title">Create Organisation</h2>
-        <TextInput v-model="form.name" label="Name (required)" placeholder="My dGuild" />
-        <TextInput v-model="form.description" label="Description (required)" placeholder="Our community hub" />
-        <TextInput v-model="form.logo" label="Logo (optional)" placeholder="https://..." />
-        <TextInput
-          v-model="form.discordInviteLink"
-          label="Discord invite link (optional)"
-          placeholder="https://discord.gg/..."
-        />
+        <div class="space-y-2">
+          <Label for="onboard-name">Name (required)</Label>
+          <Input id="onboard-name" v-model="form.name" placeholder="My dGuild" />
+        </div>
+        <div class="space-y-2">
+          <Label for="onboard-desc">Description (required)</Label>
+          <Input id="onboard-desc" v-model="form.description" placeholder="Our community hub" />
+        </div>
+        <div class="space-y-2">
+          <Label for="onboard-logo">Logo (optional)</Label>
+          <Input id="onboard-logo" v-model="form.logo" placeholder="https://..." />
+        </div>
+        <div class="space-y-2">
+          <Label for="onboard-discord">Discord invite link (optional)</Label>
+          <Input id="onboard-discord" v-model="form.discordInviteLink" placeholder="https://discord.gg/..." />
+        </div>
         <div v-if="error" class="onboard-form__error">{{ error }}</div>
-        <Button type="submit" variant="primary" :disabled="saving">Create and pay</Button>
+        <Button type="submit" :disabled="saving">Create and pay</Button>
       </form>
     </Card>
   </PageSection>
@@ -40,7 +48,11 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Create org' })
 import { useAuth } from '@decentraguild/auth'
-import { PageSection, Card, TextInput, Button, ConnectWalletModal } from '@decentraguild/ui/components'
+import { ConnectWalletModal } from '@decentraguild/ui/components'
+import { Button } from '~/components/ui/button'
+import { Card } from '~/components/ui/card'
+import { Input } from '~/components/ui/input'
+import { Label } from '~/components/ui/label'
 import type { WalletConnectorId } from '@solana/connector/headless'
 import { PublicKey } from '@solana/web3.js'
 import {

@@ -6,11 +6,11 @@
         Sign in with the owner wallet to access internal operations.
       </p>
 
-      <div v-if="!auth.wallet.value" class="ops-login__card">
+      <Card v-if="!auth.wallet.value" class="ops-login__card">
         <p class="ops-login__text">
           Connect your wallet and sign a one-time message to start a session.
         </p>
-        <Button variant="primary" @click="showConnectModal = true">
+        <Button @click="showConnectModal = true">
           Connect wallet
         </Button>
         <ConnectWalletModal
@@ -23,19 +23,19 @@
           @close="showConnectModal = false"
           @select="handleConnectAndSignIn"
         />
-      </div>
+      </Card>
 
-      <div v-else class="ops-login__card">
+      <Card v-else class="ops-login__card">
         <p class="ops-login__text">
           Connected as <span class="ops-login__wallet">{{ auth.wallet.value }}</span>.
         </p>
         <p class="ops-login__hint">
           Continue to platform operations. Access is restricted to the wallet in platform_owner.
         </p>
-        <Button variant="primary" @click="goToOps">
+        <Button @click="goToOps">
           Continue to platform admin
         </Button>
-      </div>
+      </Card>
     </div>
   </PageSection>
 </template>
@@ -44,7 +44,9 @@
 definePageMeta({ title: 'Platform admin login' })
 
 import { useAuth } from '@decentraguild/auth'
-import { PageSection, Button, ConnectWalletModal } from '@decentraguild/ui/components'
+import { ConnectWalletModal } from '@decentraguild/ui/components'
+import { Button } from '~/components/ui/button'
+import { Card } from '~/components/ui/card'
 import type { WalletConnectorId } from '@solana/connector/headless'
 
 const auth = useAuth()

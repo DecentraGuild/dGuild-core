@@ -75,6 +75,29 @@
           v-model="form.discordServerInviteLink"
           label="Invite link to Discord"
           placeholder="https://discord.gg/..."
+          :error="discordError"
+          @blur="discordError = validateDiscordLink(form.discordServerInviteLink).error ?? undefined"
+        />
+        <FormInput
+          v-model="form.homepage"
+          label="Homepage"
+          placeholder="https://..."
+          :error="homepageError"
+          @blur="homepageError = validateHomepage(form.homepage).error ?? undefined"
+        />
+        <FormInput
+          v-model="form.xLink"
+          label="X (Twitter)"
+          placeholder="https://x.com/username or https://twitter.com/username"
+          :error="xError"
+          @blur="xError = validateXLink(form.xLink).error ?? undefined"
+        />
+        <FormInput
+          v-model="form.telegramLink"
+          label="Telegram"
+          placeholder="https://t.me/channel"
+          :error="telegramError"
+          @blur="telegramError = validateTelegramLink(form.telegramLink).error ?? undefined"
         />
       </Card>
     </div>
@@ -83,15 +106,26 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { Card } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 import { FormInput } from '~/components/ui/form-input'
 import { Icon } from '@iconify/vue'
 import { getGateLabel } from '@decentraguild/config'
+import {
+  validateDiscordLink,
+  validateHomepage,
+  validateXLink,
+  validateTelegramLink,
+} from '~/lib/validateSocialLinks'
 import type { AdminForm } from '~/composables/admin/useAdminForm'
 import type { TenantConfig } from '@decentraguild/core'
 
 const isProduction = import.meta.env.PROD
+const discordError = ref<string>()
+const homepageError = ref<string>()
+const xError = ref<string>()
+const telegramError = ref<string>()
 const gateLabel = getGateLabel()
 
 defineProps<{

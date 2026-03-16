@@ -257,7 +257,7 @@ Deno.serve(async (req: Request) => {
   if (action === 'list') {
     const { data: rows, error } = await db
       .from('crafter_tokens')
-      .select('id, mint, name, symbol, decimals, description, image_url, metadata_uri, authority, created_at')
+      .select('id, mint, name, symbol, decimals, description, image_url, metadata_uri, storage_backend, seller_fee_basis_points, authority, created_at')
       .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false })
 
@@ -313,6 +313,7 @@ Deno.serve(async (req: Request) => {
       metadata_uri: metadataUri,
       description,
       image_url: imageUrl,
+      seller_fee_basis_points: sellerFeeBasisPoints,
       updated_at: nowIso,
     }
     if (nameOverride != null) updatePayload.name = nameOverride
@@ -348,8 +349,10 @@ Deno.serve(async (req: Request) => {
     const mint = (body.mint as string)?.trim()
     const name = (body.name as string)?.trim()
     const symbol = (body.symbol as string)?.trim()
+    const description = (body.description as string)?.trim()
     const imageUrl = (body.imageUrl as string)?.trim()
     const metadataUri = (body.metadataUri as string)?.trim()
+    const sellerFeeBasisPoints = Math.max(0, Math.min(10000, typeof body.sellerFeeBasisPoints === 'number' ? body.sellerFeeBasisPoints : 0))
 
     if (!mint) return errorResponse('mint required', req)
 
@@ -365,8 +368,10 @@ Deno.serve(async (req: Request) => {
     const updates: Record<string, unknown> = { updated_at: nowIso }
     if (name !== undefined) updates.name = name || null
     if (symbol !== undefined) updates.symbol = symbol || null
+    if (description !== undefined) updates.description = description || null
     if (imageUrl !== undefined) updates.image_url = imageUrl || null
     if (metadataUri !== undefined) updates.metadata_uri = metadataUri || null
+    updates.seller_fee_basis_points = sellerFeeBasisPoints
 
     const { error: updateErr } = await db
       .from('crafter_tokens')

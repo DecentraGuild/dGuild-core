@@ -53,6 +53,7 @@ export const MODULE_SUBNAV: Record<string, ModuleSubnavTab[]> = {
     { id: 'plan-shipment', label: 'Plan Shipment' },
     { id: 'raffle', label: 'Raffle' },
     { id: 'marketplace', label: 'Marketplace' },
+    { id: 'vouchers', label: 'Vouchers' },
     { id: 'billing', label: 'Billing' },
   ],
   marketplace: [

@@ -35,6 +35,7 @@ export { resolveQuote } from './engine/quote.js'
 export { charge } from './engine/charge.js'
 export { confirm } from './engine/confirm.js'
 export { createUSDCTransferProvider } from './payments/usdc-provider.js'
+export { createVoucherTransferProvider } from './payments/voucher-provider.js'
 export { MODULE_TO_PRODUCT, CONDITION_TO_METER, toMeterOverrides } from './module-product-map.js'
 
 registerAllAdapters()

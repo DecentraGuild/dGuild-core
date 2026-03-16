@@ -1,54 +1,63 @@
 <template>
   <div class="discovery-page">
-    <div v-if="loading" class="discovery__loading">Loading...</div>
+    <div v-if="loading" class="discovery__loading">
+      <Skeleton class="h-9 w-full max-w-xs" />
+      <div class="mt-4 flex gap-2">
+        <Skeleton class="h-9 w-28" />
+        <Skeleton class="h-9 w-28" />
+      </div>
+    </div>
     <div v-else-if="error" class="discovery__error">{{ error }}</div>
     <div v-else class="discovery">
       <div class="discovery__bar">
         <div class="discovery__search">
-          <label for="discovery-search" class="discovery__label">Search</label>
-          <input
-            id="discovery-search"
-            v-model="searchQuery"
-            type="search"
-            class="discovery__input"
-            placeholder="Search dGuilds"
-            autocomplete="off"
-            aria-label="Search dGuilds"
-          />
-          <Icon icon="mdi:magnify" class="discovery__search-icon" aria-hidden="true" />
+          <Label for="discovery-search">Search</Label>
+          <div class="relative">
+            <Icon icon="mdi:magnify" class="discovery__search-icon" aria-hidden="true" />
+            <Input
+              id="discovery-search"
+              v-model="searchQuery"
+              type="search"
+              placeholder="Search dGuilds"
+              autocomplete="off"
+              aria-label="Search dGuilds"
+              class="pl-8"
+            />
+          </div>
         </div>
         <div class="discovery__filters">
           <div class="discovery__filter">
-            <label for="discovery-module" class="discovery__label">Module</label>
-            <select
-              id="discovery-module"
-              :value="moduleFilter ?? ''"
-              class="discovery__select"
-              aria-label="Filter by module"
-              @change="onModuleFilterChange"
-            >
-              <option value="">Any module</option>
-              <option
-                v-for="opt in moduleFilterOptions"
-                :key="opt.value"
-                :value="opt.value"
-              >
-                {{ opt.label }}
-              </option>
-            </select>
+            <Label for="discovery-module">Module</Label>
+            <Select v-model="moduleFilterModel" aria-label="Filter by module">
+              <SelectTrigger id="discovery-module" class="w-[140px]">
+                <SelectValue placeholder="Any module" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">
+                  <span>Any module</span>
+                </SelectItem>
+                <SelectItem
+                  v-for="opt in moduleFilterOptions"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div class="discovery__filter">
-            <label for="discovery-access" class="discovery__label">Access</label>
-            <select
-              id="discovery-access"
-              v-model="accessFilter"
-              class="discovery__select"
-              aria-label="Filter by access"
-            >
-              <option value="any">Any</option>
-              <option value="public">Public</option>
-              <option value="gates">Gated</option>
-            </select>
+            <Label for="discovery-access">Access</Label>
+            <Select v-model="accessFilter" aria-label="Filter by access">
+              <SelectTrigger id="discovery-access" class="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any</SelectItem>
+                <SelectItem value="public">Public</SelectItem>
+                <SelectItem value="gates">Gated</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
@@ -78,6 +87,16 @@ import type { TenantConfig } from '@decentraguild/core'
 import DiscoveryCard from '~/components/DiscoveryCard.vue'
 import { useDiscoveryFilters } from '~/composables/useDiscoveryFilters'
 import { useSupabase } from '~/composables/useSupabase'
+import { Input } from '~/components/ui/input'
+import { Label } from '~/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select'
+import { Skeleton } from '~/components/ui/skeleton'
 
 const config = useRuntimeConfig()
 const tenants = ref<TenantConfig[]>([])
@@ -118,10 +137,10 @@ const {
   filteredTenants,
 } = useDiscoveryFilters(tenants)
 
-function onModuleFilterChange(e: Event) {
-  const val = (e.target as HTMLSelectElement).value
-  moduleFilter.value = val === '' ? null : val
-}
+const moduleFilterModel = computed({
+  get: () => moduleFilter.value ?? '',
+  set: (v: string) => { moduleFilter.value = v === '' ? null : v },
+})
 </script>
 
 <style scoped>

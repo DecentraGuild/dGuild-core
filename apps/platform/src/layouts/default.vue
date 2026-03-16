@@ -1,5 +1,5 @@
 <template>
-  <div class="platform-layout" :class="{ 'platform-layout--nav-open': mobileNavOpen }">
+  <div class="platform-layout">
     <header class="platform-header">
       <div class="platform-header__left">
         <NuxtLink to="/" class="platform-header__brand">
@@ -11,52 +11,56 @@
           <span class="platform-header__brand-text">DecentraGuild</span>
         </NuxtLink>
         <nav class="platform-header__nav platform-header__nav--desktop" aria-label="Main">
-          <NuxtLink to="/">Discover</NuxtLink>
-          <NuxtLink to="/modules" :prefetch="false">Modules</NuxtLink>
-          <NuxtLink to="/onboard">Create</NuxtLink>
+          <NuxtLink to="/" class="platform-header__link">Discover</NuxtLink>
+          <NuxtLink to="/modules" :prefetch="false" class="platform-header__link">Modules</NuxtLink>
+          <NuxtLink to="/onboard" class="platform-header__link">Create</NuxtLink>
         </nav>
       </div>
       <div class="platform-header__right">
-        <button
-          type="button"
-          class="platform-header__burger"
-          aria-label="Open menu"
-          :aria-expanded="mobileNavOpen"
-          @click="mobileNavOpen = true"
-        >
-          <Icon icon="mdi:menu" aria-hidden />
-        </button>
+        <Sheet v-model:open="mobileNavOpen">
+          <SheetTrigger as-child>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="platform-header__burger"
+              aria-label="Open menu"
+            >
+              <Icon icon="mdi:menu" aria-hidden />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" class="w-[280px] sm:max-w-[280px]">
+            <SheetHeader>
+              <SheetTitle class="sr-only">Menu</SheetTitle>
+            </SheetHeader>
+            <nav class="flex flex-col gap-1 pt-6" aria-label="Main navigation">
+              <NuxtLink
+                to="/"
+                class="flex min-h-11 items-center rounded-md px-3 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                @click="mobileNavOpen = false"
+              >
+                Discover
+              </NuxtLink>
+              <NuxtLink
+                to="/modules"
+                :prefetch="false"
+                class="flex min-h-11 items-center rounded-md px-3 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                @click="mobileNavOpen = false"
+              >
+                Modules
+              </NuxtLink>
+              <NuxtLink
+                to="/onboard"
+                class="flex min-h-11 items-center rounded-md px-3 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                @click="mobileNavOpen = false"
+              >
+                Create org
+              </NuxtLink>
+            </nav>
+          </SheetContent>
+        </Sheet>
         <AuthWidget />
       </div>
     </header>
-
-    <div
-      v-show="mobileNavOpen"
-      class="platform-layout__overlay"
-      aria-hidden="true"
-      @click="mobileNavOpen = false"
-    />
-    <aside
-      class="platform-nav-drawer"
-      :class="{ 'platform-nav-drawer--open': mobileNavOpen }"
-      aria-label="Main navigation"
-      role="dialog"
-      :aria-modal="mobileNavOpen"
-    >
-      <button
-        type="button"
-        class="platform-nav-drawer__close"
-        aria-label="Close menu"
-        @click="mobileNavOpen = false"
-      >
-        <Icon icon="mdi:close" aria-hidden />
-      </button>
-      <nav class="platform-nav-drawer__nav">
-        <NuxtLink to="/" @click="mobileNavOpen = false">Discover</NuxtLink>
-        <NuxtLink to="/modules" :prefetch="false" @click="mobileNavOpen = false">Modules</NuxtLink>
-        <NuxtLink to="/onboard" @click="mobileNavOpen = false">Create org</NuxtLink>
-      </nav>
-    </aside>
 
     <main class="platform-main">
       <slot />
@@ -74,6 +78,14 @@
 import { Icon } from '@iconify/vue'
 import { AuthWidget } from '@decentraguild/auth'
 import { TransactionToastContainer } from '@decentraguild/ui/components'
+import { Button } from '~/components/ui/button'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '~/components/ui/sheet'
 
 const route = useRoute()
 const mobileNavOpen = ref(false)
@@ -82,7 +94,7 @@ watch(
   () => route.path,
   () => {
     mobileNavOpen.value = false
-  }
+  },
 )
 </script>
 
@@ -138,7 +150,7 @@ watch(
   gap: var(--theme-space-lg);
 }
 
-.platform-header__nav a {
+.platform-header__link {
   color: var(--theme-text-secondary);
   text-decoration: none;
   line-height: 1;
@@ -147,11 +159,11 @@ watch(
   align-items: center;
 }
 
-.platform-header__nav a:hover {
+.platform-header__link:hover {
   color: var(--theme-primary);
 }
 
-.platform-header__nav .router-link-active {
+.platform-header__link.router-link-active {
   color: var(--theme-primary);
   font-weight: 600;
 }
@@ -165,34 +177,10 @@ watch(
 
 .platform-header__burger {
   display: none;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: var(--theme-radius-md);
-  color: var(--theme-text-secondary);
-  cursor: pointer;
-}
-
-.platform-header__burger:hover {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-card);
 }
 
 .platform-main {
   padding: var(--theme-space-xl);
-}
-
-/* Overlay and nav drawer (mobile) */
-.platform-layout__overlay {
-  display: none;
-}
-
-.platform-nav-drawer {
-  display: none;
 }
 
 @media (max-width: var(--theme-breakpoint-md)) {
@@ -210,91 +198,6 @@ watch(
 
   .platform-main {
     padding: var(--theme-space-md);
-  }
-
-  .platform-layout__overlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    background: rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
-  }
-
-  .platform-layout--nav-open .platform-layout__overlay {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .platform-nav-drawer {
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 101;
-    width: 280px;
-    max-width: 85vw;
-    padding: var(--theme-space-md);
-    background-color: var(--theme-bg-secondary);
-    border-right: var(--theme-border-thin) solid var(--theme-border);
-    transform: translateX(-100%);
-    transition: transform 0.2s ease;
-    overflow-y: auto;
-  }
-
-  .platform-nav-drawer--open {
-    transform: translateX(0);
-  }
-
-  .platform-nav-drawer__close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    margin: 0 0 var(--theme-space-sm);
-    padding: 0;
-    background: none;
-    border: none;
-    border-radius: var(--theme-radius-md);
-    color: var(--theme-text-secondary);
-    cursor: pointer;
-  }
-
-  .platform-nav-drawer__close:hover {
-    color: var(--theme-text-primary);
-    background: var(--theme-bg-card);
-  }
-
-  .platform-nav-drawer__nav {
-    display: flex;
-    flex-direction: column;
-    gap: var(--theme-space-xs);
-  }
-
-  .platform-nav-drawer__nav a {
-    display: flex;
-    align-items: center;
-    min-height: 44px;
-    padding: 0 var(--theme-space-sm);
-    color: var(--theme-text-secondary);
-    text-decoration: none;
-    border-radius: var(--theme-radius-md);
-  }
-
-  .platform-nav-drawer__nav a:hover {
-    color: var(--theme-primary);
-    background: var(--theme-bg-card);
-  }
-
-  .platform-nav-drawer__nav a.router-link-active {
-    color: var(--theme-primary);
-    font-weight: 600;
-    background: var(--theme-bg-card);
   }
 }
 </style>
