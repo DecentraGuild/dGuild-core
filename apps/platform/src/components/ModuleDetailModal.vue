@@ -51,13 +51,6 @@ const docsUrl = computed(() =>
 )
 
 function getFromPrice(p: PricingModel): string | null {
-  if (p.modelType === 'flat_one_time') {
-    return `${formatUsdc(p.amount)} USDC one-time`
-  }
-  if (p.modelType === 'flat_recurring') {
-    const yearly = p.recurringYearly ?? (p.recurringPrice ?? 0) * 12
-    return `${formatUsdc(yearly)} USDC/yr`
-  }
   if (p.modelType === 'tiered_addons' && p.tiers?.length) {
     const minPrice = Math.min(...p.tiers.map((t) => t.recurringPrice))
     return `${formatUsdc(minPrice)} USDC/mo`
@@ -70,14 +63,6 @@ function getFromPrice(p: PricingModel): string | null {
     }
     if (baseTier.recurringPrice) {
       return `${formatUsdc(baseTier.recurringPrice)} USDC/mo`
-    }
-    return null
-  }
-  if (p.modelType === 'add_unit') {
-    const isGates = p.conditionKey === 'listsCount'
-    const unitLabel = isGates ? 'per list' : 'per unit'
-    if (p.pricePerUnit) {
-      return `${formatUsdc(p.pricePerUnit)} USDC ${unitLabel}`
     }
     return null
   }

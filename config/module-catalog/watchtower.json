@@ -26,22 +26,5 @@
     ],
     "note": "Current holders track powers conditions, shipment, and Discord roles. Enable it for mints used in those features."
   },
-  "pricing": {
-    "modelType": "tiered_addons",
-    "conditionKeys": ["mints_current", "mintsSnapshot", "mintsTransactions"],
-    "tiers": [
-      {
-        "id": "tier1",
-        "name": "Watchtower",
-        "recurringPrice": 0,
-        "included": { "mints_current": 0, "mintsSnapshot": 0, "mintsTransactions": 0 }
-      }
-    ],
-    "addons": [
-      { "conditionKey": "mints_current", "name": "Current holders (per mint)", "unitSize": 1, "recurringPricePerUnit": 0.0005 },
-      { "conditionKey": "mintsSnapshot", "name": "Snapshot track (per mint)", "unitSize": 1, "recurringPricePerUnit": 0.0005 },
-      { "conditionKey": "mintsTransactions", "name": "Transactions track (per mint)", "unitSize": 1, "recurringPricePerUnit": 0.0020 }
-    ],
-    "yearlyDiscountPercent": 25
-  }
+  "pricing": null
 }

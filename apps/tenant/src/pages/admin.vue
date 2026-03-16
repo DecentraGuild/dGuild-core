@@ -85,16 +85,20 @@
         :saving="saving"
         :deploying="deploying"
         :save-error="saveError"
+        :handle-billing-payment="handleBillingPayment"
         @save="(p: BillingPeriod, cond?: Record<string, number>) => handleRaffleBilling(p, cond)"
         @deploy="(p: BillingPeriod, cond?: Record<string, number>) => handleRaffleBilling(p, cond)"
+        @created="fetchSubscription('raffles')"
       />
 
       <AdminGatesTab
         v-else-if="tab === 'gates'"
         :slug="slug ?? ''"
         :module-state="gatesModuleState"
+        :subscription="subscriptions.gates ?? null"
         :deploying="deploying"
-        @deploy="(p: BillingPeriod) => deployModule('gates', p)"
+        @deploy="(p: BillingPeriod, cond?: Record<string, number | boolean>) => deployModule('gates', p, cond)"
+        @created="fetchSubscription('gates')"
       />
 
       <AdminAddressbookTab
@@ -111,8 +115,8 @@
         :saving="saving"
         :deploying="deploying"
         :save-error="saveError"
-        @save="(p: BillingPeriod) => handleWatchtowerSave(p)"
-        @deploy="(p: BillingPeriod) => handleWatchtowerDeploy(p)"
+        @save="(p: BillingPeriod, c?: Record<string, number>) => handleWatchtowerSave(p, c)"
+        @deploy="(p: BillingPeriod, c?: Record<string, number>) => handleWatchtowerSave(p, c)"
         @reactivate="(p: BillingPeriod) => handleReactivate('watchtower', p)"
       />
 
@@ -153,9 +157,12 @@
       @update:model-value="(v: boolean) => !v && cancelDeactivate()"
     >
       <div v-if="pendingDeactivateModuleId" class="admin__deactivate-modal">
-        <p>
+        <p v-if="getSubscriptionPeriodEnd(pendingDeactivateModuleId)">
           The module will stay active until the end of your current billing period.
           After that, it will turn off automatically.
+        </p>
+        <p v-else>
+          The module will turn off immediately.
         </p>
         <p v-if="getSubscriptionPeriodEnd(pendingDeactivateModuleId!)" class="admin__deactivate-date">
           End of period: {{ formatDeactivationDate(getSubscriptionPeriodEnd(pendingDeactivateModuleId!)!) }}
@@ -165,7 +172,7 @@
             Cancel
           </Button>
           <Button variant="default" @click="confirmDeactivate">
-            Disable at period end
+            {{ getSubscriptionPeriodEnd(pendingDeactivateModuleId!) ? 'Disable at period end' : 'Disable now' }}
           </Button>
         </div>
       </div>
@@ -306,32 +313,24 @@ async function handleRaffleBilling(period: BillingPeriod, conditions?: Record<st
   }
 }
 
-async function handleWatchtowerSave(period: BillingPeriod) {
+async function handleWatchtowerSave(period: BillingPeriod, conditions?: Record<string, number>) {
   saving.value = true
+  deploying.value = true
   saveError.value = null
   try {
+    await handleBillingPayment('watchtower', period, undefined, conditions)
     const ok = await watchtowerTabRef.value?.saveWatches?.()
     if (!ok) {
       saveError.value = 'Failed to save watchtower settings'
       return
     }
-    await handleBillingPayment('watchtower', period)
     await fetchSubscription('watchtower')
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : 'Billing failed'
   } finally {
     saving.value = false
+    deploying.value = false
   }
-}
-
-async function handleWatchtowerDeploy(period: BillingPeriod) {
-  const ok = await watchtowerTabRef.value?.saveWatches?.()
-  if (!ok) {
-    saveError.value = 'Failed to save watchtower settings'
-    return
-  }
-  await deployModule('watchtower', period)
-  await fetchSubscription('watchtower')
 }
 
 function formatDeactivationDate(iso: string): string {
@@ -370,24 +369,16 @@ function isWithinPaidPeriod(moduleId: string): boolean {
 function onModuleToggle(id: string, on: boolean) {
   if (on) {
     const entry = getModuleCatalogEntry(id)
-    if (entry?.pricing) {
-      if (isWithinPaidPeriod(id)) {
-        form.modulesById[id] = 'active'
-        save()
-      } else {
-        activationModalModuleId.value = id
-        showActivationModal.value = true
-      }
-    } else {
-      form.modulesById[id] = entry?.goActiveImmediately === true ? 'active' : 'staging'
+    if (entry?.pricing && isWithinPaidPeriod(id)) {
+      form.modulesById[id] = 'active'
       save()
+    } else {
+      activationModalModuleId.value = id
+      showActivationModal.value = true
     }
   } else {
     const current = form.modulesById[id] ?? 'off'
-    if (current === 'staging') {
-      form.modulesById[id] = 'off'
-      save()
-    } else if (current === 'active') {
+    if (current === 'staging' || current === 'active') {
       pendingDeactivateModuleId.value = id
       showDeactivateConfirm.value = true
     }
@@ -397,7 +388,7 @@ function onModuleToggle(id: string, on: boolean) {
 async function confirmDeactivate() {
   const id = pendingDeactivateModuleId.value
   if (id) {
-    form.modulesById[id] = 'deactivating'
+    form.modulesById[id] = isWithinPaidPeriod(id) ? 'deactivating' : 'off'
     await save()
   }
   pendingDeactivateModuleId.value = null
@@ -623,7 +614,7 @@ async function confirmModuleActivate() {
 }
 .admin__module-row {
   display: grid;
-  grid-template-columns: 2.5rem minmax(8rem, 1fr) minmax(14rem, 18rem) auto;
+  grid-template-columns: minmax(6rem, 7rem) minmax(8rem, 1fr) minmax(14rem, 18rem) auto;
   align-items: center;
   gap: var(--theme-space-md);
   padding: var(--theme-space-xs) 0;
@@ -638,13 +629,17 @@ async function confirmModuleActivate() {
   display: flex;
   align-items: center;
 }
-.admin__module-cell--toggle {
-  justify-content: center;
+.admin__module-cell--action {
+  justify-content: flex-start;
   align-items: center;
 }
-.admin__module-cell--toggle :deep([data-slot="switch"]) {
-  flex-shrink: 0;
-  margin: 0;
+.admin__module-badge {
+  font-size: var(--theme-font-xs);
+  font-weight: 500;
+  color: var(--theme-text-muted);
+}
+.admin__module-badge--always {
+  color: var(--theme-text-secondary);
 }
 .admin__module-cell--name {
   min-width: 0;
@@ -858,8 +853,4 @@ async function confirmModuleActivate() {
 }
 
 /* Staging: switch uses warning color */
-.admin__module-row--staging :deep([data-slot="switch"][data-state="checked"]) {
-  background-color: var(--theme-warning) !important;
-  border-color: var(--theme-warning) !important;
-}
 </style>

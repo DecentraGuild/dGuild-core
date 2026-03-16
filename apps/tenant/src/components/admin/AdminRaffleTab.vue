@@ -101,7 +101,6 @@
         :show-gate-select="isDefaultGatePublic"
         :submitting="createSubmitting"
         :error="createError"
-        :ticket-meta="{ label: createTicketMeta.label, placeholder: createTicketMeta.placeholder, hint: createTicketMeta.hint }"
         @submit="onCreateSubmit"
         @cancel="closeRaffleModal"
       />
@@ -123,7 +122,7 @@ import RaffleCreateForm from '~/components/admin/RaffleCreateForm.vue'
 import RaffleUpgradeModal from '~/components/admin/RaffleUpgradeModal.vue'
 import { useTenantStore } from '~/stores/tenant'
 import { nextTick, watch } from 'vue'
-import { usePricePreview } from '~/composables/core/usePricePreview'
+import { useQuote } from '~/composables/core/useQuote'
 import { useMintMetadataForInput } from '~/composables/mint/useMintMetadataForInput'
 import { useAdminRaffleActions } from '~/composables/admin/useAdminRaffleActions'
 import { useAdminRaffleModals } from '~/composables/admin/useAdminRaffleModals'
@@ -133,7 +132,7 @@ import { resolveGateForTransaction } from '@decentraguild/core'
 import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
 import {
   getEscrowWalletFromConnector,
-  buildBillingTransfer,
+  sendAndConfirmTransaction,
   buildInitializeRaffleTransaction,
   buildPrepareRaffleTransaction,
   buildCloseRaffleTransaction,
@@ -162,11 +161,18 @@ const props = defineProps<{
   saving?: boolean
   deploying?: boolean
   saveError?: string | null
+  handleBillingPayment?: (
+    moduleId: string,
+    period: BillingPeriod,
+    slugToClaim?: string,
+    conditions?: ConditionSet,
+  ) => Promise<boolean>
 }>()
 
 const emit = defineEmits<{
   save: [period: BillingPeriod, conditions?: ConditionSet]
   deploy: [period: BillingPeriod, conditions?: ConditionSet]
+  created: []
 }>()
 
 const tenantStore = useTenantStore()
@@ -209,7 +215,7 @@ const createForm = reactive({
   description: '',
   ticketMint: '',
   ticketPriceDisplay: '',
-  maxTicketsDisplay: '100',
+  maxTicketsDisplay: '',
   gate: null as { programId: string; account: string } | null | 'use-default',
 })
 
@@ -219,28 +225,44 @@ const createTicketMeta = useMintMetadataForInput(
   { fieldLabel: 'Ticket price' }
 )
 
-const slugRef = computed(() => tenantStore.slug ?? '')
 const tenantIdRef = computed(() => tenantStore.tenantId)
-const { conditions: apiConditions, price, refresh } = usePricePreview(slugRef, ref('raffles'), ref('monthly'))
-
-const liveConditions = computed(() => upgradeConditionsOverride.value ?? conditions.value)
-
-watch(apiConditions, (c) => {
-  conditions.value = c
-}, { immediate: true })
-
-/** Current tier from subscription (paid tier) or price preview (e.g. before upgrade). */
-const effectiveTierId = computed(() => {
-  const fromSub = props.subscription?.selectedTierId
-  if (fromSub) return fromSub
-  const fromPrice = price.value?.selectedTierId
-  return fromPrice ?? 'base'
+const moduleIdRef = ref('raffles')
+const { quote, fetchQuote } = useQuote({
+  moduleId: moduleIdRef,
+  durationDays: ref(30),
 })
 
-/** Included slot count from tier: Base 1, Grow 3, Pro 10. */
-const slotLimit = computed(() =>
-  effectiveTierId.value === 'pro' ? 10 : effectiveTierId.value === 'grow' ? 3 : 1,
+watch(quote, (q) => {
+  if (!q?.meters) {
+    conditions.value = null
+    return
+  }
+  conditions.value = { raffleSlotsUsed: q.meters.raffle_slots?.used ?? 0 }
+}, { immediate: true })
+
+/** For pricing widget: show price for adding next raffle (raffle_slots target). */
+const rafflePricingConditions = computed(() => ({
+  raffleSlotsUsed: activeRaffles.value.length + 1,
+}))
+
+const liveConditions = computed(() => upgradeConditionsOverride.value ?? rafflePricingConditions.value)
+
+/** Slot limit from grants or tier. Base 1 (default), Grow 3, Pro 10. */
+const slotLimit = computed(() => {
+  const limit = quote.value?.meters?.raffle_slots?.limit
+  if (limit != null && limit >= 1) return limit
+  const tierId = props.subscription?.selectedTierId
+  return tierId === 'pro' ? 10 : tierId === 'grow' ? 3 : 1
+})
+
+/** Tier id for upgrade modal display. */
+const effectiveTierId = computed(() =>
+  slotLimit.value >= 10 ? 'pro' : slotLimit.value >= 3 ? 'grow' : 'base',
 )
+
+function refresh() {
+  fetchQuote()
+}
 
 const {
   slotCards,
@@ -352,7 +374,7 @@ function openCreateModal(_slotIndex: number) {
   createForm.description = ''
   createForm.ticketMint = ''
   createForm.ticketPriceDisplay = ''
-  createForm.maxTicketsDisplay = '100'
+  createForm.maxTicketsDisplay = ''
   if (isDefaultGatePublic.value) {
     createForm.gate = null
   } else {
@@ -365,9 +387,14 @@ function openCreateModal(_slotIndex: number) {
 async function onCreateSubmit() {
   const name = createForm.name.trim()
   const ticketMint = createForm.ticketMint.trim()
-  const maxTickets = Math.max(1, parseInt(createForm.maxTicketsDisplay, 10) || 100)
+  const maxTicketsParsed = parseInt(createForm.maxTicketsDisplay, 10)
+  const maxTickets = maxTicketsParsed > 0 ? maxTicketsParsed : 0
   if (!name || !ticketMint) {
     createError.value = 'Name and ticket mint are required'
+    return
+  }
+  if (maxTickets < 1) {
+    createError.value = 'Total tickets is required (minimum 1)'
     return
   }
   const dec = createTicketMeta.metadata.value?.decimals
@@ -378,6 +405,11 @@ async function onCreateSubmit() {
   const ticketPriceRaw = createTicketMeta.toRawAmount()
   if (!ticketPriceRaw || ticketPriceRaw === '0') {
     createError.value = 'Ticket price is required'
+    return
+  }
+  const ticketPriceNum = parseFloat(createForm.ticketPriceDisplay) || 0
+  if (ticketPriceNum < 0) {
+    createError.value = 'Ticket price must be zero or positive'
     return
   }
 
@@ -391,95 +423,63 @@ async function onCreateSubmit() {
     return
   }
 
+  const id = tenantIdRef.value
+  if (!id) {
+    createError.value = 'Tenant not set'
+    return
+  }
+
   createSubmitting.value = true
   createError.value = null
   try {
-    const supabase = useSupabase()
-    const { data: intentData, error: intentError } = await supabase.functions.invoke('billing', {
-      body: {
-        action: 'raffle-intent',
-        tenantId: tenantIdRef.value,
-        payerWallet: wallet.publicKey.toBase58(),
-      },
-    })
-    if (intentError) throw new Error(intentError.message ?? `Failed to create raffle payment`)
-    const intent = intentData as {
-      noPaymentRequired?: boolean
-      paymentId?: string
-      amountUsdc?: number
-      memo?: string
-      recipientAta?: string
+    const conditions: ConditionSet = {
+      raffleSlotsUsed: activeRaffles.value.length + 1,
     }
+    const handlePay = props.handleBillingPayment
+    if (!handlePay) throw new Error('Billing not configured')
+    const paid = await handlePay('raffles', 'monthly', undefined, conditions)
+    if (!paid) throw new Error('Payment was not completed')
 
-    const seed = Buffer.alloc(8)
-    seed.writeBigUInt64LE(BigInt(Date.now()), 0)
-    const rafflePda = deriveRafflePda(name, seed)
-
-    const resolvedGate = resolveGateForTransaction(
-      effectiveRaffleGate.value,
-      createForm.gate
+    const gate = resolveGateForTransaction(
+      effectiveRaffleGate.value ?? null,
+      createForm.gate,
     )
-    const useWhitelist = Boolean(resolvedGate?.account?.trim())
+    const useWhitelist = Boolean(gate?.account?.trim())
+    const whitelist = useWhitelist && gate?.account ? gate.account : undefined
 
-    const raffleTx = await buildInitializeRaffleTransaction({
+    const seed = crypto.getRandomValues(new Uint8Array(8))
+    const tx = await buildInitializeRaffleTransaction({
       name,
-      description: createForm.description.trim(),
+      description: createForm.description.trim() || '',
       seed,
       ticketMint,
-      ticketPrice: BigInt(ticketPriceRaw),
+      ticketPrice: ticketPriceRaw,
       ticketDecimals: dec,
       maxTickets,
       useWhitelist,
-      whitelist: useWhitelist && resolvedGate?.account ? resolvedGate.account : null,
-      whitelistProgram: resolvedGate?.programId,
+      whitelist: whitelist ?? null,
       connection: connection.value,
       wallet,
     })
+    await sendAndConfirmTransaction(
+      connection.value,
+      tx,
+      wallet,
+      wallet.publicKey,
+    )
 
-    const { Transaction, PublicKey } = await import('@solana/web3.js')
-    const skipPayment = intent.noPaymentRequired || !intent.paymentId || intent.amountUsdc == null || !intent.memo || !intent.recipientAta
-
-    let combined: InstanceType<typeof Transaction>
-    if (skipPayment) {
-      combined = new Transaction()
-      combined.feePayer = wallet.publicKey
-      combined.add(...raffleTx.instructions)
-    } else {
-      const billingTx = buildBillingTransfer({
-        payer: wallet.publicKey,
-        amountUsdc: intent.amountUsdc,
-        recipientAta: new PublicKey(intent.recipientAta),
-        memo: intent.memo,
-        connection: connection.value,
-      })
-      combined = new Transaction()
-      combined.feePayer = wallet.publicKey
-      combined.add(...raffleTx.instructions, ...billingTx.instructions)
-    }
-
-    const sig = await sendWithTxStatus(connection.value!, combined, wallet, wallet.publicKey)
-    if (!sig) throw new Error('Transaction failed')
-
-    if (!skipPayment && !intent.noPaymentRequired && intent.paymentId) {
-      const { error: confirmError } = await supabase.functions.invoke('billing', {
-        body: { action: 'confirm', tenantId: tenantIdRef.value, paymentId: intent.paymentId, txSignature: sig },
-      })
-      if (confirmError) throw new Error(confirmError.message ?? 'Payment confirmation failed')
-    }
-
-    const { error: registerError } = await supabase.from('tenant_raffles').insert({
-      tenant_id: tenantIdRef.value,
-      raffle_pubkey: rafflePda.toBase58(),
+    const rafflePda = deriveRafflePda(name, seed)
+    const supabase = useSupabase()
+    const { error: bindErr } = await supabase.functions.invoke('platform', {
+      body: { action: 'raffle-bind-tenant', tenantId: id, rafflePubkey: rafflePda.toBase58() },
     })
-    if (registerError) throw new Error(registerError.message ?? 'Failed to register raffle')
+    if (bindErr) throw new Error(bindErr.message ?? 'Failed to bind raffle')
 
-    await fetchRaffles()
     closeRaffleModal()
-    createForm.name = ''
-    createForm.description = ''
-    createForm.ticketMint = ''
-    createForm.ticketPriceDisplay = ''
-    createForm.maxTicketsDisplay = '100'
+    await fetchRaffles()
+    await fetchChainDataForRaffles()
+    pricingRef.value?.refresh?.()
+    emit('created')
   } catch (e) {
     createError.value = e instanceof Error ? e.message : 'Failed to create'
   } finally {
@@ -954,12 +954,6 @@ defineExpose({
   gap: var(--theme-space-md);
   min-width: 320px;
 }
-:deep(.raffle-create-form__hint) {
-  margin: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
-}
-
 :deep(.raffle-create-form__error) {
   margin: 0;
   font-size: var(--theme-font-sm);

@@ -1,8 +1,10 @@
 /**
  * Address book entries for the current tenant.
  * Uses tenant-catalog Edge Function (central list). Address Book is always available as an admin tab.
+ * Prepends platform defaults (SOL, USDC, USDT, WBTC) by mint address; deduplicates by mint.
  */
 
+import { ADDRESS_BOOK_DEFAULT_MINTS } from '@decentraguild/core'
 import { useTenantStore } from '~/stores/tenant'
 import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
 
@@ -17,6 +19,17 @@ export interface AddressBookEntry {
   symbol?: string | null
   traitIndex?: unknown
 }
+
+const DEFAULT_MINT_SET = new Set(ADDRESS_BOOK_DEFAULT_MINTS.map((c) => c.mint))
+
+const defaultEntries: AddressBookEntry[] = ADDRESS_BOOK_DEFAULT_MINTS.map((c) => ({
+  mint: c.mint,
+  kind: 'SPL' as const,
+  tier: 'base' as const,
+  label: c.name ?? c.symbol,
+  name: c.name ?? c.symbol,
+  image: null,
+}))
 
 export function useAddressBook() {
   const tenantStore = useTenantStore()
@@ -33,16 +46,19 @@ export function useAddressBook() {
     error.value = null
     try {
       const data = await list()
-      entries.value = data.map((row) => ({
-        id: row.id,
-        mint: row.mint,
-        kind: row.kind,
-        tier: 'base' as const,
-        label: row.label,
-        image: row.image,
-        name: row.name,
-        traitIndex: row.trait_index,
-      }))
+      const catalogEntries = data
+        .filter((row) => !DEFAULT_MINT_SET.has(row.mint))
+        .map((row) => ({
+          id: row.id,
+          mint: row.mint,
+          kind: row.kind,
+          tier: 'base' as const,
+          label: row.label,
+          image: row.image,
+          name: row.name,
+          traitIndex: row.trait_index,
+        }))
+      entries.value = [...defaultEntries, ...catalogEntries]
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load address book'
     } finally {

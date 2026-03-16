@@ -1,6 +1,6 @@
 /**
  * Watchtower billing: paid counts and within-limit checks.
- * Only mints within the paid limit (first N by enabled_at per scope) get sync and data access.
+ * Uses tenant_meter_limits (pricing engine v2).
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -11,36 +11,35 @@ export type PaidCountsByScope = {
   mintsTransactions: number
 }
 
-const SCOPE_KEYS = ['mints_current', 'mintsSnapshot', 'mintsTransactions'] as const
-const SCOPE_TO_ENABLED_AT = {
-  mints_current: 'enabled_at_holders',
-  mintsSnapshot: 'enabled_at_snapshot',
-  mintsTransactions: 'enabled_at_transactions',
-} as const
-const SCOPE_TO_TRACK = {
-  mints_current: 'track_holders',
-  mintsSnapshot: 'track_snapshot',
-  mintsTransactions: 'track_transactions',
-} as const
+const SCOPE_TO_METER: Record<keyof PaidCountsByScope, string> = {
+  mints_current: 'mints_current',
+  mintsSnapshot: 'mints_snapshot',
+  mintsTransactions: 'mints_transactions',
+}
 
 export async function getPaidCountsByScope(
   db: SupabaseClient,
   tenantId: string,
 ): Promise<PaidCountsByScope> {
   const { data: rows } = await db
-    .from('billing_subscriptions')
-    .select('scope_key, conditions_snapshot')
+    .from('tenant_meter_limits')
+    .select('meter_key, quantity_total')
     .eq('tenant_id', tenantId)
-    .eq('module_id', 'watchtower')
-  const result: PaidCountsByScope = { mints_current: 0, mintsSnapshot: 0, mintsTransactions: 0 }
-  for (const row of rows ?? []) {
-    const cond = (row.conditions_snapshot as Record<string, number> | null) ?? {}
-    const scopeKey = (row.scope_key as string) ?? ''
-    if (scopeKey && SCOPE_KEYS.includes(scopeKey as keyof PaidCountsByScope)) {
-      result[scopeKey as keyof PaidCountsByScope] = Number(cond[scopeKey]) || 0
-    }
+    .in('meter_key', ['mints_current', 'mints_snapshot', 'mints_transactions'])
+
+  const byMeter = (rows ?? []).reduce(
+    (acc: Record<string, number>, r: { meter_key: string; quantity_total: number }) => {
+      acc[r.meter_key] = Number(r.quantity_total)
+      return acc
+    },
+    {},
+  )
+
+  return {
+    mints_current: byMeter.mints_current ?? 0,
+    mintsSnapshot: byMeter.mints_snapshot ?? 0,
+    mintsTransactions: byMeter.mints_transactions ?? 0,
   }
-  return result
 }
 
 export async function getWithinLimitMints(
@@ -48,12 +47,30 @@ export async function getWithinLimitMints(
   tenantId: string,
   scopeKey: keyof PaidCountsByScope,
 ): Promise<Set<string>> {
-  const paid = await getPaidCountsByScope(db, tenantId)
-  const paidCount = paid[scopeKey]
-  if (paidCount <= 0) return new Set()
+  const meterKey = SCOPE_TO_METER[scopeKey]
+  const { data: limitRow } = await db
+    .from('tenant_meter_limits')
+    .select('quantity_total')
+    .eq('tenant_id', tenantId)
+    .eq('meter_key', meterKey)
+    .maybeSingle()
 
-  const enabledCol = SCOPE_TO_ENABLED_AT[scopeKey]
-  const trackCol = SCOPE_TO_TRACK[scopeKey]
+  const limit = limitRow ? Number((limitRow as { quantity_total: number }).quantity_total) : 0
+  if (limit <= 0) return new Set()
+
+  const trackCol =
+    scopeKey === 'mints_current'
+      ? 'track_holders'
+      : scopeKey === 'mintsSnapshot'
+        ? 'track_snapshot'
+        : 'track_transactions'
+  const enabledCol =
+    scopeKey === 'mints_current'
+      ? 'enabled_at_holders'
+      : scopeKey === 'mintsSnapshot'
+        ? 'enabled_at_snapshot'
+        : 'enabled_at_transactions'
+
   const { data: watches } = await db
     .from('watchtower_watches')
     .select(`mint, ${enabledCol}`)
@@ -61,13 +78,9 @@ export async function getWithinLimitMints(
     .eq(trackCol, true)
     .not(enabledCol, 'is', null)
     .order(enabledCol, { ascending: true })
+    .limit(limit)
 
-  const within: string[] = []
-  for (const w of watches ?? []) {
-    if (within.length >= paidCount) break
-    within.push(w.mint as string)
-  }
-  return new Set(within)
+  return new Set((watches ?? []).map((w) => w.mint as string))
 }
 
 export async function isMintWithinLimit(

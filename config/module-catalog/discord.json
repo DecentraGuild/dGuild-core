@@ -29,10 +29,5 @@
     ],
     "note": "Sync interval depends on holder count: 15 minutes to 6 hours."
   },
-  "pricing": {
-    "modelType": "flat_recurring",
-    "name": "Discord",
-    "recurringPrice": 0,
-    "yearlyDiscountPercent": 0
-  }
+  "pricing": null
 }

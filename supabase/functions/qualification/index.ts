@@ -456,6 +456,17 @@ Deno.serve(async (req: Request) => {
       sumAmountRaw -= 1
     }
 
+    if (sumAmountRaw < totalAmountRaw && recipients.length > 0) {
+      const remainder = totalAmountRaw - sumAmountRaw
+      const minIdx = recipients.reduce((best, r, i) =>
+        r.amountRaw < (recipients[best]?.amountRaw ?? Infinity) ? i : best,
+        0,
+      )
+      const r = recipients[minIdx]!
+      r.amountRaw += remainder
+      sumAmountRaw += remainder
+    }
+
     function roundToDecimals(value: number, d: number): number {
       const factor = 10 ** d
       return Math.round(value * factor) / factor

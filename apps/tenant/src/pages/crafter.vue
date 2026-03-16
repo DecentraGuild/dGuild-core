@@ -11,67 +11,75 @@
           <span>Loading tokens...</span>
         </div>
 
-        <div v-else class="crafter-page__content">
-          <div class="crafter-page__header">
-            <Button @click="showCreateModal = true">
-              <Icon icon="lucide:plus" class="crafter-page__btn-icon" />
-              Create token
-            </Button>
-          </div>
-
-          <div v-if="tokens.length === 0" class="crafter-page__empty">
-            <p>No tokens yet. Create your first SPL token.</p>
-          </div>
-
-          <div v-else class="crafter-page__grid">
-            <div
-              v-for="t in tokens"
-              :key="t.mint"
-              class="crafter-card"
-            >
-              <div v-if="t.image_url" class="crafter-card__image-wrap">
-                <img :src="t.image_url" :alt="t.name" class="crafter-card__image" />
-              </div>
-              <div v-else class="crafter-card__placeholder">
-                <Icon icon="lucide:coin" class="crafter-card__placeholder-icon" />
-              </div>
-              <div class="crafter-card__body">
-                <h3 class="crafter-card__name">{{ t.name || t.symbol || 'Token' }}</h3>
-                <p class="crafter-card__symbol">{{ t.symbol }}</p>
-                <code class="crafter-card__mint">{{ truncateAddress(t.mint, 6, 4) }}</code>
-                <div class="crafter-card__stats">
-                  <span class="crafter-card__stat">
-                    Circulating: {{ supplyByMint[t.mint] ?? '…' }}
-                  </span>
-                  <span class="crafter-card__stat">
-                    Balance: {{ balanceByMint[t.mint] ?? '…' }}
-                  </span>
+        <div v-else class="admin__split">
+          <div class="admin__panel crafter-page__content">
+            <div class="crafter-page__grid">
+              <button
+                type="button"
+                class="crafter-card crafter-card--create"
+                @click="showCreateModal = true"
+              >
+                <Icon icon="lucide:plus" class="crafter-card__create-icon" />
+                <span class="crafter-card__create-label">Create token</span>
+              </button>
+              <div
+                v-for="t in tokens"
+                :key="t.mint"
+                class="crafter-card"
+              >
+                <div v-if="t.image_url" class="crafter-card__image-wrap">
+                  <img :src="t.image_url" :alt="t.name" class="crafter-card__image" />
                 </div>
-                <div class="crafter-card__actions">
-                  <Button
-                    v-if="!t.metadata_uri"
-                    variant="secondary"
-                    size="sm"
-                    @click="openPublishModal(t)"
-                  >
-                    Add metadata
-                  </Button>
-                  <Button variant="secondary" size="sm" @click="openActionModal('mint', t)">Mint</Button>
-                  <Button variant="secondary" size="sm" @click="openActionModal('burn', t)">Burn</Button>
-                  <Button v-if="t.metadata_uri" variant="ghost" size="sm" @click="openActionModal('edit', t)">Edit</Button>
-                  <Button variant="ghost" size="sm" @click="openActionModal('close', t)">Close</Button>
-                  <a
-                    :href="solscanUrl(t.mint)"
-                    target="_blank"
-                    rel="noopener"
-                    class="crafter-card__link"
-                  >
-                    <Icon icon="lucide:external-link" />
-                  </a>
+                <div v-else class="crafter-card__placeholder">
+                  <Icon icon="lucide:coin" class="crafter-card__placeholder-icon" />
+                </div>
+                <div class="crafter-card__body">
+                  <h3 class="crafter-card__name">{{ t.name || t.symbol || 'Token' }}</h3>
+                  <p class="crafter-card__symbol">{{ t.symbol }}</p>
+                  <code class="crafter-card__mint">{{ truncateAddress(t.mint, 6, 4) }}</code>
+                  <div class="crafter-card__stats">
+                    <span class="crafter-card__stat">
+                      Circulating: {{ supplyByMint[t.mint] ?? '…' }}
+                    </span>
+                    <span class="crafter-card__stat">
+                      Balance: {{ balanceByMint[t.mint] ?? '…' }}
+                    </span>
+                  </div>
+                  <div class="crafter-card__actions">
+                    <Button
+                      v-if="!t.metadata_uri"
+                      variant="secondary"
+                      size="sm"
+                      @click="openPublishModal(t)"
+                    >
+                      Add metadata
+                    </Button>
+                    <template v-if="t.metadata_uri">
+                      <Button variant="secondary" size="sm" @click="openActionModal('mint', t)">Mint</Button>
+                      <Button variant="secondary" size="sm" @click="openActionModal('burn', t)">Burn</Button>
+                      <Button variant="ghost" size="sm" @click="openActionModal('edit', t)">Edit</Button>
+                    </template>
+                    <Button variant="ghost" size="sm" @click="openActionModal('close', t)">Close</Button>
+                    <a
+                      :href="solscanUrl(t.mint)"
+                      target="_blank"
+                      rel="noopener"
+                      class="crafter-card__link"
+                    >
+                      <Icon icon="lucide:external-link" />
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+
+          <AdminPricingWidget
+            module-id="crafter"
+            :module-state="crafterModuleState"
+            :conditions="{ tokensCount: tokens.length + 1 }"
+            :subscription="subscriptions.crafter ?? null"
+          />
         </div>
 
         <SimpleModal
@@ -86,27 +94,14 @@
             @submit.prevent="onCreateSubmit"
           >
             <FormInput
-              v-model="createForm.name"
-              label="Name"
-              placeholder="Token name"
-              required
-            />
-            <FormInput
-              v-model="createForm.symbol"
-              label="Symbol"
-              placeholder="e.g. TKN"
-              required
-            />
-            <FormInput
               v-model="createForm.decimals"
               type="number"
               label="Decimals"
               placeholder="6"
             />
             <p class="crafter-create-form__hint crafter-create-form__hint--stages">
-              Stage 1: Create mint + pay. Then add metadata (stage 2), then mint/burn/edit (stage 3).
+              Stage 1: Create mint + pay (decimals only). Add name, symbol, image in metadata (stage 2).
             </p>
-            <p class="crafter-create-form__fee">{{ crafterPricePerToken != null ? `${crafterPricePerToken} USDC one-time per token` : '…' }}</p>
             <p v-if="createError" class="crafter-create-form__error">{{ createError }}</p>
             <p v-if="createTxStatus" class="crafter-create-form__status">{{ createTxStatus }}</p>
             <div class="crafter-create-form__actions">
@@ -173,7 +168,7 @@
             <template v-if="publishForm.storageBackend === 'api'">
               <Button
                 type="button"
-                variant="secondary"
+                variant="primary"
                 :disabled="!canPublishMedia || publishUploadLoading"
                 @click="onUploadPublishMetadata"
               >
@@ -269,21 +264,19 @@ import FormInput from '~/components/ui/form-input/FormInput.vue'
 import OptionsSelect from '~/components/ui/options-select/OptionsSelect.vue'
 import { useCrafter, type CrafterToken, type CrafterCreateForm } from '~/composables/crafter/useCrafter'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
+import AdminPricingWidget from '~/components/admin/AdminPricingWidget.vue'
 import { useTenantStore } from '~/stores/tenant'
 import { useAuth } from '@decentraguild/auth'
 import { getModuleState, isModuleVisibleInAdmin } from '@decentraguild/core'
-import { getModuleCatalogEntry } from '@decentraguild/config'
+import { useAdminSubscriptions } from '~/composables/admin/useAdminSubscriptions'
 
 definePageMeta({ middleware: 'admin-auth' })
 
-const crafterPricePerToken = computed(() => {
-  const entry = getModuleCatalogEntry('crafter')
-  const pricing = entry?.pricing as { pricePerUnit?: number } | undefined
-  return pricing?.pricePerUnit ?? null
-})
+const { subscriptions, fetchSubscription } = useAdminSubscriptions()
+const tenantStore = useTenantStore()
+const crafterModuleState = computed(() => getModuleState(tenantStore.tenant?.modules?.crafter))
 
 const clampBasisPoints = (v: unknown) => Math.max(0, Math.min(10000, Number(v) || 0))
-const tenantStore = useTenantStore()
 const crafterEnabled = computed(() => {
   const mod = tenantStore.tenant?.modules?.crafter
   return mod && isModuleVisibleInAdmin(getModuleState(mod))
@@ -324,16 +317,10 @@ async function refreshAll() {
   await refreshSupplyAndBalance()
 }
 
-const canCreate = computed(
-  () =>
-    createForm.value.name.trim().length > 0 &&
-    createForm.value.symbol.trim().length > 0
-)
+const canCreate = computed(() => true)
 
 const showCreateModal = ref(false)
 const createForm = ref<CrafterCreateForm>({
-  name: '',
-  symbol: '',
   decimals: '6',
 })
 
@@ -469,7 +456,7 @@ async function onCreateSubmit() {
   const result = await create({ ...createForm.value, decimals })
   if (result.success) {
     showCreateModal.value = false
-    createForm.value = { name: '', symbol: '', decimals: '6' }
+    createForm.value = { decimals: '6' }
   }
 }
 
@@ -609,10 +596,16 @@ async function onActionSubmit() {
 }
 
 onMounted(() => {
-  if (crafterEnabled.value) void list()
+  if (crafterEnabled.value) {
+    void list()
+    void fetchSubscription('crafter')
+  }
 })
 watch(crafterEnabled, (enabled) => {
-  if (enabled) void list()
+  if (enabled) {
+    void list()
+    void fetchSubscription('crafter')
+  }
 })
 watch(
   () => [tokens.value, auth.wallet.value],
@@ -652,15 +645,47 @@ watch(
   gap: var(--theme-space-lg);
 }
 
-.crafter-page__header {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .crafter-page__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
   gap: var(--theme-space-lg);
+}
+
+.crafter-card--create {
+  cursor: pointer;
+  border: 2px dashed var(--theme-border);
+  background: var(--theme-bg-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 12rem;
+  padding: var(--theme-space-lg);
+}
+
+.crafter-card--create:hover {
+  border-color: var(--theme-primary);
+  background: var(--theme-bg-secondary);
+}
+
+.crafter-card__create-icon {
+  font-size: 2.5rem;
+  color: var(--theme-text-muted);
+  margin-bottom: var(--theme-space-sm);
+}
+
+.crafter-card--create:hover .crafter-card__create-icon {
+  color: var(--theme-primary);
+}
+
+.crafter-card__create-label {
+  font-size: var(--theme-font-sm);
+  font-weight: 500;
+  color: var(--theme-text-secondary);
+}
+
+.crafter-card--create:hover .crafter-card__create-label {
+  color: var(--theme-primary);
 }
 
 .crafter-card {
@@ -797,11 +822,6 @@ watch(
   max-height: 12rem;
   overflow-y: auto;
   margin: 0;
-}
-
-.crafter-create-form__fee {
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary);
 }
 
 .crafter-create-form__error {

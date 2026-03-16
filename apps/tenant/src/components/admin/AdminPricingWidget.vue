@@ -1,9 +1,24 @@
 <template>
   <aside class="pricing-widget">
-    <div v-if="loading" class="pricing-widget__loading">
+    <div v-if="billingDisabled" class="pricing-widget__unavailable">
+      <span>Billing temporarily unavailable</span>
+    </div>
+
+    <div v-else-if="loading" class="pricing-widget__loading">
       <Icon icon="lucide:loader-2" class="pricing-widget__spinner" />
       <span>Loading pricing...</span>
     </div>
+
+    <template v-else-if="price?.billable && (isAddUnit || isTieredWithOneTime)">
+      <div class="pricing-widget__tier">
+        <span class="pricing-widget__tier-name">{{ isTieredWithOneTime ? (price.oneTimeUnitName ?? 'Per unit') : addUnitName }}</span>
+        <span class="pricing-widget__tier-price">{{ formatUsdc(isTieredWithOneTime ? oneTimePerUnitEffective : price.oneTimeTotal) }} USDC</span>
+      </div>
+      <p v-if="isTieredWithOneTime" class="pricing-widget__add-unit-hint">
+        {{ price.oneTimeUnitName ?? 'Per unit' }}: {{ formatUsdc(oneTimePerUnitEffective) }} USDC when creating on {{ selectedTier?.name ?? 'this' }} tier.
+      </p>
+      <p v-else class="pricing-widget__add-unit-hint">One-time fee per new {{ addUnitName.toLowerCase() }}.</p>
+    </template>
 
     <template v-else-if="price?.billable && selectedTier">
       <div class="pricing-widget__tier">
@@ -90,17 +105,6 @@
       </div>
     </template>
 
-    <template v-else-if="price?.billable && (isAddUnit || isTieredWithOneTime)">
-      <div class="pricing-widget__tier">
-        <span class="pricing-widget__tier-name">{{ isTieredWithOneTime ? (price.oneTimeUnitName ?? 'Per unit') : addUnitName }}</span>
-        <span class="pricing-widget__tier-price">{{ formatUsdc(isTieredWithOneTime ? oneTimePerUnitEffective : price.oneTimeTotal) }} USDC</span>
-      </div>
-      <p v-if="isTieredWithOneTime" class="pricing-widget__add-unit-hint">
-        {{ price.oneTimeUnitName ?? 'Per unit' }}: {{ formatUsdc(oneTimePerUnitEffective) }} USDC when creating on {{ selectedTier?.name ?? 'this' }} tier.
-      </p>
-      <p v-else class="pricing-widget__add-unit-hint">One-time fee per new list.</p>
-    </template>
-
     <template v-else-if="price?.billable && chargeAmount === 0 && !isAddUnit && !isTieredWithOneTime && moduleId !== 'slug'">
       <div class="pricing-widget__free">
         <span>Free</span>
@@ -164,20 +168,20 @@
       </p>
 
       <Button
-        v-if="moduleState === 'staging'"
+        v-if="moduleState === 'staging' || (moduleState === 'active' && hasDeficit && !isAddUnit)"
         variant="default"
         :disabled="deploying"
-        @click="$emit('deploy', selectedPeriod)"
+        @click="$emit('deploy', selectedPeriod, conditions ?? undefined)"
       >
         <Icon v-if="deploying" icon="lucide:loader-2" class="pricing-widget__spinner" />
         {{ deployLabel }}
       </Button>
 
       <Button
-        v-if="moduleState === 'active' && isTieredWithOneTime"
+        v-if="moduleState === 'active' && isTieredWithOneTime && !hasDeficit"
         variant="default"
         :disabled="saving"
-        @click="$emit('save', selectedPeriod)"
+        @click="$emit('save', selectedPeriod, conditions ?? undefined)"
       >
         {{ saveButtonLabel }}
       </Button>
@@ -200,10 +204,10 @@
         {{ saving ? 'Extending...' : 'Extend' }}
       </Button>
       <Button
-        v-else-if="moduleState === 'active' && !isAddUnit"
+        v-else-if="moduleState === 'active' && !isAddUnit && !hasDeficit"
         variant="default"
         :disabled="saving"
-        @click="$emit('save', selectedPeriod)"
+        @click="$emit('save', selectedPeriod, conditions ?? undefined)"
       >
         {{ saving ? 'Saving...' : 'Save' }}
       </Button>
@@ -215,17 +219,17 @@
 
 <script setup lang="ts">
 import { computed, ref, toRef, watch } from 'vue'
+import { watchDebounced } from '@vueuse/core'
 import type { ModuleState } from '@decentraguild/core'
-import type { BillingPeriod, PriceResult, ConditionSet, TieredAddonsPricing, TieredWithOneTimePerUnitPricing, TierDefinition } from '@decentraguild/billing'
-import { computePrice, getOneTimePerUnitForTier } from '@decentraguild/billing'
+import type { BillingPeriod, PriceResult, ConditionSet, TieredAddonsPricing, TieredWithOneTimePerUnitPricing, TierDefinition, QuoteLineItem } from '@decentraguild/billing'
+import { getProductDisplayType, getProductUnitLabel, getRafflesTiers, CONDITION_TO_METER } from '@decentraguild/billing'
 import { getModuleCatalogEntry } from '@decentraguild/config'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import { formatDate, formatUsdc } from '@decentraguild/display'
-import { usePricePreview } from '~/composables/core/usePricePreview'
+import { useQuote } from '~/composables/core/useQuote'
 import { usePricingDisplay } from '~/composables/core/usePricingDisplay'
 import { usePricingWidgetActions } from '~/composables/core/usePricingWidgetActions'
-import { useTenantStore } from '~/stores/tenant'
 
 export interface SubscriptionInfo {
   billingPeriod: BillingPeriod
@@ -255,8 +259,8 @@ const props = withDefaults(
 )
 
 defineEmits<{
-  save: [billingPeriod: BillingPeriod]
-  deploy: [billingPeriod: BillingPeriod]
+  save: [billingPeriod: BillingPeriod, conditions?: ConditionSet]
+  deploy: [billingPeriod: BillingPeriod, conditions?: ConditionSet]
   reactivate: [billingPeriod: BillingPeriod]
   extend: [billingPeriod: BillingPeriod]
 }>()
@@ -286,8 +290,6 @@ const canReactivateWithoutPayment = computed(() => {
   }
 })
 
-const periodLocked = computed(() => hasActiveSubscription.value)
-
 watch(
   () => props.subscription,
   (sub) => {
@@ -298,58 +300,148 @@ watch(
   { immediate: true },
 )
 
-const tenantStore = useTenantStore()
-const slug = computed(() => tenantStore.slug)
 const moduleIdRef = computed(() => props.moduleId)
 
 const hasLiveConditions = computed(() => props.conditions != null && Object.keys(props.conditions).length > 0)
 
-const { conditions: apiConditions, price: apiPrice, loading, error, refresh } = usePricePreview(slug, moduleIdRef, selectedPeriod)
+/** True when live usage exceeds stored/paid limits (e.g. Watchtower: more tracks enabled than paid). */
+const hasDeficit = computed(() => {
+  const live = props.conditions
+  const stored = props.storedConditions
+  if (!live || Object.keys(live).length === 0) return false
+  if (!stored) return Object.values(live).some((v) => (typeof v === 'number' ? v : 0) > 0)
+  for (const [k, v] of Object.entries(live)) {
+    const liveNum = typeof v === 'number' ? v : 0
+    const storedNum = typeof stored[k] === 'number' ? (stored[k] as number) : 0
+    if (liveNum > storedNum) return true
+  }
+  return false
+})
 
+const meterOverridesRef = computed(() => {
+  if (!hasLiveConditions.value || !props.conditions) return undefined
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(props.conditions)) {
+    const meter = CONDITION_TO_METER[k] ?? k
+    out[meter] = typeof v === 'boolean' ? (v ? 1 : 0) : Number(v)
+  }
+  return out
+})
+
+const durationDaysRef = computed(() => (selectedPeriod.value === 'yearly' ? 365 : 30))
+
+const { quote, loading, error, billingDisabled, fetchQuote } = useQuote({
+  moduleId: moduleIdRef,
+  durationDays: durationDaysRef,
+  meterOverrides: meterOverridesRef,
+  slugOnly: props.moduleId === 'slug' && props.yearlyOnly,
+})
+
+watchDebounced(
+  () => [moduleIdRef.value, selectedPeriod.value, meterOverridesRef.value],
+  () => fetchQuote(),
+  { debounce: 400, immediate: true },
+)
+
+function refresh() {
+  fetchQuote()
+}
 defineExpose({ refresh, selectedPeriod })
 
 const catalogEntry = computed(() => getModuleCatalogEntry(props.moduleId))
 
-const pricingModel = computed(() => {
-  const p = catalogEntry.value?.pricing
-  if (!p) return null
-  if (p.modelType === 'tiered_addons') return p as TieredAddonsPricing
-  if (p.modelType === 'tiered_with_one_time_per_unit') return p as TieredWithOneTimePerUnitPricing
-  return null
-})
+/** V2 product key (slug -> admin for billing). */
+const productKey = computed(() => (props.moduleId === 'slug' ? 'admin' : props.moduleId))
+
+/** V2: one-time per unit (gates, crafter). From billing product config, not catalog. */
+const isAddUnit = computed(() => getProductDisplayType(productKey.value) === 'one_time_per_unit')
+
+/** V2: tiered with one-time per unit (raffles). From billing product config, not catalog. */
+const isTieredWithOneTime = computed(() => getProductDisplayType(productKey.value) === 'tiered_with_one_time')
+
+/** V2: unit label for one-time display. From billing product config, not catalog. */
+const addUnitName = computed(() => getProductUnitLabel(productKey.value))
 
 const conditions = computed((): ConditionSet | null => {
   if (hasLiveConditions.value) return props.conditions!
-  return apiConditions.value
+  const q = quote.value
+  if (!q?.meters) return null
+  return Object.fromEntries(
+    (Object.entries(q.meters) as [string, { used: number; limit: number }][]).map(([k, v]) => [k, v.used]),
+  ) as ConditionSet
 })
 
 const price = computed((): PriceResult | null => {
-  if (hasLiveConditions.value && catalogEntry.value?.pricing) {
-    return computePrice(props.moduleId, props.conditions!, catalogEntry.value.pricing, {
-      billingPeriod: selectedPeriod.value,
-    })
+  const q = quote.value
+  if (!q) return null
+  const components = q.lineItems.map((item: QuoteLineItem) => ({
+    type: 'one-time' as const,
+    name: item.label ?? item.meter_key,
+    quantity: item.quantity,
+    unitPrice: item.unit_price ?? (item.quantity ? item.price_usdc / item.quantity : 0),
+    amount: item.price_usdc,
+  }))
+  const raffleSlotsItem = q.lineItems.find((i: QuoteLineItem) => i.meter_key === 'raffle_slots')
+  const fromQuote =
+    raffleSlotsItem?.unit_price ?? (raffleSlotsItem?.quantity ? raffleSlotsItem.price_usdc / raffleSlotsItem.quantity : 0)
+  const oneTimePerUnitForSelectedTier =
+    fromQuote > 0 ? fromQuote : (selectedTier.value?.oneTimePerUnit ?? 0)
+  return {
+    moduleId: props.moduleId,
+    billable: true,
+    components,
+    oneTimeTotal: q.priceUsdc,
+    recurringMonthly: q.priceUsdc,
+    recurringYearly: q.priceUsdc * (selectedPeriod.value === 'yearly' ? 1 : 12),
+    appliedYearlyDiscount: null,
+    selectedTierId: null,
+    oneTimePerUnitForSelectedTier: isTieredWithOneTime.value ? oneTimePerUnitForSelectedTier : undefined,
+    oneTimeUnitName: isTieredWithOneTime.value ? 'Per raffle' : undefined,
   }
-  return apiPrice.value
 })
 
-/** Prefer subscription tier (paid) so widget shows correct tier after upgrade. */
+const pricingModel = computed((): TieredAddonsPricing | TieredWithOneTimePerUnitPricing | null => {
+  const q = quote.value
+  if (!q?.meters) return null
+  const conditionKeys = Object.keys(q.meters)
+  if (isTieredWithOneTime.value && productKey.value === 'raffles') {
+    return {
+      modelType: 'tiered_with_one_time_per_unit',
+      conditionKeys,
+      tiers: getRafflesTiers(),
+      addons: [],
+      yearlyDiscountPercent: 0,
+      oneTimeUnitName: 'Per raffle',
+    } as TieredWithOneTimePerUnitPricing
+  }
+  const included = Object.fromEntries(
+    (Object.entries(q.meters) as [string, { used: number; limit: number }][]).map(([k, v]) => [k, v.limit]),
+  )
+  return {
+    modelType: 'tiered_addons',
+    conditionKeys,
+    tiers: [{ id: 'default', name: 'Usage', recurringPrice: 0, included }],
+    addons: [],
+    yearlyDiscountPercent: 0,
+  } as TieredAddonsPricing
+})
+
 const selectedTier = computed((): TierDefinition | null => {
-  if (!pricingModel.value) return null
-  const tiers = (pricingModel.value as TieredAddonsPricing | TieredWithOneTimePerUnitPricing).tiers
-  const tierId = props.subscription?.selectedTierId ?? price.value?.selectedTierId
-  if (!tierId) return null
-  return tiers.find((t) => t.id === tierId) ?? null
+  const pm = pricingModel.value
+  const cond = conditions.value
+  if (!pm) return null
+  if (isTieredWithOneTime.value && productKey.value === 'raffles' && cond) {
+    const slots = cond.raffle_slots ?? cond.raffleSlotsUsed ?? 0
+    const tiers = (pm as TieredWithOneTimePerUnitPricing).tiers
+    const num = typeof slots === 'number' ? slots : 0
+    if (num >= 4) return tiers.find((t) => t.id === 'pro') ?? tiers[2] ?? null
+    if (num >= 2) return tiers.find((t) => t.id === 'grow') ?? tiers[1] ?? null
+    return tiers.find((t) => t.id === 'base') ?? tiers[0] ?? null
+  }
+  return (pm as TieredAddonsPricing).tiers[0] ?? null
 })
 
-/** Per-unit amount for tiered_with_one_time: use subscription tier when present so Grow/Pro show 0. */
-const oneTimePerUnitEffective = computed(() => {
-  if (!isTieredWithOneTime.value) return price.value?.oneTimePerUnitForSelectedTier ?? 0
-  const tierId = props.subscription?.selectedTierId ?? price.value?.selectedTierId
-  if (tierId && catalogEntry.value?.pricing) {
-    return getOneTimePerUnitForTier(catalogEntry.value.pricing, tierId)
-  }
-  return price.value?.oneTimePerUnitForSelectedTier ?? 0
-})
+const oneTimePerUnitEffective = computed(() => price.value?.oneTimePerUnitForSelectedTier ?? 0)
 
 const yearlyDiscountLabel = computed(() => {
   if (!price.value?.appliedYearlyDiscount) {
@@ -378,21 +470,6 @@ const upgradeRecurringAmount = computed(() => {
     : price.value.recurringMonthly
 })
 
-const isAddUnit = computed(() => {
-  const p = catalogEntry.value?.pricing
-  return p != null && 'modelType' in p && p.modelType === 'add_unit'
-})
-
-const isTieredWithOneTime = computed(() => {
-  const p = catalogEntry.value?.pricing
-  return p != null && 'modelType' in p && p.modelType === 'tiered_with_one_time_per_unit'
-})
-
-const addUnitName = computed(() => {
-  const p = catalogEntry.value?.pricing
-  if (p && 'modelType' in p && p.modelType === 'add_unit' && 'name' in p) return p.name as string
-  return 'Add unit'
-})
 
 const storedConditionsRef = computed(() => props.storedConditions ?? null)
 const { usageRows, addonComponents } = usePricingDisplay(
@@ -590,6 +667,11 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 }
 
 .pricing-widget__free {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-muted);
+}
+
+.pricing-widget__unavailable {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
 }

@@ -1,9 +1,6 @@
 /**
- * Admin billing subscriptions per module.
- * Reads directly from billing_subscriptions via PostgREST (RLS enforces tenant admin access).
- * Watchtower returns per-track subscriptions keyed by scope (mints_current, mintsSnapshot, mintsTransactions).
+ * Admin billing subscriptions. Reads from granted_entitlements and tenant_meter_limits (pricing engine v2).
  */
-
 import type { BillingPeriod } from '@decentraguild/billing'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
 import { useSupabase } from '~/composables/core/useSupabase'
@@ -18,27 +15,28 @@ export interface SubscriptionInfo {
 
 export type WatchtowerSubscriptionByScope = Record<string, SubscriptionInfo>
 
-function rowToSubscriptionInfo(row: Record<string, unknown>): SubscriptionInfo {
-  const conditions = (row.conditions_snapshot as Record<string, unknown> | undefined) ?? {}
-  const conditionsSnapshot =
-    Object.keys(conditions).length > 0
-      ? (Object.fromEntries(
-          Object.entries(conditions).filter(([, v]) => typeof v === 'number'),
-        ) as Record<string, number>)
-      : undefined
+const WATCHTOWER_SCOPES = ['mints_current', 'mints_snapshot', 'mints_transactions'] as const
+const SCOPE_DISPLAY: Record<string, string> = {
+  mints_current: 'mints_current',
+  mints_snapshot: 'mintsSnapshot',
+  mints_transactions: 'mints_transactions',
+}
+
+function toSubscriptionInfo(
+  quantityTotal: number,
+  expiresAtMax: string | null,
+): SubscriptionInfo {
   return {
-    billingPeriod: row.billing_period as BillingPeriod,
-    periodEnd: row.period_end as string,
-    recurringAmountUsdc: Number(row.recurring_amount_usdc),
-    selectedTierId: (row.price_snapshot as Record<string, unknown>)?.selectedTierId as
-      | string
-      | undefined,
-    ...(conditionsSnapshot && { conditionsSnapshot }),
+    billingPeriod: 'monthly',
+    periodEnd: expiresAtMax ?? new Date().toISOString(),
+    recurringAmountUsdc: 0,
+    conditionsSnapshot: {},
   }
 }
 
 export function useAdminSubscriptions() {
-  const { tenantId, slug } = useAdminTenant()
+  const { tenantId } = useAdminTenant()
+  const supabase = useSupabase()
 
   const subscriptions = reactive<
     Record<string, SubscriptionInfo | WatchtowerSubscriptionByScope | null>
@@ -47,78 +45,55 @@ export function useAdminSubscriptions() {
   async function fetchSubscription(moduleId: string) {
     const id = tenantId.value
     if (!id) return
-    try {
-      const supabase = useSupabase()
-      if (moduleId === 'watchtower') {
-        const { data: rows, error } = await supabase
-          .from('billing_subscriptions')
-          .select('scope_key, billing_period, period_end, recurring_amount_usdc, price_snapshot, conditions_snapshot')
-          .eq('tenant_id', id)
-          .eq('module_id', moduleId)
-        if (error) throw error
-        const byScope: WatchtowerSubscriptionByScope = {}
-        const scopeKeys = ['mints_current', 'mintsSnapshot', 'mintsTransactions']
-        for (const row of rows ?? []) {
-          const r = row as Record<string, unknown>
-          const scopeKey = (r.scope_key as string) ?? ''
-          const info = rowToSubscriptionInfo(r)
-          if (scopeKey) {
-            byScope[scopeKey] = info
-          } else {
-            const cond = (r.conditions_snapshot as Record<string, number> | undefined) ?? {}
-            for (const key of scopeKeys) {
-              const count = Number(cond[key]) || 0
-              if (count > 0) byScope[key] = { ...info, conditionsSnapshot: { [key]: count } }
-            }
-          }
-        }
-        subscriptions[moduleId] = Object.keys(byScope).length > 0 ? byScope : null
-        return
-      }
 
-      const { data, error } = await supabase
-        .from('billing_subscriptions')
-        .select('billing_period, period_end, recurring_amount_usdc, price_snapshot, conditions_snapshot')
+    subscriptions[moduleId] = null
+
+    if (moduleId === 'watchtower') {
+      const { data: limits } = await supabase
+        .from('tenant_meter_limits')
+        .select('meter_key, quantity_total, expires_at_max')
         .eq('tenant_id', id)
-        .eq('module_id', moduleId)
-        .eq('scope_key', '')
-        .maybeSingle()
+        .in('meter_key', WATCHTOWER_SCOPES)
 
-      if (error) throw error
-      if (data) {
-        subscriptions[moduleId] = rowToSubscriptionInfo(data as Record<string, unknown>)
-        return
+      const byScope: WatchtowerSubscriptionByScope = {}
+      for (const scope of WATCHTOWER_SCOPES) {
+        const row = (limits ?? []).find((r: { meter_key: string }) => r.meter_key === scope)
+        const qty = row ? Number((row as { quantity_total: number }).quantity_total) : 0
+        const expires = row ? (row as { expires_at_max: string | null }).expires_at_max : null
+        const key = SCOPE_DISPLAY[scope] ?? scope
+        byScope[key] = toSubscriptionInfo(qty, expires)
+        byScope[key].conditionsSnapshot = { [key]: qty }
       }
+      subscriptions[moduleId] = byScope
+      return
+    }
 
-      if (moduleId === 'slug') {
-        const { data: payments } = await supabase
-          .from('billing_payments')
-          .select('billing_period, period_end, amount_usdc, price_snapshot')
-          .eq('tenant_id', id)
-          .eq('module_id', 'slug')
-          .eq('status', 'confirmed')
-          .in('payment_type', ['initial', 'extend'])
-          .order('confirmed_at', { ascending: false })
-          .limit(1)
-        const row = Array.isArray(payments) ? payments[0] : null
-        if (row) {
-          const r = row as Record<string, unknown>
-          const priceSnap = (r.price_snapshot as Record<string, unknown>) ?? {}
-          subscriptions.slug = {
-            billingPeriod: (r.billing_period as BillingPeriod) ?? 'yearly',
-            periodEnd: r.period_end as string,
-            recurringAmountUsdc: (priceSnap.recurringYearly as number) ?? Number(r.amount_usdc),
-          }
-        } else {
-          subscriptions.slug = null
-        }
-      } else {
-        subscriptions[moduleId] = null
-      }
-    } catch {
-      subscriptions[moduleId] = null
+    const meterByModule: Record<string, string> = {
+      marketplace: 'mints_count',
+      raffles: 'raffle_slots',
+      gates: 'gate_lists',
+      crafter: 'crafter_tokens',
+      admin: 'registration',
+      slug: 'slug',
+    }
+    const meterKey = meterByModule[moduleId] ?? moduleId
+
+    const { data: limit } = await supabase
+      .from('tenant_meter_limits')
+      .select('quantity_total, expires_at_max')
+      .eq('tenant_id', id)
+      .eq('meter_key', meterKey)
+      .maybeSingle()
+
+    if (limit) {
+      const qty = Number((limit as { quantity_total: number }).quantity_total)
+      const expires = (limit as { expires_at_max: string | null }).expires_at_max
+      const info = toSubscriptionInfo(qty, expires)
+      info.conditionsSnapshot = { [meterKey]: qty }
+      subscriptions[moduleId] = info
     }
   }
 
+  const { slug } = useAdminTenant()
   return { subscriptions, fetchSubscription, slug }
 }

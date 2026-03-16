@@ -1,14 +1,13 @@
 /**
- * Slug claim flow: check availability, claim via billing Edge Function, extend.
+ * Slug claim flow: check availability, claim via billing (quote → charge → confirm).
  */
-
 import type { BillingPeriod } from '@decentraguild/billing'
-import { PublicKey } from '@solana/web3.js'
 import {
   buildBillingTransfer,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
+import { PublicKey } from '@solana/web3.js'
 import { useTenantStore } from '~/stores/tenant'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useSupabase } from '~/composables/core/useSupabase'
@@ -29,7 +28,6 @@ export function useSlugClaim(opts: {
   fetchSubscription: (moduleId: string) => Promise<void>
 }) {
   const {
-    slug: _slug,
     saveError,
     saving,
     handleBillingPayment,
@@ -38,6 +36,7 @@ export function useSlugClaim(opts: {
   const tenantStore = useTenantStore()
   const tenantId = computed(() => tenantStore.tenantId)
   const { connection } = useSolanaConnection()
+  const supabase = useSupabase()
   const txNotifications = useTransactionNotificationsStore()
 
   const desiredSlug = ref('')
@@ -51,7 +50,6 @@ export function useSlugClaim(opts: {
     slugChecking.value = true
     slugCheckStatus.value = 'checking'
     try {
-      const supabase = useSupabase()
       const { data } = await supabase
         .from('tenant_config')
         .select('id')
@@ -98,30 +96,41 @@ export function useSlugClaim(opts: {
     saving.value = true
     saveError.value = null
     try {
-      const supabase = useSupabase()
-      const { data: intentData, error: intentError } = await supabase.functions.invoke('billing', {
-        body: { action: 'extend-intent', tenantId: id, moduleId: 'slug', billingPeriod: period },
+      const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
+        body: {
+          action: 'quote',
+          tenantId: id,
+          productKey: 'admin',
+          meterOverrides: { slug: 1 },
+          durationDays: 365,
+        },
       })
-      if (intentError) throw new Error(getEdgeFunctionErrorMessage(intentError, 'Extend request failed'))
-      const intent = intentData as {
-        noPaymentRequired: boolean
-        paymentId?: string
-        amountUsdc?: number
-        memo?: string
-        recipientAta?: string
-      }
-      if (intent.noPaymentRequired) {
+      if (quoteErr) throw new Error(getEdgeFunctionErrorMessage(quoteErr, 'Quote failed'))
+      const quote = quoteData as { quoteId: string; priceUsdc: number }
+      if (!quote?.quoteId) throw new Error('No quote returned')
+
+      if (quote.priceUsdc <= 0) {
         await fetchSubscription('slug')
         return
       }
-      if (!intent.paymentId || !intent.amountUsdc || !intent.memo || !intent.recipientAta) {
-        throw new Error('Invalid extension intent response')
-      }
-      if (!connection.value) throw new Error('Solana RPC not configured')
+
       const wallet = getEscrowWalletFromConnector()
       if (!wallet?.publicKey) throw new Error('Wallet not connected')
+      const payerWallet = wallet.publicKey.toBase58()
 
-      const notificationId = `slug-extend-${intent.paymentId}`
+      const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
+        body: {
+          action: 'charge',
+          quoteId: quote.quoteId,
+          payerWallet,
+          paymentMethod: 'usdc',
+        },
+      })
+      if (chargeErr) throw new Error(getEdgeFunctionErrorMessage(chargeErr, 'Charge failed'))
+      const charge = chargeData as { paymentId: string; amountUsdc: number; memo: string; recipientAta: string }
+      if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
+
+      const notificationId = `slug-extend-${charge.paymentId}`
       txNotifications.add(notificationId, {
         status: 'pending',
         message: 'Extending slug. Confirm the transaction in your wallet.',
@@ -129,11 +138,12 @@ export function useSlugClaim(opts: {
       })
 
       try {
+        if (!connection.value) throw new Error('Solana RPC not configured')
         const tx = buildBillingTransfer({
           payer: wallet.publicKey,
-          amountUsdc: intent.amountUsdc,
-          recipientAta: new PublicKey(intent.recipientAta),
-          memo: intent.memo,
+          amountUsdc: charge.amountUsdc,
+          recipientAta: new PublicKey(charge.recipientAta),
+          memo: charge.memo,
           connection: connection.value,
         })
         const txSignature = await sendAndConfirmTransaction(
@@ -146,7 +156,7 @@ export function useSlugClaim(opts: {
         const { data: confirmData, error: confirmError } = await supabase.functions.invoke(
           'billing',
           {
-            body: { action: 'confirm', tenantId: id, paymentId: intent.paymentId, txSignature },
+            body: { action: 'confirm', paymentId: charge.paymentId, txSignature },
           },
         )
         if (confirmError) throw new Error(getEdgeFunctionErrorMessage(confirmError, 'Confirm failed'))

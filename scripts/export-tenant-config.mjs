@@ -109,9 +109,7 @@ async function main() {
     trackerRes,
     collectionMembersRes,
     discordServerRes,
-    billingSubsRes,
     billingPaymentsRes,
-    billingStateRes,
   ] = await Promise.all([
     supabase.from('tenant_config').select('*').eq('id', tenantId).maybeSingle(),
     supabase.from('marketplace_settings').select('settings').eq('tenant_id', tenantId).maybeSingle(),
@@ -150,9 +148,7 @@ async function main() {
       .select('discord_guild_id, guild_name, bot_invite_state, bot_role_position')
       .eq('tenant_id', tenantId)
       .maybeSingle(),
-    supabase.from('billing_subscriptions').select('*').eq('tenant_id', tenantId),
     supabase.from('billing_payments').select('*').eq('tenant_id', tenantId),
-    supabase.from('tenant_module_billing_state').select('*').eq('tenant_id', tenantId),
   ])
 
   if (tenantRes.error) {
@@ -216,19 +212,9 @@ async function main() {
     json.collectionScope = [...new Set(collectionMembersRes.data.map((r) => r.collection_mint))]
   }
 
-  if (billingSubsRes.data?.length) {
-    json.billingSubscriptions = billingSubsRes.data.map((r) =>
-      pick(r, ['id', 'module_id', 'scope_key', 'billing_period', 'recurring_amount_usdc', 'period_start', 'period_end', 'conditions_snapshot', 'price_snapshot'])
-    )
-  }
   if (billingPaymentsRes.data?.length) {
     json.billingPayments = billingPaymentsRes.data.map((r) =>
       pick(r, ['id', 'module_id', 'scope_key', 'payment_type', 'amount_usdc', 'billing_period', 'period_start', 'period_end', 'tx_signature', 'status', 'memo', 'payer_wallet', 'conditions_snapshot', 'price_snapshot', 'confirmed_at', 'expires_at'])
-    )
-  }
-  if (billingStateRes.data?.length) {
-    json.billingState = billingStateRes.data.map((r) =>
-      pick(r, ['module_id', 'selected_tier_id', 'period_end'])
     )
   }
 

@@ -14,11 +14,8 @@
           <thead>
             <tr>
               <th>Date</th>
-              <th>Module</th>
-              <th>Type</th>
+              <th>Product</th>
               <th>Amount</th>
-              <th>Period</th>
-              <th>End date</th>
               <th>Tx</th>
               <th>Invoice</th>
             </tr>
@@ -26,24 +23,22 @@
           <tbody>
             <tr v-for="p in payments" :key="p.id">
               <td>{{ formatPaymentDate(p.confirmedAt) }}</td>
-              <td>{{ MODULE_NAV[p.moduleId]?.label ?? p.moduleId }}</td>
-              <td>{{ formatPaymentType(p) }}</td>
+              <td>{{ p.productLabel }}</td>
               <td class="admin__billing-amount">{{ formatUsdc(p.amountUsdc) }} USDC</td>
-              <td>{{ formatPeriod(p) }}</td>
-              <td>{{ formatPeriodEnd(p) }}</td>
               <td>
                 <a
                   v-if="p.txSignature"
-                  :href="`https://solscan.io/tx/${p.txSignature}`"
+                  :href="txExplorerUrl(p.txSignature)"
                   target="_blank"
                   rel="noopener"
                   class="admin__billing-tx-link"
                 >
                   <Icon icon="lucide:external-link" />
                 </a>
+                <span v-else class="admin__billing-tx-muted">--</span>
               </td>
               <td>
-                <button class="admin__billing-invoice-btn" @click="downloadInvoice(p.id)">
+                <button class="admin__billing-invoice-btn" title="Download invoice" @click="downloadInvoice(p.id)">
                   <Icon icon="lucide:download" />
                 </button>
               </td>
@@ -63,6 +58,7 @@ import { Icon } from '@iconify/vue'
 import { useTenantStore } from '~/stores/tenant'
 import { MODULE_NAV } from '~/config/modules'
 import { useSupabase } from '~/composables/core/useSupabase'
+import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
 
 defineProps<{
   slug: string | null
@@ -72,21 +68,46 @@ const tenantStore = useTenantStore()
 const tenantId = computed(() => tenantStore.tenantId)
 const payments = ref<BillingPaymentRecord[]>([])
 const loading = ref(false)
+const { txUrl } = useExplorerLinks()
+
+const METER_TO_PRODUCT: Record<string, string> = {
+  mints_current: 'watchtower',
+  mints_snapshot: 'watchtower',
+  mints_transactions: 'watchtower',
+  mints_count: 'marketplace',
+  custom_currencies: 'marketplace',
+  monetize_storefront: 'marketplace',
+  raffle_slots: 'raffles',
+  raffle_hosting: 'raffles',
+  gate_lists: 'gates',
+  crafter_tokens: 'crafter',
+  registration: 'admin',
+  slug: 'admin',
+  recipients_count: 'shipment',
+}
 
 interface BillingPaymentRecord {
   id: string
-  moduleId: string
-  paymentType: string
   amountUsdc: number
-  billingPeriod: string
-  periodEnd: string | null
   txSignature: string | null
   confirmedAt: string | null
-  priceSnapshot: {
-    previousTierName?: string
-    newTierName?: string
-    remainingDays?: number
-  } | null
+  productLabel: string
+  quoteId: string | null
+  lineItems: unknown[]
+}
+
+function productLabelFromLineItems(lineItems: Array<{ meter_key?: string; source?: string; bundleId?: string }>): string {
+  if (!lineItems?.length) return 'Payment'
+  const first = lineItems[0]
+  if (first.source === 'bundle' && first.bundleId) {
+    const labels: Record<string, string> = {
+      starterpack: 'Starter Pack',
+    }
+    return labels[first.bundleId] ?? first.bundleId
+  }
+  const meterKey = first.meter_key
+  const productId = meterKey ? METER_TO_PRODUCT[meterKey] : null
+  return productId ? (MODULE_NAV[productId]?.label ?? productId) : (meterKey ?? 'Payment')
 }
 
 async function load() {
@@ -94,28 +115,51 @@ async function load() {
   loading.value = true
   try {
     const supabase = useSupabase()
-    const { data, error } = await supabase
+    const { data: paymentsData, error } = await supabase
       .from('billing_payments')
-      .select('id, module_id, payment_type, amount_usdc, billing_period, period_end, tx_signature, confirmed_at, price_snapshot')
+      .select('id, amount_usdc, tx_signature, confirmed_at, quote_id')
       .eq('tenant_id', tenantId.value)
       .eq('status', 'confirmed')
       .order('confirmed_at', { ascending: false })
 
-    if (!error && data) {
-      payments.value = data.map((r) => ({
+    if (error || !paymentsData?.length) {
+      payments.value = []
+      return
+    }
+
+    const quoteIds = paymentsData
+      .map((r) => r.quote_id as string | null)
+      .filter((id): id is string => Boolean(id))
+    const quotesMap = new Map<string, { line_items: unknown[] }>()
+
+    if (quoteIds.length > 0) {
+      const { data: quotesData } = await supabase
+        .from('billing_quotes')
+        .select('id, line_items')
+        .in('id', quoteIds)
+      for (const q of quotesData ?? []) {
+        quotesMap.set((q as { id: string }).id, {
+          line_items: ((q as { line_items: unknown }).line_items as unknown[]) ?? [],
+        })
+      }
+    }
+
+    payments.value = paymentsData.map((r) => {
+      const quoteId = r.quote_id as string | null
+      const quote = quoteId ? quotesMap.get(quoteId) : null
+      const lineItems = (quote?.line_items ?? []) as Array<{ meter_key?: string; source?: string; bundleId?: string }>
+      return {
         id: r.id as string,
-        moduleId: r.module_id as string,
-        paymentType: r.payment_type as string,
         amountUsdc: Number(r.amount_usdc),
-        billingPeriod: r.billing_period as string,
-        periodEnd: r.period_end as string | null,
         txSignature: r.tx_signature as string | null,
         confirmedAt: r.confirmed_at as string | null,
-        priceSnapshot: r.price_snapshot as BillingPaymentRecord['priceSnapshot'],
-      }))
-    }
+        productLabel: productLabelFromLineItems(lineItems),
+        quoteId,
+        lineItems,
+      }
+    })
   } catch {
-    // silent
+    payments.value = []
   } finally {
     loading.value = false
   }
@@ -134,50 +178,40 @@ function formatPaymentDate(iso: string | null): string {
   }
 }
 
-function formatPaymentType(p: BillingPaymentRecord): string {
-  if (p.paymentType === 'upgrade_prorate' && p.priceSnapshot) {
-    const prev = p.priceSnapshot.previousTierName
-    const next = p.priceSnapshot.newTierName
-    const days = p.priceSnapshot.remainingDays
-    if (prev && next) {
-      return `Upgrade (${prev} to ${next}${days ? `, ${days}d remaining` : ''})`
-    }
-  }
-  const labels: Record<string, string> = {
-    initial: 'Initial',
-    registration: 'Registration',
-    upgrade_prorate: 'Upgrade',
-    renewal: 'Renewal',
-    extend: 'Extension',
-  }
-  return labels[p.paymentType] ?? p.paymentType
+function txExplorerUrl(signature: string): string {
+  return txUrl(signature)
 }
-
-/** Admin registration is one-time permanent; slug and other modules are recurring. */
-function isOneTimePayment(p: BillingPaymentRecord): boolean {
-  return p.moduleId === 'admin' && p.paymentType === 'registration'
-}
-
-function formatPeriod(p: BillingPaymentRecord): string {
-  return isOneTimePayment(p) ? 'one-time' : p.billingPeriod
-}
-
-function formatPeriodEnd(p: BillingPaymentRecord): string {
-  return isOneTimePayment(p) ? '--' : formatPaymentDate(p.periodEnd)
-}
-
 
 async function downloadInvoice(paymentId: string) {
   if (!tenantId.value) return
   try {
     const supabase = useSupabase()
-    const { data, error } = await supabase
+    const { data: payment, error: payErr } = await supabase
       .from('billing_payments')
       .select('*')
       .eq('id', paymentId)
+      .eq('tenant_id', tenantId.value)
       .single()
-    if (error || !data) return
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    if (payErr || !payment) return
+
+    let quote: unknown = null
+    const quoteId = payment.quote_id as string | null
+    if (quoteId) {
+      const { data: q } = await supabase
+        .from('billing_quotes')
+        .select('*')
+        .eq('id', quoteId)
+        .eq('tenant_id', tenantId.value)
+        .single()
+      quote = q
+    }
+
+    const invoice = {
+      payment,
+      quote,
+      downloadedAt: new Date().toISOString(),
+    }
+    const blob = new Blob([JSON.stringify(invoice, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -245,6 +279,11 @@ defineExpose({ load })
   color: var(--theme-primary);
   display: inline-flex;
   align-items: center;
+}
+
+.admin__billing-tx-muted {
+  color: var(--theme-text-muted);
+  font-size: var(--theme-font-sm);
 }
 
 .admin__billing-invoice-btn {

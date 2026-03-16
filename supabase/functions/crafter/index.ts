@@ -123,18 +123,14 @@ Deno.serve(async (req: Request) => {
   // ---------------------------------------------------------------------------
   if (action === 'create') {
     const mint = (body.mint as string)?.trim()
-    const name = (body.name as string)?.trim() || null
-    const symbol = (body.symbol as string)?.trim() || null
     const decimals = typeof body.decimals === 'number' ? body.decimals : 6
     const memo = (body.memo as string)?.trim()
 
     if (!mint) return errorResponse('mint required', req)
-    if (!name || !symbol) return errorResponse('name and symbol required', req)
     if (!memo) return errorResponse('memo required (from crafter-intent)', req)
 
     const expiresAt = new Date(now.getTime() + PENDING_EXPIRY_MINUTES * 60 * 1000)
-
-    const metadataJson = { name, symbol, decimals }
+    const metadataJson = { name: '', symbol: '', decimals }
 
     const { error: insertErr } = await db.from('crafter_pending').insert({
       tenant_id: tenantId,
@@ -183,7 +179,6 @@ Deno.serve(async (req: Request) => {
       .from('billing_payments')
       .select('id, amount_usdc, status')
       .eq('tenant_id', tenantId)
-      .eq('module_id', 'crafter')
       .eq('memo', memo)
       .maybeSingle()
 

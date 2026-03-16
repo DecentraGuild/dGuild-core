@@ -41,8 +41,6 @@ export interface CrafterToken {
 }
 
 export interface CrafterCreateForm {
-  name: string
-  symbol: string
   decimals: number | string
 }
 
@@ -115,94 +113,90 @@ export function useCrafter() {
 
     createSubmitting.value = true
     createError.value = null
-    createTxStatus.value = null
+    createTxStatus.value = 'Getting quote...'
 
     try {
-      const mintKeypair = Keypair.generate()
-      const mintPubkey = mintKeypair.publicKey.toBase58()
-
-      const headers = await getAuthHeaders()
-      if (!headers) return { success: false, error: 'Sign in required' }
-
-      const { data: intentData, error: intentErr } = await supabase.functions.invoke('billing', {
+      const currentCount = tokens.value.length
+      const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
         body: {
-          action: 'crafter-intent',
+          action: 'quote',
           tenantId: id,
-          payerWallet: wallet.publicKey.toBase58(),
+          productKey: 'crafter',
+          meterOverrides: { crafter_tokens: currentCount + 1 },
+          durationDays: 30,
         },
-        headers,
       })
-      if (intentErr) throw intentErr
-      if (!intentData?.paymentId || !intentData?.memo || intentData?.amountUsdc == null || !intentData?.recipientAta) {
-        throw new Error('Invalid response from crafter-intent')
-      }
+      if (quoteErr) throw new Error(quoteErr.message ?? 'Quote failed')
+      const quote = quoteData as { quoteId?: string; priceUsdc?: number }
+      if (!quote?.quoteId) throw new Error('No quote returned')
 
-      const paymentId = intentData.paymentId as string
-      const memo = intentData.memo as string
-      const amountUsdc = intentData.amountUsdc as number
-      const recipientAta = new PublicKey(intentData.recipientAta as string)
+      createTxStatus.value = 'Charging...'
+      const payerWallet = wallet.publicKey.toBase58()
+      const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
+        body: {
+          action: 'charge',
+          quoteId: quote.quoteId,
+          payerWallet,
+          paymentMethod: 'usdc',
+        },
+      })
+      if (chargeErr) throw new Error(chargeErr.message ?? 'Charge failed')
+      const charge = chargeData as { paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }
+      if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
+      const mintKeypair = Keypair.generate()
+      const decimals = typeof form.decimals === 'number' ? form.decimals : parseInt(String(form.decimals), 10) || 6
+      const headers = await getAuthHeaders()
+      if (!headers) throw new Error('Sign in required')
+
+      createTxStatus.value = 'Creating pending...'
       const { error: createErr } = await supabase.functions.invoke('crafter', {
         body: {
           action: 'create',
           tenantId: id,
-          mint: mintPubkey,
-          name: form.name.trim(),
-          symbol: form.symbol.trim(),
-          decimals: form.decimals,
-          memo,
+          mint: mintKeypair.publicKey.toBase58(),
+          decimals,
+          memo: charge.memo,
         },
         headers,
       })
-      if (createErr) throw createErr
+      if (createErr) throw new Error(createErr.message ?? 'Create pending failed')
 
+      createTxStatus.value = 'Sending transaction...'
       const tx = await buildCreateMintAndBillingTransaction({
         mintKeypair,
-        decimals: Number(form.decimals) || 6,
-        memo,
-        amountUsdc,
-        recipientAta,
+        decimals,
+        memo: charge.memo,
+        amountUsdc: charge.amountUsdc ?? 0,
+        recipientAta: new PublicKey(charge.recipientAta),
         payer: wallet.publicKey,
         connection: conn,
       })
-
-      const TX_LABELS: Record<string, string> = {
-        signing: 'Signing...',
-        sending: 'Sending...',
-        confirming: 'Confirming...',
-      }
-      createTxStatus.value = 'Signing...'
       const txSignature = await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey, {
         signers: [mintKeypair],
-        onStatus: (s) => {
-          createTxStatus.value = TX_LABELS[s] ?? s
-        },
       })
 
       createTxStatus.value = 'Confirming payment...'
-      const { error: billingConfirmErr } = await supabase.functions.invoke('billing', {
-        body: { action: 'confirm', tenantId: id, paymentId, txSignature },
-        headers,
+      const { error: confirmErr } = await supabase.functions.invoke('billing', {
+        body: { action: 'confirm', paymentId: charge.paymentId, txSignature },
       })
-      if (billingConfirmErr) throw billingConfirmErr
+      if (confirmErr) throw new Error(confirmErr.message ?? 'Confirm failed')
 
-      const { data: confirmData, error: confirmErr } = await supabase.functions.invoke('crafter', {
+      createTxStatus.value = 'Confirming token...'
+      const { error: crafterConfirmErr } = await supabase.functions.invoke('crafter', {
         body: {
           action: 'confirm',
           tenantId: id,
-          mint: mintPubkey,
+          mint: mintKeypair.publicKey.toBase58(),
           txSignature,
-          memo,
+          memo: charge.memo,
         },
         headers,
       })
-      if (confirmErr) throw confirmErr
-      if (!confirmData?.success) throw new Error('Confirm failed')
+      if (crafterConfirmErr) throw new Error(crafterConfirmErr.message ?? 'Token confirm failed')
 
-      createTxStatus.value = null
-      createError.value = null
       await list()
-      return { success: true, mint: mintPubkey }
+      return { success: true, mint: mintKeypair.publicKey.toBase58() }
     } catch (e) {
       createError.value = e instanceof Error ? e.message : 'Create failed'
       return { success: false, error: createError.value }

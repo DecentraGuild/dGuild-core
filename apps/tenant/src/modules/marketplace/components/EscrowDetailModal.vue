@@ -1,86 +1,151 @@
 <template>
   <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
     <DialogContent :class="['escrow-modal gap-0 max-h-[90vh] overflow-y-auto sm:max-w-[42rem]']" :show-close-button="false">
-        <EscrowDetailHeader
-          :is-maker="isMaker"
-          :escrow="detailEscrow"
-          @copy-share-link="detail.copyShareLinkAndNotify"
-          @close="close"
-        />
+      <EscrowDetailHeader
+        :is-maker="isMaker"
+        :escrow="detailEscrow"
+        @copy-share-link="detail.copyShareLinkAndNotify"
+        @close="close"
+      />
+      <StatusBanner
+        v-if="detailRpcError && !detail.apiAvailable"
+        variant="error"
+        :message="detailRpcError"
+      >
+        <template #hint>
+          <p class="escrow-modal__rpc-hint">Set NUXT_PUBLIC_HELIUS_RPC in your environment.</p>
+        </template>
+      </StatusBanner>
+      <StatusBanner
+        v-else-if="detailLoading"
+        variant="loading"
+        message="Loading escrow..."
+      />
+      <StatusBanner
+        v-else-if="!detailEscrow"
+        variant="empty"
+        message="Escrow not found."
+      />
+      <template v-else>
         <StatusBanner
-          v-if="detailRpcError && !detail.apiAvailable"
-          variant="error"
-          :message="detailRpcError"
-        >
-          <template #hint>
-            <p class="escrow-modal__rpc-hint">Set NUXT_PUBLIC_HELIUS_RPC in your environment.</p>
-          </template>
-        </StatusBanner>
-        <StatusBanner
-          v-else-if="detailLoading"
-          variant="loading"
-          message="Loading escrow..."
+          v-if="detailRpcError && detail.apiAvailable && (isMaker || detail.canFill)"
+          variant="info"
+          message="To fill or cancel, add NUXT_PUBLIC_HELIUS_RPC to your .env. Viewing works without it."
         />
-        <StatusBanner
-          v-else-if="!detailEscrow"
-          variant="empty"
-          message="Escrow not found."
-        />
-        <template v-else>
-          <StatusBanner
-            v-if="detailRpcError && detail.apiAvailable && (isMaker || detail.canFill)"
-            variant="info"
-            message="To fill or cancel, add NUXT_PUBLIC_HELIUS_RPC to your .env. Viewing works without it."
-          />
-          <div class="escrow-modal__body">
-            <section v-if="isMaker" class="escrow-modal__owner">
-              <section class="escrow-modal__details">
-                <button
-                  type="button"
-                  class="escrow-modal__details-toggle"
-                  :aria-expanded="unref(detail.ownerFillOpen)"
-                  @click="detail.toggleOwnerFillOpen"
-                >
-                  <span>Fill trade</span>
-                  <Icon :icon="unref(detail.ownerFillOpen) ? 'lucide:chevron-up' : 'lucide:chevron-down'" />
-                </button>
-                <div v-show="unref(detail.ownerFillOpen)" class="escrow-modal__details-content">
-                  <div v-if="!detailDisplay" class="escrow-modal__fill-loading">Loading trade details...</div>
-                  <EscrowDetailTradeFlow
-                    v-else
-                    :escrow="detailEscrow!"
-                    :display="detailDisplay"
-                    :show-amount-controls="false"
-                    :show-fill-actions="false"
-                    :wallet-address="unref(detail.walletAddress)"
-                    :can-fill="unref(detail.canFill)"
-                    :can-sign-transactions="unref(detail.canSignTransactions)"
-                    :insufficient-balance="unref(detail.insufficientBalance)"
-                    :filling="unref(detail.filling)"
-                    :fill-percent="unref(detail.fillPercent)"
-                    :fill-amount-input="unref(detail.fillAmountInput)"
-                    :ratio-flipped="unref(detail.ratioFlipped)"
-                    :chain-price="unref(detail.chainPrice)"
-                    :deposit-symbol-display="unref(detail.depositSymbolDisplay)"
-                    :price-symbol-display="unref(detail.priceSymbolDisplay)"
-                    :deposit-name-display="unref(detail.depositNameDisplay)"
-                    :request-name-display="unref(detail.requestNameDisplay)"
-                    :fill-request-amount-display="unref(detail.fillRequestAmountDisplay)"
-                    :fill-deposit-amount-display="unref(detail.fillDepositAmountDisplay)"
-                    :request-token-balance="unref(detail.requestTokenBalance)"
-                    cannot-fill-reason=""
-                    @update:fill-percent="detail.setFillPercent"
-                    @fill-amount-input="detail.onFillAmountInput"
-                    @focus-amount-input="detail.onFocusAmountInput"
-                    @toggle-ratio="detail.toggleRatio"
-                  />
-                </div>
-              </section>
-              <EscrowDetailActions
-                :cancelling="unref(detail.cancelling)"
-                @cancel="() => detail.handleCancel(close)"
-              />
-              <h3 class="escrow-modal__section-title">Details</h3>
+        <div class="escrow-modal__body">
+          <section v-if="isMaker" class="escrow-modal__owner">
+            <section class="escrow-modal__details">
+              <button
+                type="button"
+                class="escrow-modal__details-toggle"
+                :aria-expanded="unref(detail.ownerFillOpen)"
+                @click="detail.toggleOwnerFillOpen"
+              >
+                <span>Fill trade</span>
+                <Icon :icon="unref(detail.ownerFillOpen) ? 'lucide:chevron-up' : 'lucide:chevron-down'" />
+              </button>
+              <div v-show="unref(detail.ownerFillOpen)" class="escrow-modal__details-content">
+                <div v-if="!detailDisplay" class="escrow-modal__fill-loading">Loading trade details...</div>
+                <EscrowDetailTradeFlow
+                  v-else
+                  :escrow="detailEscrow!"
+                  :display="detailDisplay"
+                  :show-amount-controls="false"
+                  :show-fill-actions="false"
+                  :wallet-address="unref(detail.walletAddress)"
+                  :can-fill="unref(detail.canFill)"
+                  :can-sign-transactions="unref(detail.canSignTransactions)"
+                  :insufficient-balance="unref(detail.insufficientBalance)"
+                  :filling="unref(detail.filling)"
+                  :fill-percent="unref(detail.fillPercent)"
+                  :fill-amount-input="unref(detail.fillAmountInput)"
+                  :ratio-flipped="unref(detail.ratioFlipped)"
+                  :chain-price="unref(detail.chainPrice)"
+                  :deposit-symbol-display="unref(detail.depositSymbolDisplay)"
+                  :price-symbol-display="unref(detail.priceSymbolDisplay)"
+                  :deposit-name-display="unref(detail.depositNameDisplay)"
+                  :request-name-display="unref(detail.requestNameDisplay)"
+                  :fill-request-amount-display="unref(detail.fillRequestAmountDisplay)"
+                  :fill-deposit-amount-display="unref(detail.fillDepositAmountDisplay)"
+                  :request-token-balance="unref(detail.requestTokenBalance)"
+                  cannot-fill-reason=""
+                  @update:fill-percent="detail.setFillPercent"
+                  @fill-amount-input="detail.onFillAmountInput"
+                  @focus-amount-input="detail.onFocusAmountInput"
+                  @toggle-ratio="detail.toggleRatio"
+                />
+              </div>
+            </section>
+            <EscrowDetailActions
+              :cancelling="unref(detail.cancelling)"
+              @cancel="() => detail.handleCancel(close)"
+            />
+            <h3 class="escrow-modal__section-title">Details</h3>
+            <EscrowDetailMetadata
+              :escrow="detailEscrow!"
+              :escrow-id="props.escrowId"
+              :display="detailDisplay"
+              :is-public-recipient="unref(detail.isPublicRecipient)"
+              :expire-label="unref(detail.expireLabel)"
+              :share-url-value="unref(detail.shareUrlValue)"
+              :share-qr-data-url="unref(detail.shareQrDataUrl)"
+              :show-qr-and-link="true"
+              :truncate-address="detail.truncateAddress"
+              :explorer-links="unref(detail.explorerLinks)"
+              :copy-to-clipboard="detail.copyToClipboard"
+              @copy-share-link="detail.copyShareLinkAndNotify"
+            />
+          </section>
+
+          <section v-if="!isMaker" class="escrow-modal__fill">
+            <h3 class="escrow-modal__section-title">Fill trade</h3>
+            <p v-if="props.fillDisabled" class="escrow-modal__fill-winding-down">
+              Marketplace is winding down; only cancel is allowed.
+            </p>
+            <p v-else-if="!detailDisplay" class="escrow-modal__fill-loading">Loading trade details...</p>
+            <EscrowDetailTradeFlow
+              v-else
+              :escrow="detailEscrow!"
+              :display="detailDisplay"
+              :show-amount-controls="true"
+              :show-fill-actions="true"
+              :wallet-address="unref(detail.walletAddress)"
+              :can-fill="unref(detail.canFill)"
+              :can-sign-transactions="unref(detail.canSignTransactions)"
+              :insufficient-balance="unref(detail.insufficientBalance)"
+              :filling="unref(detail.filling)"
+              :fill-percent="unref(detail.fillPercent)"
+              :fill-amount-input="unref(detail.fillAmountInput)"
+              :ratio-flipped="unref(detail.ratioFlipped)"
+              :chain-price="unref(detail.chainPrice)"
+              :deposit-symbol-display="unref(detail.depositSymbolDisplay)"
+              :price-symbol-display="unref(detail.priceSymbolDisplay)"
+              :deposit-name-display="unref(detail.depositNameDisplay)"
+              :request-name-display="unref(detail.requestNameDisplay)"
+              :fill-request-amount-display="unref(detail.fillRequestAmountDisplay)"
+              :fill-deposit-amount-display="unref(detail.fillDepositAmountDisplay)"
+              :request-token-balance="unref(detail.requestTokenBalance)"
+              :cannot-fill-reason="cannotFillReason"
+              @update:fill-percent="detail.setFillPercent"
+              @fill-amount-input="detail.onFillAmountInput"
+              @focus-amount-input="detail.onFocusAmountInput"
+              @toggle-ratio="detail.toggleRatio"
+              @fill="detail.handleFill(close)"
+              @connect-wallet="auth.openConnectModal()"
+            />
+          </section>
+
+          <section v-if="!isMaker" class="escrow-modal__details">
+            <button
+              type="button"
+              class="escrow-modal__details-toggle"
+              :aria-expanded="unref(detail.detailsOpen)"
+              @click="detail.toggleDetailsOpen"
+            >
+              <span>Details</span>
+              <Icon :icon="unref(detail.detailsOpen) ? 'lucide:chevron-up' : 'lucide:chevron-down'" />
+            </button>
+            <div v-show="unref(detail.detailsOpen)" class="escrow-modal__details-content">
               <EscrowDetailMetadata
                 :escrow="detailEscrow!"
                 :escrow-id="props.escrowId"
@@ -95,75 +160,10 @@
                 :copy-to-clipboard="detail.copyToClipboard"
                 @copy-share-link="detail.copyShareLinkAndNotify"
               />
-            </section>
-
-            <section v-if="!isMaker" class="escrow-modal__fill">
-              <h3 class="escrow-modal__section-title">Fill trade</h3>
-              <p v-if="props.fillDisabled" class="escrow-modal__fill-winding-down">
-                Marketplace is winding down; only cancel is allowed.
-              </p>
-              <p v-else-if="!detailDisplay" class="escrow-modal__fill-loading">Loading trade details...</p>
-              <EscrowDetailTradeFlow
-                v-else
-                :escrow="detailEscrow!"
-                :display="detailDisplay"
-                :show-amount-controls="true"
-                :show-fill-actions="true"
-                :wallet-address="unref(detail.walletAddress)"
-                :can-fill="unref(detail.canFill)"
-                :can-sign-transactions="unref(detail.canSignTransactions)"
-                :insufficient-balance="unref(detail.insufficientBalance)"
-                :filling="unref(detail.filling)"
-                :fill-percent="unref(detail.fillPercent)"
-                :fill-amount-input="unref(detail.fillAmountInput)"
-                :ratio-flipped="unref(detail.ratioFlipped)"
-                :chain-price="unref(detail.chainPrice)"
-                :deposit-symbol-display="unref(detail.depositSymbolDisplay)"
-                :price-symbol-display="unref(detail.priceSymbolDisplay)"
-                :deposit-name-display="unref(detail.depositNameDisplay)"
-                :request-name-display="unref(detail.requestNameDisplay)"
-                :fill-request-amount-display="unref(detail.fillRequestAmountDisplay)"
-                :fill-deposit-amount-display="unref(detail.fillDepositAmountDisplay)"
-                :request-token-balance="unref(detail.requestTokenBalance)"
-                :cannot-fill-reason="cannotFillReason"
-                @update:fill-percent="detail.setFillPercent"
-                @fill-amount-input="detail.onFillAmountInput"
-                @focus-amount-input="detail.onFocusAmountInput"
-                @toggle-ratio="detail.toggleRatio"
-                @fill="detail.handleFill(close)"
-                @connect-wallet="auth.openConnectModal()"
-              />
-            </section>
-
-            <section v-if="!isMaker" class="escrow-modal__details">
-              <button
-                type="button"
-                class="escrow-modal__details-toggle"
-                :aria-expanded="unref(detail.detailsOpen)"
-                @click="detail.toggleDetailsOpen"
-              >
-                <span>Details</span>
-                <Icon :icon="unref(detail.detailsOpen) ? 'lucide:chevron-up' : 'lucide:chevron-down'" />
-              </button>
-              <div v-show="unref(detail.detailsOpen)" class="escrow-modal__details-content">
-                <EscrowDetailMetadata
-                  :escrow="detailEscrow!"
-                  :escrow-id="props.escrowId"
-                  :display="detailDisplay"
-                  :is-public-recipient="unref(detail.isPublicRecipient)"
-                  :expire-label="unref(detail.expireLabel)"
-                  :share-url-value="unref(detail.shareUrlValue)"
-                  :share-qr-data-url="unref(detail.shareQrDataUrl)"
-                  :show-qr-and-link="true"
-                  :truncate-address="detail.truncateAddress"
-                  :explorer-links="unref(detail.explorerLinks)"
-                  :copy-to-clipboard="detail.copyToClipboard"
-                  @copy-share-link="detail.copyShareLinkAndNotify"
-                />
-              </div>
-            </section>
-          </div>
-        </template>
+            </div>
+          </section>
+        </div>
+      </template>
     </DialogContent>
   </Dialog>
 </template>

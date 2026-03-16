@@ -270,6 +270,8 @@ async function onLink(payload: { guildId: string }) {
     }
     guildIdInput.value = ''
     await fetchServer()
+    await tenantStore.refetchTenantContext()
+
     await Promise.all([fetchCatalog(), fetchGuildRoles(), fetchGateLists(), fetchRoleCards(), fetchRulesCatalog()])
   } finally {
     linking.value = false

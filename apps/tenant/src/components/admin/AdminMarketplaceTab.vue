@@ -68,7 +68,12 @@ const liveConditions = computed(() => {
   const customCurrenciesCount = f.currencyMints.length - baseCurrenciesCount
   const fee = f.shopFee
   const monetizeStorefront = fee.makerFlatFee > 0 || fee.takerFlatFee > 0 || fee.makerPercentFee > 0 || fee.takerPercentFee > 0
-  return { mintsCount, baseCurrenciesCount, customCurrenciesCount, monetizeStorefront }
+  return {
+    mints_count: mintsCount,
+    base_currencies_count: baseCurrenciesCount,
+    custom_currencies: customCurrenciesCount,
+    monetize_storefront: monetizeStorefront,
+  }
 })
 
 const pricingRef = ref<InstanceType<typeof AdminPricingWidget> | null>(null)

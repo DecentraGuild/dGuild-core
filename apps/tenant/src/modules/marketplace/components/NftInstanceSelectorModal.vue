@@ -1,98 +1,98 @@
 <template>
   <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
     <DialogContent :class="['nft-instance-selector__panel p-0 gap-0 max-h-[85vh] flex flex-col overflow-hidden sm:max-w-[48rem]']" :show-close-button="false">
-        <div class="nft-instance-selector__header">
-          <h3 class="nft-instance-selector__title">{{ collectionName }}</h3>
-          <button type="button" class="nft-instance-selector__close" aria-label="Close" @click="$emit('update:modelValue', false)">
-            <Icon icon="lucide:x" />
+      <div class="nft-instance-selector__header">
+        <h3 class="nft-instance-selector__title">{{ collectionName }}</h3>
+        <button type="button" class="nft-instance-selector__close" aria-label="Close" @click="$emit('update:modelValue', false)">
+          <Icon icon="lucide:x" />
+        </button>
+      </div>
+      <p class="nft-instance-selector__subtitle">Select a specific NFT from the collection</p>
+      <div class="nft-instance-selector__toolbar">
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="nft-instance-selector__search"
+          placeholder="Search by name, number, or mint..."
+        />
+        <div v-if="hasAnyTraits" class="nft-instance-selector__filters">
+          <button
+            type="button"
+            class="nft-instance-selector__filter-btn"
+            :class="{ 'nft-instance-selector__filter-btn--active': filtersOpen }"
+            @click="filtersOpen = !filtersOpen"
+          >
+            <Icon icon="lucide:filter" />
+            Filters
+            <span v-if="activeFilterCount" class="nft-instance-selector__filter-badge">{{ activeFilterCount }}</span>
           </button>
-        </div>
-        <p class="nft-instance-selector__subtitle">Select a specific NFT from the collection</p>
-        <div class="nft-instance-selector__toolbar">
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="nft-instance-selector__search"
-            placeholder="Search by name, number, or mint..."
-          />
-          <div v-if="hasAnyTraits" class="nft-instance-selector__filters">
-            <button
-              type="button"
-              class="nft-instance-selector__filter-btn"
-              :class="{ 'nft-instance-selector__filter-btn--active': filtersOpen }"
-              @click="filtersOpen = !filtersOpen"
-            >
-              <Icon icon="lucide:filter" />
-              Filters
-              <span v-if="activeFilterCount" class="nft-instance-selector__filter-badge">{{ activeFilterCount }}</span>
-            </button>
-            <div v-if="filtersOpen" class="nft-instance-selector__filter-panel">
-              <div class="nft-instance-selector__filter-header">
-                <span>Filter by traits</span>
-                <button v-if="hasActiveFilters" type="button" @click="clearTraitFilters">Clear all</button>
-              </div>
-              <div v-for="(values, traitType) in uniqueTraits" :key="traitType" class="nft-instance-selector__trait-group">
-                <p class="nft-instance-selector__trait-label">{{ traitType }}</p>
-                <div class="nft-instance-selector__trait-values">
-                  <button
-                    v-for="val in values"
-                    :key="`${traitType}-${val}`"
-                    type="button"
-                    class="nft-instance-selector__trait-chip"
-                    :class="{ 'nft-instance-selector__trait-chip--active': selectedTraits[traitType] === val }"
-                    @click="toggleTraitFilter(traitType, val)"
-                  >
-                    {{ val }}
-                  </button>
-                </div>
+          <div v-if="filtersOpen" class="nft-instance-selector__filter-panel">
+            <div class="nft-instance-selector__filter-header">
+              <span>Filter by traits</span>
+              <button v-if="hasActiveFilters" type="button" @click="clearTraitFilters">Clear all</button>
+            </div>
+            <div v-for="(values, traitType) in uniqueTraits" :key="traitType" class="nft-instance-selector__trait-group">
+              <p class="nft-instance-selector__trait-label">{{ traitType }}</p>
+              <div class="nft-instance-selector__trait-values">
+                <button
+                  v-for="val in values"
+                  :key="`${traitType}-${val}`"
+                  type="button"
+                  class="nft-instance-selector__trait-chip"
+                  :class="{ 'nft-instance-selector__trait-chip--active': selectedTraits[traitType] === val }"
+                  @click="toggleTraitFilter(traitType, val)"
+                >
+                  {{ val }}
+                </button>
               </div>
             </div>
           </div>
         </div>
-        <div class="nft-instance-selector__body">
-          <div v-if="loading" class="nft-instance-selector__empty">
-            <Icon icon="lucide:loader-2" class="nft-instance-selector__empty-icon" />
-            <p>Loading NFTs...</p>
-          </div>
-          <div v-else-if="filteredNfts.length === 0" class="nft-instance-selector__empty">
-            <Icon icon="lucide:image-off" class="nft-instance-selector__empty-icon" />
-            <p>{{ hasActiveFilters ? 'No NFTs match the selected filters' : 'No NFTs found' }}</p>
-            <button v-if="hasActiveFilters" type="button" @click="clearSearchAndFilters">Clear filters</button>
-          </div>
-          <div v-else class="nft-instance-selector__grid">
-            <button
-              v-for="nft in paginatedNfts"
-              :key="nft.mint"
-              type="button"
-              class="nft-instance-selector__card"
-              @click="selectNft(nft)"
-            >
-              <div class="nft-instance-selector__card-media">
-                <img v-if="nft.metadata?.image" :src="nft.metadata.image" :alt="nft.metadata.name ?? nft.mint" />
-                <div v-else class="nft-instance-selector__card-placeholder">
-                  <Icon icon="lucide:image-off" />
-                </div>
+      </div>
+      <div class="nft-instance-selector__body">
+        <div v-if="loading" class="nft-instance-selector__empty">
+          <Icon icon="lucide:loader-2" class="nft-instance-selector__empty-icon" />
+          <p>Loading NFTs...</p>
+        </div>
+        <div v-else-if="filteredNfts.length === 0" class="nft-instance-selector__empty">
+          <Icon icon="lucide:image-off" class="nft-instance-selector__empty-icon" />
+          <p>{{ hasActiveFilters ? 'No NFTs match the selected filters' : 'No NFTs found' }}</p>
+          <button v-if="hasActiveFilters" type="button" @click="clearSearchAndFilters">Clear filters</button>
+        </div>
+        <div v-else class="nft-instance-selector__grid">
+          <button
+            v-for="nft in paginatedNfts"
+            :key="nft.mint"
+            type="button"
+            class="nft-instance-selector__card"
+            @click="selectNft(nft)"
+          >
+            <div class="nft-instance-selector__card-media">
+              <img v-if="nft.metadata?.image" :src="nft.metadata.image" :alt="nft.metadata.name ?? nft.mint" />
+              <div v-else class="nft-instance-selector__card-placeholder">
+                <Icon icon="lucide:image-off" />
               </div>
-              <div class="nft-instance-selector__card-info">
-                <p class="nft-instance-selector__card-name">{{ nft.metadata?.name ?? truncateAddress(nft.mint) }}</p>
-                <div v-if="displayTraits(nft).length" class="nft-instance-selector__card-traits">
-                  <span
-                    v-for="(attr, idx) in displayTraits(nft).slice(0, 3)"
-                    :key="idx"
-                    class="nft-instance-selector__trait-tag"
-                  >
-                    {{ attr.trait_type }}: {{ attr.value }}
-                  </span>
-                </div>
-              </div>
-            </button>
-            <div v-if="hasMore" class="nft-instance-selector__load-more">
-              <button type="button" class="nft-instance-selector__load-more-btn" @click="loadMore">
-                Load more ({{ filteredNfts.length - visibleCount }} remaining)
-              </button>
             </div>
+            <div class="nft-instance-selector__card-info">
+              <p class="nft-instance-selector__card-name">{{ nft.metadata?.name ?? truncateAddress(nft.mint) }}</p>
+              <div v-if="displayTraits(nft).length" class="nft-instance-selector__card-traits">
+                <span
+                  v-for="(attr, idx) in displayTraits(nft).slice(0, 3)"
+                  :key="idx"
+                  class="nft-instance-selector__trait-tag"
+                >
+                  {{ attr.trait_type }}: {{ attr.value }}
+                </span>
+              </div>
+            </div>
+          </button>
+          <div v-if="hasMore" class="nft-instance-selector__load-more">
+            <button type="button" class="nft-instance-selector__load-more-btn" @click="loadMore">
+              Load more ({{ filteredNfts.length - visibleCount }} remaining)
+            </button>
           </div>
         </div>
+      </div>
     </DialogContent>
   </Dialog>
 </template>

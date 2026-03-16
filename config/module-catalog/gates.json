@@ -30,10 +30,5 @@
     "note": "Module is active immediately; billing is per list when you create one."
   },
   "goActiveImmediately": true,
-  "pricing": {
-    "modelType": "add_unit",
-    "conditionKey": "listsCount",
-    "name": "Gates",
-    "pricePerUnit": 0.005
-  }
+  "pricing": null
 }

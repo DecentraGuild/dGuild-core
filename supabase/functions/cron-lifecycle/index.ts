@@ -60,7 +60,7 @@ function applyLifecycleTransitions(
 
     if (upd.state === 'deactivating') {
       const untilDate = parseDate(upd.deactivatingUntil)
-      if (untilDate && untilDate <= now) {
+      if (!untilDate || untilDate <= now) {
         upd = {
           ...entry,
           state: 'off',

@@ -17,8 +17,10 @@ export const CONDITION_LABELS: Record<string, string> = {
   mintsGrow: 'Snapshot mints',
   mintsPro: 'Transaction mints',
   mints_current: 'Current holders',
-  mintsSnapshot: 'Snapshot track',
-  mintsTransactions: 'Transactions track',
+  mints_snapshot: 'Snapshot',
+  mints_transactions: 'Transactions',
+  mintsSnapshot: 'Snapshot',
+  mintsTransactions: 'Transactions',
 }
 
 export interface NumericUsageRow {

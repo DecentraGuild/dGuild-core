@@ -246,27 +246,6 @@ async function syncTenant(supabase, config) {
     }
   }
 
-  if (config.billingSubscriptions?.length) {
-    for (const sub of config.billingSubscriptions) {
-      const { error } = await supabase.from('billing_subscriptions').upsert(
-        {
-          id: sub.id,
-          tenant_id: tenantId,
-          module_id: sub.module_id,
-          scope_key: sub.scope_key ?? '',
-          billing_period: sub.billing_period,
-          recurring_amount_usdc: sub.recurring_amount_usdc,
-          period_start: sub.period_start,
-          period_end: sub.period_end,
-          conditions_snapshot: sub.conditions_snapshot ?? {},
-          price_snapshot: sub.price_snapshot ?? {},
-        },
-        { onConflict: 'tenant_id,module_id,scope_key' }
-      )
-      if (error) throw error
-    }
-  }
-
   if (config.billingPayments !== undefined) {
     await supabase.from('billing_payments').delete().eq('tenant_id', tenantId)
     if (config.billingPayments.length) {
@@ -290,21 +269,6 @@ async function syncTenant(supabase, config) {
           confirmed_at: p.confirmed_at ?? null,
           expires_at: p.expires_at,
         }))
-      )
-      if (error) throw error
-    }
-  }
-
-  if (config.billingState?.length) {
-    for (const s of config.billingState) {
-      const { error } = await supabase.from('tenant_module_billing_state').upsert(
-        {
-          tenant_id: tenantId,
-          module_id: s.module_id,
-          selected_tier_id: s.selected_tier_id ?? null,
-          period_end: s.period_end ?? null,
-        },
-        { onConflict: 'tenant_id,module_id' }
       )
       if (error) throw error
     }

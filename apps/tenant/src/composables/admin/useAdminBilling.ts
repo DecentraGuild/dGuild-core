@@ -1,37 +1,26 @@
 /**
- * Admin billing: payment flow, deploy, reactivate, extend for modules.
- * Uses the billing Edge Function for intent creation and confirmation.
- * On-chain USDC transfer is built/sent client-side as before.
+ * Admin billing: quote → charge → confirm (pricing engine v2).
  */
-
 import type { ModuleState } from '@decentraguild/core'
 import type { BillingPeriod, ConditionSet } from '@decentraguild/billing'
-import { getModuleCatalogEntry } from '@decentraguild/config'
-import { PublicKey } from '@solana/web3.js'
+import { getProductDisplayType, MODULE_TO_PRODUCT, toMeterOverrides } from '@decentraguild/billing'
 import {
   buildBillingTransfer,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
+import { PublicKey } from '@solana/web3.js'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
-import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useSupabase } from '~/composables/core/useSupabase'
-import type { Ref } from 'vue'
+import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
-import { getEdgeFunctionErrorMessage } from '~/utils/edgeFunctionError'
+import type { Ref } from 'vue'
 import type { TenantConfig } from '@decentraguild/core'
 
-interface PaymentIntentResponse {
-  noPaymentRequired: boolean
-  paymentId?: string
-  amountUsdc?: number
-  memo?: string
-  recipientWallet?: string
-  recipientAta?: string
-  billingPeriod?: string
-  periodStart?: string
-  periodEnd?: string
-  error?: string
+const TX_STATUS_LABELS: Record<string, string> = {
+  signing: 'Signing...',
+  sending: 'Sending...',
+  confirming: 'Confirming...',
 }
 
 export function useAdminBilling(opts: {
@@ -41,8 +30,9 @@ export function useAdminBilling(opts: {
   extending: Ref<boolean>
   fetchSubscription: (moduleId: string) => Promise<void>
 }) {
-  const { saveError, saving, deploying, extending, fetchSubscription } = opts
+  const { saveError, saving, deploying, extending } = opts
   const { tenantId, slug, tenantStore } = useAdminTenant()
+  const supabase = useSupabase()
   const { connection } = useSolanaConnection()
   const txNotifications = useTransactionNotificationsStore()
 
@@ -52,92 +42,117 @@ export function useAdminBilling(opts: {
     slugToClaim?: string,
     conditions?: ConditionSet,
   ): Promise<boolean> {
-    const id = tenantId.value
-    if (!id) return false
+    let notificationId: string | undefined
+    try {
+      const id = tenantId.value
+      if (!id) throw new Error('Tenant not set')
 
-    const supabase = useSupabase()
-    const body: Record<string, unknown> = {
-      action: 'intent',
-      tenantId: id,
-      moduleId,
-      billingPeriod,
+      const productKey = MODULE_TO_PRODUCT[moduleId] ?? moduleId
+    const durationDays = billingPeriod === 'yearly' ? 365 : 30
+    let meterOverrides = toMeterOverrides(conditions)
+    if (moduleId === 'slug' && slugToClaim) {
+      meterOverrides = { slug: 1 }
     }
-    if (moduleId === 'slug' && slugToClaim) body.slug = slugToClaim
-    if (conditions && typeof conditions === 'object') body.conditions = conditions
-    const wallet = getEscrowWalletFromConnector()
-    if (wallet?.publicKey) body.payerWallet = wallet.publicKey.toBase58()
 
-    const { data: intentData, error: intentError } = await supabase.functions.invoke('billing', {
-      body,
+    const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
+      body: {
+        action: 'quote',
+        tenantId: id,
+        productKey,
+        durationDays,
+        meterOverrides,
+      },
     })
-    if (intentError) {
-      throw new Error(getEdgeFunctionErrorMessage(intentError, 'Billing request failed'))
-    }
+    if (quoteErr) throw new Error(quoteErr.message ?? 'Quote failed')
+    const quote = quoteData as { quoteId: string; priceUsdc: number }
+    if (!quote?.quoteId) throw new Error('No quote returned')
 
-    const intent = intentData as PaymentIntentResponse
-    if (intent.noPaymentRequired) return true
+    if (quote.priceUsdc <= 0) return true
 
-    if (!intent.paymentId || !intent.amountUsdc || !intent.memo || !intent.recipientAta) {
-      throw new Error('Invalid payment intent response')
-    }
-    if (!connection.value) throw new Error('Solana RPC not configured')
+    const wallet = getEscrowWalletFromConnector()
     if (!wallet?.publicKey) throw new Error('Wallet not connected')
+    const payerWallet = wallet.publicKey.toBase58()
 
-    const notificationId = `billing-${moduleId}-${intent.paymentId}`
-    txNotifications.add(notificationId, {
+    const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
+      body: {
+        action: 'charge',
+        quoteId: quote.quoteId,
+        payerWallet,
+        paymentMethod: 'usdc',
+      },
+    })
+    if (chargeErr) throw new Error(chargeErr.message ?? 'Charge failed')
+    const charge = chargeData as { paymentId: string; amountUsdc: number; memo: string; recipientAta: string }
+    if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
+
+    if (!connection.value) throw new Error('Solana RPC not configured')
+    notificationId = `billing-${Date.now()}`
+    const nid = notificationId
+    txNotifications.add(nid, {
       status: 'pending',
-      message: 'Processing payment. Confirm the transaction in your wallet.',
+      message: 'Payment. Confirm the transaction in your wallet.',
       signature: null,
     })
 
-    try {
-      const tx = buildBillingTransfer({
-        payer: wallet.publicKey,
-        amountUsdc: intent.amountUsdc,
-        recipientAta: new PublicKey(intent.recipientAta),
-        memo: intent.memo,
-        connection: connection.value,
-      })
-      const txSignature = await sendAndConfirmTransaction(
-        connection.value,
-        tx,
-        wallet,
-        wallet.publicKey,
-      )
-
-      const { data: confirmData, error: confirmError } = await supabase.functions.invoke(
-        'billing',
-        {
-          body: {
-            action: 'confirm',
-            tenantId: id,
-            paymentId: intent.paymentId,
-            txSignature,
-          },
+    const tx = buildBillingTransfer({
+      payer: wallet.publicKey,
+      amountUsdc: charge.amountUsdc,
+      recipientAta: new PublicKey(charge.recipientAta),
+      memo: charge.memo,
+      connection: connection.value,
+    })
+    const txSignature = await sendAndConfirmTransaction(
+      connection.value,
+      tx,
+      wallet,
+      wallet.publicKey,
+      {
+        onStatus: (s) => {
+          const label = TX_STATUS_LABELS[s] ?? s
+          txNotifications.update(nid, {
+            status: 'pending',
+            message: `Payment: ${label}`,
+          })
         },
-      )
-      if (confirmError) throw new Error(getEdgeFunctionErrorMessage(confirmError, 'Confirm failed'))
+      },
+    )
 
-      const result = confirmData as { tenant?: Record<string, unknown> }
-      if (result.tenant) {
-        tenantStore.setTenant(result.tenant as unknown as TenantConfig)
+    txNotifications.update(nid, {
+      status: 'success',
+      message: 'Payment confirmed.',
+      signature: txSignature,
+    })
+
+    const confirmBody: Record<string, unknown> = {
+      action: 'confirm',
+      paymentId: charge.paymentId,
+      txSignature,
+    }
+    if (slugToClaim) confirmBody.slugToClaim = slugToClaim
+
+    const { error: confirmErr } = await supabase.functions.invoke('billing', {
+      body: confirmBody,
+    })
+      if (confirmErr) {
+        txNotifications.update(notificationId, {
+          status: 'error',
+          message: confirmErr.message ?? 'Confirm failed',
+          signature: null,
+        })
+        throw new Error(confirmErr.message ?? 'Confirm failed')
       }
 
-      txNotifications.update(notificationId, {
-        status: 'success',
-        message: 'Payment confirmed.',
-        signature: txSignature,
-      })
       return true
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Payment failed'
+    if (notificationId) {
       txNotifications.update(notificationId, {
         status: 'error',
-        message: msg,
+        message: e instanceof Error ? e.message : 'Payment failed',
         signature: null,
       })
-      throw e
     }
+    throw e
+  }
   }
 
   async function deployModule(moduleId: string, billingPeriod: BillingPeriod, conditions?: ConditionSet) {
@@ -146,10 +161,8 @@ export function useAdminBilling(opts: {
     deploying.value = true
     saveError.value = null
     try {
-      const catalogEntry = getModuleCatalogEntry(moduleId)
-      const isAddUnitOnly =
-        catalogEntry?.pricing &&
-        (catalogEntry.pricing as { modelType?: string }).modelType === 'add_unit'
+      const productKey = MODULE_TO_PRODUCT[moduleId] ?? moduleId
+      const isAddUnitOnly = getProductDisplayType(productKey) === 'one_time_per_unit'
       if (!isAddUnitOnly) {
         const paid = await handleBillingPayment(moduleId, billingPeriod, undefined, conditions)
         if (!paid) throw new Error('Payment was not completed')
@@ -174,7 +187,6 @@ export function useAdminBilling(opts: {
         settingsjson: prev.settingsjson ?? {},
       }
 
-      const supabase = useSupabase()
       const { data, error } = await supabase
         .from('tenant_config')
         .update({ modules, updated_at: new Date().toISOString() })
@@ -197,10 +209,8 @@ export function useAdminBilling(opts: {
     saving.value = true
     saveError.value = null
     try {
-      const catalogEntry = getModuleCatalogEntry(moduleId)
-      const isAddUnitOnly =
-        catalogEntry?.pricing &&
-        (catalogEntry.pricing as { modelType?: string }).modelType === 'add_unit'
+      const productKey = MODULE_TO_PRODUCT[moduleId] ?? moduleId
+      const isAddUnitOnly = getProductDisplayType(productKey) === 'one_time_per_unit'
       if (!isAddUnitOnly) {
         const paid = await handleBillingPayment(moduleId, billingPeriod)
         if (!paid) throw new Error('Payment was not completed')
@@ -224,7 +234,6 @@ export function useAdminBilling(opts: {
         settingsjson: prev.settingsjson ?? {},
       }
 
-      const supabase = useSupabase()
       const { data, error } = await supabase
         .from('tenant_config')
         .update({ modules, updated_at: new Date().toISOString() })
@@ -247,79 +256,8 @@ export function useAdminBilling(opts: {
     extending.value = true
     saveError.value = null
     try {
-      const supabase = useSupabase()
-      const { data: intentData, error: intentError } = await supabase.functions.invoke('billing', {
-        body: {
-          action: 'extend-intent',
-          tenantId: tenantId.value,
-          moduleId,
-          billingPeriod,
-        },
-      })
-      if (intentError) throw new Error(getEdgeFunctionErrorMessage(intentError, 'Extend request failed'))
-      const intent = intentData as PaymentIntentResponse
-      if (intent.noPaymentRequired) {
-        await fetchSubscription(moduleId)
-        return
-      }
-      if (!intent.paymentId || !intent.amountUsdc || !intent.memo || !intent.recipientAta) {
-        throw new Error('Invalid extension intent response')
-      }
-      if (!connection.value) throw new Error('Solana RPC not configured')
-      const wallet = getEscrowWalletFromConnector()
-      if (!wallet?.publicKey) throw new Error('Wallet not connected')
-
-      const notificationId = `billing-extend-${moduleId}-${intent.paymentId}`
-      txNotifications.add(notificationId, {
-        status: 'pending',
-        message: 'Extending subscription. Confirm the transaction in your wallet.',
-        signature: null,
-      })
-
-      try {
-        const tx = buildBillingTransfer({
-          payer: wallet.publicKey,
-          amountUsdc: intent.amountUsdc,
-          recipientAta: new PublicKey(intent.recipientAta),
-          memo: intent.memo,
-          connection: connection.value,
-        })
-        const txSignature = await sendAndConfirmTransaction(
-          connection.value,
-          tx,
-          wallet,
-          wallet.publicKey,
-        )
-
-        const { data: confirmData, error: confirmError } = await supabase.functions.invoke(
-          'billing',
-          {
-            body: {
-              action: 'confirm',
-              tenantId: tenantId.value,
-              paymentId: intent.paymentId,
-              txSignature,
-            },
-          },
-        )
-        if (confirmError) throw new Error(getEdgeFunctionErrorMessage(confirmError, 'Confirm failed'))
-
-        const result = confirmData as { tenant?: Record<string, unknown> }
-        if (result.tenant) {
-          tenantStore.setTenant(result.tenant as unknown as TenantConfig)
-        }
-        await fetchSubscription(moduleId)
-
-        txNotifications.update(notificationId, {
-          status: 'success',
-          message: 'Subscription extended.',
-          signature: txSignature,
-        })
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Extension failed'
-        txNotifications.update(notificationId, { status: 'error', message: msg, signature: null })
-        throw e
-      }
+      await handleBillingPayment(moduleId, billingPeriod)
+      await opts.fetchSubscription(moduleId)
     } catch (e) {
       saveError.value = e instanceof Error ? e.message : 'Extend failed'
     } finally {

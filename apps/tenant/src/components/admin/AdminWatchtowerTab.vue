@@ -33,43 +33,85 @@
           <p v-if="!mints.length" class="watchtower-tab__empty">
             Add mints in Admin > Address Book first.
           </p>
-          <ul v-else class="watchtower-tab__list">
-            <li
-              v-for="mint in mints"
-              :key="mint.mint"
-              class="watchtower-tab__item"
-            >
-              <div class="watchtower-tab__item-info">
-                <span class="watchtower-tab__item-name">{{ mint.name ?? mint.label ?? truncateAddress(mint.mint, 8, 6) }}</span>
-                <code class="watchtower-tab__item-addr">{{ truncateAddress(mint.mint, 8, 6) }}</code>
-              </div>
-              <div class="watchtower-tab__item-tracks">
-                <label class="watchtower-tab__check">
-                  <input
-                    type="checkbox"
-                    :checked="watchesByMint[mint.mint]?.track_holders ?? false"
-                    @change="onTrackChange(mint.mint, 'track_holders', ($event.target as HTMLInputElement).checked)"
-                  />
-                  <span>Current holders</span>
-                </label>
-                <label class="watchtower-tab__check">
-                  <input
-                    type="checkbox"
-                    :checked="watchesByMint[mint.mint]?.track_snapshot ?? false"
-                    @change="onTrackChange(mint.mint, 'track_snapshot', ($event.target as HTMLInputElement).checked)"
-                  />
-                  <span>Snapshot</span>
-                </label>
-                <label class="watchtower-tab__check watchtower-tab__check--disabled" title="Coming soon">
-                  <input type="checkbox" :checked="false" disabled />
-                  <span>Transactions</span>
-                </label>
-              </div>
-            </li>
-          </ul>
+          <template v-else>
+            <section v-if="mintsSpl.length" class="watchtower-tab__section">
+              <h4 class="watchtower-tab__section-title">SPL tokens</h4>
+              <ul class="watchtower-tab__list">
+                <li
+                  v-for="mint in mintsSpl"
+                  :key="mint.mint"
+                  class="watchtower-tab__item"
+                >
+                  <div class="watchtower-tab__item-info">
+                    <span class="watchtower-tab__item-name">{{ mint.name ?? mint.label ?? truncateAddress(mint.mint, 8, 6) }}</span>
+                    <code class="watchtower-tab__item-addr">{{ truncateAddress(mint.mint, 8, 6) }}</code>
+                  </div>
+                  <div class="watchtower-tab__item-tracks">
+                    <label class="watchtower-tab__check">
+                      <input
+                        type="checkbox"
+                        :checked="watchesByMint[mint.mint]?.track_holders ?? false"
+                        @change="onTrackChange(mint.mint, 'track_holders', ($event.target as HTMLInputElement).checked)"
+                      />
+                      <span>Current holders</span>
+                    </label>
+                    <label class="watchtower-tab__check">
+                      <input
+                        type="checkbox"
+                        :checked="watchesByMint[mint.mint]?.track_snapshot ?? false"
+                        @change="onTrackChange(mint.mint, 'track_snapshot', ($event.target as HTMLInputElement).checked)"
+                      />
+                      <span>Snapshot</span>
+                    </label>
+                    <label class="watchtower-tab__check watchtower-tab__check--disabled" title="Coming soon">
+                      <input type="checkbox" :checked="false" disabled />
+                      <span>Transactions</span>
+                    </label>
+                  </div>
+                </li>
+              </ul>
+            </section>
+            <section v-if="mintsNft.length" class="watchtower-tab__section">
+              <h4 class="watchtower-tab__section-title">NFT collections</h4>
+              <ul class="watchtower-tab__list">
+                <li
+                  v-for="mint in mintsNft"
+                  :key="mint.mint"
+                  class="watchtower-tab__item"
+                >
+                  <div class="watchtower-tab__item-info">
+                    <span class="watchtower-tab__item-name">{{ mint.name ?? mint.label ?? truncateAddress(mint.mint, 8, 6) }}</span>
+                    <code class="watchtower-tab__item-addr">{{ truncateAddress(mint.mint, 8, 6) }}</code>
+                  </div>
+                  <div class="watchtower-tab__item-tracks">
+                    <label class="watchtower-tab__check">
+                      <input
+                        type="checkbox"
+                        :checked="watchesByMint[mint.mint]?.track_holders ?? false"
+                        @change="onTrackChange(mint.mint, 'track_holders', ($event.target as HTMLInputElement).checked)"
+                      />
+                      <span>Current holders</span>
+                    </label>
+                    <label class="watchtower-tab__check">
+                      <input
+                        type="checkbox"
+                        :checked="watchesByMint[mint.mint]?.track_snapshot ?? false"
+                        @change="onTrackChange(mint.mint, 'track_snapshot', ($event.target as HTMLInputElement).checked)"
+                      />
+                      <span>Snapshot</span>
+                    </label>
+                    <label class="watchtower-tab__check watchtower-tab__check--disabled" title="Coming soon">
+                      <input type="checkbox" :checked="false" disabled />
+                      <span>Transactions</span>
+                    </label>
+                  </div>
+                </li>
+              </ul>
+            </section>
+          </template>
           <div v-if="localSaveError" class="watchtower-tab__error">{{ localSaveError }}</div>
           <p v-else-if="showGraceHint" class="watchtower-tab__grace-hint">
-            You have 3 days to deploy and pay for the new tracks. Snapshots and holders for new mints will be available after payment.
+            Deploy and pay for the new tracks to make them active for members.
           </p>
           <p class="watchtower-tab__save-hint">
             Changes are saved when you click Save in the pricing widget.
@@ -87,8 +129,8 @@
       :saving="saving"
       :deploying="deploying"
       :save-error="saveError"
-      @save="(p: BillingPeriod) => emit('save', p)"
-      @deploy="(p: BillingPeriod) => emit('deploy', p)"
+      @save="(p: BillingPeriod, c?: Record<string, number>) => emit('save', p, c)"
+      @deploy="(p: BillingPeriod, c?: Record<string, number>) => emit('deploy', p, c)"
       @reactivate="(p: BillingPeriod) => emit('reactivate', p)"
     />
   </div>
@@ -225,13 +267,16 @@ interface WatchRow {
 const mints = ref<MintRow[]>([])
 const watches = ref<WatchRow[]>([])
 
-const storedConditionsSnapshot = computed((): { mints_current: number; mintsSnapshot: number; mintsTransactions: number } | null => {
+const mintsSpl = computed(() => mints.value.filter((m) => m.kind === 'SPL'))
+const mintsNft = computed(() => mints.value.filter((m) => m.kind === 'NFT'))
+
+const storedConditionsSnapshot = computed((): { mints_current: number; mints_snapshot: number; mints_transactions: number } | null => {
   const scope = byScope.value
   if (!scope) return null
   return {
     mints_current: scope.mints_current?.conditionsSnapshot?.mints_current ?? 0,
-    mintsSnapshot: scope.mintsSnapshot?.conditionsSnapshot?.mintsSnapshot ?? 0,
-    mintsTransactions: scope.mintsTransactions?.conditionsSnapshot?.mintsTransactions ?? 0,
+    mints_snapshot: scope.mintsSnapshot?.conditionsSnapshot?.mintsSnapshot ?? 0,
+    mints_transactions: scope.mints_transactions?.conditionsSnapshot?.mints_transactions ?? 0,
   }
 })
 
@@ -245,14 +290,14 @@ const watchesByMint = computed(() => {
 
 const liveConditions = computed(() => {
   let mints_current = 0
-  let mintsSnapshot = 0
-  let mintsTransactions = 0
+  let mints_snapshot = 0
+  let mints_transactions = 0
   for (const w of watches.value) {
     if (w.track_holders) mints_current++
-    if (w.track_snapshot) mintsSnapshot++
-    if (w.track_transactions) mintsTransactions++
+    if (w.track_snapshot) mints_snapshot++
+    if (w.track_transactions) mints_transactions++
   }
-  return { mints_current, mintsSnapshot, mintsTransactions }
+  return { mints_current, mints_snapshot, mints_transactions }
 })
 
 const byScope = computed((): WatchtowerSubscriptionByScope | null => {
@@ -281,14 +326,14 @@ function entitledForTrack(scopeKey: string): number {
 const _trackLimits = computed(() => ({
   track_holders: { entitled: entitledForTrack('mints_current'), active: isTrackActive('mints_current') },
   track_snapshot: { entitled: entitledForTrack('mintsSnapshot'), active: isTrackActive('mintsSnapshot') },
-  track_transactions: { entitled: entitledForTrack('mintsTransactions'), active: isTrackActive('mintsTransactions') },
+  track_transactions: { entitled: entitledForTrack('mints_transactions'), active: isTrackActive('mints_transactions') },
 }))
 
 const showGraceHint = computed(() => {
   const live = liveConditions.value
   const stored = storedConditionsSnapshot.value
-  if (!stored) return live.mints_current > 0 || live.mintsSnapshot > 0 || live.mintsTransactions > 0
-  return live.mints_current > stored.mints_current || live.mintsSnapshot > stored.mintsSnapshot || live.mintsTransactions > stored.mintsTransactions
+  if (!stored) return live.mints_current > 0 || live.mints_snapshot > 0 || live.mints_transactions > 0
+  return live.mints_current > stored.mints_current || live.mints_snapshot > stored.mints_snapshot || live.mints_transactions > stored.mints_transactions
 })
 
 const widgetSubscription = computed((): SubscriptionInfo | null => {
@@ -406,9 +451,17 @@ async function saveWatches(): Promise<boolean> {
       }
       await supabase.from('watchtower_watches').upsert(payload, { onConflict: 'tenant_id,mint' })
       if (w.track_holders || w.track_snapshot) {
-        await supabase.functions.invoke('cron-tracker', {
-          body: { syncMint: w.mint, tenantId: id },
-        })
+        try {
+          const { error: syncErr } = await supabase.functions.invoke('cron-tracker', {
+            body: { syncMint: w.mint, tenantId: id },
+          })
+          if (syncErr) {
+            // Best-effort: cron-tracker may 503 on cold start (heavy Solana deps).
+            // pg_cron runs every 5 min and will sync; deploy still succeeds.
+          }
+        } catch {
+          // Network/timeout: same as above; pg_cron will sync.
+        }
       }
     }
     return true
@@ -449,6 +502,21 @@ onMounted(fetchData)
 .watchtower-tab__empty {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
+}
+
+.watchtower-tab__section {
+  margin-bottom: var(--theme-space-lg);
+}
+
+.watchtower-tab__section:last-child {
+  margin-bottom: 0;
+}
+
+.watchtower-tab__section-title {
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  margin: 0 0 var(--theme-space-sm);
+  color: var(--theme-text-secondary);
 }
 
 .watchtower-tab__list {

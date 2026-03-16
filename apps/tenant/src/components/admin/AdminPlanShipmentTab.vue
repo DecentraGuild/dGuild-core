@@ -40,18 +40,8 @@
           {{ loadedJson.recipients.length }} recipients, total {{ totalAmount }} tokens, mint {{ truncateAddress(loadedJson.mint, 8, 6) }}
         </p>
         <p v-if="loadedJson" class="plan-shipment-tab__hint-sm">
-          If you get "No active state tree infos", register the mint for compression first (one-time per mint).
+          Register the mint for compression before shipping (one-time per mint). Creates token pool and ship wallet token account if needed.
         </p>
-        <Button
-          v-if="loadedJson && canRegisterMint"
-          variant="outline"
-          size="sm"
-          :disabled="registering"
-          @click="registerMint"
-        >
-          <Icon v-if="registering" icon="lucide:loader-2" class="plan-shipment-tab__spinner" />
-          Register mint for compression
-        </Button>
       </div>
 
       <div class="plan-shipment-tab__window plan-shipment-tab__window--wallet">
@@ -105,11 +95,20 @@
           </div>
         </template>
         <p v-if="shipWallet.error.value" class="plan-shipment-tab__error">{{ shipWallet.error.value }}</p>
-        <div class="plan-shipment-tab__ship-actions">
+        <div v-if="shipWallet.hasWallet.value" class="plan-shipment-tab__ship-actions">
           <Button
             variant="default"
+            size="sm"
+            :disabled="!canRegisterMint || registering"
+            @click="registerConfirmOpen = true"
+          >
+            <Icon v-if="registering" icon="lucide:loader-2" class="plan-shipment-tab__spinner" />
+            Register token account
+          </Button>
+          <Button
+            variant="secondary"
             :disabled="!canShip || shipping"
-            @click="onShip"
+            @click="shipConfirmOpen = true"
           >
             <Icon v-if="shipping" icon="lucide:loader-2" class="plan-shipment-tab__spinner" />
             Ship
@@ -134,35 +133,58 @@
       </div>
       <p v-else-if="historyRecords.length === 0" class="plan-shipment-tab__muted">No shipments yet.</p>
       <ul v-else class="plan-shipment-tab__history-list">
-          <li
-            v-for="r in historyRecords"
-            :key="r.id"
-            class="plan-shipment-tab__history-item"
+        <li
+          v-for="r in historyRecords"
+          :key="r.id"
+          class="plan-shipment-tab__history-item"
+        >
+          <button
+            type="button"
+            class="plan-shipment-tab__history-row"
+            @click="expandedId = expandedId === r.id ? null : r.id"
           >
-            <button
-              type="button"
-              class="plan-shipment-tab__history-row"
-              @click="expandedId = expandedId === r.id ? null : r.id"
-            >
-              <span class="plan-shipment-tab__history-mint">{{ truncateAddress(r.mint, 8, 6) }}</span>
-              <span class="plan-shipment-tab__history-meta">{{ r.recipient_count }} recipients</span>
-              <span class="plan-shipment-tab__history-date">{{ formatDate(r.created_at) }}</span>
-              <Icon :icon="expandedId === r.id ? 'lucide:chevron-down' : 'lucide:chevron-right'" />
-            </button>
-            <div v-if="expandedId === r.id" class="plan-shipment-tab__history-detail">
-              <p class="plan-shipment-tab__history-mint-full"><code>{{ r.mint }}</code></p>
-              <p class="plan-shipment-tab__history-amount">Total: {{ formatTotalAmount(r.total_amount) }}</p>
-              <p class="plan-shipment-tab__history-tx">
-                <a :href="explorerLinks.txUrl(r.tx_signature)" target="_blank" rel="noopener" class="plan-shipment-tab__link">
-                  <Icon icon="lucide:external-link" /> Transaction
-                </a>
-              </p>
-              <p class="plan-shipment-tab__history-by">By {{ truncateAddress(r.created_by, 8, 6) }}</p>
-              <p class="plan-shipment-tab__history-at">{{ formatDateTime(r.created_at) }}</p>
-            </div>
-          </li>
-        </ul>
+            <span class="plan-shipment-tab__history-mint">{{ truncateAddress(r.mint, 8, 6) }}</span>
+            <span class="plan-shipment-tab__history-meta">{{ r.recipient_count }} recipients</span>
+            <span class="plan-shipment-tab__history-date">{{ formatDate(r.created_at) }}</span>
+            <Icon :icon="expandedId === r.id ? 'lucide:chevron-down' : 'lucide:chevron-right'" />
+          </button>
+          <div v-if="expandedId === r.id" class="plan-shipment-tab__history-detail">
+            <p class="plan-shipment-tab__history-mint-full"><code>{{ r.mint }}</code></p>
+            <p class="plan-shipment-tab__history-amount">Total: {{ formatTotalAmount(r.total_amount) }}</p>
+            <p class="plan-shipment-tab__history-tx">
+              <a :href="explorerLinks.txUrl(r.tx_signature)" target="_blank" rel="noopener" class="plan-shipment-tab__link">
+                <Icon icon="lucide:external-link" /> Transaction
+              </a>
+            </p>
+            <p class="plan-shipment-tab__history-by">By {{ truncateAddress(r.created_by, 8, 6) }}</p>
+            <p class="plan-shipment-tab__history-at">{{ formatDateTime(r.created_at) }}</p>
+          </div>
+        </li>
+      </ul>
     </div>
+
+    <ConfirmTransactionModal
+      v-model="registerConfirmOpen"
+      title="Register token account"
+      fee="~0.002 SOL"
+      :loading="registering"
+      @confirm="onRegisterConfirm"
+    >
+      <p>This will create the token pool for compression and your ship wallet's token account for this mint.</p>
+    </ConfirmTransactionModal>
+
+    <ConfirmTransactionModal
+      v-model="shipConfirmOpen"
+      title="Ship"
+      :fee="shipFeeEstimate"
+      :loading="shipping"
+      @confirm="onShipConfirm"
+    >
+      <p v-if="loadedJson">
+        This will compress and send tokens to {{ loadedJson.recipients.length }} recipient{{ loadedJson.recipients.length === 1 ? '' : 's' }}.
+        Total: {{ totalAmount.toLocaleString(undefined, { maximumFractionDigits: 6 }) }} tokens.
+      </p>
+    </ConfirmTransactionModal>
 
     <SimpleModal
       v-if="generateModalOpen"
@@ -237,6 +259,7 @@ import { Button } from '~/components/ui/button'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import AddressBookModal from '~/components/shared/AddressBookModal.vue'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
+import ConfirmTransactionModal from '~/components/ui/confirm-transaction-modal/ConfirmTransactionModal.vue'
 import ConditionSetCatalog from '~/components/gates/ConditionSetCatalog.vue'
 import { truncateAddress } from '@decentraguild/display'
 import { useShipWallet } from '~/composables/shipment/useShipWallet'
@@ -342,6 +365,16 @@ const {
   ship,
 } = form
 
+const registerConfirmOpen = ref(false)
+const shipConfirmOpen = ref(false)
+
+const SHIP_FEE_PER_RECIPIENT = 0.0002
+const shipFeeEstimate = computed(() => {
+  const n = loadedJson.value?.recipients.length ?? 0
+  if (n === 0) return ''
+  const total = (SHIP_FEE_PER_RECIPIENT * n).toFixed(4)
+  return `~${total} SOL (${n} recipient${n === 1 ? '' : 's'})`
+})
 const generateModalOpen = ref(false)
 const addressBookModalOpen = ref(false)
 const generateRuleId = ref<number | null>(null)
@@ -468,8 +501,14 @@ async function doImport() {
   importKey.value = ''
 }
 
-async function onShip() {
+async function onRegisterConfirm() {
+  await registerMint()
+  if (!shipError.value) registerConfirmOpen.value = false
+}
+
+async function onShipConfirm() {
   await ship(fetchHistory)
+  if (!shipError.value) shipConfirmOpen.value = false
 }
 
 function formatDate(iso: string): string {
@@ -650,6 +689,9 @@ onMounted(() => void fetchHistory())
   margin: var(--theme-space-xs) 0;
 }
 .plan-shipment-tab__ship-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-space-sm);
   margin-top: var(--theme-space-md);
 }
 .plan-shipment-tab__info {

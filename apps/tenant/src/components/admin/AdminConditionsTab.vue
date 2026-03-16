@@ -122,10 +122,11 @@ async function fetchDiscordServer() {
   const id = tenantId.value
   if (!id) return
   const supabase = useSupabase()
-  const { data } = await supabase.functions.invoke('discord-server', {
-    body: { action: 'get', tenantId: id },
-  })
-  const srv = (data as { server?: Record<string, unknown> | null })?.server
+  const { data: srv } = await supabase
+    .from('discord_servers')
+    .select('discord_guild_id, bot_role_position')
+    .eq('tenant_id', id)
+    .maybeSingle()
   if (srv?.discord_guild_id) {
     discordGuildId.value = srv.discord_guild_id as string
     const botPos = srv.bot_role_position as number | null | undefined

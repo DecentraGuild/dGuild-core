@@ -19,7 +19,8 @@
  *   whitelist-bind   – Bind whitelist to tenant (one list = one tenant).
  *   whitelist-unbind – Remove whitelist from tenant.
  *   raffle-fetch-unbound – Fetch raffles by tenant creator not yet bound.
- *   raffle-bind      – Bind raffle to tenant (one raffle = one tenant).
+ *   raffle-bind      – Bind raffle to tenant (one raffle = one tenant). Platform admin.
+ *   raffle-bind-tenant – Bind raffle to tenant. Tenant admin (for in-app create flow).
  *   raffle-unbind    – Remove raffle from tenant.
  *   crafter-import-token – Ops: add mint to crafter_tokens when confirm failed but tx succeeded.
  *   crafter-remove-token – Ops: remove mint from crafter_tokens (e.g. after user closed their ATA).
@@ -48,6 +49,25 @@ function toUint8Array(data: unknown): Uint8Array {
     return new Uint8Array(v.buffer, v.byteOffset, v.byteLength)
   }
   return new Uint8Array(0)
+}
+
+async function requireTenantAdmin(
+  authHeader: string | null,
+  tenantId: string,
+  req: Request,
+): Promise<{ ok: true; wallet: string } | { ok: false; response: Response }> {
+  const { getWalletFromAuthHeader } = await import('../_shared/auth.ts')
+  const wallet = await getWalletFromAuthHeader(authHeader)
+  if (!wallet) {
+    return { ok: false, response: errorResponse('Not signed in. Connect your wallet and sign in first.', req, 401) }
+  }
+  const db = getAdminClient()
+  const { data: tenant } = await db.from('tenant_config').select('admins').eq('id', tenantId).maybeSingle()
+  const admins = (tenant?.admins as string[]) ?? []
+  if (!admins.includes(wallet)) {
+    return { ok: false, response: errorResponse('Tenant admin only.', req, 403) }
+  }
+  return { ok: true, wallet }
 }
 
 /** Same auth path as tenant admin: RPC uses auth_wallet() from JWT. */
@@ -119,30 +139,81 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
     if (!tenant) return errorResponse('Tenant not found', req, 404)
 
-    const { data: subs } = await db
-      .from('billing_subscriptions')
-      .select('*')
-      .eq('tenant_id', (tenant as Record<string, unknown>).id)
+    const { data: limitsRows } = await db
+      .from('tenant_meter_limits')
+      .select('meter_key, quantity_total, expires_at_max')
+      .eq('tenant_id', tenantId)
+    const { data: metersRows } = await db.from('meters').select('meter_key, product_key')
+    const productByMeter = Object.fromEntries(
+      (metersRows ?? []).map((m) => [(m as { meter_key: string }).meter_key, (m as { product_key: string }).product_key]),
+    )
+    const subsByModule: Record<string, { periodEnd: string; quantity: number }> = {}
+    for (const r of limitsRows ?? []) {
+      const row = r as { meter_key: string; quantity_total: number; expires_at_max: string | null }
+      const product = productByMeter[row.meter_key] ?? row.meter_key
+      const existing = subsByModule[product]
+      const periodEnd = row.expires_at_max ?? ''
+      if (!existing || (periodEnd && (!existing.periodEnd || periodEnd > existing.periodEnd))) {
+        subsByModule[product] = { periodEnd, quantity: Number(row.quantity_total) }
+      }
+    }
+    const meterLimits = (limitsRows ?? []).map((r) => ({
+      meter_key: (r as { meter_key: string }).meter_key,
+      quantity_total: Number((r as { quantity_total: number }).quantity_total),
+      expires_at_max: (r as { expires_at_max: string | null }).expires_at_max,
+    }))
+    const subs = Object.entries(subsByModule).map(([module_id, v]) => ({
+      module_id,
+      billing_period: v.periodEnd ? 'Active' : '—',
+      period_start: null,
+      period_end: v.periodEnd || null,
+      recurring_amount_usdc: 0,
+    }))
 
     const { data: paymentsRaw } = await db
       .from('billing_payments')
-      .select('id, tenant_id, module_id, amount_usdc, billing_period, period_start, period_end, status, confirmed_at, tx_signature')
+      .select('id, tenant_id, amount_usdc, status, confirmed_at, tx_signature, quote_id')
       .eq('tenant_id', tenantId)
       .order('confirmed_at', { ascending: false })
       .limit(50)
 
-    const payments = (paymentsRaw ?? []).map((p) => ({
-      id: p.id,
-      tenantSlug: (tenant as Record<string, unknown>).slug ?? tenantId,
-      moduleId: p.module_id,
-      amountUsdc: Number(p.amount_usdc),
-      billingPeriod: p.billing_period,
-      periodStart: p.period_start,
-      periodEnd: p.period_end,
-      status: p.status,
-      confirmedAt: p.confirmed_at,
-      txSignature: p.tx_signature,
-    }))
+    const payments: Array<{
+      id: string
+      tenantSlug: string
+      moduleId: string
+      amountUsdc: number
+      status: string
+      confirmedAt: string | null
+      txSignature: string | null
+    }> = []
+    for (const p of paymentsRaw ?? []) {
+      let moduleId = '—'
+      if (p.quote_id) {
+        const { data: quote } = await db
+          .from('billing_quotes')
+          .select('line_items')
+          .eq('id', p.quote_id)
+          .maybeSingle()
+        const items = (quote?.line_items ?? []) as Array<{ meter_key?: string; bundleId?: string; source?: string }>
+        const first = items[0]
+        if (first?.source === 'bundle' && first.bundleId) {
+          const { data: b } = await db.from('bundles').select('product_key').eq('id', first.bundleId).maybeSingle()
+          if (b) moduleId = (b as { product_key: string }).product_key
+        } else if (first?.meter_key) {
+          const { data: m } = await db.from('meters').select('product_key').eq('meter_key', first.meter_key).maybeSingle()
+          if (m) moduleId = (m as { product_key: string }).product_key
+        }
+      }
+      payments.push({
+        id: p.id,
+        tenantSlug: (tenant as Record<string, unknown>).slug ?? tenantId,
+        moduleId,
+        amountUsdc: Number(p.amount_usdc),
+        status: p.status,
+        confirmedAt: p.confirmed_at,
+        txSignature: p.tx_signature,
+      })
+    }
 
     const activeModules = Object.entries((tenant.modules as Record<string, unknown>) ?? {}).filter(
       ([, m]) => (m as Record<string, unknown>)?.state === 'active',
@@ -179,7 +250,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({
       tenant,
       subscriptions: subs ?? [],
-      billing: { subscriptions: subs ?? [], payments },
+      billing: { subscriptions: subs ?? [], payments, meterLimits },
       stats,
       gates: gates ?? [],
       raffles: raffles ?? [],
@@ -363,7 +434,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: paymentsRaw } = await db
       .from('billing_payments')
-      .select('id, tenant_id, module_id, amount_usdc, billing_period, period_start, period_end, status, confirmed_at, tx_signature')
+      .select('id, tenant_id, amount_usdc, status, confirmed_at, tx_signature, quote_id')
       .eq('status', 'confirmed')
       .order('confirmed_at', { ascending: false })
       .limit(50)
@@ -373,31 +444,44 @@ Deno.serve(async (req: Request) => {
       .select('id, slug')
     const slugByTenant = Object.fromEntries((tenants ?? []).map((t) => [t.id, t.slug ?? t.id]))
 
-    const recentPayments = (paymentsRaw ?? []).map((p) => ({
-      id: p.id,
-      tenantSlug: slugByTenant[p.tenant_id] ?? p.tenant_id,
-      moduleId: p.module_id,
-      amountUsdc: Number(p.amount_usdc),
-      billingPeriod: p.billing_period,
-      periodStart: p.period_start,
-      periodEnd: p.period_end,
-      confirmedAt: p.confirmed_at,
-      txSignature: p.tx_signature,
-    }))
-
-    const { data: activeSubs } = await db
-      .from('billing_subscriptions')
-      .select('recurring_amount_usdc, billing_period')
-      .gt('period_end', new Date().toISOString())
-
-    const activeSubCount = activeSubs?.length ?? 0
-    let totalMrrUsdc = 0
-    for (const s of activeSubs ?? []) {
-      const monthly = s.billing_period === 'yearly'
-        ? Number(s.recurring_amount_usdc) / 12
-        : Number(s.recurring_amount_usdc)
-      totalMrrUsdc += monthly
+    const recentPayments: Array<{
+      id: string
+      tenantSlug: string
+      moduleId: string
+      amountUsdc: number
+      confirmedAt: string | null
+      txSignature: string | null
+    }> = []
+    for (const p of paymentsRaw ?? []) {
+      let moduleId = '—'
+      if (p.quote_id) {
+        const { data: quote } = await db
+          .from('billing_quotes')
+          .select('line_items')
+          .eq('id', p.quote_id)
+          .maybeSingle()
+        const items = (quote?.line_items ?? []) as Array<{ meter_key?: string; bundleId?: string; source?: string }>
+        const first = items[0]
+        if (first?.source === 'bundle' && first.bundleId) {
+          const { data: b } = await db.from('bundles').select('product_key').eq('id', first.bundleId).maybeSingle()
+          if (b) moduleId = (b as { product_key: string }).product_key
+        } else if (first?.meter_key) {
+          const { data: m } = await db.from('meters').select('product_key').eq('meter_key', first.meter_key).maybeSingle()
+          if (m) moduleId = (m as { product_key: string }).product_key
+        }
+      }
+      recentPayments.push({
+        id: p.id,
+        tenantSlug: slugByTenant[p.tenant_id] ?? p.tenant_id,
+        moduleId,
+        amountUsdc: Number(p.amount_usdc),
+        confirmedAt: p.confirmed_at,
+        txSignature: p.tx_signature,
+      })
     }
+
+    const activeSubCount = 0
+    const totalMrrUsdc = 0
 
     return jsonResponse({
       activeSubscriptions: activeSubCount,
@@ -410,149 +494,21 @@ Deno.serve(async (req: Request) => {
   // billing-extend – platform override extend
   // ---------------------------------------------------------------------------
   if (action === 'billing-extend') {
-    const check = await requirePlatformAdmin(authHeader, req)
-    if (!check.ok) return check.response
-
-    const tenantId = body.tenantId as string
-    const moduleId = body.moduleId as string
-    const months = (body.months as number) ?? 1
-    if (!tenantId || !moduleId) return errorResponse('tenantId and moduleId required', req)
-
-    const { data: rows } = await db
-      .from('billing_subscriptions')
-      .select('scope_key, period_end')
-      .eq('tenant_id', tenantId)
-      .eq('module_id', moduleId)
-
-    if (!rows?.length) return errorResponse('Subscription not found', req, 404)
-    const earliest = (rows as { period_end: string }[]).reduce(
-      (a, b) => (new Date(a.period_end) < new Date(b.period_end) ? a : b),
-    )
-    const currentEnd = new Date(earliest.period_end)
-    const newEnd = new Date(currentEnd)
-    newEnd.setMonth(newEnd.getMonth() + months)
-
-    await db
-      .from('billing_subscriptions')
-      .update({ period_end: newEnd.toISOString(), updated_at: new Date().toISOString() })
-      .eq('tenant_id', tenantId)
-      .eq('module_id', moduleId)
-
-    await db.from('platform_audit_log').insert({
-      actor_wallet: check.wallet,
-      action: 'subscription_extended',
-      target_type: 'subscription',
-      target_id: `${tenantId}/${moduleId}`,
-      details: { months, newPeriodEnd: newEnd.toISOString() },
-    })
-
-    return jsonResponse({ ok: true, periodEnd: newEnd.toISOString() }, req)
+    return errorResponse('Billing temporarily unavailable', req, 503)
   }
 
   // ---------------------------------------------------------------------------
   // billing-set-period-end – manually set period end
   // ---------------------------------------------------------------------------
   if (action === 'billing-set-period-end') {
-    const check = await requirePlatformAdmin(authHeader, req)
-    if (!check.ok) return check.response
-
-    const tenantId = body.tenantId as string
-    const moduleId = body.moduleId as string
-    const periodEnd = body.periodEnd as string
-    if (!tenantId || !moduleId || !periodEnd) return errorResponse('tenantId, moduleId, periodEnd required', req)
-
-    await db
-      .from('billing_subscriptions')
-      .update({ period_end: periodEnd, updated_at: new Date().toISOString() })
-      .eq('tenant_id', tenantId)
-      .eq('module_id', moduleId)
-
-    await db.from('platform_audit_log').insert({
-      actor_wallet: check.wallet,
-      action: 'subscription_period_end_set',
-      target_type: 'subscription',
-      target_id: `${tenantId}/${moduleId}`,
-      details: { periodEnd },
-    })
-
-    return jsonResponse({ ok: true }, req)
+    return errorResponse('Billing temporarily unavailable', req, 503)
   }
 
   // ---------------------------------------------------------------------------
   // billing-set-watchtower-tracks – ops override: set paid track counts for Watchtower
   // ---------------------------------------------------------------------------
   if (action === 'billing-set-watchtower-tracks') {
-    const check = await requirePlatformAdmin(authHeader, req)
-    if (!check.ok) return check.response
-
-    const tenantId = body.tenantId as string
-    const mints_current = typeof body.mints_current === 'number' ? Math.max(0, Math.floor(body.mints_current)) : undefined
-    const mintsSnapshot = typeof body.mintsSnapshot === 'number' ? Math.max(0, Math.floor(body.mintsSnapshot)) : undefined
-    const mintsTransactions = typeof body.mintsTransactions === 'number' ? Math.max(0, Math.floor(body.mintsTransactions)) : undefined
-    if (!tenantId) return errorResponse('tenantId required', req)
-    if (mints_current === undefined && mintsSnapshot === undefined && mintsTransactions === undefined) {
-      return errorResponse('At least one track count (mints_current, mintsSnapshot, mintsTransactions) required', req)
-    }
-
-    const SCOPE_KEYS = ['mints_current', 'mintsSnapshot', 'mintsTransactions'] as const
-    const updates: Array<{ scopeKey: string; count: number }> = []
-    if (mints_current !== undefined) updates.push({ scopeKey: 'mints_current', count: mints_current })
-    if (mintsSnapshot !== undefined) updates.push({ scopeKey: 'mintsSnapshot', count: mintsSnapshot })
-    if (mintsTransactions !== undefined) updates.push({ scopeKey: 'mintsTransactions', count: mintsTransactions })
-
-    for (const { scopeKey, count } of updates) {
-      const { data: existing } = await db
-        .from('billing_subscriptions')
-        .select('id')
-        .eq('tenant_id', tenantId)
-        .eq('module_id', 'watchtower')
-        .eq('scope_key', scopeKey)
-        .maybeSingle()
-
-      if (existing) {
-        await db
-          .from('billing_subscriptions')
-          .update({
-            conditions_snapshot: { [scopeKey]: count },
-            updated_at: new Date().toISOString(),
-          })
-          .eq('tenant_id', tenantId)
-          .eq('module_id', 'watchtower')
-          .eq('scope_key', scopeKey)
-      } else {
-        const { data: anyRow } = await db
-          .from('billing_subscriptions')
-          .select('period_start, period_end, billing_period')
-          .eq('tenant_id', tenantId)
-          .eq('module_id', 'watchtower')
-          .limit(1)
-          .maybeSingle()
-        const periodEnd = anyRow?.period_end ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-        const periodStart = anyRow?.period_start ?? new Date().toISOString()
-        const billingPeriod = (anyRow?.billing_period as string) ?? 'monthly'
-        await db.from('billing_subscriptions').insert({
-          tenant_id: tenantId,
-          module_id: 'watchtower',
-          scope_key: scopeKey,
-          billing_period: billingPeriod,
-          recurring_amount_usdc: 0,
-          period_start: periodStart,
-          period_end: periodEnd,
-          conditions_snapshot: { [scopeKey]: count },
-          price_snapshot: {},
-        })
-      }
-    }
-
-    await db.from('platform_audit_log').insert({
-      actor_wallet: check.wallet,
-      action: 'watchtower_tracks_set',
-      target_type: 'subscription',
-      target_id: `${tenantId}/watchtower`,
-      details: { mints_current, mintsSnapshot, mintsTransactions },
-    })
-
-    return jsonResponse({ ok: true }, req)
+    return errorResponse('Billing temporarily unavailable', req, 503)
   }
 
   // ---------------------------------------------------------------------------
@@ -796,6 +752,39 @@ Deno.serve(async (req: Request) => {
       target_id: rafflePubkey,
       details: { tenant_id: tenantId },
     })
+
+    return jsonResponse({ ok: true }, req)
+  }
+
+  // ---------------------------------------------------------------------------
+  // raffle-bind-tenant – bind raffle to tenant (tenant admin, for in-app create)
+  // ---------------------------------------------------------------------------
+  if (action === 'raffle-bind-tenant') {
+    const tenantId = body.tenantId as string
+    const rafflePubkey = (body.rafflePubkey as string)?.trim()
+    if (!tenantId || !rafflePubkey) return errorResponse('tenantId and rafflePubkey required', req)
+
+    const check = await requireTenantAdmin(authHeader, tenantId, req)
+    if (!check.ok) return check.response
+
+    const { data: existing } = await db
+      .from('tenant_raffles')
+      .select('tenant_id')
+      .eq('raffle_pubkey', rafflePubkey)
+      .maybeSingle()
+    if (existing) {
+      return errorResponse(
+        `Raffle already assigned to another tenant (${(existing as Record<string, unknown>).tenant_id})`,
+        req,
+        409,
+      )
+    }
+
+    const { error } = await db.from('tenant_raffles').insert({
+      tenant_id: tenantId,
+      raffle_pubkey: rafflePubkey,
+    })
+    if (error) return errorResponse(error.message, req, 500)
 
     return jsonResponse({ ok: true }, req)
   }

@@ -25,8 +25,6 @@ export type { GatingScope, GatingScopeId } from './load-module-catalog.js'
 export type {
   PricingModel,
   TieredAddonsPricing,
-  OneTimePerUnitPricing,
-  FlatRecurringPricing,
+  TieredWithOneTimePerUnitPricing,
   TierDefinition,
-  AddonDefinition,
 } from '@decentraguild/billing'

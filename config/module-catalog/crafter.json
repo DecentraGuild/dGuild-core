@@ -28,10 +28,5 @@
     "note": "Module is active immediately; billing is per token when you create one."
   },
   "goActiveImmediately": true,
-  "pricing": {
-    "modelType": "one_time_per_unit",
-    "conditionKey": "tokensCount",
-    "name": "Per token",
-    "pricePerUnit": 0.0005
-  }
+  "pricing": null
 }

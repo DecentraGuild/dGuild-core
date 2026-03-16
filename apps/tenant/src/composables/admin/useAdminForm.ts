@@ -98,6 +98,19 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
     { deep: true },
   )
 
+  function syncModulesFromTenant(t: TenantConfig) {
+    const mods = t.modules ?? {}
+    suppressDirty++
+    try {
+      for (const id of moduleIds.value) {
+        const mod = mods[id]
+        form.modulesById[id] = (mod?.state ?? 'off') as ModuleState
+      }
+    } finally {
+      suppressDirty--
+    }
+  }
+
   watch(
     tenant,
     (t) => {
@@ -108,6 +121,8 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
       const tenantChanged = Boolean(lastTenantId.value && t.id && t.id !== lastTenantId.value)
       if (tenantChanged || !dirty.value) {
         setFormFromTenant(t)
+      } else {
+        syncModulesFromTenant(t)
       }
     },
     { immediate: true },

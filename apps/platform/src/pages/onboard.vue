@@ -39,23 +39,23 @@
 
 <script setup lang="ts">
 definePageMeta({ title: 'Create org' })
-import { Connection, PublicKey } from '@solana/web3.js'
 import { useAuth } from '@decentraguild/auth'
-import {
-  buildBillingTransfer,
-  sendAndConfirmTransaction,
-  getEscrowWalletFromConnector,
-  getConnectorState,
-  isBackpackConnector,
-} from '@decentraguild/web3'
 import { PageSection, Card, TextInput, Button, ConnectWalletModal } from '@decentraguild/ui/components'
 import type { WalletConnectorId } from '@solana/connector/headless'
-import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
+import { PublicKey } from '@solana/web3.js'
+import {
+  createConnection,
+  getEscrowWalletFromConnector,
+  buildBillingTransfer,
+  sendAndConfirmTransaction,
+} from '@decentraguild/web3'
+import { useSupabase } from '~/composables/useSupabase'
+import { useRpc } from '~/composables/useRpc'
 
 const auth = useAuth()
+const supabase = useSupabase()
 const { rpcUrl, hasRpc } = useRpc()
 const showConnectModal = ref(false)
-const txNotifications = useTransactionNotificationsStore()
 
 onMounted(() => {
   auth.fetchMe()
@@ -69,12 +69,8 @@ const form = reactive({
   discordInviteLink: '',
 })
 
-const config = useRuntimeConfig()
 const saving = ref(false)
 const error = ref<string | null>(null)
-
-/** Path to fallback logo (served from platform app public). */
-const DEFAULT_LOGO_PATH = '/dguild-logoGreyscale.webp'
 
 async function handleConnectAndSignIn(connectorId: WalletConnectorId) {
   const ok = await auth.connectAndSignIn(connectorId)
@@ -96,108 +92,83 @@ async function submit() {
     return
   }
 
+  const wallet = getEscrowWalletFromConnector()
+  if (!wallet?.publicKey) {
+    error.value = 'Connect your wallet'
+    return
+  }
+
   saving.value = true
   error.value = null
-  let notificationId: string | null = null
   try {
-    const wallet = getEscrowWalletFromConnector()
-    if (!wallet?.publicKey) {
-      showConnectModal.value = true
-      throw new Error('Wallet disconnected. Reconnect to sign the transaction.')
-    }
+    const tenantId = crypto.randomUUID().replace(/-/g, '').slice(0, 7)
 
-    const { useSupabase } = await import('~/composables/useSupabase')
-    const supabase = useSupabase()
-    const { data: intentData, error: intentError } = await supabase.functions.invoke('billing', {
+    const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
       body: {
-        action: 'register-intent',
-        payerWallet: wallet.publicKey.toBase58(),
+        action: 'quote',
+        tenantId,
+        productKey: 'admin',
+        meterOverrides: { registration: 1 },
+        durationDays: 0,
       },
     })
-    if (intentError) {
-      const msg = intentError.message ?? 'Failed to create payment intent'
-      const hint = msg.includes('non-2xx')
-        ? ' Ensure Supabase is running (pnpm supabase start) and edge functions are served (pnpm supabase functions serve).'
-        : ''
-      throw new Error(msg + hint)
-    }
-    const intent = intentData as {
-      paymentId: string
-      amountUsdc: number
-      memo: string
-      recipientAta: string
-    }
-    if (!intent.paymentId || !intent.amountUsdc || !intent.memo || !intent.recipientAta) {
-      throw new Error('Invalid payment intent response')
-    }
+    if (quoteErr) throw new Error(quoteErr.message ?? 'Quote failed')
+    const quote = quoteData as { quoteId?: string; priceUsdc?: number }
+    if (!quote?.quoteId) throw new Error('No quote returned')
 
-    const connection = new Connection(rpcUrl.value)
-    notificationId = `create-org-${intent.paymentId}`
-    txNotifications.add(notificationId, {
-      status: 'pending',
-      message: 'Creating organisation. Confirm the transaction in your wallet.',
-      signature: null,
+    if ((quote.priceUsdc ?? 0) <= 0) throw new Error('Registration pricing not configured')
+
+    const payerWallet = wallet.publicKey.toBase58()
+    const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
+      body: {
+        action: 'charge',
+        quoteId: quote.quoteId,
+        payerWallet,
+        paymentMethod: 'usdc',
+      },
     })
-    const connectorId = getConnectorState().connectorId
+    if (chargeErr) throw new Error(chargeErr.message ?? 'Charge failed')
+    const charge = chargeData as { paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }
+    if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
+
+    const connection = createConnection(rpcUrl.value)
     const tx = buildBillingTransfer({
       payer: wallet.publicKey,
-      amountUsdc: intent.amountUsdc,
-      recipientAta: new PublicKey(intent.recipientAta),
-      memo: intent.memo,
+      amountUsdc: charge.amountUsdc ?? 0,
+      recipientAta: new PublicKey(charge.recipientAta),
+      memo: charge.memo,
       connection,
-      instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
     })
-    const txSignature = await sendAndConfirmTransaction(
-      connection,
-      tx,
-      wallet,
-      wallet.publicKey,
-    )
+    const txSignature = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
 
-    if (notificationId) {
-      txNotifications.update(notificationId, {
-        status: 'success',
-        message: 'Organisation created. Redirecting to your dGuild.',
-        signature: txSignature,
-      })
-    }
+    const { error: confirmErr } = await supabase.functions.invoke('billing', {
+      body: { action: 'confirm', paymentId: charge.paymentId, txSignature },
+    })
+    if (confirmErr) throw new Error(confirmErr.message ?? 'Confirm failed')
 
-    const { data: confirmData, error: confirmError } = await supabase.functions.invoke('billing', {
+    const { data: session } = await supabase.auth.getSession()
+    const token = session?.session?.access_token
+    const { error: createErr } = await supabase.functions.invoke('billing', {
       body: {
-        action: 'register-confirm',
-        paymentId: intent.paymentId,
-        txSignature,
-        tenantName: form.name.trim(),
-        payerWallet: wallet.publicKey.toBase58(),
+        action: 'register-create',
+        paymentId: charge.paymentId,
+        name: form.name.trim(),
         description: form.description.trim() || null,
-        logo:
-          form.logo?.trim() ||
-          (typeof window !== 'undefined' ? window.location.origin : 'https://dguild.org') + DEFAULT_LOGO_PATH,
+        logo: form.logo.trim() || null,
         discordInviteLink: form.discordInviteLink.trim() || null,
       },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
-    if (confirmError) throw new Error(confirmError.message ?? 'Failed to confirm registration')
-    const result = confirmData as { tenant?: { id: string; slug?: string | null } }
-    const tenant = result.tenant
-    const tenantId = (tenant?.id ?? '').trim()
-    if (!tenantId?.trim()) throw new Error('No tenant id returned')
+    if (createErr) throw new Error(createErr.message ?? 'Create organisation failed')
+
+    const config = useRuntimeConfig()
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    if (isLocal) {
-      window.location.href = `http://localhost:3002/admin?tenant=${encodeURIComponent(tenantId)}&new=1`
-    } else {
-      const tenantAppHost = config.public.tenantAppHost as string
-      window.location.href = `https://${tenantAppHost}/admin?tenant=${encodeURIComponent(tenantId)}&new=1`
-    }
+    const tenantAppUrl = isLocal
+      ? `http://localhost:3002/?tenant=${encodeURIComponent(tenantId)}`
+      : `https://${(config.public.tenantAppHost as string) || 'dapp.dguild.org'}/?tenant=${encodeURIComponent(tenantId)}`
+    await navigateTo(tenantAppUrl, { external: true })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Failed to create org'
-    error.value = msg
-    if (notificationId) {
-      txNotifications.update(notificationId, {
-        status: 'error',
-        message: msg,
-        signature: null,
-      })
-    }
+    error.value = e instanceof Error ? e.message : 'Failed to create organisation'
   } finally {
     saving.value = false
   }

@@ -26,18 +26,13 @@
       "Activate the systems your guild requires"
     ]
   },
-  "pricing": {"modelType": "flat_one_time", "name": "dGuild registration", "amount": 0.0010},
+  "pricing": null,
   "addons": {
     "slug": {
       "id": "slug",
       "name": "Custom slug",
       "shortDescription": "Custom subdomain for your dGuild (e.g. your-slug.dguild.org).",
-      "pricing": {
-        "modelType": "flat_recurring",
-        "name": "Custom slug",
-        "recurringYearly": 0.0019,
-        "yearlyDiscountPercent": 0
-      }
+      "pricing": null
     }
   }
 }

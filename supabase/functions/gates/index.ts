@@ -199,6 +199,7 @@ Deno.serve(async (req: Request) => {
         tenant_id: tenant?.id ?? tenantId,
         address: body.address,
         name: body.name,
+        authority: (body.authority as string) ?? '',
         image_url: body.imageUrl ?? null,
       }).select().single()
       if (error) return errorResponse(error.message, req, 500)

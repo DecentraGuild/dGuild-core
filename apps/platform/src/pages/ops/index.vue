@@ -80,9 +80,8 @@
               <thead>
                 <tr>
                   <th>Tenant</th>
-                  <th>Module</th>
+                  <th>Product</th>
                   <th>Amount</th>
-                  <th>Period</th>
                   <th>Confirmed</th>
                 </tr>
               </thead>
@@ -91,7 +90,6 @@
                   <td>{{ p.tenantSlug }}</td>
                   <td>{{ p.moduleId }}</td>
                   <td>{{ formatUsdc(p.amountUsdc) }} USDC</td>
-                  <td>{{ p.billingPeriod }}</td>
                   <td>
                     <span v-if="p.confirmedAt">{{ formatDateTime(p.confirmedAt) }}</span>
                     <span v-else class="ops-table__muted">n/a</span>
@@ -218,10 +216,8 @@ interface BillingPaymentSummary {
   tenantSlug: string
   moduleId: string
   amountUsdc: number
-  billingPeriod: string
-  periodStart: string
-  periodEnd: string
   confirmedAt: string | null
+  txSignature?: string | null
 }
 
 interface AuditEntry {

@@ -80,6 +80,8 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({ middleware: 'gates-module' })
+
 import { getModuleState, isModuleVisibleToMembers } from '@decentraguild/core'
 import { Icon } from '@iconify/vue'
 import { useAuth } from '@decentraguild/auth'

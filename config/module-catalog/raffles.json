@@ -32,41 +32,5 @@
     ],
     "note": "Module is active immediately; billing is per raffle when you create one on the Base tier."
   },
-  "pricing": {
-    "modelType": "tiered_with_one_time_per_unit",
-    "conditionKeys": ["raffleSlotsUsed"],
-    "tiers": [
-      {
-        "id": "base",
-        "name": "Base",
-        "recurringPrice": 0,
-        "included": { "raffleSlotsUsed": 1 },
-        "oneTimePerUnit": 0.0005
-      },
-      {
-        "id": "grow",
-        "name": "Grow",
-        "recurringPrice": 0.0015,
-        "included": { "raffleSlotsUsed": 3 },
-        "oneTimePerUnit": 0
-      },
-      {
-        "id": "pro",
-        "name": "Pro",
-        "recurringPrice": 0.0025,
-        "included": { "raffleSlotsUsed": 10 },
-        "oneTimePerUnit": 0
-      }
-    ],
-    "addons": [
-      {
-        "conditionKey": "raffleSlotsUsed",
-        "name": "Extra raffle slot",
-        "unitSize": 1,
-        "recurringPricePerUnit": 0.0005
-      }
-    ],
-    "yearlyDiscountPercent": 25,
-    "oneTimeUnitName": "Per raffle"
-  }
+  "pricing": null
 }

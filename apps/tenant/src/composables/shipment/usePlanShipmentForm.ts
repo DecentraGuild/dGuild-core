@@ -81,8 +81,13 @@ export function usePlanShipmentForm(options: UsePlanShipmentFormOptions) {
   const registering = ref(false)
   const registerMessage = ref<string | null>(null)
   const shipError = ref<string | null>(null)
+  const mintRegistered = ref(false)
 
   const mint = computed(() => loadedJson.value?.mint ?? null)
+
+  watch(mint, () => {
+    mintRegistered.value = false
+  })
 
   const totalAmount = computed(() => {
     const j = loadedJson.value
@@ -97,6 +102,7 @@ export function usePlanShipmentForm(options: UsePlanShipmentFormOptions) {
       loadedJson.value &&
       loadedJson.value.recipients.length > 0 &&
       hasWallet.value &&
+      mintRegistered.value &&
       !shipping.value
   )
 
@@ -163,9 +169,13 @@ export function usePlanShipmentForm(options: UsePlanShipmentFormOptions) {
         payer: kp,
         mint: json.mint,
         rpcUrl: rpcUrl.value || undefined,
+        createPayerAta: true,
       })
+      mintRegistered.value = true
       if (result === REGISTER_ALREADY_DONE) {
         registerMessage.value = 'Mint already registered. Proceed to Ship.'
+      } else {
+        registerMessage.value = 'Mint registered. Proceed to Ship.'
       }
     } catch (e) {
       shipError.value = e instanceof Error ? e.message : 'Register failed'

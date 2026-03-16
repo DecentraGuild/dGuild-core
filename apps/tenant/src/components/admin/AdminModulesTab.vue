@@ -10,12 +10,19 @@
             class="admin__module-row"
             :class="{ 'admin__module-row--staging': form.modulesById[id] === 'staging' }"
           >
-            <div class="admin__module-cell admin__module-cell--toggle">
-              <Switch
-                v-if="id !== 'admin'"
-                :model-value="isModuleOn(id)"
-                @update:model-value="$emit('module-toggle', id, $event)"
-              />
+            <div class="admin__module-cell admin__module-cell--action">
+              <template v-if="id === 'admin'">
+                <span class="admin__module-badge admin__module-badge--always">Always on</span>
+              </template>
+              <Button
+                v-else
+                :variant="moduleActionVariant(id)"
+                size="sm"
+                :disabled="isDeactivating(id)"
+                @click="onModuleAction(id)"
+              >
+                {{ moduleActionLabel(id) }}
+              </Button>
             </div>
             <div class="admin__module-cell admin__module-cell--name">
               <span class="admin__module-name">{{ MODULE_NAV[id]?.label ?? id }}</span>
@@ -99,12 +106,13 @@
 
 <script setup lang="ts">
 import type { BillingPeriod } from '@decentraguild/billing'
+import type { ModuleState } from '@decentraguild/core'
 import { Card } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
-import { Switch } from '~/components/ui/switch'
 import { Icon } from '@iconify/vue'
 import { getModuleCatalogEntry } from '@decentraguild/config'
+import { getProductDisplayType } from '@decentraguild/billing'
 import { MODULE_NAV } from '~/config/modules'
 import type { ModuleCatalogEntry } from '@decentraguild/config'
 
@@ -138,13 +146,48 @@ const props = defineProps<{
   extendPeriod: BillingPeriod
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'module-toggle': [id: string, on: boolean]
   'start-extend': [id: string]
   'confirm-extend': [id: string]
   'cancel-extend': []
   'update:extendPeriod': [value: BillingPeriod]
 }>()
+
+function getModuleState(moduleId: string): ModuleState {
+  return (props.form.modulesById[moduleId] ?? 'off') as ModuleState
+}
+
+function moduleActionLabel(moduleId: string): string {
+  const s = getModuleState(moduleId)
+  if (s === 'off') return 'Enable'
+  if (s === 'staging') return 'Staging'
+  if (s === 'active') return 'Active'
+  if (s === 'deactivating') return 'Deactivating'
+  return 'Enable'
+}
+
+function moduleActionVariant(moduleId: string): 'outline' | 'secondary' | 'default' | 'destructive' {
+  const s = getModuleState(moduleId)
+  if (s === 'off') return 'outline'
+  if (s === 'staging') return 'secondary'
+  if (s === 'active') return 'default'
+  if (s === 'deactivating') return 'secondary'
+  return 'outline'
+}
+
+function isDeactivating(moduleId: string): boolean {
+  return getModuleState(moduleId) === 'deactivating'
+}
+
+function onModuleAction(moduleId: string) {
+  const s = getModuleState(moduleId)
+  if (s === 'off') {
+    emit('module-toggle', moduleId, true)
+  } else if (s === 'staging' || s === 'active') {
+    emit('module-toggle', moduleId, false)
+  }
+}
 
 function moduleDeactivationDate(moduleId: string): string | null {
   const entry = props.tenant?.modules?.[moduleId] as { deactivatedate?: string | null } | undefined
@@ -162,18 +205,13 @@ function formatDeactivationDate(iso: string): string {
   }
 }
 
-function isModuleOn(moduleId: string): boolean {
-  const s = props.form.modulesById[moduleId] ?? 'off'
-  return s === 'staging' || s === 'active' || s === 'deactivating'
-}
-
 function isModuleBillable(moduleId: string): boolean {
   return getModuleCatalogEntry(moduleId)?.pricing != null
 }
 
 function isAddUnitOnly(moduleId: string): boolean {
-  const pricing = getModuleCatalogEntry(moduleId)?.pricing as { modelType?: string } | undefined
-  return pricing?.modelType === 'add_unit'
+  const productKey = moduleId === 'slug' ? 'admin' : moduleId
+  return getProductDisplayType(productKey) === 'one_time_per_unit'
 }
 
 function isAlwaysOnModule(moduleId: string): boolean {

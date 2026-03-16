@@ -16,7 +16,7 @@
     "Member page: view and decompress received tokens"
   ],
   "routePath": "/shipment",
-  "order": 6,
+  "order": 5,
   "goActiveImmediately": true,
   "activationInstructions": {
     "intro": "Create shipment lists and ship tokens to your community.",
@@ -28,10 +28,5 @@
     ],
     "note": "Module is active immediately; pricing is per recipient when enabled."
   },
-  "pricing": {
-    "modelType": "one_time_per_unit",
-    "conditionKey": "recipientsCount",
-    "name": "Per recipient",
-    "pricePerUnit": 0
-  }
+  "pricing": null
 }

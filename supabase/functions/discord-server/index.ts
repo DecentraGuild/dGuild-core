@@ -71,6 +71,21 @@ Deno.serve(async (req: Request) => {
     }, { onConflict: 'tenant_id' })
 
     if (error) return errorResponse(error.message, req, 500)
+
+    const { data: tenant } = await db.from('tenant_config').select('modules').eq('id', tenantId).maybeSingle()
+    const prevMods = (tenant?.modules as Record<string, unknown>) ?? {}
+    const prev = (prevMods.discord as Record<string, unknown>) ?? {}
+    const modules = {
+      ...prevMods,
+      discord: {
+        state: 'active',
+        deactivatedate: null,
+        deactivatingUntil: null,
+        settingsjson: prev.settingsjson ?? {},
+      },
+    }
+    await db.from('tenant_config').update({ modules, updated_at: new Date().toISOString() }).eq('id', tenantId)
+
     return jsonResponse({ ok: true }, req)
   }
 
@@ -227,6 +242,27 @@ Deno.serve(async (req: Request) => {
         const tk = (c.payload.trait_key as string) ?? ''
         const tv = (c.payload.trait_value as string) ?? ''
         const base = `Holding ${amountStr} ${label} with a ${tk || '?'} of ${tv || '?'}`
+        return nextLogic ? `${base} ${nextLogic}` : base
+      }
+      if (c.type === 'TIME_WEIGHTED') {
+        const mint = (c.payload.mint ?? c.payload.collection_or_mint ?? '') as string
+        const label = (catalog.get(mint) ?? mint) || '?'
+        const minPct = typeof c.payload.min_percent === 'number' && c.payload.min_percent >= 0
+          ? Math.min(100, Math.floor(c.payload.min_percent))
+          : 0
+        const beginAt = String(c.payload.begin_snapshot_at ?? '').trim()
+        const endAt = String(c.payload.end_snapshot_at ?? '').trim()
+        const formatDate = (s: string) => {
+          if (!s) return '?'
+          try {
+            const d = new Date(s)
+            if (Number.isNaN(d.getTime())) return s.slice(0, 10)
+            return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+          } catch {
+            return s.slice(0, 10)
+          }
+        }
+        const base = `Holding at least ${minPct}% of the total supply of ${label} during the period of ${formatDate(beginAt)} and ${formatDate(endAt)}`
         return nextLogic ? `${base} ${nextLogic}` : base
       }
       const base = `Holding ${amountStr} ${label}`

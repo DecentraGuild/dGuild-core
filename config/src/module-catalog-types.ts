@@ -17,7 +17,7 @@ export interface ModuleCatalogAddon {
   id: string
   name: string
   shortDescription?: string
-  pricing: PricingModel
+  pricing: PricingModel | null
 }
 
 export interface ModuleCatalogEntry {

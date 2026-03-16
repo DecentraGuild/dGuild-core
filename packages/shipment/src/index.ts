@@ -57,6 +57,8 @@ export interface RegisterMintParams {
   rpcUrl?: string
   /** SPL or Token-2022. Defaults to TOKEN_PROGRAM_ID. */
   tokenProgramId?: typeof TOKEN_PROGRAM_ID | typeof TOKEN_2022_PROGRAM_ID
+  /** Create payer's ATA for the mint if it doesn't exist. Default true. */
+  createPayerAta?: boolean
 }
 
 /** Returned when mint is already registered; caller can treat as success and proceed to Ship. */
@@ -130,7 +132,7 @@ function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
 export async function registerMintForCompression(
   params: RegisterMintParams
 ): Promise<string> {
-  const { connection, payer, mint, rpcUrl, tokenProgramId } = params
+  const { connection, payer, mint, rpcUrl, tokenProgramId, createPayerAta = true } = params
   const rpcEndpoint =
     rpcUrl ?? (connection as { rpcEndpoint?: string }).rpcEndpoint
   if (!rpcEndpoint) {
@@ -143,17 +145,41 @@ export async function registerMintForCompression(
   const programId = tokenProgramId ?? TOKEN_PROGRAM_ID
   try {
     await createTokenPool(rpc, payer, mintPk, undefined, programId)
-    return 'registered'
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (
       msg.includes('already in use') ||
       msg.includes('custom program error: 0x0')
     ) {
+      if (createPayerAta) {
+        await getOrCreateAssociatedTokenAccount(
+          rpc,
+          payer,
+          mintPk,
+          payer.publicKey,
+          false,
+          undefined,
+          undefined,
+          programId
+        )
+      }
       return REGISTER_ALREADY_DONE
     }
     throw e
   }
+  if (createPayerAta) {
+    await getOrCreateAssociatedTokenAccount(
+      rpc,
+      payer,
+      mintPk,
+      payer.publicKey,
+      false,
+      undefined,
+      undefined,
+      programId
+    )
+  }
+  return 'registered'
 }
 
 /**
@@ -223,11 +249,12 @@ export async function compressAndSend(
   ]
 
   const toAddresses = recipients.map((r) => new PublicKey(r.address))
-  const amounts = recipients.map((r) => Math.floor(r.amount * multiplier))
+  const amountsRaw = recipients.map((r) => Math.round(r.amount * multiplier))
+  const amountsBN = amountsRaw.map((a) => bn(a))
 
   for (let i = 0; i < toAddresses.length; i += MAX_ADDRESSES_PER_INSTRUCTION) {
     const batch = toAddresses.slice(i, i + MAX_ADDRESSES_PER_INSTRUCTION)
-    const batchAmounts = amounts.slice(i, i + MAX_ADDRESSES_PER_INSTRUCTION)
+    const batchAmounts = amountsBN.slice(i, i + MAX_ADDRESSES_PER_INSTRUCTION)
     const compressIx = await CompressedTokenProgram.compress({
       payer: payer.publicKey,
       owner: payer.publicKey,

@@ -581,9 +581,6 @@ interface BillingPayment {
   tenantSlug: string
   moduleId: string
   amountUsdc: number
-  billingPeriod: string
-  periodStart: string
-  periodEnd: string
   status: string
   confirmedAt: string | null
   txSignature: string | null
@@ -603,6 +600,7 @@ const catalogModules = getModuleCatalogListWithAddons()
 const stats = ref<TenantStats | null>(null)
 const subscriptions = ref<Record<string, SubscriptionSummary | null>>({})
 const billingSubsRaw = ref<Array<Record<string, unknown>>>([])
+const meterLimits = ref<Array<{ meter_key: string; quantity_total: number; expires_at_max: string | null }>>([])
 const payments = ref<BillingPayment[]>([])
 
 const watchtowerTrackInputs = ref<Record<string, number>>({ mints_current: 0, mintsSnapshot: 0, mintsTransactions: 0 })
@@ -620,7 +618,22 @@ const hasWatchtowerModule = computed(() => {
   return m?.state === 'active' || m?.state === 'staging' || m?.state === 'deactivating'
 })
 
+const WATCHTOWER_METER_KEYS = ['mints_current', 'mints_snapshot', 'mints_transactions'] as const
+const WATCHTOWER_SCOPE_LABELS_MAP: Record<string, string> = {
+  mints_current: 'Current holders',
+  mints_snapshot: 'Snapshot',
+  mints_transactions: 'Transactions',
+}
+
 const watchtowerTracks = computed(() => {
+  const limits = meterLimits.value.filter((r) => WATCHTOWER_METER_KEYS.includes(r.meter_key as (typeof WATCHTOWER_METER_KEYS)[number]))
+  if (limits.length) {
+    return limits.map((r) => ({
+      scopeKey: r.meter_key,
+      label: WATCHTOWER_SCOPE_LABELS_MAP[r.meter_key] ?? r.meter_key,
+      count: r.quantity_total,
+    }))
+  }
   const rows = billingSubsRaw.value.filter(
     (r) => r.module_id === 'watchtower' && r.scope_key && ['mints_current', 'mintsSnapshot', 'mintsTransactions'].includes(r.scope_key as string),
   )
@@ -632,11 +645,11 @@ const watchtowerTracks = computed(() => {
       return { scopeKey: key, label: WATCHTOWER_SCOPE_LABELS[key] ?? key, count }
     })
   }
-  return [
-    { scopeKey: 'mints_current', label: 'Current holders', count: 0 },
-    { scopeKey: 'mintsSnapshot', label: 'Snapshot', count: 0 },
-    { scopeKey: 'mintsTransactions', label: 'Transactions', count: 0 },
-  ]
+  return WATCHTOWER_METER_KEYS.map((key) => ({
+    scopeKey: key,
+    label: WATCHTOWER_SCOPE_LABELS_MAP[key] ?? key,
+    count: 0,
+  }))
 })
 
 const loading = ref(true)
@@ -991,7 +1004,7 @@ async function loadTenant() {
     const d = data as {
       tenant: TenantConfig
       subscriptions?: Array<Record<string, unknown>>
-      billing?: { payments: BillingPayment[] }
+      billing?: { payments: BillingPayment[]; meterLimits?: Array<{ meter_key: string; quantity_total: number; expires_at_max: string | null }> }
       stats?: TenantStats
       gates?: Array<{ address: string; name: string }>
       raffles?: Array<{ raffle_pubkey: string; created_at: string; closed_at: string | null }>
@@ -1004,6 +1017,7 @@ async function loadTenant() {
     crafterTokens.value = d.crafterTokens ?? []
     const rawSubs = d.billing?.subscriptions ?? d.subscriptions ?? []
     billingSubsRaw.value = rawSubs
+    meterLimits.value = d.billing?.meterLimits ?? []
     const subs: Record<string, SubscriptionSummary | null> = {}
     for (const sub of rawSubs) {
       subs[sub.module_id as string] = {

@@ -123,12 +123,12 @@
       ref="pricingRef"
       module-id="gates"
       :module-state="moduleState"
-      :conditions="{ listsCount: lists.length }"
-      :subscription="null"
+      :conditions="{ listsCount: lists.length + 1 }"
+      :subscription="subscription"
       :saving="false"
       :deploying="creating || props.deploying"
       :save-error="createError"
-      @deploy="(p: BillingPeriod) => emit('deploy', p)"
+      @deploy="(p: BillingPeriod) => emit('deploy', p, { listsCount: lists.length + 1 })"
     />
   </div>
 
@@ -192,7 +192,7 @@ import type { Ref } from 'vue'
 import { useAdminGating } from '~/composables/admin/useAdminGating'
 import GateSelectRow from '~/components/gates/GateSelectRow.vue'
 import type { BillingPeriod } from '@decentraguild/billing'
-import { PublicKey, Transaction } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import {
   deriveWhitelistPda,
   buildBillingTransfer,
@@ -228,11 +228,13 @@ interface ListEntry {
 const props = defineProps<{
   slug: string
   moduleState: ModuleState
+  subscription: { periodEnd?: string } | null
   deploying: boolean
 }>()
 
 const emit = defineEmits<{
-  deploy: [period: BillingPeriod]
+  deploy: [period: BillingPeriod, conditions?: Record<string, number | boolean>]
+  created: []
 }>()
 
 const tenantStore = useTenantStore()
@@ -349,82 +351,86 @@ watch(selectedList, (list) => {
 })
 
 async function createList() {
-  if (!createListName.value.trim() || !tenantId.value || !connection.value) return
+  const name = createListName.value.trim()
+  if (!name) return
+  const wallet = getEscrowWalletFromConnector()
+  if (!wallet?.publicKey || !connection.value) {
+    createError.value = 'Connect your wallet'
+    return
+  }
+
   createError.value = null
   creating.value = true
+  const supabase = useSupabase()
   try {
-    const wallet = getEscrowWalletFromConnector()
-    if (!wallet?.publicKey) throw new Error('Wallet not connected')
-    const authority = wallet.publicKey
-    const name = createListName.value.trim()
-    const whitelistPda = deriveWhitelistPda(authority, name)
-
-    const supabase = useSupabase()
-    const { data: intentData, error: intentError } = await supabase.functions.invoke('billing', {
+    const currentCount = lists.value.length
+    const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
       body: {
-        action: 'intent',
+        action: 'quote',
         tenantId: tenantId.value,
-        moduleId: 'gates',
-        billingPeriod: 'monthly',
-        payerWallet: wallet.publicKey.toBase58(),
+        productKey: 'gates',
+        meterOverrides: { gate_lists: currentCount + 1 },
+        durationDays: 30,
       },
     })
-    if (intentError) throw new Error(intentError.message ?? 'Failed to create payment intent')
-    const intent = intentData as {
-      noPaymentRequired?: boolean
-      paymentId?: string
-      amountUsdc?: number
-      memo?: string
-      recipientAta?: string
-    }
-    if (intent.noPaymentRequired) throw new Error('Payment required to create list')
-    if (!intent.paymentId || intent.amountUsdc == null || !intent.memo || !intent.recipientAta) {
-      throw new Error('Invalid payment intent response')
+    if (quoteErr) throw new Error(quoteErr.message ?? 'Quote failed')
+    const quote = quoteData as { quoteId?: string; priceUsdc?: number }
+    if (!quote?.quoteId) throw new Error('No quote returned')
+
+    if (quote.priceUsdc != null && quote.priceUsdc > 0) {
+      const payerWallet = wallet.publicKey.toBase58()
+      const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
+        body: {
+          action: 'charge',
+          quoteId: quote.quoteId,
+          payerWallet,
+          paymentMethod: 'usdc',
+        },
+      })
+      if (chargeErr) throw new Error(chargeErr.message ?? 'Charge failed')
+      const charge = chargeData as { paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }
+      if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
+
+      const tx = buildBillingTransfer({
+        payer: wallet.publicKey,
+        amountUsdc: charge.amountUsdc ?? 0,
+        recipientAta: new PublicKey(charge.recipientAta),
+        memo: charge.memo,
+        connection: connection.value,
+      })
+      const txSignature = await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
+
+      const { error: confirmErr } = await supabase.functions.invoke('billing', {
+        body: { action: 'confirm', paymentId: charge.paymentId, txSignature },
+      })
+      if (confirmErr) throw new Error(confirmErr.message ?? 'Confirm failed')
     }
 
-    const billingTx = buildBillingTransfer({
-      payer: wallet.publicKey,
-      amountUsdc: intent.amountUsdc,
-      recipientAta: new PublicKey(intent.recipientAta),
-      memo: intent.memo,
-      connection: connection.value,
-    })
-    const whitelistTx = await buildInitializeWhitelistTransaction({
+    const tx = await buildInitializeWhitelistTransaction({
       name,
-      authority,
+      authority: wallet.publicKey,
       connection: connection.value,
       wallet,
     })
-    const combined = new Transaction()
-    combined.add(...billingTx.instructions, ...whitelistTx.instructions)
+    await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
 
-    const sig = await sendAndConfirmTransaction(
-      connection.value,
-      combined,
-      wallet,
-      wallet.publicKey
-    )
-    if (!sig) throw new Error('Transaction failed')
-
-    const { error: confirmError } = await supabase.functions.invoke('billing', {
-      body: { action: 'confirm', tenantId: tenantId.value, paymentId: intent.paymentId, txSignature: sig },
+    const address = deriveWhitelistPda(wallet.publicKey, name).toBase58()
+    const { error } = await supabase.functions.invoke('gates', {
+      body: {
+        action: 'list-create',
+        tenantId: tenantId.value,
+        address,
+        name,
+        authority: wallet.publicKey.toBase58(),
+        imageUrl: createListImageUrl.value.trim() || null,
+      },
     })
-    if (confirmError) throw new Error(confirmError.message ?? 'Payment confirmation failed')
-
-    const { error: insertError } = await supabase.from('gate_lists').insert({
-      tenant_id: tenantId.value,
-      address: whitelistPda.toBase58(),
-      name,
-      authority: authority.toBase58(),
-      image_url: createListImageUrl.value.trim() || null,
-    })
-    if (insertError) throw new Error(insertError.message ?? 'Failed to register list')
+    if (error) throw new Error(error.message ?? 'Failed to save list')
 
     await fetchLists()
-    selectedListAddress.value = whitelistPda.toBase58()
-    showCreateModal.value = false
-    createListName.value = ''
-    createListImageUrl.value = ''
+    pricingRef.value?.refresh?.()
+    emit('created')
+    closeCreateModalAndReset()
   } catch (e) {
     createError.value = e instanceof Error ? e.message : 'Failed to create list'
   } finally {
