@@ -64,7 +64,7 @@ export function usePlanShipmentForm(options: UsePlanShipmentFormOptions) {
   const {
     connection,
     rpcUrl,
-    tenantId,
+    tenantId: _tenantId,
     shipWalletAddress,
     hasWallet,
     getKeypair,

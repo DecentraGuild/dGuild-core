@@ -17,6 +17,7 @@ export default defineNuxtConfig({
     },
   },
   components: [
+    { path: path.resolve(dirname, '../../packages/ui/src/components'), pathPrefix: false, priority: -1 },
     { path: '~/components/admin', pathPrefix: false },
     { path: '~/components/gates', pathPrefix: false },
     { path: '~/components/mint', pathPrefix: false },

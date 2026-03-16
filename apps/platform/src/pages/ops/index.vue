@@ -78,80 +78,80 @@
             <DialogDescription>Set voucher type, name, symbol, and link to bundle or entitlements.</DialogDescription>
           </DialogHeader>
           <form class="ops__voucher-form space-y-4" @submit.prevent="submitMetadataAndLink">
+            <div class="ops__form-row">
+              <label>Voucher type</label>
+              <select v-model="metadataForm.type">
+                <option value="bundle">Bundle</option>
+                <option value="individual">Individual</option>
+              </select>
+            </div>
+            <template v-if="metadataForm.type === 'bundle'">
               <div class="ops__form-row">
-                <label>Voucher type</label>
-                <select v-model="metadataForm.type">
-                  <option value="bundle">Bundle</option>
-                  <option value="individual">Individual</option>
+                <label>Bundle</label>
+                <select v-model="metadataForm.bundleId" required>
+                  <option value="">Select bundle</option>
+                  <option v-for="b in bundles" :key="b.id" :value="b.id">{{ b.label }} ({{ b.id }})</option>
                 </select>
               </div>
-              <template v-if="metadataForm.type === 'bundle'">
-                <div class="ops__form-row">
-                  <label>Bundle</label>
-                  <select v-model="metadataForm.bundleId" required>
-                    <option value="">Select bundle</option>
-                    <option v-for="b in bundles" :key="b.id" :value="b.id">{{ b.label }} ({{ b.id }})</option>
+            </template>
+            <div class="ops__form-row">
+              <label>Name</label>
+              <input v-model="metadataForm.name" type="text" placeholder="Voucher name" required />
+            </div>
+            <div class="ops__form-row">
+              <label>Symbol</label>
+              <input v-model="metadataForm.symbol" type="text" placeholder="e.g. VOUCH" required />
+            </div>
+            <div class="ops__form-row">
+              <label>Image URL (optional)</label>
+              <input v-model="metadataForm.imageUrl" type="url" placeholder="https://…" />
+            </div>
+            <div class="ops__form-row">
+              <label>Royalty (basis points, optional)</label>
+              <input v-model.number="metadataForm.sellerFeeBasisPoints" type="number" min="0" max="10000" placeholder="0" />
+              <span class="ops__form-hint">0–10000 (100 = 1%)</span>
+            </div>
+            <div class="ops__form-row">
+              <label>Tokens required</label>
+              <input v-model.number="metadataForm.tokensRequired" type="number" min="1" />
+            </div>
+            <div class="ops__form-row">
+              <label>Max redemptions per tenant (optional)</label>
+              <input v-model.number="metadataForm.maxRedemptionsPerTenant" type="number" min="0" placeholder="Unlimited" />
+            </div>
+            <template v-if="metadataForm.type === 'individual'">
+              <div class="ops__form-row">
+                <label>Label (optional)</label>
+                <input v-model="metadataForm.label" type="text" placeholder="Display label" />
+              </div>
+              <div class="ops__form-section">
+                <div class="ops__form-section-header">
+                  <span>Entitlements</span>
+                  <Button type="button" size="sm" variant="outline" @click="addMetadataEntitlement">
+                    Add entitlement
+                  </Button>
+                </div>
+                <div v-for="(e, i) in metadataForm.entitlements" :key="i" class="ops__entitlement-row">
+                  <select v-model="e.meter_key" required>
+                    <option value="">Select meter</option>
+                    <option v-for="m in meters" :key="m.meter_key" :value="m.meter_key">
+                      {{ m.meter_key }} ({{ m.product_key }})
+                    </option>
                   </select>
+                  <input v-model.number="e.quantity" type="number" min="1" placeholder="Qty" required />
+                  <input v-model.number="e.duration_days" type="number" min="0" placeholder="Days" required />
+                  <Button type="button" size="sm" variant="ghost" @click="removeMetadataEntitlement(i)">Remove</Button>
                 </div>
-              </template>
-              <div class="ops__form-row">
-                <label>Name</label>
-                <input v-model="metadataForm.name" type="text" placeholder="Voucher name" required />
               </div>
-              <div class="ops__form-row">
-                <label>Symbol</label>
-                <input v-model="metadataForm.symbol" type="text" placeholder="e.g. VOUCH" required />
-              </div>
-              <div class="ops__form-row">
-                <label>Image URL (optional)</label>
-                <input v-model="metadataForm.imageUrl" type="url" placeholder="https://…" />
-              </div>
-              <div class="ops__form-row">
-                <label>Royalty (basis points, optional)</label>
-                <input v-model.number="metadataForm.sellerFeeBasisPoints" type="number" min="0" max="10000" placeholder="0" />
-                <span class="ops__form-hint">0–10000 (100 = 1%)</span>
-              </div>
-              <div class="ops__form-row">
-                <label>Tokens required</label>
-                <input v-model.number="metadataForm.tokensRequired" type="number" min="1" />
-              </div>
-              <div class="ops__form-row">
-                <label>Max redemptions per tenant (optional)</label>
-                <input v-model.number="metadataForm.maxRedemptionsPerTenant" type="number" min="0" placeholder="Unlimited" />
-              </div>
-              <template v-if="metadataForm.type === 'individual'">
-                <div class="ops__form-row">
-                  <label>Label (optional)</label>
-                  <input v-model="metadataForm.label" type="text" placeholder="Display label" />
-                </div>
-                <div class="ops__form-section">
-                  <div class="ops__form-section-header">
-                    <span>Entitlements</span>
-                    <Button type="button" size="sm" variant="outline" @click="addMetadataEntitlement">
-                      Add entitlement
-                    </Button>
-                  </div>
-                  <div v-for="(e, i) in metadataForm.entitlements" :key="i" class="ops__entitlement-row">
-                    <select v-model="e.meter_key" required>
-                      <option value="">Select meter</option>
-                      <option v-for="m in meters" :key="m.meter_key" :value="m.meter_key">
-                        {{ m.meter_key }} ({{ m.product_key }})
-                      </option>
-                    </select>
-                    <input v-model.number="e.quantity" type="number" min="1" placeholder="Qty" required />
-                    <input v-model.number="e.duration_days" type="number" min="0" placeholder="Days" required />
-                    <Button type="button" size="sm" variant="ghost" @click="removeMetadataEntitlement(i)">Remove</Button>
-                  </div>
-                </div>
-              </template>
-              <div class="flex flex-wrap items-center gap-2">
-                <Button type="button" size="sm" variant="ghost" @click="metadataModalMint = null">Cancel</Button>
-                <Button type="submit" size="sm" :disabled="voucherMetadataLoading">
-                  Add metadata & link
-                </Button>
-                <p v-if="metadataFormError" class="text-destructive text-sm">{{ metadataFormError }}</p>
-              </div>
-            </form>
+            </template>
+            <div class="flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" variant="ghost" @click="metadataModalMint = null">Cancel</Button>
+              <Button type="submit" size="sm" :disabled="voucherMetadataLoading">
+                Add metadata & link
+              </Button>
+              <p v-if="metadataFormError" class="text-destructive text-sm">{{ metadataFormError }}</p>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -165,7 +165,6 @@
         @close="bundleEditId = null"
         @save="saveBundleEdit"
       />
-
     </div>
   </PageSection>
 </template>
@@ -175,7 +174,6 @@ definePageMeta({ title: 'Platform operations' })
 
 import { Keypair, PublicKey } from '@solana/web3.js'
 import { useAuth } from '@decentraguild/auth'
-import { formatDate, formatDateTime, formatUsdc } from '@decentraguild/core'
 import { Button } from '~/components/ui/button'
 import {
   buildCreateMintOnlyTransaction,

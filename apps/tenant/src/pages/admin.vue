@@ -276,7 +276,7 @@ const marketplaceSettings = computed(() => {
 })
 
 const marketplaceModuleState = computed(() => getModuleState(tenant.value?.modules?.marketplace))
-const discordModuleState = computed(() => getModuleState(tenant.value?.modules?.discord))
+const _discordModuleState = computed(() => getModuleState(tenant.value?.modules?.discord))
 const raffleModuleState = computed(() => getModuleState(tenant.value?.modules?.raffles))
 const gatesModuleState = computed(() => getModuleState(tenant.value?.modules?.gates))
 const watchtowerModuleState = computed(() => getModuleState(tenant.value?.modules?.watchtower))
@@ -296,7 +296,7 @@ const tab = computed(() => {
 })
 const hasWidgetTab = computed(() => WIDGET_TABS.has(tab.value) || tab.value === 'plan-shipment')
 
-async function saveWithBilling(moduleId: string, billingPeriod: BillingPeriod) {
+async function _saveWithBilling(moduleId: string, billingPeriod: BillingPeriod) {
   await save()
   await handleBillingPayment(moduleId, billingPeriod)
 }

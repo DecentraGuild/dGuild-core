@@ -123,7 +123,6 @@ import BN from 'bn.js'
 import { fetchWalletTokenBalances, type TokenBalance } from '~/composables/core/useWalletTokenBalances'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useMintMetadata } from '~/composables/mint/useMintMetadata'
-import { resolveGateForTransaction } from '@decentraguild/core'
 import { useMintLabels } from '~/composables/mint/useMintLabels'
 import { useStoreMints } from '~/composables/core/useStoreMints'
 import { useTenantInLinks } from '~/composables/core/useTenantInLinks'
@@ -264,7 +263,7 @@ const requestSelectOptionGroups = computed(() => {
   const settings = tenantStore.marketplaceSettings
   const labels = requestLabelByMint.value
   if (!settings) return []
-  const getLabel = (mint: string, name?: string | null, symbol?: string | null) =>
+  const getLabel = (mint: string, name?: string | null, _symbol?: string | null) =>
     sanitizeTokenLabel(name ?? labels.get(mint) ?? truncateAddress(mint, 8, 4))
   const items: Array<{ mint: string; _kind: TokenKind; name?: string | null; symbol?: string | null }> = []
   for (const c of settings.collectionMints ?? []) {
@@ -444,7 +443,7 @@ async function create() {
       effectiveModuleWhitelist.value,
       settingsWhitelist.value
     )
-    const hasWhitelist = Boolean(resolvedWhitelist?.account?.trim())
+    const _hasWhitelist = Boolean(resolvedWhitelist?.account?.trim())
 
     let recipientAddr: string | null = null
     if (settingsDirect.value && settingsDirectAddress.value.trim()) {

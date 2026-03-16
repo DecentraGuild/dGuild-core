@@ -95,7 +95,7 @@ const auth = useAuth()
 
 const tenant = computed(() => tenantStore.tenant)
 const tenantId = computed(() => tenantStore.tenantId)
-const slug = computed(() => tenantStore.slug ?? '')
+const _slug = computed(() => tenantStore.slug ?? '')
 /** Use whichever is available first: connector (adapter) or session (fetchMe). Speeds up load after login. */
 const wallet = computed(
   () => auth.connectorState.value?.account ?? auth.wallet.value ?? null

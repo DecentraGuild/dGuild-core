@@ -90,7 +90,7 @@ export function useSlugClaim(opts: {
     await claimSlug()
   }
 
-  async function extendSlug(period: BillingPeriod) {
+  async function extendSlug(_period: BillingPeriod) {
     const id = tenantId.value
     if (!id) return
     saving.value = true

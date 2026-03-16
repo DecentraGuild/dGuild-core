@@ -1,4 +1,5 @@
 <template>
+  <!-- eslint-disable-next-line vue/no-v-html -- Trusted content from docs markdown only -->
   <article class="docs-prose" v-html="html" />
 </template>
 

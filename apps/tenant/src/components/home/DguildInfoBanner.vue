@@ -64,7 +64,7 @@ import { Icon } from '@iconify/vue'
 
 const props = withDefaults(
   defineProps<{
-    name: string
+    name?: string
     description?: string
     logo?: string
     homepage?: string

@@ -97,10 +97,6 @@ const platformDocsBase = (config.public.platformDocsUrl as string) ?? 'https://d
 
 const expandedModuleId = ref<string | null>(null)
 
-function toggleModule(id: string) {
-  expandedModuleId.value = expandedModuleId.value === id ? null : id
-}
-
 function docsUrl(entry: ModuleCatalogEntry) {
   return `${platformDocsBase.replace(/\/$/, '')}/modules/${entry.id}`
 }
