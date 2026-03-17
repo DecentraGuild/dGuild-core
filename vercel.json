@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm -w run build:tenant",
-  "outputDirectory": "apps/tenant/.output/public",
-  "installCommand": "corepack enable && pnpm install"
+  "buildCommand": "cd ../.. && corepack enable && pnpm install && pnpm -w run build:tenant",
+  "outputDirectory": ".output/public",
+  "installCommand": "echo 'Install in build step'",
+  "framework": null
 }
