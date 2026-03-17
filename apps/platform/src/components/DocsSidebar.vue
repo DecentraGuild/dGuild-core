@@ -1,94 +1,97 @@
 <template>
   <nav class="docs-sidebar__nav">
-    <NuxtLink to="/docs" class="docs-sidebar__link" :class="{ 'docs-sidebar__link--active': isActive('/docs') }" :prefetch="false">
-      Overview
-    </NuxtLink>
-    <div class="docs-sidebar__section">
-      <span class="docs-sidebar__section-title">General</span>
-      <NuxtLink
-        v-for="item in generalItems"
-        :key="item.path"
-        :to="item.path"
-        class="docs-sidebar__link"
-        :class="{ 'docs-sidebar__link--active': isActive(item.path) }"
-        :prefetch="false"
+    <div v-for="(section, sIdx) in sections" :key="sIdx" class="docs-sidebar__section">
+      <button
+        type="button"
+        class="docs-sidebar__section-trigger"
+        :aria-expanded="isSectionOpen(sIdx)"
+        :aria-controls="`docs-section-${sIdx}`"
+        @click="toggleSection(sIdx)"
       >
-        {{ item.label }}
-      </NuxtLink>
-    </div>
-    <div class="docs-sidebar__section">
-      <span class="docs-sidebar__section-title">Admin</span>
-      <NuxtLink
-        v-for="item in adminItems"
-        :key="item.path"
-        :to="item.path"
-        class="docs-sidebar__link"
-        :class="{ 'docs-sidebar__link--active': isActive(item.path) }"
-        :prefetch="false"
+        <span class="docs-sidebar__section-title">{{ section.title }}</span>
+        <Icon
+          :icon="isSectionOpen(sIdx) ? 'lucide:chevron-down' : 'lucide:chevron-right'"
+          class="docs-sidebar__section-chevron"
+          aria-hidden
+        />
+      </button>
+      <div
+        :id="`docs-section-${sIdx}`"
+        class="docs-sidebar__section-content"
+        :hidden="!isSectionOpen(sIdx)"
       >
-        {{ item.label }}
-      </NuxtLink>
-    </div>
-    <div class="docs-sidebar__section">
-      <span class="docs-sidebar__section-title">Market</span>
-      <NuxtLink
-        v-for="item in marketItems"
-        :key="item.path"
-        :to="item.path"
-        class="docs-sidebar__link"
-        :class="{ 'docs-sidebar__link--active': isActive(item.path) }"
-        :prefetch="false"
-      >
-        {{ item.label }}
-      </NuxtLink>
-    </div>
-    <div class="docs-sidebar__section">
-      <span class="docs-sidebar__section-title">Discord</span>
-      <NuxtLink
-        v-for="item in discordItems"
-        :key="item.path"
-        :to="item.path"
-        class="docs-sidebar__link"
-        :class="{ 'docs-sidebar__link--active': isActive(item.path) }"
-        :prefetch="false"
-      >
-        {{ item.label }}
-      </NuxtLink>
+        <NuxtLink
+          v-for="item in section.items"
+          :key="item.path"
+          :to="item.path"
+          class="docs-sidebar__link"
+          :class="{ 'docs-sidebar__link--active': isActive(item.path) }"
+          :prefetch="false"
+        >
+          {{ item.label }}
+        </NuxtLink>
+      </div>
     </div>
   </nav>
 </template>
 
 <script setup lang="ts">
+import { Icon } from '@iconify/vue'
+import { getDocsSidebarSections } from '~/composables/useDocFromCatalog'
+
 const route = useRoute()
+const sections = getDocsSidebarSections()
 
-const generalItems = [
-  { path: '/docs/general/getting-started', label: 'Getting started' },
-  { path: '/docs/general/creating-a-dguild', label: 'Creating a dGuild' },
-  { path: '/docs/general/directory', label: 'Directory' },
-  { path: '/docs/general/billing-overview', label: 'Billing' },
-]
-
-const adminItems = [
-  { path: '/docs/modules/admin', label: 'General' },
-  { path: '/docs/modules/admin/domains-and-slugs', label: 'Domains and slugs' },
-]
-
-const marketItems = [
-  { path: '/docs/modules/marketplace', label: 'General' },
-  { path: '/docs/modules/marketplace/how-it-works', label: 'How it works' },
-  { path: '/docs/modules/marketplace/collections-currencies', label: 'Collections and currencies' },
-  { path: '/docs/modules/marketplace/fees-tiers', label: 'Fees and tiers' },
-]
-
-const discordItems = [
-  { path: '/docs/modules/discord', label: 'General' },
-  { path: '/docs/modules/discord/verify-flow', label: 'Verify flow' },
-  { path: '/docs/modules/discord/setup', label: 'Setup and role rules' },
-]
+const openSections = ref<Set<number>>(new Set())
 
 function isActive(path: string): boolean {
   if (path === '/docs') return route.path === '/docs'
   return route.path === path || route.path.startsWith(path + '/')
+}
+
+function sectionContainsActive(sIdx: number): boolean {
+  const section = sections[sIdx]
+  if (!section) return false
+  return section.items.some((item) => isActive(item.path))
+}
+
+const effectiveOpenSections = computed(() => {
+  if (openSections.value.size > 0) return openSections.value
+  const set = new Set<number>()
+  sections.forEach((_, sIdx) => {
+    if (sectionContainsActive(sIdx)) set.add(sIdx)
+  })
+  if (set.size === 0) set.add(0)
+  return set
+})
+
+watch(
+  () => route.path,
+  () => {
+    const next = new Set<number>()
+    sections.forEach((_, sIdx) => {
+      if (sectionContainsActive(sIdx)) next.add(sIdx)
+    })
+    if (next.size === 0) next.add(0)
+    openSections.value = next
+  },
+)
+
+function isSectionOpen(sIdx: number): boolean {
+  return effectiveOpenSections.value.has(sIdx)
+}
+
+function toggleSection(sIdx: number) {
+  const next = new Set(openSections.value)
+  if (next.has(sIdx)) next.delete(sIdx)
+  else next.add(sIdx)
+  if (next.size === 0) {
+    sections.forEach((_, i) => {
+      if (sectionContainsActive(i)) next.add(i)
+    })
+    if (next.size === 0) next.add(0)
+  }
+  openSections.value = next
 }
 </script>
 
@@ -102,17 +105,53 @@ function isActive(path: string): boolean {
 .docs-sidebar__section {
   display: flex;
   flex-direction: column;
-  gap: var(--theme-space-xs);
+  gap: 0;
   margin-top: var(--theme-space-md);
 }
 
-.docs-sidebar__section-title {
+.docs-sidebar__section-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--theme-space-xs) var(--theme-space-sm);
   font-size: var(--theme-font-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--theme-text-muted);
-  margin-bottom: var(--theme-space-xs);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.docs-sidebar__section-trigger:hover {
+  color: var(--theme-text-primary);
+  background-color: var(--theme-bg-card);
+}
+
+.docs-sidebar__section-title {
+  flex: 1;
+}
+
+.docs-sidebar__section-chevron {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.docs-sidebar__section-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-xs);
+  padding-left: var(--theme-space-sm);
+  margin-top: var(--theme-space-xs);
+}
+
+.docs-sidebar__section-content[hidden] {
+  display: none;
 }
 
 .docs-sidebar__link {

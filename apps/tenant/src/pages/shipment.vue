@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Shipments">
+  <PageSection title="Shipments" module-id="shipment">
     <div class="shipment-page">
       <div v-if="!shipmentVisible" class="shipment-page__inactive">
         <p>Shipments is not enabled for this dGuild.</p>

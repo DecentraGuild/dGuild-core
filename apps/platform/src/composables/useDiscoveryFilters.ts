@@ -6,7 +6,7 @@ import {
   getEffectiveGate,
   getModuleGateFromTenant,
 } from '@decentraguild/core'
-import { getModuleCatalogList, getModuleDisplayName, isModuleNavigable } from '@decentraguild/config'
+import { getModuleCatalogList, getModuleDisplayName, isModuleNavigable } from '@decentraguild/catalog'
 
 export interface ActiveModuleWithGate {
   name: string
@@ -77,7 +77,8 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
   }
 
   const moduleFilterOptions = computed(() => {
-    const list = getModuleCatalogList().filter((m) => isModuleNavigable(m.status))
+    const list = getModuleCatalogList()
+      .filter((m) => !m.docsOnly && isModuleNavigable(m.status))
     return list.map((m) => ({ value: m.id, label: m.name }))
   })
 

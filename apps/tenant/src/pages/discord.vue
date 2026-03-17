@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Discord">
+  <PageSection title="Discord" module-id="discord">
     <div class="discord-page__layout">
       <div v-if="!discordVisible" class="discord-page__inactive">
         <p>Discord is not enabled for this dGuild.</p>

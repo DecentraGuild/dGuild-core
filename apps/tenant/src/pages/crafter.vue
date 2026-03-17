@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Crafter">
+  <PageSection title="Crafter" module-id="crafter">
     <div class="crafter-page">
       <p v-if="!crafterEnabled" class="crafter-page__empty">
         Crafter is not enabled for this community. Enable it in Admin → Modules.
@@ -14,14 +14,6 @@
         <div v-else class="admin__split">
           <div class="admin__panel crafter-page__content">
             <div class="crafter-page__grid">
-              <button
-                type="button"
-                class="crafter-card crafter-card--create"
-                @click="showCreateModal = true"
-              >
-                <Icon icon="lucide:plus" class="crafter-card__create-icon" />
-                <span class="crafter-card__create-label">Create token</span>
-              </button>
               <div
                 v-for="t in tokens"
                 :key="t.mint"
@@ -59,7 +51,6 @@
                       <Button variant="secondary" size="sm" @click="openActionModal('burn', t)">Burn</Button>
                       <Button variant="ghost" size="sm" @click="openActionModal('edit', t)">Edit</Button>
                     </template>
-                    <Button variant="ghost" size="sm" @click="openActionModal('close', t)">Close</Button>
                     <a
                       :href="solscanUrl(t.mint)"
                       target="_blank"
@@ -71,6 +62,14 @@
                   </div>
                 </div>
               </div>
+              <button
+                type="button"
+                class="crafter-card crafter-card--create"
+                @click="showCreateModal = true"
+              >
+                <Icon icon="lucide:plus" class="crafter-card__create-icon" />
+                <span class="crafter-card__create-label">Create token</span>
+              </button>
             </div>
           </div>
 
@@ -283,9 +282,6 @@
                 />
               </template>
             </template>
-            <template v-else-if="actionType === 'close'">
-              <p class="crafter-create-form__hint">Close your empty token account to reclaim rent (~0.002 SOL). Account must have zero balance.</p>
-            </template>
             <p v-if="actionError" class="crafter-create-form__error">{{ actionError }}</p>
             <div class="crafter-create-form__actions">
               <Button type="button" variant="secondary" @click="actionType = null">Cancel</Button>
@@ -303,8 +299,6 @@
 
 <script setup lang="ts">
 import { truncateAddress, formatRawTokenAmount, toRawUnits } from '@decentraguild/display'
-import { PublicKey } from '@solana/web3.js'
-import { getAssociatedTokenAddressSync } from '@solana/spl-token'
 import { Icon } from '@iconify/vue'
 import { Button } from '~/components/ui/button'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
@@ -344,8 +338,6 @@ const {
   mint: doMint,
   burn: doBurn,
   editMetadata: doEditMetadata,
-  closeAccount: doCloseAccount,
-  remove: removeToken,
 } = useCrafter()
 
 const supplyByMint = ref<Record<string, string>>({})
@@ -564,7 +556,7 @@ async function onCreateSubmit() {
   }
 }
 
-type ActionType = 'mint' | 'burn' | 'edit' | 'close'
+type ActionType = 'mint' | 'burn' | 'edit'
 const actionType = ref<ActionType | null>(null)
 const actionToken = ref<CrafterToken | null>(null)
 const actionError = ref<string | null>(null)
@@ -588,10 +580,10 @@ const editJsonPreview = computed(() =>
 )
 
 const actionModalTitle = computed(() =>
-  actionType.value === 'edit' ? 'Edit metadata' : actionType.value === 'close' ? 'Close account' : actionType.value ? actionType.value.charAt(0).toUpperCase() + actionType.value.slice(1) : ''
+  actionType.value === 'edit' ? 'Edit metadata' : actionType.value ? actionType.value.charAt(0).toUpperCase() + actionType.value.slice(1) : ''
 )
 const actionSubmitLabel = computed(() =>
-  actionType.value === 'edit' ? 'Save' : actionType.value === 'close' ? 'Close account' : actionType.value ?? ''
+  actionType.value === 'edit' ? 'Save' : actionType.value ?? ''
 )
 const canSubmitAction = computed(() => {
   if (!actionType.value || !actionToken.value) return false
@@ -602,8 +594,6 @@ const canSubmitAction = computed(() => {
       return !!actionForm.value.amount?.trim()
     case 'edit':
       return editForm.value.name?.trim() && editForm.value.symbol?.trim() && editForm.value.metadataUri?.trim()
-    case 'close':
-      return true
     default:
       return false
   }
@@ -705,30 +695,6 @@ async function onActionSubmit() {
       actionSubmitting.value = false
     }
     return
-  }
-
-  if (type === 'close' && auth.wallet.value) {
-    actionSubmitting.value = true
-    actionError.value = null
-    try {
-      const mintPk = new PublicKey(token.mint)
-      const walletPk = new PublicKey(auth.wallet.value)
-      const ata = getAssociatedTokenAddressSync(mintPk, walletPk)
-      const result = await doCloseAccount(token.mint, ata.toBase58(), auth.wallet.value)
-      if (result.success) {
-        const removed = await removeToken(token.mint)
-        if (removed.success) {
-          actionType.value = null
-          await refreshSupplyAndBalance()
-        } else {
-          actionError.value = removed.error ?? 'Close succeeded but failed to remove from list'
-        }
-      } else {
-        actionError.value = result.error ?? 'Close failed'
-      }
-    } finally {
-      actionSubmitting.value = false
-    }
   }
 }
 

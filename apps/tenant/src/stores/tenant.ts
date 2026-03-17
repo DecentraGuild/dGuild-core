@@ -66,11 +66,18 @@ export const useTenantStore = defineStore('tenant', () => {
         treasury: data.treasury as string | undefined,
       }
 
+      const rawSettings = data.marketplace_settings as MarketplaceSettings | null
+      const currencyMintsFromTable = (data.currency_mints as string[] | null) ?? []
+      const marketplaceSettings: MarketplaceSettings | null = rawSettings
+        ? {
+            ...rawSettings,
+            currencyMints: currencyMintsFromTable.map((mint) => ({ mint })),
+          }
+        : null
+
       applyTenantContext(slugParam, {
         tenant: tenantData,
-        marketplaceSettings: data.marketplace_settings
-          ? (data.marketplace_settings as MarketplaceSettings)
-          : null,
+        marketplaceSettings,
         raffleSettings: data.raffle_settings
           ? (data.raffle_settings as RaffleSettings)
           : null,

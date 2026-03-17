@@ -1,0 +1,47 @@
+{
+  "module": {
+    "id": "admin",
+    "status": "available",
+    "name": "Admin",
+    "icon": "mdi:cog",
+    "image": null,
+    "routePath": "/admin",
+    "order": 1,
+    "alwaysOn": true,
+    "addons": {
+      "slug": {
+        "id": "slug",
+        "name": "Custom slug",
+        "shortDescription": "Custom subdomain for your dGuild (e.g. your-slug.dguild.org).",
+        "pricing": null
+      }
+    }
+  },
+  "catalog": {
+    "shortDescription": "The command chamber of your guild. Define identity, manage systems, and govern your domain.",
+    "longDescription": "The Admin module is the foundation of every dGuild. From here, you establish your identity, configure your guild's presence, and activate systems from the Codex. It is both your throne and your control panel.",
+    "keyInfo": [
+      "Core module (always active)",
+      "Guild identity & branding",
+      "Module activation & management",
+      "Global configuration control",
+      "Custom slug support"
+    ]
+  },
+  "docs": {
+    "overview": "The Admin module is the central authority of your guild. It defines who you are, how your guild appears, and which systems are active.\n\nEvery dGuild is created with this module — it cannot be removed.",
+    "mechanics": "Stores guild metadata (name, visuals, description)\n\nManages module activation states\n\nHandles subscription and billing hooks\n\nControls routing via slug system\n\nSingle-wallet authority (future: DAO/multisig)",
+    "setup": "Set your guild name and identity\n\nUpload branding assets\n\n(Optional) Claim your custom slug\n\nExplore the Codex\n\nActivate modules",
+    "pricing": "Guild registration → 10 USDC (one-time)\n\nCustom slug → 19 USDC / year"
+  },
+  "activationInstructions": {
+    "intro": "Your guild begins here. Establish your banner, name your hall, and prepare to expand.",
+    "steps": [
+      "Set your guild name and general information",
+      "Upload branding assets and configure visuals",
+      "Claim your custom slug (optional)",
+      "Review available modules in the catalog",
+      "Activate the systems your guild requires"
+    ]
+  }
+}

@@ -8,6 +8,8 @@ import {
   buildBillingTransfer,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
+  getConnectorState,
+  isBackpackConnector,
 } from '@decentraguild/web3'
 import { PublicKey } from '@solana/web3.js'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
@@ -94,12 +96,14 @@ export function useAdminBilling(opts: {
       signature: null,
     })
 
+    const connectorId = getConnectorState().connectorId
     const tx = buildBillingTransfer({
       payer: wallet.publicKey,
       amountUsdc: charge.amountUsdc,
       recipientAta: new PublicKey(charge.recipientAta),
       memo: charge.memo,
       connection: connection.value,
+      instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
     })
     const txSignature = await sendAndConfirmTransaction(
       connection.value,

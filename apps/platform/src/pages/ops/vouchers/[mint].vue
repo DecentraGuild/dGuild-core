@@ -94,7 +94,7 @@
         <Card aria-label="Actions">
           <CardHeader>
             <CardTitle>Actions</CardTitle>
-            <CardDescription>Mint, burn, edit, or close voucher token accounts.</CardDescription>
+            <CardDescription>Mint, burn, or edit voucher token accounts.</CardDescription>
           </CardHeader>
           <CardContent class="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" :disabled="mintLoading" @click="mintDialogOpen = true">
@@ -110,15 +110,6 @@
             </Button>
             <Button size="sm" variant="outline" @click="editExpanded = !editExpanded">
               {{ editExpanded ? 'Hide edit' : 'Edit' }}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              :disabled="closeLoading || ourBalanceRaw !== '0'"
-              :title="ourBalanceRaw !== '0' ? 'Close only works for empty token accounts' : 'Close empty token account to reclaim rent'"
-              @click="openClose"
-            >
-              {{ closeLoading ? 'Closing…' : 'Close' }}
             </Button>
           </CardContent>
         </Card>
@@ -319,7 +310,6 @@ import {
   createConnection,
   buildMintTransaction,
   buildBurnTransaction,
-  buildCloseMintTransaction,
   buildUpdateMetadataTransaction,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
@@ -381,7 +371,6 @@ const editError = ref<string | null>(null)
 const editMetadata = ref<{ name: string; symbol: string; image: string | null; sellerFeeBasisPoints: number | null } | null>(null)
 const mintLoading = ref(false)
 const burnLoading = ref(false)
-const closeLoading = ref(false)
 const mintDialogOpen = ref(false)
 const burnDialogOpen = ref(false)
 const mintAmount = ref(1)
@@ -558,48 +547,6 @@ async function confirmBurn() {
     toastStore.add(toastId, { status: 'error', message: msg })
   } finally {
     burnLoading.value = false
-  }
-}
-
-async function openClose() {
-  if (!mint.value) return
-  const wallet = getEscrowWalletFromConnector()
-  const rpcUrl = useRpc().rpcUrl.value
-  if (!wallet?.publicKey || !rpcUrl) {
-    toastStore.add(`voucher-close-${Date.now()}`, { status: 'error', message: 'Connect wallet and ensure RPC is configured' })
-    return
-  }
-  if (BigInt(ourBalanceRaw.value) !== 0n) {
-    toastStore.add(`voucher-close-${Date.now()}`, { status: 'error', message: 'Close only works for empty token accounts. Burn or transfer first.' })
-    return
-  }
-  closeLoading.value = true
-  const toastId = `voucher-close-${mint.value}-${Date.now()}`
-  toastStore.add(toastId, { status: 'pending', message: 'Closing account…' })
-  try {
-    const connection = createConnection(rpcUrl)
-    const ata = getAssociatedTokenAddressSync(new PublicKey(mint.value), wallet.publicKey)
-    try {
-      await getAccount(connection, ata)
-    } catch {
-      toastStore.add(toastId, { status: 'error', message: 'No token account to close' })
-      closeLoading.value = false
-      return
-    }
-    const tx = buildCloseMintTransaction({
-      mint: mint.value,
-      authority: wallet.publicKey,
-      accountToClose: ata,
-      destination: wallet.publicKey,
-    })
-    const sig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
-    toastStore.add(toastId, { status: 'success', message: 'Account closed, rent reclaimed', signature: sig })
-    await Promise.all([loadOurBalance(), loadHolders()])
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Close failed'
-    toastStore.add(toastId, { status: 'error', message: msg })
-  } finally {
-    closeLoading.value = false
   }
 }
 

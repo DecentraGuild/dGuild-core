@@ -914,6 +914,21 @@ Deno.serve(async (req: Request) => {
       details: { tenant_id: tenantId },
     })
 
+    const { fetchMintMetadata } = await import('../_shared/mint-metadata.ts')
+    const onChainMeta = await fetchMintMetadata(mint, 'SPL')
+    if (onChainMeta?.uri) {
+      const crafterUpdates: Record<string, unknown> = { metadata_uri: onChainMeta.uri }
+      if (onChainMeta.name != null) crafterUpdates.name = onChainMeta.name
+      if (onChainMeta.image != null) crafterUpdates.image_url = onChainMeta.image
+      if (onChainMeta.sellerFeeBasisPoints != null) crafterUpdates.seller_fee_basis_points = onChainMeta.sellerFeeBasisPoints
+      await db.from('crafter_tokens').update(crafterUpdates).eq('tenant_id', tenantId).eq('mint', mint)
+
+      const mintMetaUpdates: Record<string, unknown> = { uri: onChainMeta.uri, updated_at: nowIso }
+      if (onChainMeta.name != null) mintMetaUpdates.name = onChainMeta.name
+      if (onChainMeta.image != null) mintMetaUpdates.image = onChainMeta.image
+      await db.from('mint_metadata').update(mintMetaUpdates).eq('mint', mint)
+    }
+
     return jsonResponse({ ok: true, mint }, req)
   }
 

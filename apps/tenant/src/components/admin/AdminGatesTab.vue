@@ -192,10 +192,8 @@ import type { Ref } from 'vue'
 import { useAdminGating } from '~/composables/admin/useAdminGating'
 import GateSelectRow from '~/components/gates/GateSelectRow.vue'
 import type { BillingPeriod } from '@decentraguild/billing'
-import { PublicKey } from '@solana/web3.js'
 import {
   deriveWhitelistPda,
-  buildBillingTransfer,
   buildInitializeWhitelistTransaction,
   buildAddToWhitelistTransaction,
   buildRemoveFromWhitelistTransaction,
@@ -230,6 +228,12 @@ const props = defineProps<{
   moduleState: ModuleState
   subscription: { periodEnd?: string } | null
   deploying: boolean
+  handleBillingPayment: (
+    moduleId: string,
+    period: BillingPeriod,
+    slugToClaim?: string,
+    conditions?: Record<string, number | boolean>,
+  ) => Promise<boolean>
 }>()
 
 const emit = defineEmits<{
@@ -363,48 +367,9 @@ async function createList() {
   creating.value = true
   const supabase = useSupabase()
   try {
-    const currentCount = lists.value.length
-    const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
-      body: {
-        action: 'quote',
-        tenantId: tenantId.value,
-        productKey: 'gates',
-        meterOverrides: { gate_lists: currentCount + 1 },
-        durationDays: 30,
-      },
+    await props.handleBillingPayment('gates', 'monthly', undefined, {
+      listsCount: lists.value.length + 1,
     })
-    if (quoteErr) throw new Error(quoteErr.message ?? 'Quote failed')
-    const quote = quoteData as { quoteId?: string; priceUsdc?: number }
-    if (!quote?.quoteId) throw new Error('No quote returned')
-
-    if (quote.priceUsdc != null && quote.priceUsdc > 0) {
-      const payerWallet = wallet.publicKey.toBase58()
-      const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
-        body: {
-          action: 'charge',
-          quoteId: quote.quoteId,
-          payerWallet,
-          paymentMethod: 'usdc',
-        },
-      })
-      if (chargeErr) throw new Error(chargeErr.message ?? 'Charge failed')
-      const charge = chargeData as { paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }
-      if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
-
-      const tx = buildBillingTransfer({
-        payer: wallet.publicKey,
-        amountUsdc: charge.amountUsdc ?? 0,
-        recipientAta: new PublicKey(charge.recipientAta),
-        memo: charge.memo,
-        connection: connection.value,
-      })
-      const txSignature = await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
-
-      const { error: confirmErr } = await supabase.functions.invoke('billing', {
-        body: { action: 'confirm', paymentId: charge.paymentId, txSignature },
-      })
-      if (confirmErr) throw new Error(confirmErr.message ?? 'Confirm failed')
-    }
 
     const tx = await buildInitializeWhitelistTransaction({
       name,

@@ -33,7 +33,7 @@
                 <SelectValue placeholder="Any module" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">
+                <SelectItem value="all">
                   <span>Any module</span>
                 </SelectItem>
                 <SelectItem
@@ -138,8 +138,8 @@ const {
 } = useDiscoveryFilters(tenants)
 
 const moduleFilterModel = computed({
-  get: () => moduleFilter.value ?? '',
-  set: (v: string) => { moduleFilter.value = v === '' ? null : v },
+  get: () => moduleFilter.value ?? 'all',
+  set: (v: string) => { moduleFilter.value = v === 'all' ? null : v },
 })
 </script>
 

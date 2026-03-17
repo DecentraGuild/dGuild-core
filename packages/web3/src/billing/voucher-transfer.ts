@@ -102,7 +102,7 @@ export async function buildVoucherTransfer(
   const memoIx = createMemoInstruction(memo)
 
   if (instructionOrder === 'memoFirst') {
-    instructions.push(transferIx, memoIx)
+    instructions.push(memoIx, transferIx)
   } else {
     instructions.push(transferIx, memoIx)
   }

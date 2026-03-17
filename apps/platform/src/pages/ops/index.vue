@@ -43,11 +43,13 @@
         />
 
         <OpsVoucherCreateCard
+          v-model:existing-mint="existingMintForDraft"
           :wallet="voucherWallet"
           :loading="voucherMintLoading"
           :error="voucherMintError"
           :success="voucherMintSuccess"
           @create-mint="createVoucherMint"
+          @add-draft="registerExistingMintAsDraft"
         />
         <OpsVouchersListCard
           :drafts="voucherDrafts"
@@ -286,6 +288,7 @@ const voucherWallet = computed(() => {
   return typeof w === 'string' ? w : (w as { toBase58?: () => string })?.toBase58?.() ?? null
 })
 
+const existingMintForDraft = ref('')
 const voucherDrafts = ref<Array<{ mint: string; created_at: string }>>([])
 const voucherLinked = ref<Array<{ mint: string; type: string; bundleId?: string; label?: string }>>([])
 const voucherMintLoading = ref(false)
@@ -485,6 +488,46 @@ async function createVoucherMint() {
     await loadVoucherList()
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Failed to create mint'
+    voucherMintError.value = msg
+    toastStore.add(toastId, { status: 'error', message: msg })
+  } finally {
+    voucherMintLoading.value = false
+  }
+}
+
+function isValidSolanaMint(mint: string): boolean {
+  const trimmed = mint.trim()
+  if (trimmed.length < 32 || trimmed.length > 44) return false
+  const base58 = /^[1-9A-HJ-NP-Za-km-z]+$/
+  return base58.test(trimmed)
+}
+
+async function registerExistingMintAsDraft(mint: string) {
+  const supabase = useSupabase()
+  if (!mint) {
+    voucherMintError.value = 'Enter a mint address'
+    return
+  }
+  if (!isValidSolanaMint(mint)) {
+    voucherMintError.value = 'Invalid mint: use a base58 address (32–44 characters)'
+    return
+  }
+  const toastId = `voucher-draft-${Date.now()}`
+  toastStore.add(toastId, { status: 'pending', message: 'Adding mint as draft…' })
+  voucherMintLoading.value = true
+  voucherMintError.value = null
+  voucherMintSuccess.value = null
+  try {
+    const { error } = await supabase.functions.invoke('platform', {
+      body: { action: 'voucher-register-draft', mint: mint.trim() },
+    })
+    if (error) throw new Error(error.message ?? 'Failed to register draft')
+    toastStore.add(toastId, { status: 'success', message: `Mint added as draft: ${mint.slice(0, 8)}…` })
+    voucherMintSuccess.value = `Mint added as draft: ${mint.slice(0, 8)}…`
+    existingMintForDraft.value = ''
+    await loadVoucherList()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to add draft'
     voucherMintError.value = msg
     toastStore.add(toastId, { status: 'error', message: msg })
   } finally {

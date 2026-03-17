@@ -81,10 +81,17 @@ export default defineNuxtPlugin(async () => {
       treasury: data.treasury as string | undefined,
     }
 
-    let marketplaceSettings = data.marketplace_settings as MarketplaceSettings | null
+    const rawSettings = data.marketplace_settings as MarketplaceSettings | null
+    const currencyMintsFromTable = (data.currency_mints as string[] | null) ?? []
+    let marketplaceSettings: MarketplaceSettings | null = rawSettings
+      ? {
+          ...rawSettings,
+          currencyMints: currencyMintsFromTable.map((mint) => ({ mint })),
+        }
+      : null
     if (marketplaceSettings) {
       const mints = [
-        ...(marketplaceSettings.currencyMints ?? []).map((c) => (typeof c === 'string' ? c : c.mint)),
+        ...marketplaceSettings.currencyMints.map((c) => c.mint),
         ...(marketplaceSettings.splAssetMints ?? []).map((c) => (typeof c === 'string' ? c : c.mint)),
         ...(marketplaceSettings.collectionMints ?? []).map((c) => (typeof c === 'string' ? c : c.mint)),
       ].filter(Boolean)
@@ -108,7 +115,7 @@ export default defineNuxtPlugin(async () => {
           })
         marketplaceSettings = {
           ...marketplaceSettings,
-          currencyMints: enrich(marketplaceSettings.currencyMints as Array<{ mint: string; name?: string; symbol?: string; image?: string }>),
+          currencyMints: enrich(marketplaceSettings.currencyMints),
           splAssetMints: enrich(marketplaceSettings.splAssetMints as Array<{ mint: string; name?: string; symbol?: string; image?: string }>),
           collectionMints: enrich(marketplaceSettings.collectionMints as Array<{ mint: string; name?: string; image?: string }>),
         }

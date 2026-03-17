@@ -111,10 +111,10 @@ import { Card } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import { Icon } from '@iconify/vue'
-import { getModuleCatalogEntry } from '@decentraguild/config'
+import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import { getProductDisplayType } from '@decentraguild/billing'
 import { MODULE_NAV } from '~/config/modules'
-import type { ModuleCatalogEntry } from '@decentraguild/config'
+import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 
 const config = useRuntimeConfig()
 const platformDocsBase = config.public.platformDocsUrl as string ?? 'https://dguild.org/docs'

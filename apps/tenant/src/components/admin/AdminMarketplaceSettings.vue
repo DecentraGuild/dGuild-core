@@ -57,7 +57,7 @@
             :error="addCurrencyError"
             @keydown.enter.prevent="lookupAndAddCurrency"
           />
-          <AddressBookBrowser kind="SPL" @select="(mint) => { newCurrencyMint = mint; lookupAndAddCurrency() }" />
+          <AddressBookBrowser kind="SPL" hide-base-mints @select="(mint) => { newCurrencyMint = mint; lookupAndAddCurrency() }" />
           <Button
             variant="secondary"
             :disabled="!newCurrencyMint.trim() || saving"

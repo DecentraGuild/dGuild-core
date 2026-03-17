@@ -31,7 +31,7 @@
 import { Icon } from '@iconify/vue'
 import { formatUsdc } from '@decentraguild/core'
 import { Modal } from '@decentraguild/ui/components'
-import type { ModuleCatalogEntry } from '@decentraguild/config'
+import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 import type { PricingModel } from '@decentraguild/billing'
 
 const props = defineProps<{

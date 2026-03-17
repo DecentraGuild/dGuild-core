@@ -16,7 +16,7 @@
 
 <script setup lang="ts">
 import { formatUsdc } from '@decentraguild/core'
-import { getModuleCatalogEntry } from '@decentraguild/config'
+import { getModuleCatalogEntry } from '@decentraguild/catalog'
 
 const props = defineProps<{ moduleId: string }>()
 

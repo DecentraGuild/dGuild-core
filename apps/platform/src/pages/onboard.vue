@@ -58,6 +58,8 @@ import { PublicKey } from '@solana/web3.js'
 import {
   createConnection,
   getEscrowWalletFromConnector,
+  getConnectorState,
+  isBackpackConnector,
   buildBillingTransfer,
   sendAndConfirmTransaction,
 } from '@decentraguild/web3'
@@ -144,12 +146,14 @@ async function submit() {
     if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
     const connection = createConnection(rpcUrl.value)
+    const connectorId = getConnectorState().connectorId
     const tx = buildBillingTransfer({
       payer: wallet.publicKey,
       amountUsdc: charge.amountUsdc ?? 0,
       recipientAta: new PublicKey(charge.recipientAta),
       memo: charge.memo,
       connection,
+      instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
     })
     const txSignature = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
 

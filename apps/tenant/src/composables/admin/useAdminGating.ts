@@ -8,7 +8,7 @@ import type { Ref } from 'vue'
 import type { MarketplaceGateSettings } from '@decentraguild/core'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
-import type { GatingScopeId } from '@decentraguild/config'
+import type { GatingScopeId } from '@decentraguild/catalog'
 
 export type GateFormValue = MarketplaceGateSettings | null | 'use-default' | 'admin-only'
 

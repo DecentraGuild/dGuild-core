@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Raffle">
+  <PageSection title="Raffle" module-id="raffles">
     <div
       class="raffle-page"
       :class="{ 'raffle-page--selected': !!selectedRaffle }"

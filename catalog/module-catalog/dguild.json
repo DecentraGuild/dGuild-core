@@ -1,0 +1,28 @@
+{
+  "module": {
+    "id": "dguild",
+    "status": "available",
+    "name": "dGuild",
+    "icon": "mdi:book-open-variant",
+    "image": null,
+    "routePath": "/docs",
+    "order": 0,
+    "docsOnly": true
+  },
+  "catalog": {
+    "shortDescription": "Build your dGuild. Run your community.",
+    "longDescription": "DecentraGuild is Web3 infrastructure as a service. You use our tech and UI to create a dGuild Custom: your organisation with your branding, treasury, and modules. Your community gets a dedicated hub tailored to your setup. We provide the infrastructure; you own and operate your dGuild.",
+    "keyInfo": [
+      "Build Your Own: choose modules, set branding, run your community on-chain",
+      "DecentraGuild does not hold custody or control over your environment",
+      "Getting started, creating a dGuild, directory, and billing"
+    ]
+  },
+  "docs": {
+    "overview": "# Documentation\n\nBuild your dGuild. Run your community.\n\nDecentraGuild is Web3 infrastructure as a service. You use our tech and UI to create a dGuild Custom: your organisation with your branding, treasury, and modules. Your community gets a dedicated hub tailored to your setup. We provide the infrastructure; you own and operate your dGuild. DecentraGuild does not hold custody or control over your environment, now or in the future.\n\n## General\n\n- **Getting started** — What DecentraGuild is and how it works\n- **Creating a dGuild** — Wallet connect, details, and registration\n- **Directory** — Discover and visit dGuilds\n- **Billing** — Pricing and subscriptions\n\n## Modules\n\nUse the sidebar to explore each module: Admin, Crafter, Gates, Watchtower, Shipment, Discord, Market, Raffles.",
+    "gettingStarted": "# Getting started\n\n## What is DecentraGuild\n\nDecentraGuild provides Web3 infrastructure and a ready-made UI so communities can run their own hub: storefront, Discord integration, branding, and treasury. You build it; we power it.\n\n## What is a dGuild Custom\n\nA **dGuild Custom** is your organisation on the platform. (We often shorten this to \"dGuild.\") Custom means: we supply the technology and interface; you choose the modules, flows, and rules. DecentraGuild does not hold custody or control over your dGuild environment, now or in the future. You own and operate it.\n\nYour dGuild has:\n\n- Branding (logo, colours, theme)\n- A dedicated subdomain (e.g. `your-slug.dguild.org`)\n- Modules you enable (Market, Discord, Admin)\n- Your treasury and fee settings\n- Admin access\n\nMembers use your subdomain to interact with your dGuild. You decide which modules are active.\n\n## Build Your Own\n\nThe offering is **Build Your Own**: choose which modules to enable, set your branding, and run your community on-chain. DecentraGuild handles the infrastructure; you control what happens inside your dGuild.\n\n## Quick start\n\n1. **Create** — Connect your wallet, pay the registration fee, and set up your org.\n2. **Configure** — Use Admin to enable modules, set branding, and configure Market or Discord.\n3. **Operate** — Your community trades on the storefront and links wallets for Discord roles.\n4. **Grow** — Add modules and adjust tiers as you scale.",
+    "creatingDguild": "# Creating a dGuild\n\n## Connect wallet\n\nGo to the Create org page and connect your wallet. Phantom, Solflare, and other Solana-compatible wallets are supported. You sign a message to verify your identity.\n\n## Fill details\n\n- **Name** (required)\n- **Description** (required)\n- **Logo** (required) — URL to your logo image\n- **Discord invite** (optional)\n\nThese can be updated later in Admin.\n\n## Pay registration\n\nRegistration requires a one-time USDC payment. The amount is shown before you confirm. Ensure you have enough USDC and SOL for fees. Sign the transaction to complete.\n\n## After creation\n\nYou are redirected to your dGuild Admin, where you can enable modules, set branding, configure Market or Discord, and manage billing.",
+    "directory": "# Directory\n\n## Discovering dGuilds\n\nThe Directory lists all dGuilds on the platform. Each card shows name, description, and logo. Use it to explore communities and find ones you want to join.\n\n## Visiting a dGuild\n\nClick **Visit** to open a dGuild. You land on its subdomain (e.g. `your-slug.dguild.org`) with that dGuild's branding and modules. If Market is enabled, you can browse and trade. If Discord is enabled, members can link wallets and get roles. Admin is available only to dGuild admins.",
+    "billingOverview": "# Billing\n\n## Overview\n\nPricing has three parts:\n\n- **Registration** — One-time USDC payment when you create your dGuild\n- **Module tiers** — Monthly or yearly fees per enabled module (Market, Discord)\n- **Add-ons** — Extra capacity on top of base tiers (custom slug, additional mints)\n\nAll payments are in USDC, on-chain.\n\n## Registration fee\n\nA one-time payment when you create your dGuild. Covers provisioning your organisation.\n\n## Module tiers\n\nMarket and Discord use tiered pricing: Starter, Growth, Pro. Each tier has limits (collections, role rules, mints). Higher tiers add capacity and features. You choose a tier when you enable the module. The Admin pricing widget shows the cost.\n\n## Add-ons\n\n- **Custom slug** — Claim a memorable subdomain (e.g. `your-slug.dguild.org`). Billed yearly.\n- **Extra mints** — Additional collections or role rules beyond the tier limit.\n\nConfigure add-ons in Admin. The pricing widget displays all costs.\n\n## Yearly discount\n\nMany modules offer a discount for yearly billing. The discount is shown in the pricing widget."
+  }
+}

@@ -1,5 +1,6 @@
 <template>
   <div class="docs-page">
+    <DocsPageHeader v-if="doc" :title="doc.title" :subtitle="doc.subtitle" />
     <DocMarkdown v-if="doc" :html="doc.html" />
     <div v-else class="docs-not-found">
       <h2>Page not found</h2>
@@ -11,19 +12,20 @@
 </template>
 
 <script setup lang="ts">
+import { getDocContentFromCatalog } from '~/composables/useDocFromCatalog'
+
 definePageMeta({ layout: 'docs' })
 
 const route = useRoute()
-const slug = (route.params.slug as string) ?? ''
 const { data: doc } = await useAsyncData(
   `docs-${route.path}`,
-  () => useDocMarkdown(['general', slug]),
+  () => getDocContentFromCatalog(route.path),
 )
 const nav = useDocsNav(route.path)
 
 useSeoMeta({
-  title: doc.value?.meta.title ? `${doc.value.meta.title} | DecentraGuild Docs` : 'Docs | DecentraGuild',
-  description: doc.value?.meta.description ?? 'DecentraGuild platform and module documentation',
+  title: doc.value?.title ? `${doc.value.title} | DecentraGuild Docs` : 'Docs | DecentraGuild',
+  description: 'DecentraGuild platform and module documentation',
 })
 </script>
 

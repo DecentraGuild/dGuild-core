@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Member lists">
+  <PageSection title="Member lists" module-id="gates">
     <div class="gates-page">
       <div v-if="!gatesVisible" class="gates-page__inactive">
         <p>Member lists is not enabled for this dGuild.</p>

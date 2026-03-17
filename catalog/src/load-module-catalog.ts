@@ -1,5 +1,6 @@
-import type { ModuleCatalogEntry, ModuleCatalogAddon } from './module-catalog-types.js'
+import type { ModuleCatalogEntry, ModuleCatalogAddon, ModuleCatalogFile } from './module-catalog-types.js'
 
+import dguild from '../module-catalog/dguild.json'
 import admin from '../module-catalog/admin.json'
 import marketplace from '../module-catalog/marketplace.json'
 import discord from '../module-catalog/discord.json'
@@ -9,22 +10,50 @@ import watchtower from '../module-catalog/watchtower.json'
 import shipment from '../module-catalog/shipment.json'
 import crafter from '../module-catalog/crafter.json'
 
-const entries: ModuleCatalogEntry[] = [
-  admin as ModuleCatalogEntry,
-  marketplace as ModuleCatalogEntry,
-  discord as ModuleCatalogEntry,
-  gates as ModuleCatalogEntry,
-  raffles as ModuleCatalogEntry,
-  watchtower as ModuleCatalogEntry,
-  shipment as ModuleCatalogEntry,
-  crafter as ModuleCatalogEntry,
+function flattenEntry(file: ModuleCatalogFile): ModuleCatalogEntry {
+  const { module: m, catalog: c, docs, activationInstructions } = file
+  return {
+    id: m.id,
+    status: m.status,
+    name: m.name,
+    gateLabel: m.gateLabel,
+    icon: m.icon,
+    image: m.image,
+    shortDescription: c.shortDescription,
+    longDescription: c.longDescription,
+    keyInfo: c.keyInfo,
+    userCostsInfo: c.userCostsInfo,
+    routePath: m.routePath,
+    order: m.order,
+    pricing: null,
+    addons: m.addons,
+    activationInstructions,
+    goActiveImmediately: m.goActiveImmediately,
+    alwaysOn: m.alwaysOn,
+    docsOnly: m.docsOnly,
+    blockchain: m.programId ? { programId: m.programId } : undefined,
+    docs,
+  }
+}
+
+const rawFiles: ModuleCatalogFile[] = [
+  dguild as ModuleCatalogFile,
+  admin as ModuleCatalogFile,
+  marketplace as ModuleCatalogFile,
+  discord as ModuleCatalogFile,
+  gates as ModuleCatalogFile,
+  raffles as ModuleCatalogFile,
+  watchtower as ModuleCatalogFile,
+  shipment as ModuleCatalogFile,
+  crafter as ModuleCatalogFile,
 ]
+
+const entries: ModuleCatalogEntry[] = rawFiles.map(flattenEntry)
 
 const catalog: Record<string, ModuleCatalogEntry> = Object.fromEntries(
   entries.map((entry) => [entry.id, entry]),
 )
 
-/** Build synthetic catalog entry for an addon (e.g. slug from admin). */
 function addonToCatalogEntry(addon: ModuleCatalogAddon, parent: ModuleCatalogEntry): ModuleCatalogEntry {
   return {
     id: addon.id,
@@ -39,6 +68,7 @@ function addonToCatalogEntry(addon: ModuleCatalogAddon, parent: ModuleCatalogEnt
     order: parent.order,
     pricing: addon.pricing,
     addons: undefined,
+    docsOnly: undefined,
   }
 }
 

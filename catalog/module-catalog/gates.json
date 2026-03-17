@@ -1,0 +1,41 @@
+{
+  "module": {
+    "id": "gates",
+    "status": "available",
+    "name": "Member lists",
+    "gateLabel": "Gate",
+    "icon": "mdi:gate",
+    "image": null,
+    "routePath": "/gates",
+    "order": 2,
+    "programId": "whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn",
+    "goActiveImmediately": true
+  },
+  "catalog": {
+    "shortDescription": "Control who may enter your realm. Define access across your entire guild.",
+    "longDescription": "Gates allow you to create on-chain access lists that can be applied across your guild, modules, or specific actions. They are the foundation of permission and exclusivity.",
+    "keyInfo": [
+      "On-chain wallet lists",
+      "Global / module / transaction level usage",
+      "Works with Discord & airdrops",
+      "Composable across modules"
+    ],
+    "userCostsInfo": "Viewing member lists is free. There are no transaction costs for members; the guild pays for list creation and on-chain storage."
+  },
+  "docs": {
+    "overview": "The Gates module allows you to define who can access your systems. It acts as your guild's permission layer.",
+    "mechanics": "Each gate = on-chain wallet list\n\nCan be applied to: Entire guild, Specific modules, Individual actions\n\nIntegrates with: Marketplace, Raffles, Discord roles, Shipments",
+    "setup": "Create a gate\n\nAdd wallet addresses\n\nAssign gate to modules or actions",
+    "pricing": "5 USDC per gate list\n\nOn-chain storage cost per wallet slot (reclaimable)"
+  },
+  "activationInstructions": {
+    "intro": "Decide who may enter your halls. Forge your access scroll and seal it on-chain.",
+    "steps": [
+      "Create a new member list",
+      "Add wallet addresses",
+      "Remove wallet addresses as needed",
+      "Choose where the gate applies (global, module, transaction)"
+    ],
+    "note": "Module is active immediately; billing is per list when you create one."
+  }
+}

@@ -41,7 +41,7 @@
 <script setup lang="ts">
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import { Button } from '~/components/ui/button'
-import { getModuleCatalogEntry } from '@decentraguild/config'
+import { getModuleCatalogEntry } from '@decentraguild/catalog'
 
 const props = defineProps<{
   modelValue: boolean

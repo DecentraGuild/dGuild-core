@@ -4,8 +4,8 @@
  */
 
 import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
-import { getModuleCatalogEntry } from '@decentraguild/config'
-import type { TieredAddonsPricing } from '@decentraguild/config'
+import { getModuleCatalogEntry } from '@decentraguild/catalog'
+import type { TieredAddonsPricing } from '@decentraguild/catalog'
 import { useSupabase } from '~/composables/core/useSupabase'
 import type { AddressBookEntry, CatalogMintItem } from '~/types/mints'
 import { reactive, ref, watch, computed, nextTick } from 'vue'
@@ -433,7 +433,7 @@ export function useMarketplaceSettings(opts: {
         tokenStandard: m.tokenStandard,
       }))
       const cmu = (s.currencyMints as CurrencyMint[]) ?? []
-      form.currencyMints = cmu.length > 0 ? cmu.map((c) => ({ ...c, _loading: false, _error: undefined })) : [...BASE_CURRENCY_MINTS]
+      form.currencyMints = cmu.map((c) => ({ ...c, _loading: false, _error: undefined }))
       const sf = s.shopFee as Partial<ShopFee> | undefined
       if (sf) {
         form.shopFee.wallet = sf.wallet ?? ''
@@ -573,14 +573,23 @@ export function useMarketplaceSettings(opts: {
     try {
       const payload = buildPayload()
       const supabase = useSupabase()
+      const settingsForDb = { ...payload }
+      delete (settingsForDb as Record<string, unknown>).currencyMints
       const { error } = await supabase
         .from('marketplace_settings')
-        .upsert({ tenant_id: tenantId.value, settings: payload, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
+        .upsert({ tenant_id: tenantId.value, settings: settingsForDb, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
       if (error) throw new Error(error.message)
+
+      const currencies = (payload.currencyMints as Array<{ mint: string }>) ?? []
+      const { error: delErr } = await supabase.from('marketplace_currencies').delete().eq('tenant_id', tenantId.value)
+      if (delErr) throw new Error(delErr.message)
+      if (currencies.length > 0) {
+        const { error: insErr } = await supabase.from('marketplace_currencies').insert(currencies.map((c) => ({ tenant_id: tenantId.value, mint: c.mint })))
+        if (insErr) throw new Error(insErr.message)
+      }
 
       const colls = (payload.collectionMints as Array<{ mint: string }>) ?? []
       const spls = (payload.splAssetMints as Array<{ mint: string }>) ?? []
-      const currencies = (payload.currencyMints as Array<{ mint: string }>) ?? []
       if (colls.length || spls.length || currencies.length) {
         const { error: syncErr } = await supabase.functions.invoke('marketplace', {
           body: {

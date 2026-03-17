@@ -88,6 +88,7 @@
 </template>
 
 <script setup lang="ts">
+import { BASE_CURRENCY_MINT_ADDRESSES } from '@decentraguild/core'
 import { truncateAddress } from '@decentraguild/display'
 import { Icon } from '@iconify/vue'
 import type { AddressBookEntry, MintKind } from '~/types/mints'
@@ -96,7 +97,11 @@ import { useAddressBook } from '~/composables/watchtower/useAddressBook'
 const props = withDefaults(defineProps<{
   /** Filter entries to only this kind. When undefined shows all. */
   kind?: MintKind
-}>(), {})
+  /** When true, hide the four base currencies (SOL, WBTC, USDC, USDT) so they are only toggled via checkboxes. */
+  hideBaseMints?: boolean
+}>(), {
+  hideBaseMints: false,
+})
 
 const emit = defineEmits<{
   /** Emits the chosen mint address. */
@@ -148,7 +153,11 @@ const dropdownStyle = computed(() => {
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
-  return entries.value.filter((e) => {
+  let list = entries.value
+  if (props.hideBaseMints) {
+    list = list.filter((e) => !BASE_CURRENCY_MINT_ADDRESSES.has(e.mint))
+  }
+  return list.filter((e) => {
     if (kindFilter.value !== 'all' && e.kind !== kindFilter.value) return false
     if (q) {
       const matchMint = e.mint.toLowerCase().includes(q)

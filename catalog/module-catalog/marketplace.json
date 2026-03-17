@@ -1,0 +1,41 @@
+{
+  "module": {
+    "id": "marketplace",
+    "status": "available",
+    "name": "Market",
+    "icon": "mdi:store",
+    "image": null,
+    "routePath": "/market",
+    "order": 7,
+    "programId": "esccxeEDYUXQaeMwq1ZwWAvJaHVYfsXNva13JYb2Chs"
+  },
+  "catalog": {
+    "shortDescription": "Open your guild's trade hall. Enable secure peer-to-peer asset exchange.",
+    "longDescription": "The Marketplace module lets your guild run its own trading hub with on-chain escrow. Define collections, currencies, and rules for trade.",
+    "keyInfo": [
+      "P2P NFT trading",
+      "On-chain escrow",
+      "Custom currencies",
+      "Configurable listings"
+    ],
+    "userCostsInfo": "Creating, filling, or cancelling a trade requires a small amount of SOL for transaction fees. The guild may apply fees on listings; any such fees are shown when you create or fill a trade."
+  },
+  "docs": {
+    "overview": "Marketplace enables secure trading inside your guild.",
+    "mechanics": "Escrow smart contracts\n\nCollection whitelisting\n\nToken-based payments\n\nOptional gating",
+    "setup": "Add collections\n\nAdd tokens\n\nConfigure currencies\n\nDeploy",
+    "pricing": "Starter → 19 USDC/month (up to 25 mints)\n\nGrowth → 29 USDC/month (up to 100 mints, 1 custom currency)\n\nPro → 39 USDC/month (up to 250 mints, 2 custom currency)\n\nAdd-ons: +50 mints → 5 USDC/month, Custom currency → 5 USDC/month"
+  },
+  "activationInstructions": {
+    "intro": "Raise your merchant banners. Open your gates to trade.",
+    "steps": [
+      "Add NFT collections",
+      "Add SPL tokens",
+      "Select currency tokens",
+      "Configure fees (if applicable)",
+      "Apply optional gate",
+      "Deploy marketplace"
+    ],
+    "note": "Configure your store before launching it. You can always change your settings later."
+  }
+}

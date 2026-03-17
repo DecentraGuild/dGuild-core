@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { getGateLabel } from '@decentraguild/config'
+import { getGateLabel } from '@decentraguild/catalog'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'

@@ -111,7 +111,7 @@ import { Card } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 import { FormInput } from '~/components/ui/form-input'
 import { Icon } from '@iconify/vue'
-import { getGateLabel } from '@decentraguild/config'
+import { getGateLabel } from '@decentraguild/catalog'
 import {
   validateDiscordLink,
   validateHomepage,

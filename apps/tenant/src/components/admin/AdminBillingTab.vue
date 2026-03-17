@@ -103,6 +103,10 @@ function productLabelFromLineItems(lineItems: Array<{ meter_key?: string; source
   if (first.source === 'bundle' && first.bundleId) {
     const labels: Record<string, string> = {
       starterpack: 'Starter Pack',
+      'starterpack-continium': 'Starterpack Continium',
+      'starterpack-continium-grow': 'Starterpack Continium Grow',
+      'watchtower-pack-small': 'Watchtower pack small',
+      'watchtower-pack-large': 'Watchtower pack large',
     }
     return labels[first.bundleId] ?? first.bundleId
   }

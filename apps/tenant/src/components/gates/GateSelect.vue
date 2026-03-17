@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { truncateAddress } from '@decentraguild/display'
-import { getGateLabel } from '@decentraguild/config'
+import { getGateLabel } from '@decentraguild/catalog'
 import type { MarketplaceGateSettings } from '@decentraguild/core'
 import { useGateLists } from '~/composables/gates/useGateListsPublic'
 

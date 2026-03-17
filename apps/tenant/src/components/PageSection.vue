@@ -1,16 +1,20 @@
 <template>
   <section class="page-section">
-    <div v-if="title || $slots.header" class="page-section__header">
+    <div v-if="title || $slots.header || moduleId" class="page-section__header">
       <h2 v-if="title" class="page-section__title">{{ title }}</h2>
       <slot name="header" />
+      <ModuleUserCostsInfo v-if="moduleId" :module-id="moduleId" class="page-section__costs-info" />
     </div>
     <slot />
   </section>
 </template>
 
 <script setup lang="ts">
+import ModuleUserCostsInfo from '~/components/ModuleUserCostsInfo.vue'
+
 defineProps<{
   title?: string
+  moduleId?: string
 }>()
 </script>
 
@@ -34,5 +38,9 @@ defineProps<{
   font-weight: 600;
   color: var(--theme-text-primary);
   margin: 0;
+}
+
+.page-section__costs-info {
+  margin-left: auto;
 }
 </style>

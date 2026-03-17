@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { getGatingScopes } from '@decentraguild/config'
+import { getGatingScopes } from '@decentraguild/catalog'
 import { Card } from '~/components/ui/card'
 import GateSelectRowModule from '~/components/gates/GateSelectRowModule.vue'
 import { useAdminGating } from '~/composables/admin/useAdminGating'

@@ -1,7 +1,7 @@
 import type { ModuleState } from '@decentraguild/core'
 import { isModuleVisibleInAdmin, getModuleState } from '@decentraguild/core'
-import { getModuleCatalogList, isModuleNavigable } from '@decentraguild/config'
-import type { ModuleCatalogEntry } from '@decentraguild/config'
+import { getModuleCatalogList, isModuleNavigable } from '@decentraguild/catalog'
+import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 
 export interface ModuleNavEntry {
   path: string
@@ -9,7 +9,7 @@ export interface ModuleNavEntry {
   icon: string
 }
 
-const catalog = getModuleCatalogList()
+const catalog = getModuleCatalogList().filter((m) => !m.docsOnly)
 
 /** Module id to route, label, and nav icon. Derived from the module catalog. */
 export const MODULE_NAV: Record<string, ModuleNavEntry> = Object.fromEntries(

@@ -1,0 +1,42 @@
+{
+  "module": {
+    "id": "raffles",
+    "status": "available",
+    "name": "Raffle",
+    "icon": "mdi:ticket-percent",
+    "image": null,
+    "routePath": "/raffle",
+    "order": 8,
+    "programId": "rafxXxjw9fkAuQhCJ1A4gmX1oqgvRrSeXyRPUE9K2Yx",
+    "goActiveImmediately": true
+  },
+  "catalog": {
+    "shortDescription": "Let fate decide. Run fair and transparent raffles on-chain.",
+    "longDescription": "The Raffle module allows you to host secure raffles with verifiable outcomes. Configure tickets, rewards, and participation rules.",
+    "keyInfo": [
+      "On-chain randomness",
+      "Fixed ticket supply",
+      "Guaranteed fairness",
+      "Tier-based scaling"
+    ]
+  },
+  "docs": {
+    "overview": "Raffles enable fair prize distribution through blockchain-based randomness.",
+    "mechanics": "Ticket minting\n\nLocked raffle lifecycle\n\nRandom winner selection\n\nAutomatic reward distribution",
+    "setup": "Define ticket parameters\n\nAdd reward\n\nLaunch raffle\n\nWait for sell-out\n\nDraw winner",
+    "pricing": "Base: 5 USDC per raffle, 1 active raffle\n\nGrowth: 15 USDC/month, 3 active raffles\n\nPro: 29 USDC/month, 10 active raffles"
+  },
+  "activationInstructions": {
+    "intro": "Summon your community. Announce the prize. Let fate decide the victor.",
+    "steps": [
+      "Select ticket mint",
+      "Set ticket price and supply",
+      "Apply optional gate",
+      "Add reward mint and amount",
+      "Start raffle (irreversible)",
+      "Wait for sell-out and Draw winner",
+      "Distribute rewards and claim proceeds"
+    ],
+    "note": "Module is active immediately; billing is per raffle when you create one on the Base tier."
+  }
+}

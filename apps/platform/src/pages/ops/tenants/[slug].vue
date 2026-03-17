@@ -586,7 +586,7 @@ import type { TenantConfig } from '@decentraguild/core'
 import { formatDate, formatDateTime, formatUsdc } from '@decentraguild/core'
 import { truncateAddress } from '@decentraguild/display'
 import { Icon } from '@iconify/vue'
-import { getModuleCatalogListWithAddons } from '@decentraguild/config'
+import { getModuleCatalogListWithAddons } from '@decentraguild/catalog'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/dialog'
@@ -631,7 +631,7 @@ const route = useRoute()
 const router = useRouter()
 
 const tenant = ref<TenantConfig | null>(null)
-const catalogModules = getModuleCatalogListWithAddons()
+const catalogModules = getModuleCatalogListWithAddons().filter((m) => !m.docsOnly)
 const stats = ref<TenantStats | null>(null)
 const subscriptions = ref<Record<string, SubscriptionSummary | null>>({})
 const billingSubsRaw = ref<Array<Record<string, unknown>>>([])

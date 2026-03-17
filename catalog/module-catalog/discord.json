@@ -1,0 +1,38 @@
+{
+  "module": {
+    "id": "discord",
+    "status": "available",
+    "name": "Discord",
+    "icon": "mdi:discord",
+    "image": null,
+    "routePath": "/discord",
+    "order": 5
+  },
+  "catalog": {
+    "shortDescription": "Connect your guild to Discord. Let roles be earned, not assigned.",
+    "longDescription": "The Discord module bridges your on-chain systems with your Discord server. Roles are automatically assigned based on conditions and holdings.",
+    "keyInfo": [
+      "Discord bot integration",
+      "Auto role assignment",
+      "Multi-wallet linking",
+      "Cross-guild compatibility"
+    ]
+  },
+  "docs": {
+    "overview": "This module connects your guild to Discord and automates community roles based on blockchain data.",
+    "mechanics": "Users link wallets\n\nConditions determine role assignment\n\nSync runs periodically\n\nWorks across multiple guilds",
+    "setup": "Invite bot\n\nConnect server\n\nDefine roles\n\nApply conditions\n\nActivate sync",
+    "pricing": "Included (depends on Watchtower usage)"
+  },
+  "activationInstructions": {
+    "intro": "Bridge your guildhall and your Discord keep. Let roles be earned, not granted.",
+    "steps": [
+      "Invite DecentraGuild bot",
+      "Connect Discord server",
+      "Configure your roles in the Discord server",
+      "Add a role to your conditionsets",
+      "Deploy automation"
+    ],
+    "note": "Sync interval depends on conditionset"
+  }
+}

@@ -22,7 +22,7 @@
               <span class="home__card-bg-icon" aria-hidden="true">
                 <Icon :icon="entry.icon" height="none" class="home__card-bg-icon-svg" />
               </span>
-              <CardContent class="home__card-trigger !px-4 !pt-4 !pb-4">
+              <CardContent class="home__card-trigger !px-3 !pt-3 !pb-3">
                 <div class="home__card-header">
                   <div class="home__card-heading">
                     <span class="home__card-name-row">
@@ -58,8 +58,8 @@ import { Card, CardContent } from '~/components/ui/card'
 import { Icon } from '@iconify/vue'
 import DguildInfoBanner from '~/components/home/DguildInfoBanner.vue'
 import { useThemeStore } from '@decentraguild/ui'
-import { getModuleCatalogEntry } from '@decentraguild/config'
-import type { ModuleCatalogEntry } from '@decentraguild/config'
+import { getModuleCatalogEntry } from '@decentraguild/catalog'
+import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 import { useTenantStore } from '~/stores/tenant'
 import { useNavModules } from '~/composables/core/useNavModules'
 import { useTenantInLinks } from '~/composables/core/useTenantInLinks'
@@ -116,7 +116,7 @@ function moduleLink(entry: ModuleCatalogEntry) {
 .home__grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: var(--theme-space-md);
+  gap: var(--theme-space-sm);
 }
 
 @media (min-width: var(--theme-breakpoint-sm)) {
@@ -128,7 +128,7 @@ function moduleLink(entry: ModuleCatalogEntry) {
 @media (min-width: var(--theme-breakpoint-lg)) {
   .home__grid {
     grid-template-columns: repeat(4, 1fr);
-    gap: var(--theme-space-lg);
+    gap: var(--theme-space-md);
   }
 }
 
@@ -136,6 +136,7 @@ function moduleLink(entry: ModuleCatalogEntry) {
   position: relative;
   display: flex;
   flex-direction: column;
+  height: 100px;
   background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 55%),
     var(--theme-bg-card);
   border: 1px solid var(--theme-border);
@@ -191,8 +192,10 @@ function moduleLink(entry: ModuleCatalogEntry) {
   flex-direction: column;
   align-items: flex-start;
   text-align: left;
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  padding: var(--theme-space-md);
+  padding: var(--theme-space-sm) var(--theme-space-md);
   background: none;
   border: none;
   color: var(--theme-text-primary);
@@ -245,7 +248,7 @@ function moduleLink(entry: ModuleCatalogEntry) {
 .home__card-chevron {
   display: inline-flex;
   align-items: center;
-  margin-top: var(--theme-space-xs);
+  margin-top: auto;
   color: var(--theme-text-muted);
 }
 

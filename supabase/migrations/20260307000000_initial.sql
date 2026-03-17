@@ -187,6 +187,14 @@ CREATE INDEX IF NOT EXISTS idx_mint_scope_collection
   ON public.marketplace_mint_scope(tenant_id, collection_mint)
   WHERE collection_mint IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS public.marketplace_currencies (
+  tenant_id TEXT NOT NULL REFERENCES public.tenant_config(id) ON DELETE CASCADE,
+  mint TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, mint)
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_currencies_tenant ON public.marketplace_currencies(tenant_id);
+
 -- ---------------------------------------------------------------------------
 -- Condition sets (tenant-scoped, reusable; discord_role_rules references)
 -- ---------------------------------------------------------------------------
@@ -480,6 +488,50 @@ CREATE TABLE IF NOT EXISTS public.voucher_redemptions (
   payment_id UUID NOT NULL REFERENCES public.billing_payments(id),
   quantity NUMERIC NOT NULL DEFAULT 1,
   redeemed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Individual vouchers: mint -> entitlements (meter_key, quantity, duration_days)
+CREATE TABLE IF NOT EXISTS public.individual_vouchers (
+  mint TEXT PRIMARY KEY,
+  max_redemptions_per_tenant INTEGER,
+  label TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.individual_voucher_entitlements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  mint TEXT NOT NULL REFERENCES public.individual_vouchers(mint) ON DELETE CASCADE,
+  meter_key TEXT NOT NULL REFERENCES public.meters(meter_key),
+  quantity NUMERIC NOT NULL,
+  duration_days INTEGER NOT NULL DEFAULT 30,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (mint, meter_key)
+);
+CREATE INDEX IF NOT EXISTS idx_individual_voucher_entitlements_mint ON public.individual_voucher_entitlements(mint);
+
+CREATE TABLE IF NOT EXISTS public.individual_voucher_redemption_totals (
+  tenant_id TEXT NOT NULL,
+  voucher_mint TEXT NOT NULL REFERENCES public.individual_vouchers(mint),
+  count NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, voucher_mint)
+);
+
+CREATE TABLE IF NOT EXISTS public.individual_voucher_redemptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id TEXT NOT NULL,
+  voucher_mint TEXT NOT NULL,
+  payment_id UUID NOT NULL REFERENCES public.billing_payments(id),
+  quantity NUMERIC NOT NULL DEFAULT 1,
+  redeemed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_individual_voucher_redemptions_tenant ON public.individual_voucher_redemptions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_individual_voucher_redemptions_mint ON public.individual_voucher_redemptions(voucher_mint);
+
+CREATE TABLE IF NOT EXISTS public.voucher_drafts (
+  mint TEXT PRIMARY KEY,
+  actor_wallet TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE OR REPLACE FUNCTION public.granted_entitlements_ledger_fn()
@@ -781,7 +833,8 @@ SELECT
   rs.settings AS raffle_settings,
   tc.homepage,
   tc.x_link,
-  tc.telegram_link
+  tc.telegram_link,
+  (SELECT array_agg(mc.mint ORDER BY mc.mint) FROM public.marketplace_currencies mc WHERE mc.tenant_id = tc.id) AS currency_mints
 FROM public.tenant_config tc
 LEFT JOIN public.marketplace_settings ms ON ms.tenant_id = tc.id
 LEFT JOIN public.raffle_settings rs ON rs.tenant_id = tc.id;
@@ -911,6 +964,10 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('crafter-metadata', 'crafter-metadata', true)
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('voucher-metadata', 'voucher-metadata', true)
+ON CONFLICT (id) DO NOTHING;
+
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
@@ -923,6 +980,7 @@ ALTER TABLE public.tenant_collection_scope ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.holder_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.marketplace_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.marketplace_mint_scope ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.marketplace_currencies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.condition_sets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.condition_set_conditions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discord_servers ENABLE ROW LEVEL SECURITY;
@@ -934,6 +992,10 @@ ALTER TABLE public.discord_verify_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discord_role_removal_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discord_guild_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discord_member_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.meters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.meter_dependencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.duration_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tier_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cron_edge_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.billing_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tenant_raffles ENABLE ROW LEVEL SECURITY;
@@ -952,11 +1014,17 @@ ALTER TABLE public.tenant_gate_lists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.billing_quotes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.granted_entitlements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tenant_meter_limits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.entitlement_expiry_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tenant_voucher_redemption_totals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.voucher_redemptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bundles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bundle_entitlements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bundle_vouchers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.individual_vouchers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.individual_voucher_entitlements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.individual_voucher_redemption_totals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.individual_voucher_redemptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.voucher_drafts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "gate_metadata_public_read" ON public.gate_metadata FOR SELECT USING (true);
 CREATE POLICY "tenant_gate_lists_public_read" ON public.tenant_gate_lists FOR SELECT USING (true);
@@ -996,6 +1064,14 @@ CREATE POLICY "marketplace_settings_admin_delete" ON public.marketplace_settings
   FOR DELETE USING (public.is_tenant_admin(tenant_id));
 
 CREATE POLICY "marketplace_mint_scope_public_read" ON public.marketplace_mint_scope FOR SELECT USING (true);
+
+CREATE POLICY "marketplace_currencies_public_read" ON public.marketplace_currencies FOR SELECT USING (true);
+CREATE POLICY "marketplace_currencies_admin_insert" ON public.marketplace_currencies
+  FOR INSERT WITH CHECK (public.is_tenant_admin(tenant_id));
+CREATE POLICY "marketplace_currencies_admin_update" ON public.marketplace_currencies
+  FOR UPDATE USING (public.is_tenant_admin(tenant_id)) WITH CHECK (public.is_tenant_admin(tenant_id));
+CREATE POLICY "marketplace_currencies_admin_delete" ON public.marketplace_currencies
+  FOR DELETE USING (public.is_tenant_admin(tenant_id));
 
 CREATE POLICY "condition_sets_tenant_admin_all" ON public.condition_sets FOR ALL
   USING (public.is_tenant_admin(tenant_id))
@@ -1038,6 +1114,22 @@ CREATE POLICY "discord_member_roles_no_direct_access" ON public.discord_member_r
 CREATE POLICY "cron_edge_config_no_direct_access" ON public.cron_edge_config
   FOR ALL USING (false) WITH CHECK (false);
 
+CREATE POLICY "crafter_pending_no_direct_access" ON public.crafter_pending
+  FOR ALL USING (false) WITH CHECK (false);
+CREATE POLICY "discord_role_removal_queue_no_direct_access" ON public.discord_role_removal_queue
+  FOR ALL USING (false) WITH CHECK (false);
+CREATE POLICY "discord_verify_sessions_no_direct_access" ON public.discord_verify_sessions
+  FOR ALL USING (false) WITH CHECK (false);
+CREATE POLICY "entitlement_expiry_queue_no_direct_access" ON public.entitlement_expiry_queue
+  FOR ALL USING (false) WITH CHECK (false);
+CREATE POLICY "platform_audit_log_no_direct_access" ON public.platform_audit_log
+  FOR ALL USING (false) WITH CHECK (false);
+
+CREATE POLICY "meters_public_read" ON public.meters FOR SELECT USING (true);
+CREATE POLICY "meter_dependencies_public_read" ON public.meter_dependencies FOR SELECT USING (true);
+CREATE POLICY "duration_rules_public_read" ON public.duration_rules FOR SELECT USING (true);
+CREATE POLICY "tier_rules_public_read" ON public.tier_rules FOR SELECT USING (true);
+
 CREATE POLICY "billing_payments_admin_read" ON public.billing_payments FOR SELECT
   USING (public.is_tenant_admin(tenant_id));
 
@@ -1077,6 +1169,14 @@ CREATE POLICY "addressbook_settings_admin_all" ON public.addressbook_settings FO
 CREATE POLICY "bundles_admin_only" ON public.bundles FOR ALL USING (false) WITH CHECK (false);
 CREATE POLICY "bundle_entitlements_admin_only" ON public.bundle_entitlements FOR ALL USING (false) WITH CHECK (false);
 CREATE POLICY "bundle_vouchers_admin_only" ON public.bundle_vouchers FOR ALL USING (false) WITH CHECK (false);
+
+CREATE POLICY "individual_vouchers_admin_only" ON public.individual_vouchers FOR ALL USING (false) WITH CHECK (false);
+CREATE POLICY "individual_voucher_entitlements_admin_only" ON public.individual_voucher_entitlements FOR ALL USING (false) WITH CHECK (false);
+CREATE POLICY "individual_voucher_redemption_totals_admin_read" ON public.individual_voucher_redemption_totals FOR SELECT
+  USING ((select auth.role()) = 'service_role');
+CREATE POLICY "individual_voucher_redemptions_admin_read" ON public.individual_voucher_redemptions FOR SELECT
+  USING ((select auth.role()) = 'service_role');
+CREATE POLICY "voucher_drafts_admin_only" ON public.voucher_drafts FOR ALL USING (false) WITH CHECK (false);
 
 CREATE POLICY "granted_entitlements_admin_read" ON public.granted_entitlements FOR SELECT
   USING (public.is_tenant_admin(tenant_id));
@@ -1157,13 +1257,45 @@ INSERT INTO public.bundles (id, product_key, price_usdc, label, version, price_v
   ('starterpack', 'starterpack', 99, 'Starter Pack (mints + holders + raffles + gates)', 1, 1)
 ON CONFLICT (id) DO NOTHING;
 
+UPDATE public.bundles
+SET label = 'Starter Pack (marketplace + memberlist + raffles + craft + holders + snapshots)',
+    price_usdc = 99,
+    price_version = 2
+WHERE id = 'starterpack';
+
+DELETE FROM public.bundle_entitlements WHERE bundle_id = 'starterpack';
+
 INSERT INTO public.bundle_entitlements (bundle_id, meter_key, quantity, duration_days) VALUES
   ('starterpack', 'mints_count', 25, 30),
-  ('starterpack', 'mints_current', 3, 30),
+  ('starterpack', 'gate_lists', 1, 0),
   ('starterpack', 'raffle_hosting', 1, 0),
   ('starterpack', 'raffle_slots', 1, 0),
-  ('starterpack', 'gate_lists', 1, 0)
-ON CONFLICT (bundle_id, meter_key) DO NOTHING;
+  ('starterpack', 'crafter_tokens', 3, 0),
+  ('starterpack', 'mints_current', 3, 30),
+  ('starterpack', 'mints_snapshot', 3, 30)
+ON CONFLICT (bundle_id, meter_key) DO UPDATE SET quantity = EXCLUDED.quantity, duration_days = EXCLUDED.duration_days;
+
+INSERT INTO public.bundles (id, product_key, price_usdc, label, version, price_version) VALUES
+  ('starterpack-continium', 'starterpack', 39, 'Starterpack Continium (marketplace + holders + snapshots)', 1, 1),
+  ('starterpack-continium-grow', 'starterpack', 52, 'Starterpack Continium Grow (marketplace + raffle grow + holders + snapshots)', 1, 1),
+  ('watchtower-pack-small', 'watchtower', 24, 'Watchtower pack small (3 current + 3 snapshot)', 1, 1),
+  ('watchtower-pack-large', 'watchtower', 90, 'Watchtower pack large (10 current + 10 snapshot)', 1, 1)
+ON CONFLICT (id) DO UPDATE SET product_key = EXCLUDED.product_key, price_usdc = EXCLUDED.price_usdc, label = EXCLUDED.label;
+
+INSERT INTO public.bundle_entitlements (bundle_id, meter_key, quantity, duration_days) VALUES
+  ('starterpack-continium', 'mints_count', 25, 30),
+  ('starterpack-continium', 'mints_current', 3, 30),
+  ('starterpack-continium', 'mints_snapshot', 3, 30),
+  ('starterpack-continium-grow', 'mints_count', 25, 30),
+  ('starterpack-continium-grow', 'raffle_hosting', 1, 0),
+  ('starterpack-continium-grow', 'raffle_slots', 3, 0),
+  ('starterpack-continium-grow', 'mints_current', 3, 30),
+  ('starterpack-continium-grow', 'mints_snapshot', 3, 30),
+  ('watchtower-pack-small', 'mints_current', 3, 30),
+  ('watchtower-pack-small', 'mints_snapshot', 3, 30),
+  ('watchtower-pack-large', 'mints_current', 10, 30),
+  ('watchtower-pack-large', 'mints_snapshot', 10, 30)
+ON CONFLICT (bundle_id, meter_key) DO UPDATE SET quantity = EXCLUDED.quantity, duration_days = EXCLUDED.duration_days;
 
 -- ---------------------------------------------------------------------------
 -- Cron jobs
@@ -1174,6 +1306,6 @@ SELECT cron.schedule('tracker-sync', '*/5 * * * *', $$SELECT public.invoke_edge_
 SELECT cron.schedule('expire-stale-payments', '0 * * * *', $$SELECT public.invoke_edge_function('billing', '{"action":"expire-stale"}'::jsonb)$$);
 SELECT cron.schedule(
   'expire-entitlements',
-  '* * * * *',
+  '0 * * * *',
   $$SELECT public.invoke_edge_function('billing', '{"action":"expire-entitlements"}'::jsonb)$$
 );

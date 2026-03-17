@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Watchtower">
+  <PageSection title="Watchtower" module-id="watchtower">
     <div v-if="!watchtowerVisible" class="watchtower-page__inactive">
       <p>Watchtower is not enabled for this dGuild.</p>
     </div>

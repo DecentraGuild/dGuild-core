@@ -42,7 +42,7 @@ export default defineNuxtConfig({
     },
   },
   build: {
-    transpile: ['@decentraguild/ui', '@decentraguild/auth', '@decentraguild/web3', '@decentraguild/contracts', '@decentraguild/config'],
+    transpile: ['@decentraguild/ui', '@decentraguild/auth', '@decentraguild/web3', '@decentraguild/contracts', '@decentraguild/catalog'],
   },
   hooks: {
     'vite:extendConfig'(config) {

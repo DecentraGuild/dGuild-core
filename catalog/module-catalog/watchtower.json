@@ -1,0 +1,39 @@
+{
+  "module": {
+    "id": "watchtower",
+    "status": "available",
+    "name": "Watchtower",
+    "icon": "mdi:tower-fire",
+    "image": null,
+    "routePath": "/watchtower",
+    "order": 3,
+    "goActiveImmediately": true
+  },
+  "catalog": {
+    "shortDescription": "Observe your realm. Track holders, snapshots, and activity across your assets.",
+    "longDescription": "Watchtower monitors your on-chain assets and feeds data into your guild systems. Use it to power conditions, automate roles, and drive decisions.",
+    "keyInfo": [
+      "Holder tracking",
+      "Snapshot system",
+      "Conditions engine integration",
+      "Multi-tier tracking options"
+    ]
+  },
+  "docs": {
+    "overview": "Watchtower is your data engine. It tracks blockchain activity and transforms it into usable conditions across your guild.",
+    "mechanics": "Tracks per mint: Current holders, Daily snapshots, Transactions (planned)\n\nFeeds into: Discord roles, Shipments, Gates logic",
+    "setup": "Add mints in Admin\n\nEnable tracking type\n\nUse data in conditions",
+    "pricing": "Current holders → ~5 USDC / mint / month (tiered down at scale)\n\nSnapshots → 5 USDC / mint / month\n\nTransactions → 20 USDC / mint / month"
+  },
+  "activationInstructions": {
+    "intro": "Enable tracking for mints in your address book.",
+    "steps": [
+      "Add mints in Admin > Address Book",
+      "Enable Current holders, Snapshot, or Transactions per mint in Watchtower",
+      "Review pricing and deploy",
+      "Configure Conditionsets with up to 10 conditions",
+      "Weighted token holdings are available with snapshots"
+    ],
+    "note": "The Watch powers conditions for shipments and Discord roles. Enable it for mints used in those features."
+  }
+}

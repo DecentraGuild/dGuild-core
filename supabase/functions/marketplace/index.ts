@@ -775,8 +775,9 @@ Deno.serve(async (req: Request) => {
     for (const m of currencyMints) {
       scopeRows.push({ tenant_id: tenantId, mint: m.mint, source: 'currency', collection_mint: null })
     }
+    await db.from('marketplace_mint_scope').delete().eq('tenant_id', tenantId)
     if (scopeRows.length > 0) {
-      await db.from('marketplace_mint_scope').upsert(scopeRows, { onConflict: 'tenant_id,mint' })
+      await db.from('marketplace_mint_scope').insert(scopeRows)
     }
 
     return jsonResponse({ catalogSynced: catalogUnique.length, scopeSynced: scopeRows.length }, req)

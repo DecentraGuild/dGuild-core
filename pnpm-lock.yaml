@@ -60,9 +60,9 @@ importers:
       '@decentraguild/auth':
         specifier: workspace:*
         version: link:../../packages/auth
-      '@decentraguild/config':
+      '@decentraguild/catalog':
         specifier: workspace:*
-        version: link:../../config
+        version: link:../../catalog
       '@decentraguild/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -151,9 +151,9 @@ importers:
       '@decentraguild/billing':
         specifier: workspace:*
         version: link:../../packages/billing
-      '@decentraguild/config':
+      '@decentraguild/catalog':
         specifier: workspace:*
-        version: link:../../config
+        version: link:../../catalog
       '@decentraguild/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -231,7 +231,7 @@ importers:
         specifier: ^0.25.0
         version: 0.25.0(rollup@4.57.1)(vite@7.3.1(@types/node@20.19.33)(jiti@2.6.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
 
-  config:
+  catalog:
     dependencies:
       '@decentraguild/billing':
         specifier: workspace:*

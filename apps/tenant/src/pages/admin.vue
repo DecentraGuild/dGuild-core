@@ -97,6 +97,7 @@
         :module-state="gatesModuleState"
         :subscription="subscriptions.gates ?? null"
         :deploying="deploying"
+        :handle-billing-payment="handleBillingPayment"
         @deploy="(p: BillingPeriod, cond?: Record<string, number | boolean>) => deployModule('gates', p, cond)"
         @created="fetchSubscription('gates')"
       />
@@ -188,7 +189,7 @@
 definePageMeta({ middleware: 'admin-auth' })
 import type { BillingPeriod } from '@decentraguild/billing'
 import { getModuleState } from '@decentraguild/core'
-import { getModuleCatalogEntry } from '@decentraguild/config'
+import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import { Button } from '~/components/ui/button'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import { useTenantStore } from '~/stores/tenant'
@@ -441,6 +442,7 @@ async function onMarketplaceSaved(settings: Record<string, unknown>) {
       : null
   )
   await fetchSubscription('marketplace')
+  await tenantStore.refetchTenantContext()
 }
 onMounted(() => {
   const q = route.query.tab

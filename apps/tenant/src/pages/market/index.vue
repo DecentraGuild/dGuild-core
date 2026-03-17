@@ -1,5 +1,5 @@
 <template>
-  <PageSection>
+  <PageSection module-id="marketplace">
     <ClientOnly>
       <div v-if="!marketplaceActive" class="market-shell-inactive">
         <p>Marketplace is not enabled for this dGuild.</p>
@@ -92,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getModuleState, isModuleVisibleToMembers } from '@decentraguild/core'
 import { useTenantStore } from '~/stores/tenant'
@@ -123,7 +123,7 @@ const marketplaceDeactivating = computed(() => marketplaceState.value === 'deact
 const createDisabled = computed(() => !FEATURES.marketplace.createTrade || marketplaceDeactivating.value)
 const activeTab = computed(() => (route.query.tab === 'open-trades' ? 'open-trades' : 'browse'))
 
-const { entries, mintsSet } = useMarketplaceScope()
+const { entries, mintsSet, fetchScope } = useMarketplaceScope()
 const { labelByMint } = useMintLabels(mintsSet)
 const {
   tree,
@@ -136,6 +136,10 @@ const {
   selectNodeByBreadcrumbIndex,
   setSelectedDetailMint,
 } = useMarketplaceTree(entries, marketplaceSettings, labelByMint)
+
+onMounted(() => {
+  fetchScope()
+})
 
 watch(
   selectedNode,

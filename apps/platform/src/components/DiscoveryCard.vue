@@ -82,8 +82,8 @@ const cardStyle = computed(() => {
 <style scoped>
 .discovery-card {
   position: relative;
-  aspect-ratio: 3 / 4;
-  background-size: cover;
+  height: 392px;
+  background-size: auto 100%;
   background-position: center;
   background-color: var(--theme-bg-secondary);
   border-radius: var(--theme-radius-md);

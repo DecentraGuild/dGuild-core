@@ -24,7 +24,7 @@
               <CollapsibleTrigger
                 :id="`module-trigger-${entry.id}`"
                 :aria-controls="`module-detail-${entry.id}`"
-                class="modules__card-trigger"
+                class="modules__card-trigger focus-visible:outline-none focus-visible:ring-0"
               >
                 <span class="modules__card-header">
                   <span class="modules__card-heading">
@@ -52,11 +52,12 @@
                 :aria-labelledby="`module-trigger-${entry.id}`"
               >
                 <p class="modules__card-desc">
-                  {{ entry.detailedDescription || entry.longDescription || entry.shortDescription }}
+                  {{ entry.docs?.overview || entry.longDescription || entry.shortDescription }}
                 </p>
                 <ul v-if="entry.keyInfo?.length" class="modules__card-key-info">
                   <li v-for="(item, i) in entry.keyInfo" :key="i">{{ item }}</li>
                 </ul>
+                <p v-if="entry.docs?.pricing" class="modules__card-docs-pricing">{{ entry.docs.pricing }}</p>
                 <div v-if="getFromPrice(entry)" class="modules__card-pricing">
                   <span class="modules__card-pricing-label">From</span>
                   {{ getFromPrice(entry) }}
@@ -85,8 +86,8 @@
 definePageMeta({ title: 'Modules' })
 import { Icon } from '@iconify/vue'
 import { formatUsdc } from '@decentraguild/core'
-import { getModuleCatalogList } from '@decentraguild/config'
-import type { ModuleCatalogEntry } from '@decentraguild/config'
+import { getModuleCatalogList } from '@decentraguild/catalog'
+import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 import DguildCenter from '~/components/DguildCenter.vue'
 import { Badge } from '~/components/ui/badge'
 import { Card } from '~/components/ui/card'
@@ -140,7 +141,8 @@ function getFromPrice(entry: ModuleCatalogEntry): string | null {
 const DISPLAY_STATUSES = new Set<'available' | 'coming_soon'>(['available', 'coming_soon'])
 
 const displayModules = computed(() =>
-  getModuleCatalogList().filter((m) => DISPLAY_STATUSES.has(m.status as 'available' | 'coming_soon'))
+  getModuleCatalogList()
+    .filter((m) => !m.docsOnly && DISPLAY_STATUSES.has(m.status as 'available' | 'coming_soon'))
 )
 </script>
 
@@ -148,8 +150,8 @@ const displayModules = computed(() =>
 .modules {
   display: flex;
   flex-direction: column;
-  gap: var(--theme-space-xl);
-  padding-bottom: var(--theme-space-lg);
+  gap: var(--theme-space-md);
+  padding-bottom: var(--theme-space-md);
 }
 
 .modules__intro {
@@ -192,13 +194,16 @@ const displayModules = computed(() =>
   position: relative;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 55%),
-    var(--theme-bg-card);
+  background: var(--theme-bg-card);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.modules__card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
 }
 
 .modules__card-bg-icon {
@@ -219,6 +224,11 @@ const displayModules = computed(() =>
   height: 100%;
   color: var(--theme-primary);
   opacity: 0.12;
+  transition: opacity 0.15s ease;
+}
+
+.modules__card:hover .modules__card-bg-icon-svg {
+  opacity: 0;
 }
 
 .modules__card-bg-icon-svg :deep(svg) {
@@ -231,11 +241,6 @@ const displayModules = computed(() =>
   border-color: var(--theme-primary);
 }
 
-.modules__card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
-}
-
 .modules__card-trigger {
   position: relative;
   z-index: 1;
@@ -244,16 +249,17 @@ const displayModules = computed(() =>
   align-items: flex-start;
   text-align: left;
   width: 100%;
-  padding: var(--theme-space-md);
+  padding: var(--theme-space-sm);
   background: none;
   border: none;
   cursor: pointer;
   color: var(--theme-text-primary);
-  transition: background-color 0.15s ease;
+  outline: none;
 }
 
-.modules__card-trigger:hover {
-  background: var(--theme-bg-secondary);
+.modules__card-trigger:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .modules__card-trigger[aria-expanded="true"] .modules__card-chevron-icon {
@@ -339,7 +345,7 @@ const displayModules = computed(() =>
 .modules__card-detail {
   position: relative;
   z-index: 1;
-  padding: 0 var(--theme-space-md) var(--theme-space-md);
+  padding: 0 var(--theme-space-sm) var(--theme-space-sm);
   border-top: 1px solid var(--theme-border);
 }
 
@@ -363,6 +369,14 @@ const displayModules = computed(() =>
 
 .modules__card-key-info li {
   margin-bottom: var(--theme-space-xs);
+}
+
+.modules__card-docs-pricing {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+  margin: 0 0 var(--theme-space-sm);
+  line-height: 1.5;
+  white-space: pre-line;
 }
 
 .modules__card-pricing,

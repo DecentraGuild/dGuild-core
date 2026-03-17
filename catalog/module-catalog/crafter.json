@@ -1,0 +1,39 @@
+{
+  "module": {
+    "id": "crafter",
+    "status": "available",
+    "name": "Crafter",
+    "icon": "mdi:hammer",
+    "image": null,
+    "routePath": "/crafter",
+    "order": 6,
+    "programId": "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+    "goActiveImmediately": true
+  },
+  "catalog": {
+    "shortDescription": "Forge your own tokens and bring assets to life on-chain.",
+    "longDescription": "The Crafter module allows you to create and manage SPL tokens directly from your guild. Use them for access, rewards, or as building blocks across your ecosystem.",
+    "keyInfo": [
+      "Create SPL tokens",
+      "Mint, burn, and manage supply",
+      "Works with marketplace & gates",
+      "Metadata flexible (hosted or self-hosted)",
+      "One-time cost per token"
+    ]
+  },
+  "docs": {
+    "overview": "Crafter is your on-chain forge. It allows you to create fungible tokens that can power access systems, rewards, currencies, or community mechanics.",
+    "mechanics": "Creates SPL tokens (legacy standard)\n\nMetadata stored via API or external URI\n\nFull lifecycle control: Mint, Burn, Edit metadata",
+    "setup": "Activate Crafter\n\nCreate a token (name, symbol, image)\n\nPay creation fee\n\nManage supply as needed",
+    "pricing": "5 USDC per token (one-time)\n\nNetwork fees apply for minting/burning"
+  },
+  "activationInstructions": {
+    "intro": "Forge your tokens. Create SPL fungibles for access passes, tickets, or any on-chain asset.",
+    "steps": [
+      "Enable Crafter",
+      "Create a token (pay 5 USDC)",
+      "Mint, burn, or edit as needed"
+    ],
+    "note": "Module is active immediately; billing is per token when you create one."
+  }
+}

@@ -20,6 +20,47 @@ export interface ModuleCatalogAddon {
   pricing: PricingModel | null
 }
 
+/** Doc sections: standard (overview, mechanics, setup, pricing) or dguild (overview, gettingStarted, creatingDguild, directory, billingOverview). */
+export type ModuleCatalogDoc = Record<string, string>
+
+/** Module block in catalog file (single source of truth per module). */
+export interface ModuleCatalogFileModule {
+  id: string
+  status: ModuleCatalogStatus
+  goActiveImmediately?: boolean
+  name: string
+  icon: string
+  image: string | null
+  routePath: string
+  order: number
+  programId?: string
+  gateLabel?: string
+  alwaysOn?: boolean
+  addons?: Record<string, ModuleCatalogAddon>
+  docsOnly?: boolean
+}
+
+/** Catalog block in catalog file. */
+export interface ModuleCatalogFileCatalog {
+  shortDescription: string
+  longDescription: string
+  keyInfo: string[]
+  /** User-facing explain string for costs, fees, or transaction costs. Shown in a modal from the module page when set. */
+  userCostsInfo?: string
+}
+
+/** Full catalog file shape (module + catalog + docs; activationInstructions at top level). */
+export interface ModuleCatalogFile {
+  module: ModuleCatalogFileModule
+  catalog: ModuleCatalogFileCatalog
+  docs: ModuleCatalogDoc
+  activationInstructions?: {
+    intro: string
+    steps: string[]
+    note?: string
+  }
+}
+
 export interface ModuleCatalogEntry {
   id: string
   status: ModuleCatalogStatus
@@ -46,10 +87,16 @@ export interface ModuleCatalogEntry {
   goActiveImmediately?: boolean
   /** When true, module shows "Always on" in Admin > Modules (no billing/extend). */
   alwaysOn?: boolean
+  /** When true, entry appears only in docs sidebar and doc routes; excluded from tenant nav, activation, discovery, ops. */
+  docsOnly?: boolean
   /** Blockchain program used in transaction logic. Present only for modules with on-chain programs. */
   blockchain?: {
     programId: string
   }
+  /** Doc sections (overview, mechanics, setup, pricing or dguild extended keys). Used by platform docs. */
+  docs?: ModuleCatalogDoc
+  /** User-facing explain string for costs, fees, or transaction costs. Shown in a modal from the module page when set. */
+  userCostsInfo?: string
 }
 
 /** Statuses where the module code exists and can appear in tenant nav. */

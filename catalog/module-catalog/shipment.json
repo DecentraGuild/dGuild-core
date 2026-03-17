@@ -1,0 +1,39 @@
+{
+  "module": {
+    "id": "shipment",
+    "status": "available",
+    "name": "Shipment",
+    "icon": "mdi:package-variant",
+    "image": null,
+    "routePath": "/shipment",
+    "order": 4,
+    "goActiveImmediately": true,
+    "alwaysOn": true
+  },
+  "catalog": {
+    "shortDescription": "Deliver assets to your members with precision and scale.",
+    "longDescription": "Shipment allows you to create recipient lists and distribute tokens efficiently using compression. Ideal for rewards, airdrops, and campaigns.",
+    "keyInfo": [
+      "Condition-based recipient lists",
+      "ZK compression",
+      "Dedicated ship wallet",
+      "Member claim interface"
+    ]
+  },
+  "docs": {
+    "overview": "Shipment is your distribution system. It allows you to send tokens to large groups efficiently.",
+    "mechanics": "Uses condition engine or JSON lists\n\nExecutes via ship wallet\n\nUses ZK compression for cost efficiency\n\nResults stored after execution",
+    "setup": "Create/import ship wallet\n\nFund wallet\n\nBuild recipient list\n\nExecute shipment",
+    "pricing": "Free module\n\nCost per recipient (network/compression dependent)"
+  },
+  "activationInstructions": {
+    "intro": "Create shipment lists and ship tokens to your community.",
+    "steps": [
+      "Create a ship wallet (or import) in Plan Shipment",
+      "Fund it with SOL and tokens from your main wallet",
+      "Build a list (conditions or paste JSON)",
+      "Check it and ship it directly to your members"
+    ],
+    "note": "Module is active immediately; pricing is per recipient when enabled."
+  }
+}

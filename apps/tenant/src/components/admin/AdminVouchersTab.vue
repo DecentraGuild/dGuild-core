@@ -32,7 +32,7 @@
                 </li>
               </ul>
               <div class="admin__voucher-balance">
-                Balance: {{ v.balance }} ({{ v.tokensRequired }} required)
+                Balance: {{ formatRawTokenAmount(String(v.balance), 0, 'NFT') }} ({{ formatRawTokenAmount(String(v.tokensRequired), 0, 'NFT') }} required)
               </div>
               <div
                 v-if="hasSlugEntitlement(v) && !tenantSlug"
@@ -97,9 +97,12 @@ import {
   buildVoucherTransfer,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
+  getConnectorState,
+  isBackpackConnector,
 } from '@decentraguild/web3'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 import { getEdgeFunctionErrorMessageAsync } from '~/utils/edgeFunctionError'
+import { formatRawTokenAmount } from '@decentraguild/display'
 
 const tenantStore = useTenantStore()
 const tenantSlug = computed(() => tenantStore.tenant?.slug ?? null)
@@ -295,6 +298,7 @@ async function redeem(v: RedeemableVoucher) {
       signature: null,
     })
 
+    const connectorId = getConnectorState().connectorId
     const tx = await buildVoucherTransfer({
       payer: wallet.publicKey,
       mint: v.mint,
@@ -304,6 +308,7 @@ async function redeem(v: RedeemableVoucher) {
       recipientOwner: voucherWallet,
       memo: quote.memo,
       connection: connection.value,
+      instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
     })
 
     const txSignature = await sendAndConfirmTransaction(
