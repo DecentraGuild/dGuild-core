@@ -9,9 +9,13 @@ import type { TieredAddonsPricing, TieredWithOneTimePerUnitPricing } from '@dece
 
 export const CONDITION_LABELS: Record<string, string> = {
   mintsCount: 'Mints',
+  mints_count: 'Tradable mints',
   baseCurrenciesCount: 'Base currencies',
+  base_currencies_count: 'Base pay tokens',
   customCurrenciesCount: 'Custom currencies',
+  custom_currencies: 'Custom pay tokens',
   monetizeStorefront: 'Monetize storefront',
+  monetize_storefront: 'Trading fees',
   raffleSlotsUsed: 'Raffle slots',
   mintsBase: 'Metadata mints',
   mintsGrow: 'Snapshot mints',
@@ -67,6 +71,19 @@ export function usePricingDisplay(
       const condVal = cond[key]
       const inclVal = tier.included[key]
       const label = CONDITION_LABELS[key] ?? key
+
+      if (key === 'monetize_storefront') {
+        const active = condVal === true || condVal === 1 || condVal === 'true'
+        const lim = typeof inclVal === 'number' ? inclVal : 0
+        const included = lim >= 1
+        return {
+          key,
+          label,
+          type: 'boolean' as const,
+          active,
+          included,
+        }
+      }
 
       if (typeof condVal === 'boolean' || typeof inclVal === 'boolean') {
         return {

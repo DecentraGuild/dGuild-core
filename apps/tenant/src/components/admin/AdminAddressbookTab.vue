@@ -3,7 +3,7 @@
     <Card>
       <h3>Address book</h3>
       <p class="addressbook-tab__hint">
-        Add SPL tokens and NFT collections. Used to configure Marketplace, Discord, and Watchtower.
+        Your tenant&rsquo;s central mint list. Add SPL tokens and NFT collections here first; Marketplace and other modules use this list.
       </p>
 
       <div v-if="loading" class="addressbook-tab__loading">

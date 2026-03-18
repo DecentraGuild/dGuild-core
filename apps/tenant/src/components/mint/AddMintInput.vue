@@ -1,19 +1,25 @@
 <template>
   <div class="add-mint-input">
-    <div class="add-mint-input__row">
-      <FormInput
-        :model-value="modelValue"
-        :placeholder="placeholder"
-        :error="error ?? undefined"
-        class="add-mint-input__input"
-        @update:model-value="$emit('update:modelValue', $event)"
-        @keydown.enter.prevent="onSubmit"
-      />
-      <AddressBookBrowser @select="onAddressBookSelect" />
+    <div class="add-mint-input__shell">
+      <div class="add-mint-input__mint-wrap">
+        <input
+          :value="modelValue"
+          type="text"
+          class="add-mint-input__mint"
+          :placeholder="placeholder"
+          :disabled="disabled"
+          autocomplete="off"
+          spellcheck="false"
+          @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+          @keydown.enter.prevent="onSubmit"
+        >
+      </div>
+      <AddressBookBrowser class="add-mint-input__book" @select="onAddressBookSelect" />
       <select
         v-if="showKindSelector"
         :value="kind"
         class="add-mint-input__select"
+        :disabled="disabled"
         @change="$emit('update:kind', ($event.target as HTMLSelectElement).value as KindValue)"
       >
         <option value="auto">Auto-detect type</option>
@@ -22,6 +28,7 @@
       </select>
       <Button
         variant="secondary"
+        class="add-mint-input__action"
         :disabled="!canSubmit || loading || disabled"
         @click="onSubmit"
       >
@@ -29,13 +36,14 @@
         {{ loading ? 'Loading…' : buttonLabel }}
       </Button>
     </div>
+    <p v-if="error" class="add-mint-input__error">{{ error }}</p>
     <p v-if="finePrint" class="add-mint-input__fine-print">{{ finePrint }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import { FormInput } from '~/components/ui/form-input'
 import { Button } from '~/components/ui/button'
 import AddressBookBrowser from '~/components/shared/AddressBookBrowser.vue'
 import type { AddressBookEntry } from '~/types/mints'
@@ -63,7 +71,7 @@ const props = withDefaults(
     buttonLabel: 'Load',
     finePrint: 'If auto-detection fails, select SPL or NFT explicitly and try again.',
     showKindSelector: true,
-  }
+  },
 )
 
 const emit = defineEmits<{
@@ -91,48 +99,99 @@ function onAddressBookSelect(mint: string, entry: AddressBookEntry) {
 </script>
 
 <style scoped>
-.add-mint-input__row {
+.add-mint-input {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--theme-space-sm);
+  flex-direction: column;
+  gap: var(--theme-space-xs);
+}
+
+.add-mint-input__shell {
+  --add-mint-h: var(--theme-input-height, 2.25rem);
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: var(--add-mint-h);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-bg-primary);
+  overflow: hidden;
+}
+
+.add-mint-input__mint-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   align-items: center;
 }
 
-.add-mint-input__input {
-  flex: 1;
-  min-width: 180px;
-}
-
-.add-mint-input__input :deep(.form-input) {
+.add-mint-input__mint {
+  width: 100%;
+  min-width: 0;
+  height: var(--add-mint-h);
+  min-height: var(--add-mint-h);
+  box-sizing: border-box;
+  padding: 0 var(--theme-space-md);
   border: none;
+  outline: none;
+  margin: 0;
+  font-size: var(--theme-font-base);
+  font-family: inherit;
+  color: var(--theme-text-primary);
   background: transparent;
-  padding: 0;
-  gap: 0;
-  min-height: 0;
 }
 
-.add-mint-input__input :deep(.form-input__field) {
-  height: var(--theme-input-height, 2.25rem);
-  min-height: var(--theme-input-height, 2.25rem);
+.add-mint-input__mint::placeholder {
+  color: var(--theme-text-muted);
+}
+
+.add-mint-input__mint:focus-visible {
+  outline: none;
+}
+
+.add-mint-input__shell:focus-within {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 1px var(--theme-primary);
+}
+
+.add-mint-input__shell :deep(.ab-browser) {
+  display: flex;
+  align-self: stretch;
+}
+
+.add-mint-input__shell :deep(.ab-browser__trigger) {
+  width: var(--add-mint-h);
+  min-width: var(--add-mint-h);
+  height: 100%;
+  min-height: var(--add-mint-h);
+  border: none;
+  border-radius: 0;
+  border-left: var(--theme-border-thin) solid var(--theme-border);
   box-sizing: border-box;
 }
 
 .add-mint-input__select {
-  height: var(--theme-input-height, 2.25rem);
-  min-height: var(--theme-input-height, 2.25rem);
-  padding: 0 var(--theme-space-md);
-  border-radius: var(--theme-radius-md);
-  border: var(--theme-border-thin) solid var(--theme-border);
+  flex-shrink: 0;
+  width: auto;
+  max-width: 11rem;
+  min-height: var(--add-mint-h);
+  height: auto;
+  align-self: stretch;
+  padding: 0 var(--theme-space-sm) 0 var(--theme-space-md);
+  margin: 0;
+  border: none;
+  border-left: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: 0;
   box-sizing: border-box;
+  font-size: var(--theme-font-sm);
+  font-family: inherit;
   color: var(--theme-text-primary);
-  background-color: var(--theme-bg-primary);
+  background-color: var(--theme-bg-secondary);
+  cursor: pointer;
 }
 
-.add-mint-input__row :deep(button) {
-  height: var(--theme-input-height, 2.25rem);
-  min-height: var(--theme-input-height, 2.25rem);
-  padding-top: 0;
-  padding-bottom: 0;
+.add-mint-input__select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .add-mint-input__select option {
@@ -140,8 +199,28 @@ function onAddressBookSelect(mint: string, entry: AddressBookEntry) {
   background-color: var(--theme-bg-primary);
 }
 
+.add-mint-input__action {
+  flex-shrink: 0;
+  align-self: stretch;
+  min-height: var(--add-mint-h) !important;
+  height: 100% !important;
+  margin: 0;
+  border-radius: 0 !important;
+  border: none !important;
+  border-left: var(--theme-border-thin) solid var(--theme-border) !important;
+  box-shadow: none !important;
+  padding-left: var(--theme-space-md);
+  padding-right: var(--theme-space-md);
+}
+
+.add-mint-input__error {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-error);
+}
+
 .add-mint-input__fine-print {
-  margin-top: var(--theme-space-xs);
+  margin: 0;
   font-size: var(--theme-font-xs);
   color: var(--theme-text-muted);
 }
@@ -151,6 +230,8 @@ function onAddressBookSelect(mint: string, entry: AddressBookEntry) {
 }
 
 @keyframes add-mint-input-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

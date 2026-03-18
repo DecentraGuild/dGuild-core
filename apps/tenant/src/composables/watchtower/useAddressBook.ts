@@ -56,6 +56,9 @@ export function useAddressBook() {
           label: row.label,
           image: row.image,
           name: row.name,
+          symbol: row.symbol ?? null,
+          collectionSize: row.collectionSize,
+          uniqueTraitCount: row.uniqueTraitCount,
           traitIndex: row.trait_index,
         }))
       entries.value = [...defaultEntries, ...catalogEntries]

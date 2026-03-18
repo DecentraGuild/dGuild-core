@@ -685,7 +685,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // ---------------------------------------------------------------------------
-  // scope-sync – sync marketplace_mint_scope and tenant_mint_catalog from settings (admin)
+  // scope-sync – marketplace_mint_scope from settings; upserts tenant_mint_catalog for those mints (catalog is owned via Address book / tenant-catalog)
   // ---------------------------------------------------------------------------
   if (action === 'scope-sync') {
     const tenantId = body.tenantId as string

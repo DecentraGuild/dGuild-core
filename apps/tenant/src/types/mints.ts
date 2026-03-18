@@ -38,6 +38,8 @@ export interface AddressBookEntry {
   image: string | null
   name: string | null
   symbol?: string | null
+  collectionSize?: number
+  uniqueTraitCount?: number
   shipment_banner_image?: string | null
   /** NFT collection trait keys (e.g. for filtering or rule dropdowns). */
   trait_keys?: string[] | null
