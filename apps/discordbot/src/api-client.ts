@@ -5,21 +5,22 @@
  *   - Simple reads/writes go directly via PostgREST (service_role key bypasses RLS).
  *   - Complex operations (eligible, sync-holders, verify sessions) call Edge Functions.
  *
- * Auth: SUPABASE_SERVICE_ROLE_KEY in Authorization header.
+ * Auth: service role key in Authorization (see runtime-env.ts).
  *
  * Migration from: server-to-server Fastify API calls with x-bot-secret + x-discord-guild-id.
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseServiceRoleKey, getSupabaseUrl } from './runtime-env.js'
 
 let _supabase: SupabaseClient | null = null
 
 function getClient(): SupabaseClient {
   if (_supabase) return _supabase
-  const url = process.env.SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const url = getSupabaseUrl()
+  const serviceKey = getSupabaseServiceRoleKey()
   if (!url || !serviceKey) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
+    throw new Error('Supabase URL and service role key must be set on the bot host')
   }
   _supabase = createClient(url, serviceKey, {
     auth: { persistSession: false },
@@ -28,12 +29,12 @@ function getClient(): SupabaseClient {
 }
 
 function getFunctionsUrl(): string {
-  const url = process.env.SUPABASE_URL ?? ''
+  const url = getSupabaseUrl() ?? ''
   return `${url}/functions/v1`
 }
 
 function getServiceKey(): string {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  return getSupabaseServiceRoleKey() ?? ''
 }
 
 const REQUEST_TIMEOUT_MS = 30_000

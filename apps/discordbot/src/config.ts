@@ -2,6 +2,8 @@
  * Bot config. Secrets from env; other defaults in constants below.
  */
 
+import { getSupabaseServiceRoleKey, getSupabaseUrl } from './runtime-env.js'
+
 const DEFAULT_VERIFY_URL_TEMPLATE = 'https://{{slug}}.dguild.org/verify?token={{token}}'
 const DEFAULT_API_READINESS_MAX_WAIT_MS = 30_000
 const DEFAULT_API_READINESS_POLL_MS = 1_000
@@ -24,8 +26,8 @@ export const API_READINESS_POLL_MS = Number(
 
 /** Bot needs Supabase URL + service role to call discord-verify / discord-bot Edge Functions. */
 export function hasBotSecret(): boolean {
-  const url = process.env.SUPABASE_URL?.trim()
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  const url = getSupabaseUrl()
+  const key = getSupabaseServiceRoleKey()
   return Boolean(url && key)
 }
 

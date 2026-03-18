@@ -21,9 +21,7 @@ async function main(): Promise<void> {
     process.exit(1)
   }
   if (!hasBotSecret()) {
-    console.warn(
-      '[discordbot] SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY missing — /verify and role sync will not work until both are set.',
-    )
+    console.warn('[discordbot] Supabase URL/service key missing on host — /verify and role sync disabled.')
   }
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
