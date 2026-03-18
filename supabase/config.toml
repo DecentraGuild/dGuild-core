@@ -120,7 +120,7 @@ verify_jwt = false
 verify_jwt = false
 [functions.marketplace]
 verify_jwt = false
-[functions.tenant-catalog]
+[functions.tenant_catalog]
 verify_jwt = false
 [functions.cron-lifecycle]
 verify_jwt = false

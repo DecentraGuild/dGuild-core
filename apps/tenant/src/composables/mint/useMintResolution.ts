@@ -22,7 +22,7 @@ export function useMintResolution() {
     resolving.value = true
     try {
       const supabase = useSupabase()
-      const { data, error } = await supabase.functions.invoke('tenant-catalog', {
+      const { data, error } = await supabase.functions.invoke('tenant_catalog', {
         body: {
           action: 'resolve-full',
           tenantId,

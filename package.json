@@ -9,6 +9,7 @@
     "db:generate-seed": "node scripts/generate-seed.mjs",
     "db:seed": "node scripts/generate-seed.mjs && pnpm supabase db reset",
     "db:sync": "node scripts/sync-tenant-config.mjs",
+    "sync:address-book-defaults": "node scripts/sync-address-book-defaults.mjs",
     "db:export-tenant": "node scripts/export-tenant-config.mjs",
     "lint": "pnpm exec eslint apps packages",
     "build:platform": "pnpm exec turbo run build --filter=./packages/* --filter=@decentraguild/catalog && pnpm --filter platform generate",

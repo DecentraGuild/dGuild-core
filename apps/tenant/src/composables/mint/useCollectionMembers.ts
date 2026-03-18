@@ -33,7 +33,7 @@ export function useCollectionMembers(collectionMint: Ref<string | null>) {
     error.value = null
     try {
       const supabase = useSupabase()
-      const { data, err } = await supabase.functions.invoke('tenant-catalog', {
+      const { data, err } = await supabase.functions.invoke('tenant_catalog', {
         body: { action: 'list-members', tenantId: id, collectionMint: mint },
       })
       if (err) throw new Error(getEdgeFunctionErrorMessage(err, 'Failed to load member NFTs'))

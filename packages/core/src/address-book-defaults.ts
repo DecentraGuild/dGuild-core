@@ -1,8 +1,5 @@
-/**
- * Default mints shown in address book picker. Separate from marketplace base currencies.
- * SOL, USDC, USDT, WBTC. Keyed by mint address.
- */
+import { ADDRESS_BOOK_DEFAULT_MINTS_DATA } from './address-book-defaults.data.js'
 
-import { BASE_CURRENCY_MINTS } from './currencies.js'
+export type AddressBookDefaultMint = (typeof ADDRESS_BOOK_DEFAULT_MINTS_DATA)[number]
 
-export const ADDRESS_BOOK_DEFAULT_MINTS = [...BASE_CURRENCY_MINTS]
+export const ADDRESS_BOOK_DEFAULT_MINTS: readonly AddressBookDefaultMint[] = ADDRESS_BOOK_DEFAULT_MINTS_DATA
