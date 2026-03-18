@@ -20,6 +20,11 @@ async function main(): Promise<void> {
     console.error('DISCORD_BOT_TOKEN is required')
     process.exit(1)
   }
+  if (!hasBotSecret()) {
+    console.warn(
+      '[discordbot] SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY missing — /verify and role sync will not work until both are set.',
+    )
+  }
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
   })

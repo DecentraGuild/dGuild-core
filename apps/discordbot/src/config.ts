@@ -13,7 +13,7 @@ export const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
 export const API_BASE_URL = ''
 export const DISCORD_BOT_API_SECRET = process.env.DISCORD_BOT_API_SECRET
 
-const VERIFY_URL_TEMPLATE = process.env.VERIFY_URL_TEMPLATE ?? DEFAULT_VERIFY_URL_TEMPLATE
+const VERIFY_URL_TEMPLATE = (process.env.VERIFY_URL_TEMPLATE ?? DEFAULT_VERIFY_URL_TEMPLATE).trim()
 
 export const API_READINESS_MAX_WAIT_MS = Number(
   process.env.API_READINESS_MAX_WAIT_MS ?? DEFAULT_API_READINESS_MAX_WAIT_MS,
@@ -22,9 +22,11 @@ export const API_READINESS_POLL_MS = Number(
   process.env.API_READINESS_POLL_MS ?? DEFAULT_API_READINESS_POLL_MS,
 )
 
+/** Bot needs Supabase URL + service role to call discord-verify / discord-bot Edge Functions. */
 export function hasBotSecret(): boolean {
-  // With Supabase, service_role key is always required; treat as "has secret".
-  return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const url = process.env.SUPABASE_URL?.trim()
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  return Boolean(url && key)
 }
 
 export function buildVerifyUrl(tenantSlug: string, token: string): string {
