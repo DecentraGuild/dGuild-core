@@ -126,7 +126,7 @@ Deno.serve(async (req: Request) => {
     const clientId = Deno.env.get('DISCORD_CLIENT_ID') ?? ''
     if (!clientId) return errorResponse('DISCORD_CLIENT_ID not configured', req, 500)
 
-    const permissions = '268435456' // Manage Roles
+    const permissions = '2415919104' // Manage Roles + application commands
     const url = `https://discord.com/oauth2/authorize?client_id=${clientId}&scope=bot&permissions=${permissions}`
     return jsonResponse({ url }, req)
   }
