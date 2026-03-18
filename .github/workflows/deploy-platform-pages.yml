@@ -39,6 +39,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build platform (static)
+        env:
+          NUXT_PUBLIC_SUPABASE_URL: ${{ secrets.NUXT_PUBLIC_SUPABASE_URL }}
+          NUXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NUXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NUXT_PUBLIC_HELIUS_RPC: ${{ secrets.NUXT_PUBLIC_HELIUS_RPC }}
         run: pnpm run build:platform
 
       - name: Upload GitHub Pages artifact

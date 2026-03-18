@@ -3,8 +3,8 @@
 # Build runs from root; publish path is relative to base (repo root).
 
 [build]
-  command = "pnpm run build:tenant"
-  publish = "apps/tenant/.output/public"
+  command = "cd ../.. && corepack enable && pnpm install && pnpm -w run build:tenant"
+  publish = ".output/public"
 
 [build.environment]
   NODE_VERSION = "20"
