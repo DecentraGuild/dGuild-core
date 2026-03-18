@@ -45,7 +45,7 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
     !periodLocked.value &&
     !yearlyOnly &&
     !isAddUnit.value &&
-    (!isTieredWithOneTime.value || upgradeRecurringAmount.value > 0),
+    !isTieredWithOneTime.value,
   )
 
   const deployLabel = computed(() => {

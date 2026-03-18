@@ -32,8 +32,11 @@
         <p class="ops-login__hint">
           Continue to platform operations. Access is restricted to the wallet in platform_owner.
         </p>
-        <Button @click="goToOps">
-          Continue to platform admin
+        <p v-if="opsAccessError" class="ops-login__error" role="alert">
+          {{ opsAccessError }}
+        </p>
+        <Button :disabled="opsChecking" @click="goToOps">
+          {{ opsChecking ? 'Checking access…' : 'Continue to platform admin' }}
         </Button>
       </Card>
     </div>
@@ -47,11 +50,14 @@ import { useAuth } from '@decentraguild/auth'
 import { ConnectWalletModal } from '@decentraguild/ui/components'
 import { Button } from '~/components/ui/button'
 import { Card } from '~/components/ui/card'
+import { useSupabase } from '~/composables/useSupabase'
 import type { WalletConnectorId } from '@solana/connector/headless'
 
 const auth = useAuth()
 
 const showConnectModal = ref(false)
+const opsAccessError = ref<string | null>(null)
+const opsChecking = ref(false)
 
 onMounted(() => {
   auth.fetchMe()
@@ -59,6 +65,7 @@ onMounted(() => {
 })
 
 async function handleConnectAndSignIn(connectorId: WalletConnectorId) {
+  opsAccessError.value = null
   const ok = await auth.connectAndSignIn(connectorId)
   if (ok) {
     showConnectModal.value = false
@@ -66,8 +73,26 @@ async function handleConnectAndSignIn(connectorId: WalletConnectorId) {
   }
 }
 
-function goToOps() {
-  return navigateTo('/ops')
+async function goToOps() {
+  opsAccessError.value = null
+  opsChecking.value = true
+  try {
+    const supabase = useSupabase()
+    const { data: wallet, error } = await supabase.rpc('check_platform_admin')
+    if (error) {
+      opsAccessError.value =
+        error.message || 'Could not verify platform access. Check Supabase logs.'
+      return
+    }
+    if (!wallet) {
+      opsAccessError.value =
+        'Not recognized as platform admin. (1) Insert your wallet into public.platform_owner in Supabase. (2) In Dashboard → Authentication → Hooks, enable Custom Access Token Hook → Postgres function public.custom_access_token_hook so your JWT includes wallet_address.'
+      return
+    }
+    await navigateTo('/ops')
+  } finally {
+    opsChecking.value = false
+  }
 }
 </script>
 
@@ -116,5 +141,11 @@ function goToOps() {
   margin: 0;
   font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
+}
+
+.ops-login__error {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-destructive, #b91c1c);
 }
 </style>

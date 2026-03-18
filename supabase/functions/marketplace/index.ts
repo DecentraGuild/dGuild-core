@@ -4,13 +4,14 @@
  * Actions:
  *   metadata                  – Fetch mint metadata (from cache or Solana RPC).
  *   metadata-refresh           – Batch refresh mint metadata (admin).
- *   metadata-seed-from-configs – Seed mint_metadata from tenant catalog/watchtower/scope (platform admin).
+ *   metadata-seed-from-configs – Seed mint_metadata from Address Book defaults + catalog/watchtower/scope (platform admin).
  *   metadata-refresh-all       – Refresh all mints in mint_metadata from chain (platform admin).
  *   resolve              – Resolve mint to asset type (SPL/NFT).
  *   escrows              – List on-chain escrows in scope for a tenant.
  *   scope-expand         – Expand collection mints into the marketplace scope (admin, dev only).
  */
 
+import { ADDRESS_BOOK_DEFAULT_MINTS_DATA } from '../_shared/address-book-defaults.data.ts'
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient, getUserClient } from '../_shared/supabase-admin.ts'
 import { getWalletFromAuthHeader } from '../_shared/auth.ts'
@@ -387,6 +388,9 @@ Deno.serve(async (req: Request) => {
 
     const mintsToSeed = new Map<string, 'SPL' | 'NFT'>()
     const memberMetaByMint = new Map<string, { name: string | null; image: string | null; traits: unknown }>()
+    for (const row of ADDRESS_BOOK_DEFAULT_MINTS_DATA) {
+      mintsToSeed.set(row.mint, row.kind)
+    }
     for (const r of catalogRes.data ?? []) {
       mintsToSeed.set(r.mint as string, kindByMint.get(r.mint as string) ?? 'SPL')
     }

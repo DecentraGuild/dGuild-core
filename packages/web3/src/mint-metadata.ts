@@ -129,3 +129,16 @@ export async function fetchMintMetadataFromChain(
 
   return result
 }
+
+export async function hasMetaplexMetadataAccount(
+  connection: Connection,
+  mintAddress: string
+): Promise<boolean> {
+  try {
+    const metadataPDA = getMetadataPDA(mintAddress)
+    const accountInfo = await connection.getAccountInfo(metadataPDA)
+    return Boolean(accountInfo?.data && accountInfo.data.length > 0)
+  } catch {
+    return false
+  }
+}

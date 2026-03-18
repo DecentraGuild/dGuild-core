@@ -8,6 +8,10 @@ import type { ConditionSet, PriceResult, TierDefinition } from '@decentraguild/b
 import type { TieredAddonsPricing, TieredWithOneTimePerUnitPricing } from '@decentraguild/billing'
 
 export const CONDITION_LABELS: Record<string, string> = {
+  mints_count: 'Tradable mints in scope',
+  base_currencies_count: 'Base pay currencies',
+  custom_currencies: 'Custom pay currencies',
+  monetize_storefront: 'Monetize storefront',
   mintsCount: 'Mints',
   mints_count: 'Tradable mints',
   baseCurrenciesCount: 'Base currencies',

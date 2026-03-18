@@ -1,6 +1,6 @@
 /**
  * Tenant mint catalog – central list for all modules.
- * Uses tenant-catalog Edge Function (bypasses RLS) for admin CRUD.
+ * Uses tenant_catalog Edge Function (bypasses RLS) for admin CRUD.
  */
 
 import { useTenantStore } from '~/stores/tenant'
@@ -33,7 +33,7 @@ export function useTenantCatalog() {
     if (!id) return []
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('tenant-catalog', {
+    const { data, error } = await supabase.functions.invoke('tenant_catalog', {
       body: { action: 'list', tenantId: id },
     })
 
@@ -47,7 +47,7 @@ export function useTenantCatalog() {
     if (!id) return []
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('tenant-catalog', {
+    const { data, error } = await supabase.functions.invoke('tenant_catalog', {
       body: { action: 'list-discord', tenantId: id },
     })
 
@@ -66,7 +66,7 @@ export function useTenantCatalog() {
     if (!id) throw new Error('No tenant')
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('tenant-catalog', {
+    const { data, error } = await supabase.functions.invoke('tenant_catalog', {
       body: {
         action: 'add',
         tenantId: id,
@@ -87,7 +87,7 @@ export function useTenantCatalog() {
     if (!id) throw new Error('No tenant')
 
     const supabase = useSupabase()
-    const { error } = await supabase.functions.invoke('tenant-catalog', {
+    const { error } = await supabase.functions.invoke('tenant_catalog', {
       body: {
         action: 'update-shipment-display',
         tenantId: id,
@@ -104,7 +104,7 @@ export function useTenantCatalog() {
     if (!id) throw new Error('No tenant')
 
     const supabase = useSupabase()
-    const { error } = await supabase.functions.invoke('tenant-catalog', {
+    const { error } = await supabase.functions.invoke('tenant_catalog', {
       body: { action: 'remove', tenantId: id, mint },
     })
 
@@ -118,7 +118,7 @@ export function useTenantCatalog() {
     if (!id || !mints.length) return 0
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('tenant-catalog', {
+    const { data, error } = await supabase.functions.invoke('tenant_catalog', {
       body: { action: 'sync', tenantId: id, mints },
     })
 

@@ -1,23 +1,14 @@
 /**
- * Tenant catalog Edge Function.
+ * Tenant mint catalog Edge Function (invoke as tenant_catalog).
  * Central mint list (tenant_mint_catalog) CRUD. Uses service role to bypass RLS.
  * All actions require tenant admin (wallet in tenant_config.admins).
- *
- * Actions:
- *   list   – List mints for tenant.
- *   add    – Add mint (with optional metadata from client).
- *   remove – Remove mint.
- *   sync   – Batch upsert mints (for Marketplace, etc.).
- *   catalog-refresh-traits – Refresh trait_index for an NFT collection (id required).
- *   list-discord – List mints with track_holders=true (for Discord module).
- *   resolve-full – Resolve mint to SPL/NFT + metadata (address book picker; needs HELIUS_RPC_URL or SOLANA_RPC_URL).
  */
 
 const BASE_CURRENCY_MINTS = new Set([
-  'So11111111111111111111111111111111111111112', // Wrapped SOL
-  '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh', // WBTC
-  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
-  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+  'So11111111111111111111111111111111111111112',
+  '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
 ])
 
 function isBaseCurrencyMint(mint: string): boolean {
@@ -110,9 +101,6 @@ Deno.serve(async (req: Request) => {
     }, req)
   }
 
-  // ---------------------------------------------------------------------------
-  // list – top-level mints only (collections + SPL), with collectionSize/trait count for NFTs
-  // ---------------------------------------------------------------------------
   if (action === 'list') {
     const { data: rows, error } = await db
       .from('tenant_mint_catalog')
@@ -148,7 +136,6 @@ Deno.serve(async (req: Request) => {
       memberCountByCollection = counts
     }
 
-    // Enrich with trait count from mint_metadata for NFTs
     const nftMintSet = new Set(entries.filter((e) => e.kind === 'NFT').map((e) => e.mint))
     let traitCountByMint: Record<string, number> = {}
     if (nftMintSet.size > 0) {
@@ -190,9 +177,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ entries: enriched }, req)
   }
 
-  // ---------------------------------------------------------------------------
-  // list-members – member NFTs for a collection (from tenant_collection_members)
-  // ---------------------------------------------------------------------------
   if (action === 'list-members') {
     const collectionMint = (body.collectionMint as string)?.trim()
     if (!collectionMint) return errorResponse('collectionMint required', req)
@@ -220,9 +204,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ entries }, req)
   }
 
-  // ---------------------------------------------------------------------------
-  // list-discord – mints with any track enabled (Current holders, Snapshot, or Transactions)
-  // ---------------------------------------------------------------------------
   if (action === 'list-discord') {
     const { data: watches } = await db
       .from('watchtower_watches')
@@ -277,9 +258,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ entries }, req)
   }
 
-  // ---------------------------------------------------------------------------
-  // add – upsert with metadata. Fetches from chain when name/label/image absent.
-  // ---------------------------------------------------------------------------
   if (action === 'add') {
     const mint = (body.mint as string)?.trim()
     if (isBaseCurrencyMint(mint)) {
@@ -306,7 +284,6 @@ Deno.serve(async (req: Request) => {
       traitIndex = meta.traitIndex ?? null
     }
 
-    // Store metadata in mint_metadata; catalog stores only mint + kind + label override
     if (meta) {
       await db.from('mint_metadata').upsert({
         mint,
@@ -411,7 +388,7 @@ Deno.serve(async (req: Request) => {
             await db.from('mint_metadata').upsert(metaUpserts, { onConflict: 'mint' })
           }
         } catch {
-          /* expand best-effort; collection row already saved */
+          /* expand best-effort */
         }
       }
     }
@@ -419,9 +396,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ entry }, req)
   }
 
-  // ---------------------------------------------------------------------------
-  // remove – also removes member NFTs from tenant_collection_members
-  // ---------------------------------------------------------------------------
   if (action === 'remove') {
     const mint = (body.mint as string)?.trim()
     if (!mint) return errorResponse('mint required', req)
@@ -443,9 +417,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ ok: true }, req)
   }
 
-  // ---------------------------------------------------------------------------
-  // catalog-refresh-traits – refresh trait_index for an NFT collection in catalog
-  // ---------------------------------------------------------------------------
   if (action === 'catalog-refresh-traits') {
     const catalogId = body.id as number
     if (!catalogId) return errorResponse('id required', req)
@@ -477,9 +448,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ entry: entry ?? { id: catalogId, mint, kind: 'NFT', label: null } }, req)
   }
 
-  // ---------------------------------------------------------------------------
-  // update-shipment-display – upsert shipment_banner_image for a mint
-  // ---------------------------------------------------------------------------
   if (action === 'update-shipment-display') {
     const mint = (body.mint as string)?.trim()
     if (!mint) return errorResponse('mint required', req)
@@ -499,9 +467,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ ok: true }, req)
   }
 
-  // ---------------------------------------------------------------------------
-  // sync – batch upsert mints (for Marketplace save, etc.)
-  // ---------------------------------------------------------------------------
   if (action === 'sync') {
     const mints = body.mints as Array<{ mint: string; kind: 'SPL' | 'NFT'; label?: string | null }>
     if (!Array.isArray(mints) || mints.length === 0) {

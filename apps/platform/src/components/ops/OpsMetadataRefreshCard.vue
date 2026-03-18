@@ -3,7 +3,7 @@
     <CardHeader>
       <CardTitle>Mint metadata</CardTitle>
       <CardDescription>
-        After db reset, run <strong>Seed from configs</strong> first to populate <code>mint_metadata</code> from tenant catalog, watchtower, and marketplace scope. Then use <strong>Refresh</strong> to refetch from chain.
+        After db reset, run <strong>Seed from configs</strong> first to populate <code>mint_metadata</code> from platform Address Book defaults, tenant catalog, watchtower, and marketplace scope. Then use <strong>Refresh</strong> to refetch from chain.
       </CardDescription>
     </CardHeader>
     <CardContent>

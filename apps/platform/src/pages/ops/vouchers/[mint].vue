@@ -310,7 +310,9 @@ import {
   createConnection,
   buildMintTransaction,
   buildBurnTransaction,
+  buildCreateMetadataTransaction,
   buildUpdateMetadataTransaction,
+  hasMetaplexMetadataAccount,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
   fetchMintMetadataFromChain,
@@ -596,15 +598,27 @@ async function saveEdit(payload: {
       const metadataUri = (metaData as { metadataUri?: string })?.metadataUri
       if (!metadataUri?.trim()) throw new Error('No metadata URI returned')
       const connection = createConnection(rpcUrl)
-      const tx = buildUpdateMetadataTransaction({
-        mint: mintAddr,
-        updateAuthority: wallet.publicKey,
-        newName: resolvedName,
-        newSymbol: resolvedSymbol,
-        newUri: metadataUri.trim(),
-        sellerFeeBasisPoints,
-      })
-      await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
+      const uri = metadataUri.trim()
+      const onChainMeta = await hasMetaplexMetadataAccount(connection, mintAddr)
+      const metaTx = onChainMeta
+        ? buildUpdateMetadataTransaction({
+            mint: mintAddr,
+            updateAuthority: wallet.publicKey,
+            newName: resolvedName.slice(0, 32),
+            newSymbol: resolvedSymbol.slice(0, 10),
+            newUri: uri,
+            sellerFeeBasisPoints,
+          })
+        : buildCreateMetadataTransaction({
+            mint: mintAddr,
+            name: resolvedName.slice(0, 32),
+            symbol: resolvedSymbol.slice(0, 10),
+            uri,
+            updateAuthority: wallet.publicKey,
+            payer: wallet.publicKey,
+            sellerFeeBasisPoints,
+          })
+      await sendAndConfirmTransaction(connection, metaTx, wallet, wallet.publicKey)
     }
 
     if (detail.value.type === 'bundle') {

@@ -10,14 +10,17 @@
     </div>
 
     <template v-else-if="price?.billable && (isAddUnit || isTieredWithOneTime)">
-      <div class="pricing-widget__tier">
-        <span class="pricing-widget__tier-name">{{ isTieredWithOneTime ? (price.oneTimeUnitName ?? 'Per unit') : addUnitName }}</span>
-        <span class="pricing-widget__tier-price">{{ formatUsdc(isTieredWithOneTime ? oneTimePerUnitEffective : price.oneTimeTotal) }} USDC</span>
+      <div class="pricing-widget__one-time-card">
+        <span class="pricing-widget__price-kind">{{ isTieredWithOneTime ? 'Per raffle' : 'One-time' }}</span>
+        <div class="pricing-widget__tier pricing-widget__tier--flush">
+          <span class="pricing-widget__tier-name">{{ isTieredWithOneTime ? (price.oneTimeUnitName ?? 'Per raffle') : addUnitName }}</span>
+          <span class="pricing-widget__tier-price">{{ formatUsdc(isTieredWithOneTime ? oneTimePerUnitEffective : price.oneTimeTotal) }} USDC</span>
+        </div>
+        <p v-if="isTieredWithOneTime" class="pricing-widget__add-unit-hint">
+          {{ selectedTier?.name ?? 'Current' }} tier: {{ formatUsdc(oneTimePerUnitEffective) }} USDC each time you create a new raffle.
+        </p>
+        <p v-else class="pricing-widget__add-unit-hint">Paid once per new {{ addUnitName.toLowerCase() }}.</p>
       </div>
-      <p v-if="isTieredWithOneTime" class="pricing-widget__add-unit-hint">
-        {{ price.oneTimeUnitName ?? 'Per unit' }}: {{ formatUsdc(oneTimePerUnitEffective) }} USDC when creating on {{ selectedTier?.name ?? 'this' }} tier.
-      </p>
-      <p v-else class="pricing-widget__add-unit-hint">One-time fee per new {{ addUnitName.toLowerCase() }}.</p>
     </template>
 
     <template v-else-if="price?.billable && selectedTier">

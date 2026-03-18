@@ -1,6 +1,6 @@
 /**
  * Address book entries for the current tenant.
- * Uses tenant-catalog Edge Function (central list). Address Book is always available as an admin tab.
+ * Uses tenant_catalog Edge Function (central list). Address Book is always available as an admin tab.
  * Prepends platform defaults (SOL, USDC, USDT, WBTC) by mint address; deduplicates by mint.
  */
 
@@ -24,10 +24,11 @@ const DEFAULT_MINT_SET = new Set(ADDRESS_BOOK_DEFAULT_MINTS.map((c) => c.mint))
 
 const defaultEntries: AddressBookEntry[] = ADDRESS_BOOK_DEFAULT_MINTS.map((c) => ({
   mint: c.mint,
-  kind: 'SPL' as const,
+  kind: c.kind,
   tier: 'base' as const,
   label: c.name ?? c.symbol,
-  name: c.name ?? c.symbol,
+  name: c.name,
+  symbol: c.symbol,
   image: null,
 }))
 

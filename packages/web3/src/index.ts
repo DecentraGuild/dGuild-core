@@ -47,7 +47,10 @@ export {
 } from './das/index.js'
 export type { DasAsset, DasAttribute } from './das/index.js'
 
-export { fetchMintMetadataFromChain } from './mint-metadata.js'
+export {
+  fetchMintMetadataFromChain,
+  hasMetaplexMetadataAccount,
+} from './mint-metadata.js'
 export type { FetchedMintMetadata } from './mint-metadata.js'
 
 export {
