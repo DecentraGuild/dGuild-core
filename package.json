@@ -13,7 +13,8 @@
     "db:export-tenant": "node scripts/export-tenant-config.mjs",
     "lint": "pnpm exec eslint apps packages",
     "build:platform": "pnpm exec turbo run build --filter=./packages/* --filter=@decentraguild/catalog && pnpm --filter platform generate",
-    "build:tenant": "pnpm exec turbo run build --filter=./packages/* --filter=./catalog && pnpm --filter tenant generate"
+    "build:tenant": "pnpm exec turbo run build --filter=./packages/* --filter=./catalog && pnpm --filter tenant generate",
+    "deploy:discordbot": "pnpm --filter discord-bot deploy"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.98.0",
