@@ -14,7 +14,9 @@
     </Card>
     <Card>
       <h3>Mint catalog</h3>
-      <p class="marketplace-settings__hint">NFT collections and SPL tokens available in the marketplace.</p>
+      <p class="marketplace-settings__hint">
+        Add assets in <strong>Admin → Address book</strong> first. Here you only choose which of those are tradable on the marketplace. Paste a mint already in the book, or pick from the book.
+      </p>
 
       <AdminMintCatalog
         :mints="catalogItems"
@@ -22,15 +24,18 @@
         @delete="onDeleteMint"
       >
         <template #add>
-          <h4 class="marketplace-settings__add-title">Add mint</h4>
-          <AddMintInput
-            v-model="newMint"
-            v-model:kind="newMintKind"
-            :error="addMintError"
-            :loading="adding"
-            :disabled="saving"
-            @submit="(mint, kind, entry) => addMint(mint, kind, entry)"
-          />
+          <h4 class="marketplace-settings__add-title">Add tradable mint</h4>
+          <div class="marketplace-settings__add-mint">
+            <AddMintInput
+              v-model="newMint"
+              v-model:kind="newMintKind"
+              :error="addMintError"
+              :loading="adding"
+              :disabled="saving"
+              @submit="(mint, kind, entry) => addMint(mint, kind, entry)"
+            />
+            <AddressBookBrowser @select="(mint, e) => addMint(mint, e.kind === 'NFT' ? 'NFT' : 'SPL', e)" />
+          </div>
         </template>
       </AdminMintCatalog>
     </Card>

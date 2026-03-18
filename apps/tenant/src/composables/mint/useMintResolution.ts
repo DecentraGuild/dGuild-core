@@ -1,8 +1,5 @@
-/**
- * Resolve a mint address to kind + metadata via the marketplace Edge Function.
- * Returns { kind, spl?, collection? } for MintAssetPicker.
- */
 import { useSupabase } from '~/composables/core/useSupabase'
+import { useTenantStore } from '~/stores/tenant'
 import type { SplAssetMint, CollectionMint } from '~/types/mints'
 
 export type AssetKind = 'SPL' | 'NFT' | null
@@ -20,11 +17,18 @@ export function useMintResolution() {
     kindHint?: 'SPL' | 'NFT',
   ): Promise<ResolveMintResult> {
     if (!mint) return null
+    const tenantId = useTenantStore().tenantId
+    if (!tenantId) throw new Error('Tenant not loaded')
     resolving.value = true
     try {
       const supabase = useSupabase()
-      const { data, error } = await supabase.functions.invoke('marketplace', {
-        body: { action: 'resolve-full', mint, kind: kindHint ?? 'auto' },
+      const { data, error } = await supabase.functions.invoke('tenant-catalog', {
+        body: {
+          action: 'resolve-full',
+          tenantId,
+          mint,
+          kind: kindHint ?? 'auto',
+        },
       })
       if (error) throw error
       const d = data as { kind?: string; spl?: SplAssetMint; collection?: CollectionMint }

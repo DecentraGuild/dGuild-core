@@ -180,6 +180,8 @@ import { Button } from '~/components/ui/button'
 import {
   buildCreateMintOnlyTransaction,
   buildCreateMetadataTransaction,
+  buildUpdateMetadataTransaction,
+  hasMetaplexMetadataAccount,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
   createConnection,
@@ -590,16 +592,26 @@ async function submitMetadataAndLink() {
     const name = metadataForm.name.trim().slice(0, 32)
     const symbol = metadataForm.symbol.trim().slice(0, 10)
     const sellerFeeBasisPoints = Math.max(0, Math.min(10000, metadataForm.sellerFeeBasisPoints ?? 0))
-    const tx = buildCreateMetadataTransaction({
-      mint,
-      name,
-      symbol,
-      uri,
-      updateAuthority: wallet.publicKey,
-      payer: wallet.publicKey,
-      sellerFeeBasisPoints,
-    })
-    const metaSig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
+    const metadataOnChain = await hasMetaplexMetadataAccount(connection, mint)
+    const metaTx = metadataOnChain
+      ? buildUpdateMetadataTransaction({
+          mint,
+          updateAuthority: wallet.publicKey,
+          newName: name,
+          newSymbol: symbol,
+          newUri: uri,
+          sellerFeeBasisPoints,
+        })
+      : buildCreateMetadataTransaction({
+          mint,
+          name,
+          symbol,
+          uri,
+          updateAuthority: wallet.publicKey,
+          payer: wallet.publicKey,
+          sellerFeeBasisPoints,
+        })
+    const metaSig = await sendAndConfirmTransaction(connection, metaTx, wallet, wallet.publicKey)
 
     if (metadataForm.type === 'bundle') {
       const { error: linkErr } = await supabase.functions.invoke('platform', {
@@ -627,7 +639,7 @@ async function submitMetadataAndLink() {
 
     toastStore.add(toastId, {
       status: 'success',
-      message: `Metadata added & voucher linked: ${mint.slice(0, 8)}…`,
+      message: `${metadataOnChain ? 'Metadata updated' : 'Metadata created'} & voucher linked: ${mint.slice(0, 8)}…`,
       signature: metaSig,
     })
     metadataModalMint.value = null

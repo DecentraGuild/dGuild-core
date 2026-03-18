@@ -10,6 +10,8 @@
  * Or: pnpm db:sync
  *
  * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (or uses supabase status -o json for local)
+ * PowerShell: $env:SUPABASE_URL="https://....supabase.co"; $env:SUPABASE_SERVICE_ROLE_KEY="..."; pnpm db:sync
+ * (CMD set VAR=value does not set env for Node in PowerShell.)
  */
 
 import { readFileSync, readdirSync } from 'node:fs'
@@ -375,7 +377,7 @@ async function main() {
   const creds = getCredentials()
   if (!creds?.url || !creds?.key) {
     console.warn(
-      '[sync-tenant-config] Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or run supabase start.'
+      '[sync-tenant-config] Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY. On PowerShell use $env:SUPABASE_URL=... and $env:SUPABASE_SERVICE_ROLE_KEY=... (not set VAR=value). Or run supabase start for local.'
     )
     process.exit(0)
   }

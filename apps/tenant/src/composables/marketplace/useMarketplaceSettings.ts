@@ -7,7 +7,9 @@ import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
 import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import type { TieredAddonsPricing } from '@decentraguild/catalog'
 import { useSupabase } from '~/composables/core/useSupabase'
+import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
 import type { AddressBookEntry, CatalogMintItem } from '~/types/mints'
+import type { CatalogEntry } from '~/composables/watchtower/useTenantCatalog'
 import { reactive, ref, watch, computed, nextTick } from 'vue'
 
 export interface CollectionMint {
@@ -108,6 +110,7 @@ export function useMarketplaceSettings(opts: {
 }) {
   const { slug, settings, emit, emitSaving } = opts
   const tenantId = computed(() => useTenantStore().tenantId)
+  const tenantCatalog = useTenantCatalog()
 
   const form = reactive<MarketplaceForm>({
     collectionMints: [],
@@ -302,7 +305,14 @@ export function useMarketplaceSettings(opts: {
         const name = entry.name ?? entry.label ?? undefined
         const image = entry.image ?? undefined
         if (entry.kind === 'NFT') {
-          form.collectionMints.push({ mint: trimmed, name, image, collectionSize: 0, uniqueTraitCount: 0, traitTypes: [] })
+          form.collectionMints.push({
+            mint: trimmed,
+            name,
+            image,
+            collectionSize: entry.collectionSize ?? 0,
+            uniqueTraitCount: entry.uniqueTraitCount ?? 0,
+            traitTypes: [],
+          })
         } else {
           form.splAssetMints.push({ mint: trimmed, name, symbol: entry.symbol ?? undefined, image })
         }
@@ -311,63 +321,46 @@ export function useMarketplaceSettings(opts: {
         return
       }
 
-      const tryCollection = kind === 'auto' || kind === 'NFT'
-      const trySpl = kind === 'auto' || kind === 'SPL'
-      const supabase = useSupabase()
-      if (tryCollection) {
-        const { data: colData, error: colErr } = await supabase.functions.invoke('marketplace', {
-          body: { action: 'collection-preview', mint: trimmed },
-        })
-        if (!colErr && colData) {
-          const d = colData as { name?: string; image?: string; sellerFeeBasisPoints?: number; collectionSize?: number; uniqueTraitCount?: number; traitTypes?: string[]; updateAuthority?: string; uri?: string; primarySaleHappened?: boolean; isMutable?: boolean; editionNonce?: number; tokenStandard?: string }
-          if ((d.collectionSize ?? 0) > 0) {
-            form.collectionMints.push({
-              mint: trimmed,
-              name: d.name,
-              image: d.image,
-              sellerFeeBasisPoints: d.sellerFeeBasisPoints,
-              updateAuthority: d.updateAuthority,
-              uri: d.uri,
-              primarySaleHappened: d.primarySaleHappened,
-              isMutable: d.isMutable,
-              editionNonce: d.editionNonce,
-              tokenStandard: d.tokenStandard,
-              collectionSize: d.collectionSize ?? 0,
-              uniqueTraitCount: d.uniqueTraitCount ?? 0,
-              traitTypes: d.traitTypes ?? [],
-            })
-            newMint.value = ''
-            newMintKind.value = 'auto'
-            return
-          }
-        }
+      let rows: CatalogEntry[]
+      try {
+        rows = await tenantCatalog.list()
+      } catch (e) {
+        addMintError.value = e instanceof Error ? e.message : 'Failed to load Address book'
+        return
       }
-      if (trySpl) {
-        const { data: splData, error: splErr } = await supabase.functions.invoke('marketplace', {
-          body: { action: 'spl-preview', mint: trimmed },
-        })
-        if (!splErr && splData) {
-          const d = splData as { name?: string; symbol?: string; image?: string; decimals?: number; sellerFeeBasisPoints?: number; updateAuthority?: string; uri?: string; primarySaleHappened?: boolean; isMutable?: boolean; editionNonce?: number; tokenStandard?: string }
-          form.splAssetMints.push({
-            mint: trimmed,
-            name: d.name,
-            symbol: d.symbol,
-            image: d.image,
-            decimals: d.decimals,
-            sellerFeeBasisPoints: d.sellerFeeBasisPoints,
-            updateAuthority: d.updateAuthority,
-            uri: d.uri,
-            primarySaleHappened: d.primarySaleHappened,
-            isMutable: d.isMutable,
-            editionNonce: d.editionNonce,
-            tokenStandard: d.tokenStandard,
-          })
-          newMint.value = ''
-          newMintKind.value = 'auto'
-          return
-        }
+      const row = rows.find((r) => r.mint === trimmed)
+      if (!row) {
+        addMintError.value = 'Add this mint in Address book first (Admin → Address book).'
+        return
       }
-      addMintError.value = 'Could not resolve mint as NFT collection or SPL token.'
+      const effectiveKind = kind === 'auto' ? row.kind : kind
+      if (effectiveKind !== row.kind) {
+        addMintError.value =
+          row.kind === 'NFT'
+            ? 'This mint is an NFT collection in your Address book. Choose NFT or Auto-detect.'
+            : 'This mint is an SPL token in your Address book. Choose SPL or Auto-detect.'
+        return
+      }
+      if (row.kind === 'NFT') {
+        form.collectionMints.push({
+          mint: trimmed,
+          name: row.name ?? row.label ?? undefined,
+          image: row.image ?? undefined,
+          collectionSize: row.collectionSize ?? 0,
+          uniqueTraitCount: row.uniqueTraitCount ?? 0,
+          traitTypes: [],
+        })
+      } else {
+        form.splAssetMints.push({
+          mint: trimmed,
+          name: row.name ?? row.label ?? undefined,
+          symbol: row.symbol ?? undefined,
+          image: row.image ?? undefined,
+          decimals: row.decimals ?? null,
+        })
+      }
+      newMint.value = ''
+      newMintKind.value = 'auto'
     } catch (e) {
       addMintError.value = e instanceof Error ? e.message : 'Failed to resolve mint'
     } finally {
@@ -376,10 +369,24 @@ export function useMarketplaceSettings(opts: {
   }
 
   async function fillMissingCollectionCounts() {
+    let byMint = new Map<string, CatalogEntry>()
+    try {
+      const rows = await tenantCatalog.list()
+      byMint = new Map(rows.map((r) => [r.mint, r]))
+    } catch { /* ignore */ }
     const supabase = useSupabase()
     for (let i = 0; i < form.collectionMints.length; i++) {
       const m = form.collectionMints[i]
       if (m._loading || m._error || (m.collectionSize != null && m.collectionSize > 0)) continue
+      const cat = byMint.get(m.mint)
+      if (cat?.kind === 'NFT' && (cat.collectionSize ?? 0) > 0) {
+        const existing = form.collectionMints[i]
+        if (existing?.mint === m.mint) {
+          existing.collectionSize = cat.collectionSize ?? 0
+          existing.uniqueTraitCount = cat.uniqueTraitCount ?? 0
+        }
+        continue
+      }
       try {
         const { data } = await supabase.functions.invoke('marketplace', {
           body: { action: 'collection-preview', mint: m.mint },

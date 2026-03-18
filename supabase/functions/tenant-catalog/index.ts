@@ -10,6 +10,7 @@
  *   sync   – Batch upsert mints (for Marketplace, etc.).
  *   catalog-refresh-traits – Refresh trait_index for an NFT collection (id required).
  *   list-discord – List mints with track_holders=true (for Discord module).
+ *   resolve-full – Resolve mint to SPL/NFT + metadata (address book picker; needs HELIUS_RPC_URL or SOLANA_RPC_URL).
  */
 
 const BASE_CURRENCY_MINTS = new Set([
@@ -78,6 +79,36 @@ Deno.serve(async (req: Request) => {
 
   const db = getAdminClient()
   const now = new Date().toISOString()
+
+  if (action === 'resolve-full') {
+    const mint = (body.mint as string)?.trim()
+    const kindHint = body.kind as 'SPL' | 'NFT' | 'auto' | undefined
+    if (!mint) return errorResponse('mint required', req)
+    const { fetchMintMetadata } = await import('../_shared/mint-metadata.ts')
+    const hint = kindHint === 'auto' || !kindHint ? undefined : kindHint
+    const meta = await fetchMintMetadata(mint, hint)
+    if (!meta) return errorResponse('Mint not found or invalid', req, 404)
+    if (meta.kind === 'SPL') {
+      return jsonResponse({
+        kind: 'SPL',
+        spl: { mint, name: meta.name ?? undefined, symbol: meta.label ?? undefined, image: meta.image ?? undefined },
+      }, req)
+    }
+    const traitKeys = meta.traitIndex && typeof meta.traitIndex === 'object' && 'trait_keys' in meta.traitIndex
+      ? (meta.traitIndex.trait_keys as string[])
+      : undefined
+    return jsonResponse({
+      kind: 'NFT',
+      collection: {
+        mint,
+        name: meta.name ?? undefined,
+        image: meta.image ?? undefined,
+        collectionSize: meta.collectionSize ?? undefined,
+        uniqueTraitCount: traitKeys?.length ?? undefined,
+        traitTypes: traitKeys,
+      },
+    }, req)
+  }
 
   // ---------------------------------------------------------------------------
   // list – top-level mints only (collections + SPL), with collectionSize/trait count for NFTs

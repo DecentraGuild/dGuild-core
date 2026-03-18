@@ -1,12 +1,11 @@
 {
   "id": "0000000",
-  "slug": "our",
   "name": "Decentra Guild",
   "description": "Decentra Guild Environment",
   "branding": {
     "logo": "https://www.decentraguild.com/logo/dguild-logo.svg",
     "theme": {}
-  }
+  },
   "modules": {
     "admin": {
       "state": "active",
@@ -14,5 +13,9 @@
       "deactivatedate": null,
       "deactivatingUntil": null
     }
-  }
+  },
+  "admins": [
+    "89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q",
+    "adm1rpWxyo8u9y2Q2wxxfqaVDLE2gD1N9PbZbbhokTP"
+  ]
 }
