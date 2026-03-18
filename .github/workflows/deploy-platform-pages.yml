@@ -21,13 +21,15 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Same environment as deploy so secrets on "github-pages" are visible here.
+    # Without this, only Repository secrets are available — env-only secrets stay empty at build.
+    environment: github-pages
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        # version from package.json "packageManager": "pnpm@9.15.0"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -37,6 +39,16 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Check Supabase env for build
+        env:
+          URL: ${{ secrets.NUXT_PUBLIC_SUPABASE_URL }}
+          KEY: ${{ secrets.NUXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::error::NUXT_PUBLIC_SUPABASE_URL and NUXT_PUBLIC_SUPABASE_ANON_KEY must be set (Repository secrets or github-pages environment secrets)."
+            exit 1
+          fi
 
       - name: Build platform (static)
         env:
@@ -53,7 +65,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment: github-pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
