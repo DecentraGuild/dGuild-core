@@ -1,6 +1,8 @@
 # Builds the platform app (Nuxt static) and deploys to GitHub Pages.
 # Repo Settings → Pages → Source: "GitHub Actions" must be selected.
-# Runs only when platform or its dependencies change.
+#
+# Required GitHub secrets (Repository or github-pages environment; names must match exactly):
+#   NUXT_PUBLIC_SUPABASE_URL, NUXT_PUBLIC_SUPABASE_ANON_KEY, NUXT_PUBLIC_HELIUS_RPC
 
 name: Deploy platform to GitHub Pages
 
@@ -40,13 +42,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check Supabase env for build
+      - name: Check required secrets for build
         env:
           URL: ${{ secrets.NUXT_PUBLIC_SUPABASE_URL }}
           KEY: ${{ secrets.NUXT_PUBLIC_SUPABASE_ANON_KEY }}
+          HELIUS: ${{ secrets.NUXT_PUBLIC_HELIUS_RPC }}
         run: |
           if [ -z "$URL" ] || [ -z "$KEY" ]; then
-            echo "::error::NUXT_PUBLIC_SUPABASE_URL and NUXT_PUBLIC_SUPABASE_ANON_KEY must be set (Repository secrets or github-pages environment secrets)."
+            echo "::error::NUXT_PUBLIC_SUPABASE_URL and NUXT_PUBLIC_SUPABASE_ANON_KEY must be set (Repository or github-pages environment secrets)."
+            exit 1
+          fi
+          if [ -z "$HELIUS" ]; then
+            echo "::error::NUXT_PUBLIC_HELIUS_RPC must be set (Repository or github-pages environment secrets)."
             exit 1
           fi
 

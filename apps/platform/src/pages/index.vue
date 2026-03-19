@@ -105,12 +105,22 @@ const error = ref<string | null>(null)
 
 onMounted(async () => {
   try {
+    const anonKey = (config.public.supabaseAnonKey as string)?.trim()
+    if (!anonKey) {
+      error.value = 'Discovery is not configured. Set NUXT_PUBLIC_SUPABASE_ANON_KEY when building the platform (e.g. in GitHub Actions secrets) and redeploy.'
+      return
+    }
     const supabase = useSupabase()
     const { data, error: dbError } = await supabase
       .from('tenant_config')
       .select('id, slug, name, description, branding, modules')
       .order('created_at', { ascending: false })
-    if (dbError) throw new Error(dbError.message)
+    if (dbError) {
+      const msg = dbError.code === 'PGRST301' || dbError.message?.includes('401')
+        ? 'Invalid or missing Supabase anon key. Set NUXT_PUBLIC_SUPABASE_ANON_KEY to the anon public key from Supabase Dashboard → Settings → API and redeploy.'
+        : dbError.message
+      throw new Error(msg)
+    }
     tenants.value = (data ?? []) as TenantConfig[]
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load tenants'
