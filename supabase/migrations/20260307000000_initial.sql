@@ -8,6 +8,7 @@
 
 CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
 CREATE EXTENSION IF NOT EXISTS "pg_cron" WITH SCHEMA "cron";
+CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
 
 -- ---------------------------------------------------------------------------
 -- Tenant config
@@ -798,7 +799,7 @@ CREATE TRIGGER gate_lists_delete_trg
   FOR EACH ROW EXECUTE FUNCTION public.gate_lists_delete_fn();
 
 -- ---------------------------------------------------------------------------
--- Cron edge config (invoke_edge_function reads from here)
+-- Cron edge config (local fallback for invoke_edge_function; hosted: Vault)
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS public.cron_edge_config (
@@ -925,36 +926,46 @@ $$;
 GRANT EXECUTE ON FUNCTION public.check_platform_admin() TO authenticated;
 
 -- ---------------------------------------------------------------------------
--- invoke_edge_function (cron_edge_config fallback)
+-- invoke_edge_function (pg_cron → Edge via pg_net)
+-- Credentials: optional app.* settings, then Vault secrets (hosted), then cron_edge_config (local).
+-- Vault names: cron_invoke_supabase_url, cron_invoke_service_role_key (create in Dashboard → Vault or SQL).
 -- ---------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.invoke_edge_function(fn_name text, body_json jsonb DEFAULT '{}'::jsonb)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
+SET search_path = public, vault, extensions
 AS $$
 DECLARE
   supabase_url text;
   service_key  text;
-  config_url   text;
-  config_key   text;
 BEGIN
-  SELECT value INTO config_url FROM public.cron_edge_config WHERE key = 'supabase_url';
-  SELECT value INTO config_key FROM public.cron_edge_config WHERE key = 'service_role_key';
-  supabase_url := COALESCE(NULLIF(TRIM(current_setting('app.supabase_url', true)), ''), NULLIF(TRIM(config_url), ''));
-  service_key  := COALESCE(NULLIF(TRIM(current_setting('app.service_role_key', true)), ''), NULLIF(TRIM(config_key), ''));
+  supabase_url := COALESCE(
+    NULLIF(TRIM(current_setting('app.supabase_url', true)), ''),
+    NULLIF(TRIM((SELECT ds.decrypted_secret FROM vault.decrypted_secrets ds WHERE ds.name = 'cron_invoke_supabase_url' LIMIT 1)), ''),
+    NULLIF(TRIM((SELECT c.value FROM public.cron_edge_config c WHERE c.key = 'supabase_url')), '')
+  );
+  service_key := COALESCE(
+    NULLIF(TRIM(current_setting('app.service_role_key', true)), ''),
+    NULLIF(TRIM((SELECT ds.decrypted_secret FROM vault.decrypted_secrets ds WHERE ds.name = 'cron_invoke_service_role_key' LIMIT 1)), ''),
+    NULLIF(TRIM((SELECT c.value FROM public.cron_edge_config c WHERE c.key = 'service_role_key')), '')
+  );
 
-  IF supabase_url IS NULL OR service_key IS NULL THEN
+  IF supabase_url IS NULL OR service_key IS NULL OR service_key = '' THEN
     RAISE WARNING 'invoke_edge_function: supabase_url or service_role_key not set; skipping %', fn_name;
     RETURN;
   END IF;
   PERFORM extensions.http_post(
-    url     := supabase_url || '/functions/v1/' || fn_name,
+    url     := rtrim(supabase_url, '/') || '/functions/v1/' || fn_name,
     headers := jsonb_build_object('Authorization', 'Bearer ' || service_key, 'Content-Type', 'application/json'),
     body    := body_json::text
   );
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.invoke_edge_function(text, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.invoke_edge_function(text, jsonb) FROM anon;
+REVOKE ALL ON FUNCTION public.invoke_edge_function(text, jsonb) FROM authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Storage bucket: crafter-metadata

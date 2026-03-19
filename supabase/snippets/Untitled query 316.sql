@@ -1,1 +1,0 @@
-UPDATE cron_edge_config SET value = 'sb_secret_850181e4652dd023b7a98c58ae0d2d34bd487ee0cc3254aed6eda37307425907' WHERE key = 'service_role_key';
