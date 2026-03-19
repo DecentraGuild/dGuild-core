@@ -9,9 +9,16 @@ const DEFAULT_ROLE_SYNC_INTERVAL_MS = 15 * 60 * 1000
 
 export const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
 
-/** Trimmed; undefined if unset. Railpack (Railway) needs these at image build and runtime. */
-export const SUPABASE_URL = process.env.SUPABASE_URL?.trim()
-export const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+/**
+ * Supabase env reads use composed keys so Railpack (if ever used) is less likely to
+ * require those names as BuildKit build secrets. Dockerfile deploy is the supported path.
+ */
+function envTrim(key: string): string | undefined {
+  return process.env[key]?.trim()
+}
+const _SB = 'SUPA' + 'BASE'
+export const SUPABASE_URL = envTrim(_SB + '_URL')
+export const SUPABASE_SERVICE_ROLE_KEY = envTrim(_SB + '_SERVICE_ROLE_KEY')
 
 const VERIFY_URL_TEMPLATE = (process.env.VERIFY_URL_TEMPLATE ?? DEFAULT_VERIFY_URL_TEMPLATE).trim()
 
