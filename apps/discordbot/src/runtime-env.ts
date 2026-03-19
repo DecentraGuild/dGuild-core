@@ -1,13 +1,11 @@
 /**
- * Supabase vars are runtime-only. Railpack infers build secrets from `process.env.NAME` dot access;
- * computed keys keep `npm run build` (tsup) from requiring these at image build time.
+ * Supabase URL and service role key come from the host environment (Railway Variables, `.env` locally).
  */
-const env = process.env
 
 export function getSupabaseUrl(): string | undefined {
-  return env['SUPA' + 'BASE_URL']?.trim()
+  return process.env.SUPABASE_URL?.trim()
 }
 
 export function getSupabaseServiceRoleKey(): string | undefined {
-  return env['SUPA' + 'BASE_SERVICE_ROLE_KEY']?.trim()
+  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
 }
