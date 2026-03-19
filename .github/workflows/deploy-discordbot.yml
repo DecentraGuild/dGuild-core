@@ -1,6 +1,6 @@
 # Deploys apps/discordbot to Railway on push to main when discordbot (or its deps) change, or manually.
 # Setup: Railway → project → Settings → Tokens. GitHub → repo → Secrets → RAILWAY_DISCORDBOT_DEPLOY_TOKEN.
-# Optional: RAILWAY_DISCORDBOT_SERVICE if the project has multiple services.
+# Service name defaults to "Discordbot"; override with secret RAILWAY_DISCORDBOT_SERVICE if different.
 
 name: Deploy Discord bot
 
@@ -35,8 +35,5 @@ jobs:
             echo "Missing secret RAILWAY_DISCORDBOT_DEPLOY_TOKEN (Railway project token)."
             exit 1
           fi
-          if [ -n "$RAILWAY_SERVICE" ]; then
-            railway up --ci --service "$RAILWAY_SERVICE"
-          else
-            railway up --ci
-          fi
+          SERVICE="${RAILWAY_SERVICE:-Discordbot}"
+          railway up --ci --service "$SERVICE"
