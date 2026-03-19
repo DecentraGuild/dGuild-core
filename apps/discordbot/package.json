@@ -4,7 +4,6 @@
   "type": "module",
   "scripts": {
     "build": "tsup src/index.ts --format esm",
-    "prestart": "npm run build",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "deploy": "railway up --ci",

@@ -1,24 +1,19 @@
 /**
  * Supabase client for the Discord bot.
  *
- * The bot communicates with the DecentraGuild backend via Supabase:
- *   - Simple reads/writes go directly via PostgREST (service_role key bypasses RLS).
- *   - Complex operations (eligible, sync-holders, verify sessions) call Edge Functions.
- *
- * Auth: service role key in Authorization (see runtime-env.ts).
- *
- * Migration from: server-to-server Fastify API calls with x-bot-secret + x-discord-guild-id.
+ * The bot talks to the backend via Supabase: PostgREST (service role) and Edge Functions
+ * (discord-bot, discord-verify). Auth: Bearer service role key.
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { getSupabaseServiceRoleKey, getSupabaseUrl } from './runtime-env.js'
+import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from './config.js'
 
 let _supabase: SupabaseClient | null = null
 
 function getClient(): SupabaseClient {
   if (_supabase) return _supabase
-  const url = getSupabaseUrl()
-  const serviceKey = getSupabaseServiceRoleKey()
+  const url = SUPABASE_URL
+  const serviceKey = SUPABASE_SERVICE_ROLE_KEY
   if (!url || !serviceKey) {
     throw new Error('Supabase URL and service role key must be set on the bot host')
   }
@@ -29,12 +24,11 @@ function getClient(): SupabaseClient {
 }
 
 function getFunctionsUrl(): string {
-  const url = getSupabaseUrl() ?? ''
-  return `${url}/functions/v1`
+  return `${SUPABASE_URL ?? ''}/functions/v1`
 }
 
 function getServiceKey(): string {
-  return getSupabaseServiceRoleKey() ?? ''
+  return SUPABASE_SERVICE_ROLE_KEY ?? ''
 }
 
 const REQUEST_TIMEOUT_MS = 30_000
@@ -87,14 +81,27 @@ export class ApiError extends Error {
   }
 }
 
-/** Legacy: wait for API readiness. With Supabase, always resolves immediately. */
-export async function waitForApi(
-  _baseUrl: string,
-  _options?: { intervalMs?: number; timeoutMs?: number },
-): Promise<void> {
-  const client = getClient()
-  const { error } = await client.from('tenant_config').select('id').limit(1)
-  if (error) throw new ApiError(`Supabase not reachable: ${error.message}`, 503)
+/** Poll until Supabase responds or timeout (used on bot ready). */
+export async function waitForSupabaseReady(options?: {
+  intervalMs?: number
+  timeoutMs?: number
+}): Promise<void> {
+  const timeoutMs = options?.timeoutMs ?? 30_000
+  const intervalMs = options?.intervalMs ?? 1_000
+  const deadline = Date.now() + timeoutMs
+  let lastErr: Error | undefined
+  while (Date.now() < deadline) {
+    try {
+      const client = getClient()
+      const { error } = await client.from('tenant_config').select('id').limit(1)
+      if (!error) return
+      lastErr = new ApiError(`Supabase not reachable: ${error.message}`, 503)
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e))
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  throw lastErr ?? new ApiError('Supabase not reachable: timeout', 503)
 }
 
 export interface VerifySessionResponse {
@@ -109,11 +116,7 @@ export interface BotContextResponse {
   discordModuleState?: string | null
 }
 
-export async function getBotContext(
-  _baseUrl: string,
-  _botSecret: string,
-  discordGuildId: string,
-): Promise<BotContextResponse> {
+export async function getBotContext(discordGuildId: string): Promise<BotContextResponse> {
   const result = await invokeEdgeFunction<{ server?: Record<string, unknown>; tenant?: Record<string, unknown> }>(
     'discord-bot',
     { action: 'context', guildId: discordGuildId },
@@ -128,8 +131,6 @@ export async function getBotContext(
 }
 
 export async function createVerifySession(
-  _baseUrl: string,
-  _botSecret: string,
   discordGuildId: string,
   discordUserId: string,
 ): Promise<VerifySessionResponse> {
@@ -150,8 +151,6 @@ export interface SyncRolePayload {
 }
 
 export async function syncGuildRoles(
-  _baseUrl: string,
-  _botSecret: string,
   discordGuildId: string,
   roles: SyncRolePayload[],
   botRolePosition?: number,
@@ -184,18 +183,11 @@ export interface EligibleRoleItem {
   eligible_discord_user_ids: string[]
 }
 
-export async function syncHoldersForGuild(
-  _baseUrl: string,
-  _botSecret: string,
-  discordGuildId: string,
-): Promise<{ ok: boolean; results?: Array<{ assetId: string; holderCount: number }> }> {
+export async function syncHoldersForGuild(discordGuildId: string): Promise<void> {
   await invokeEdgeFunction('discord-bot', { action: 'sync-holders', guildId: discordGuildId })
-  return { ok: true }
 }
 
 export async function getEligible(
-  _baseUrl: string,
-  _botSecret: string,
   discordGuildId: string,
   memberRoles?: Record<string, string[]>,
 ): Promise<{ eligible: EligibleRoleItem[] }> {
@@ -207,8 +199,6 @@ export async function getEligible(
 }
 
 export async function scheduleRemovals(
-  _baseUrl: string,
-  _botSecret: string,
   discordGuildId: string,
   removals: Array<{ discord_user_id: string; discord_role_id: string }>,
 ): Promise<{ ok: boolean; scheduled: number }> {
@@ -225,8 +215,6 @@ export async function scheduleRemovals(
 }
 
 export async function getPendingRemovals(
-  _baseUrl: string,
-  _botSecret: string,
   discordGuildId: string,
 ): Promise<{ removals: Array<{ discord_user_id: string; discord_role_id: string }> }> {
   return invokeEdgeFunction<{ removals: Array<{ discord_user_id: string; discord_role_id: string }> }>(

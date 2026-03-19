@@ -3,12 +3,11 @@ import { Client, Events, GatewayIntentBits } from 'discord.js'
 import { registerCommands } from './commands.js'
 import { handleVerify } from './handlers/verify.js'
 import { syncLinkedGuild } from './handlers/sync.js'
-import { waitForApi } from './api-client.js'
+import { waitForSupabaseReady } from './api-client.js'
 import {
   DISCORD_BOT_TOKEN,
   hasBotSecret,
   ROLE_SYNC_INTERVAL_MS,
-  API_BASE_URL,
   API_READINESS_MAX_WAIT_MS,
   API_READINESS_POLL_MS,
 } from './config.js'
@@ -42,12 +41,12 @@ async function main(): Promise<void> {
 
     if (API_READINESS_MAX_WAIT_MS > 0) {
       try {
-        await waitForApi(API_BASE_URL, {
+        await waitForSupabaseReady({
           timeoutMs: API_READINESS_MAX_WAIT_MS,
           intervalMs: API_READINESS_POLL_MS,
         })
       } catch (err) {
-        console.error('API did not become ready in time:', err)
+        console.error('Supabase did not become ready in time:', err)
       }
     }
 

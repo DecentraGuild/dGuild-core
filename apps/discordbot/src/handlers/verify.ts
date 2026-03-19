@@ -1,6 +1,6 @@
 import type { ChatInputCommandInteraction } from 'discord.js'
 import { createVerifySession, ApiError } from '../api-client.js'
-import { API_BASE_URL, DISCORD_BOT_API_SECRET, buildVerifyUrl, hasBotSecret } from '../config.js'
+import { buildVerifyUrl, hasBotSecret } from '../config.js'
 
 const GUILD_NOT_LINKED_CODE = 'GUILD_NOT_LINKED'
 
@@ -16,12 +16,7 @@ export async function handleVerify(interaction: ChatInputCommandInteraction): Pr
   }
   await interaction.deferReply({ ephemeral: true })
   try {
-    const data = await createVerifySession(
-      API_BASE_URL,
-      DISCORD_BOT_API_SECRET!,
-      guildId,
-      interaction.user.id
-    )
+    const data = await createVerifySession(guildId, interaction.user.id)
     const url = buildVerifyUrl(data.tenant_slug, data.verify_token)
     await interaction.editReply({
       content: `Open this link to link your wallet to your Discord account (expires in 15 minutes):\n${url}`,
@@ -34,4 +29,3 @@ export async function handleVerify(interaction: ChatInputCommandInteraction): Pr
     }
   }
 }
-

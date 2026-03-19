@@ -8,7 +8,7 @@ import {
   getPendingRemovals,
   ApiError,
 } from '../api-client.js'
-import { API_BASE_URL, DISCORD_BOT_API_SECRET, hasBotSecret } from '../config.js'
+import { hasBotSecret } from '../config.js'
 
 const GUILD_NOT_LINKED_CODE = 'GUILD_NOT_LINKED'
 
@@ -35,9 +35,9 @@ async function fetchMemberRolesAndMap(guild: Guild): Promise<{
 export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
   if (!hasBotSecret()) return
 
-  await syncHoldersForGuild(API_BASE_URL, DISCORD_BOT_API_SECRET!, guild.id)
+  await syncHoldersForGuild(guild.id)
   const { memberRoles, memberMap } = await fetchMemberRolesAndMap(guild)
-  const { eligible } = await getEligible(API_BASE_URL, DISCORD_BOT_API_SECRET!, guild.id, memberRoles)
+  const { eligible } = await getEligible(guild.id, memberRoles)
   if (eligible.length === 0) return
 
   const toRemove: Array<{ discord_user_id: string; discord_role_id: string }> = []
@@ -65,10 +65,10 @@ export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
   }
 
   if (toRemove.length > 0) {
-    await scheduleRemovals(API_BASE_URL, DISCORD_BOT_API_SECRET!, guild.id, toRemove)
+    await scheduleRemovals(guild.id, toRemove)
   }
 
-  const { removals } = await getPendingRemovals(API_BASE_URL, DISCORD_BOT_API_SECRET!, guild.id)
+  const { removals } = await getPendingRemovals(guild.id)
   for (const { discord_user_id, discord_role_id } of removals) {
     try {
       const member =
@@ -83,7 +83,7 @@ export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
 export async function syncLinkedGuild(guild: Guild): Promise<void> {
   if (!hasBotSecret()) return
   try {
-    const ctx = await getBotContext(API_BASE_URL, DISCORD_BOT_API_SECRET!, guild.id)
+    const ctx = await getBotContext(guild.id)
     const roles = guild.roles.cache
       .filter((r) => !r.managed && r.id !== guild.id)
       .map((r) => ({
@@ -97,8 +97,6 @@ export async function syncLinkedGuild(guild: Guild): Promise<void> {
     const me = guild.members.me
     const botRolePosition = me?.roles?.cache?.reduce((max, r) => Math.max(max, r.position), -1) ?? -1
     await syncGuildRoles(
-      API_BASE_URL,
-      DISCORD_BOT_API_SECRET!,
       guild.id,
       roles,
       botRolePosition >= 0 ? botRolePosition : undefined,
@@ -112,4 +110,3 @@ export async function syncLinkedGuild(guild: Guild): Promise<void> {
     throw err
   }
 }
-

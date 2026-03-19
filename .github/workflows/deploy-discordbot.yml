@@ -1,6 +1,7 @@
 # Deploys apps/discordbot to Railway on push to main when discordbot (or its deps) change, or manually.
 # Setup: Railway → project → Settings → Tokens. GitHub → repo → Secrets → RAILWAY_DISCORDBOT_DEPLOY_TOKEN.
 # Service name defaults to "Discordbot"; override with secret RAILWAY_DISCORDBOT_SERVICE if different.
+# On the Railway service, SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY must be "Available at Build Time" (Railpack).
 
 name: Deploy Discord bot
 
