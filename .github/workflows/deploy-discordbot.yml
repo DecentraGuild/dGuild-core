@@ -1,11 +1,14 @@
-# Push-button deploy: uploads apps/discordbot to Railway (ignores GitHub watch-path / branch auto-deploy quirks).
-# Setup: Railway → your project → Settings → Tokens → create project token.
-# GitHub → repo → Settings → Secrets → Actions → add RAILWAY_DISCORDBOT_DEPLOY_TOKEN.
-# If the project has multiple services, add RAILWAY_DISCORDBOT_SERVICE (exact service name from dashboard).
+# Deploys apps/discordbot to Railway on push to main when discordbot (or its deps) change, or manually.
+# Setup: Railway → project → Settings → Tokens. GitHub → repo → Secrets → RAILWAY_DISCORDBOT_DEPLOY_TOKEN.
+# Optional: RAILWAY_DISCORDBOT_SERVICE if the project has multiple services.
 
 name: Deploy Discord bot
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/discordbot/**'
   workflow_dispatch:
 
 concurrency:
