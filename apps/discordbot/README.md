@@ -2,7 +2,7 @@ Discord bot. `/verify`: wallet–Discord link. Role sync: holder snapshots → r
 
 ## Deploy (Railway)
 
-**Auto:** Pushing to `main` with changes under `apps/discordbot/` runs the deploy workflow (same as Supabase/platform). **Manual:** Actions → **Deploy Discord bot** → Run workflow (pick branch). Secrets: `RAILWAY_DISCORDBOT_DEPLOY_TOKEN`; optional `RAILWAY_DISCORDBOT_SERVICE` if multiple services.
+**Auto:** Pushing to `main` with changes under `apps/discordbot/` runs the deploy workflow. **Manual:** Actions → **Deploy Discord bot** → Run workflow (pick branch). Secret: `RAILWAY_DISCORDBOT_DEPLOY_TOKEN`. Service name is `Discordbot` by default; set `RAILWAY_DISCORDBOT_SERVICE` if your Railway service has a different name.
 
 **From your machine:** `cd apps/discordbot`, `railway link` once, then `pnpm deploy` or from repo root `pnpm deploy:discordbot`.
 
