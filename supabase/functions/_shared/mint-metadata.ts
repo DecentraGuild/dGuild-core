@@ -1,6 +1,6 @@
 /**
  * Fetch mint metadata from Solana RPC (DAS getAsset).
- * Shared by tenant-catalog and marketplace for consistent metadata.
+ * Shared by tenant_catalog and marketplace for consistent metadata.
  */
 
 export interface MintMetadataResult {
