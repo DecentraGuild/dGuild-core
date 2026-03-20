@@ -453,7 +453,7 @@ async function saveWatches(): Promise<boolean> {
       if (w.track_holders || w.track_snapshot) {
         try {
           const { error: syncErr } = await supabase.functions.invoke('cron-tracker', {
-            body: { syncMint: w.mint, tenantId: id },
+            body: { mode: 'full', syncMint: w.mint, tenantId: id },
           })
           if (syncErr) {
             // Best-effort: cron-tracker may 503 on cold start (heavy Solana deps).

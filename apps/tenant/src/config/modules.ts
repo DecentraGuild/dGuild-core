@@ -37,7 +37,39 @@ export interface ModuleSubnavTab {
 /** Admin tabs shown as primary (always visible). */
 export const ADMIN_PRIMARY_TAB_IDS = ['general', 'theming', 'addressbook', 'modules']
 /** Admin tabs grouped under "More" dropdown (between Modules and Billing). */
-export const ADMIN_MORE_TAB_IDS = ['watchtower', 'conditions', 'gates', 'gating', 'discord', 'plan-shipment', 'raffle', 'marketplace']
+export const ADMIN_MORE_TAB_IDS = [
+  'gates',
+  'gating',
+  'watchtower',
+  'conditions',
+  'plan-shipment',
+  'discord',
+  'marketplace',
+  'raffle',
+]
+
+const ADMIN_MORE_TAB_CATALOG_SORT: Record<string, { moduleId: string; tie: number }> = {
+  gates: { moduleId: 'gates', tie: 0 },
+  gating: { moduleId: 'gates', tie: 1 },
+  watchtower: { moduleId: 'watchtower', tie: 0 },
+  conditions: { moduleId: 'watchtower', tie: 1 },
+  discord: { moduleId: 'discord', tie: 0 },
+  'plan-shipment': { moduleId: 'shipment', tie: 0 },
+  marketplace: { moduleId: 'marketplace', tie: 0 },
+  raffle: { moduleId: 'raffles', tie: 0 },
+}
+
+export function compareAdminMoreTabsByCatalogOrder(a: ModuleSubnavTab, b: ModuleSubnavTab): number {
+  const ka = ADMIN_MORE_TAB_CATALOG_SORT[a.id]
+  const kb = ADMIN_MORE_TAB_CATALOG_SORT[b.id]
+  if (!ka || !kb) return 0
+  const ia = NAV_ORDER.indexOf(ka.moduleId)
+  const ib = NAV_ORDER.indexOf(kb.moduleId)
+  const oa = ia === -1 ? 999 : ia
+  const ob = ib === -1 ? 999 : ib
+  if (oa !== ob) return oa - ob
+  return ka.tie - kb.tie
+}
 
 export const MODULE_SUBNAV: Record<string, ModuleSubnavTab[]> = {
   admin: [
@@ -45,14 +77,14 @@ export const MODULE_SUBNAV: Record<string, ModuleSubnavTab[]> = {
     { id: 'theming', label: 'Theming' },
     { id: 'addressbook', label: 'Address Book' },
     { id: 'modules', label: 'Modules' },
-    { id: 'watchtower', label: 'Watchtower' },
-    { id: 'conditions', label: 'Conditions' },
     { id: 'gates', label: 'Member lists' },
     { id: 'gating', label: 'Gates' },
-    { id: 'discord', label: 'Discord' },
+    { id: 'watchtower', label: 'Watchtower' },
+    { id: 'conditions', label: 'Conditions' },
     { id: 'plan-shipment', label: 'Plan Shipment' },
-    { id: 'raffle', label: 'Raffle' },
+    { id: 'discord', label: 'Discord' },
     { id: 'marketplace', label: 'Marketplace' },
+    { id: 'raffle', label: 'Raffle' },
     { id: 'vouchers', label: 'Vouchers' },
     { id: 'billing', label: 'Billing' },
   ],

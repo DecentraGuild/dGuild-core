@@ -150,7 +150,12 @@ import { Icon } from '@iconify/vue'
 import { useThemeStore } from '@decentraguild/ui'
 import { useTenantStore } from '~/stores/tenant'
 import { isModuleVisibleToMembers, getModuleState } from '@decentraguild/core'
-import { getModuleSubnavForPath, ADMIN_PRIMARY_TAB_IDS, ADMIN_MORE_TAB_IDS } from '~/config/modules'
+import {
+  getModuleSubnavForPath,
+  ADMIN_PRIMARY_TAB_IDS,
+  ADMIN_MORE_TAB_IDS,
+  compareAdminMoreTabsByCatalogOrder,
+} from '~/config/modules'
 import { onClickOutside, useEventListener } from '@vueuse/core'
 import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
 import { useWalletOnList } from '~/composables/gates/useWalletOnList'
@@ -249,7 +254,9 @@ const adminPrimaryTabs = computed(() =>
   subnavTabs.value.filter((t) => ADMIN_PRIMARY_TAB_IDS.includes(t.id))
 )
 const adminMoreTabs = computed(() =>
-  subnavTabs.value.filter((t) => ADMIN_MORE_TAB_IDS.includes(t.id))
+  [...subnavTabs.value.filter((t) => ADMIN_MORE_TAB_IDS.includes(t.id))].sort(
+    compareAdminMoreTabsByCatalogOrder,
+  )
 )
 const adminVouchersTab = computed(() =>
   subnavTabs.value.find((t) => t.id === 'vouchers')
