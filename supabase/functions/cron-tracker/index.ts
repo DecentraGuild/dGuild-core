@@ -1,8 +1,8 @@
 /**
  * Tracker sync Edge Function.
- * pg_cron: tracker-holders (*/5) with body { mode: "holders" }; tracker-snapshots (0,12 UTC) { mode: "snapshot" }.
+ * pg_cron: tracker-holders (every 5 min) with body { mode: "holders" }; tracker-snapshots (0 and 12 UTC) { mode: "snapshot" }.
  * Tier intervals and snapshot bucket size: platform_watchtower_settings + platform_watchtower_holder_tier.
- * Body: { mode?, offset?, syncMint?, tenantId? } — syncMint+tenantId (+ optional mode "full") = immediate full sync (admin save).
+ * Body: { mode?, offset?, syncMint?, tenantId? } — syncMint + tenantId only = immediate sync for that mint (admin save).
  */
 
 import { jsonResponse, errorResponse } from '../_shared/cors.ts'
@@ -248,7 +248,6 @@ Deno.serve(async (req: Request) => {
   }
 
   const config = await loadWatchtowerSyncConfig(db)
-  const { snapshotAt, snapshotDate } = alignSnapshotBucket(now, config.snapshot_interval_minutes)
 
   if (mode === 'holders') {
     const { data: allWatches, error: watchErr } = await db
@@ -336,6 +335,8 @@ Deno.serve(async (req: Request) => {
     console.log('[cron-tracker] holders batch done', { processed, synced, offset, hasMore })
     return jsonResponse({ processed, synced, offset, hasMore, mode }, req)
   }
+
+  const { snapshotAt, snapshotDate } = alignSnapshotBucket(now, config.snapshot_interval_minutes)
 
   const { data: snapWatches, error: snapErr } = await db
     .from('watchtower_watches')
