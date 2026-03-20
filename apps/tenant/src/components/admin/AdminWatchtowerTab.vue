@@ -457,7 +457,7 @@ async function saveWatches(): Promise<boolean> {
           })
           if (syncErr) {
             // Best-effort: cron-tracker may 503 on cold start (heavy Solana deps).
-            // pg_cron runs every 5 min and will sync; deploy still succeeds.
+            // pg_cron tracker-holders / tracker-snapshots will sync on schedule.
           }
         } catch {
           // Network/timeout: same as above; pg_cron will sync.
