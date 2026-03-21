@@ -410,6 +410,33 @@ async function fetchData() {
   }
 }
 
+/** When enabling a track on a mint with no prior stamp, reuse the oldest peer stamp among other mints with that track on (same FIFO cohort); else now. */
+function peerMinEnabledAt(
+  mint: string,
+  field: 'track_holders' | 'track_snapshot' | 'track_transactions',
+): string | null {
+  const enabledKey =
+    field === 'track_holders'
+      ? 'enabled_at_holders'
+      : field === 'track_snapshot'
+        ? 'enabled_at_snapshot'
+        : 'enabled_at_transactions'
+  const trackKey =
+    field === 'track_holders'
+      ? 'track_holders'
+      : field === 'track_snapshot'
+        ? 'track_snapshot'
+        : 'track_transactions'
+  let best: string | null = null
+  for (const w of watches.value) {
+    if (w.mint === mint) continue
+    if (!w[trackKey]) continue
+    const t = w[enabledKey]
+    if (typeof t === 'string' && t && (!best || t < best)) best = t
+  }
+  return best
+}
+
 function onTrackChange(mint: string, field: 'track_holders' | 'track_snapshot' | 'track_transactions', value: boolean) {
   const existing = watchesByMint.value[mint]
   const now = new Date().toISOString()
@@ -418,9 +445,18 @@ function onTrackChange(mint: string, field: 'track_holders' | 'track_snapshot' |
     track_holders: field === 'track_holders' ? value : (existing?.track_holders ?? false),
     track_snapshot: field === 'track_snapshot' ? value : (existing?.track_snapshot ?? false),
     track_transactions: field === 'track_transactions' ? value : (existing?.track_transactions ?? false),
-    enabled_at_holders: field === 'track_holders' && value ? (existing?.enabled_at_holders ?? now) : (existing?.enabled_at_holders ?? null),
-    enabled_at_snapshot: field === 'track_snapshot' && value ? (existing?.enabled_at_snapshot ?? now) : (existing?.enabled_at_snapshot ?? null),
-    enabled_at_transactions: field === 'track_transactions' && value ? (existing?.enabled_at_transactions ?? now) : (existing?.enabled_at_transactions ?? null),
+    enabled_at_holders:
+      field === 'track_holders' && value
+        ? (existing?.enabled_at_holders ?? peerMinEnabledAt(mint, 'track_holders') ?? now)
+        : (existing?.enabled_at_holders ?? null),
+    enabled_at_snapshot:
+      field === 'track_snapshot' && value
+        ? (existing?.enabled_at_snapshot ?? peerMinEnabledAt(mint, 'track_snapshot') ?? now)
+        : (existing?.enabled_at_snapshot ?? null),
+    enabled_at_transactions:
+      field === 'track_transactions' && value
+        ? (existing?.enabled_at_transactions ?? peerMinEnabledAt(mint, 'track_transactions') ?? now)
+        : (existing?.enabled_at_transactions ?? null),
   }
   const idx = watches.value.findIndex((w) => w.mint === mint)
   if (idx >= 0) {

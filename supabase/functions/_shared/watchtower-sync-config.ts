@@ -8,6 +8,9 @@ export type HolderTierRow = {
 
 const DEFAULT_SNAPSHOT_INTERVAL_MINUTES = 720
 
+/** Row in public.interval_timers — snapshot bucket width for tracker-snapshots / holder_snapshots. */
+export const INTERVAL_TIMER_WATCHTOWER_SNAPSHOT_BUCKET = 'watchtower_snapshot_bucket'
+
 const DEFAULT_TIERS: HolderTierRow[] = [
   { sort_order: 1, max_holders: 500, interval_minutes: 5 },
   { sort_order: 2, max_holders: 5000, interval_minutes: 15 },
@@ -23,15 +26,19 @@ export async function loadWatchtowerSyncConfig(
   db: SupabaseClient,
 ): Promise<WatchtowerSyncConfig> {
   const [{ data: settingsRow }, { data: tierRows, error: tierErr }] = await Promise.all([
-    db.from('platform_watchtower_settings').select('snapshot_interval_minutes').eq('id', 1).maybeSingle(),
+    db
+      .from('interval_timers')
+      .select('interval_minutes')
+      .eq('timer_key', INTERVAL_TIMER_WATCHTOWER_SNAPSHOT_BUCKET)
+      .maybeSingle(),
     db.from('platform_watchtower_holder_tier').select('sort_order, max_holders, interval_minutes').order('sort_order'),
   ])
   if (tierErr) {
     console.warn('[watchtower-sync-config] tier load failed', tierErr.message)
   }
   const snapshot_interval_minutes =
-    typeof settingsRow?.snapshot_interval_minutes === 'number' && settingsRow.snapshot_interval_minutes > 0
-      ? settingsRow.snapshot_interval_minutes
+    typeof settingsRow?.interval_minutes === 'number' && settingsRow.interval_minutes > 0
+      ? settingsRow.interval_minutes
       : DEFAULT_SNAPSHOT_INTERVAL_MINUTES
   const tiers =
     tierRows && tierRows.length > 0

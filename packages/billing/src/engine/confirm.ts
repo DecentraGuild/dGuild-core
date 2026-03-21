@@ -5,6 +5,7 @@
 import type { DbClient } from '../types.js'
 import type { ConfirmParams, QuoteLineItem } from '../types.js'
 import type { PaymentProvider } from '../types.js'
+import { backfillWatchtowerEnabledAtForMeters } from './watchtower-enabled-at.js'
 
 interface PaymentRow {
   id: string
@@ -144,6 +145,7 @@ export async function confirm(
 
   const tenantId = p.tenant_id
   const now = new Date().toISOString()
+  const metersTouched = new Set<string>()
 
   for (const item of lineItems) {
     if (item.source === 'bundle' && item.bundleId) {
@@ -154,6 +156,7 @@ export async function confirm(
       const entitlements = (ents ?? []) as BundleEntitlementRow[]
       for (let i = 0; i < (item.quantity ?? 1); i++) {
         for (const ent of entitlements) {
+          metersTouched.add(ent.meter_key)
           const expiresAt =
             ent.duration_days === 0 ? null : new Date(Date.now() + ent.duration_days * 24 * 60 * 60 * 1000).toISOString()
           await grantOrExtend(
@@ -169,6 +172,7 @@ export async function confirm(
         }
       }
     } else if (item.source === 'tier') {
+      metersTouched.add(item.meter_key)
       const durationDays = item.duration_days ?? 0
       const expiresAt =
         durationDays === 0
@@ -186,6 +190,8 @@ export async function confirm(
       )
     }
   }
+
+  await backfillWatchtowerEnabledAtForMeters(db, tenantId, metersTouched)
 
   if (p.payment_method === 'voucher' && p.voucher_mint) {
     const firstItem = lineItems[0]

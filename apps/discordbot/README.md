@@ -10,7 +10,9 @@ Use that exact path: **no leading `/`** (not `/apps/discordbot` — that breaks 
 
 **Config as code:** Railway does not apply `railway.json` relative to Root Directory unless you point at it. If builds ignore this folder’s config, set the config file path to **`apps/discordbot/railway.json`** (see [Railway monorepo docs](https://docs.railway.com/guides/monorepo)).
 
-**Build:** This app uses a **Dockerfile** (not Railpack) so `npm run build` does **not** need Supabase vars at image build time. You still need **`DISCORD_BOT_TOKEN`**, **`SUPABASE_URL`**, and **`SUPABASE_SERVICE_ROLE_KEY`** as normal service variables for **runtime**.
+**Build:** This app uses a **Dockerfile** (not Railpack) so `npm run build` does **not** need Supabase vars at image build time. You still need **`DISCORD_BOT_TOKEN`**, **`SUPABASE_URL`**, and **`SUPABASE_SERVICE_ROLE_KEY`** as normal service variables for **runtime** on **this** service (not only project-wide — if logs say `SUPABASE_URL is unset` or `set but empty`, the Discord service is not receiving those variables).
+
+**Logs:** After deploy, missing Supabase env is logged with a specific reason (`unset` vs `empty or whitespace`) to distinguish a missing variable from a blank value or bad Railway reference.
 
 **One deploy path:** Use **either** GitHub Actions (`Deploy Discord bot` workflow) **or** Railway’s GitHub connection — not both — or you’ll get duplicate deploys.
 

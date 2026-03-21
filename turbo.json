@@ -1,10 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["**/.env.*local"],
+  "globalEnv": ["NUXT_PUBLIC_SUPABASE_URL", "NUXT_PUBLIC_SUPABASE_ANON_KEY", "NUXT_PUBLIC_HELIUS_RPC"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", ".nuxt/**"]
+      "outputs": ["dist/**", ".output/**", ".nuxt/**"],
+      "env": ["NUXT_PUBLIC_SUPABASE_URL", "NUXT_PUBLIC_SUPABASE_ANON_KEY", "NUXT_PUBLIC_HELIUS_RPC"]
     },
     "@decentraguild/auth#build": {
       "outputs": []
