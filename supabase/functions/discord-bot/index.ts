@@ -1,6 +1,6 @@
 /**
  * Discord Bot Edge Function.
- * Called by the Discord bot (Railway) using the service role key.
+ * Called by the Discord bot (Railway) with x-bot-secret (DISCORD_BOT_SECRET) or Bearer service_role.
  * All writes use the admin client (bypasses RLS).
  *
  * Actions:
@@ -13,6 +13,7 @@
  */
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
+import { isBotAuthorized } from '../_shared/bot-auth.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getSolanaConnection } from '../_shared/solana-connection.ts'
 import { Connection, PublicKey } from 'npm:@solana/web3.js@1'
@@ -25,18 +26,6 @@ import {
   type NFTPayload,
   type WHITELISTPayload,
 } from '@decentraguild/condition-engine'
-
-// ---------------------------------------------------------------------------
-// Bot auth guard: require x-bot-secret or service role Authorization
-// ---------------------------------------------------------------------------
-
-function isBotAuthorized(req: Request): boolean {
-  const botSecret = Deno.env.get('DISCORD_BOT_SECRET')
-  const header = req.headers.get('x-bot-secret') ?? req.headers.get('authorization') ?? ''
-  if (botSecret && (header === botSecret || header === `Bearer ${botSecret}`)) return true
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  return header === `Bearer ${serviceKey}`
-}
 
 // ---------------------------------------------------------------------------
 // Holder sync helpers

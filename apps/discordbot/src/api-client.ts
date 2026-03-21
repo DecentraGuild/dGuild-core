@@ -6,7 +6,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { getSupabaseServiceRoleKey, getSupabaseUrl } from './config.js'
+import { getDiscordBotEdgeSecret, getSupabaseServiceRoleKey, getSupabaseUrl } from './config.js'
 
 let _supabase: SupabaseClient | null = null
 
@@ -31,6 +31,15 @@ function getServiceKey(): string {
   return getSupabaseServiceRoleKey() ?? ''
 }
 
+function edgeInvokeHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const botSecret = getDiscordBotEdgeSecret()
+  if (botSecret) headers['x-bot-secret'] = botSecret
+  const serviceKey = getServiceKey()
+  if (serviceKey) headers['Authorization'] = `Bearer ${serviceKey}`
+  return headers
+}
+
 const REQUEST_TIMEOUT_MS = 30_000
 
 async function invokeEdgeFunction<T>(
@@ -43,10 +52,7 @@ async function invokeEdgeFunction<T>(
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getServiceKey()}`,
-      },
+      headers: edgeInvokeHeaders(),
       body: JSON.stringify(body),
       signal: controller.signal,
     })
