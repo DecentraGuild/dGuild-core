@@ -55,10 +55,14 @@ export type { FetchedMintMetadata } from './mint-metadata.js'
 
 export {
   buildBillingTransfer,
+  buildBillingTransferInstructions,
   USDC_MINT,
   USDC_DECIMALS,
 } from './billing/transfer.js'
-export type { BuildBillingTransferParams } from './billing/transfer.js'
+export type {
+  BuildBillingTransferParams,
+  BuildBillingTransferInstructionParams,
+} from './billing/transfer.js'
 export { buildVoucherTransfer } from './billing/voucher-transfer.js'
 export type { BuildVoucherTransferParams } from './billing/voucher-transfer.js'
 

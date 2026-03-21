@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Member lists" module-id="gates">
+  <PageSection title="Member lists" module-id="gates" wide>
     <div class="gates-page">
       <div v-if="!gatesVisible" class="gates-page__inactive">
         <p>Member lists is not enabled for this dGuild.</p>
@@ -27,8 +27,8 @@
           </div>
         </div>
 
-        <div v-if="!loading && memberships.length > 0" class="gates-page__layout">
-          <div class="gates-page__grid">
+        <div v-if="!loading && memberships.length > 0" class="gates-page__layout layout-split">
+          <div class="gates-page__grid layout-split__main admin__card-grid--auto-dense">
             <button
               v-for="m in memberships"
               :key="m.address"
@@ -45,7 +45,7 @@
             </button>
           </div>
 
-          <aside v-if="selectedListAddress" class="gates-page__detail">
+          <aside v-if="selectedListAddress" class="gates-page__detail layout-split__sidebar">
             <h4 class="gates-page__detail-heading">
               Members of {{ selectedListName }}
             </h4>
@@ -249,19 +249,6 @@ watch(wallet, () => {
   color: var(--theme-text-secondary);
 }
 
-.gates-page__layout {
-  display: flex;
-  gap: var(--theme-space-xl);
-  align-items: flex-start;
-}
-
-.gates-page__grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--theme-space-md);
-  min-width: 0;
-}
 
 .gates-page__card-item {
   position: relative;
@@ -356,13 +343,4 @@ watch(wallet, () => {
   font-size: 0.9rem;
 }
 
-@media (max-width: 900px) {
-  .gates-page__layout {
-    flex-direction: column;
-  }
-
-  .gates-page__detail {
-    width: 100%;
-  }
-}
 </style>

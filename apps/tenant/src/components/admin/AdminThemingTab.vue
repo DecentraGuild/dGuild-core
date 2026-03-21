@@ -1,9 +1,6 @@
 <template>
-  <div class="admin__split">
-    <div class="admin__panel">
-      <AdminThemeSettings :branding="branding" />
-    </div>
-    <div aria-hidden="true" />
+  <div class="admin__panel">
+    <AdminThemeSettings :branding="branding" />
   </div>
 </template>
 

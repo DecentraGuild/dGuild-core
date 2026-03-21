@@ -1,5 +1,5 @@
 <template>
-  <PageSection :title="adminPageTitle">
+  <PageSection :title="adminPageTitle" wide>
     <div class="admin">
       <AdminGeneralTab
         v-if="tab === 'general'"
@@ -86,6 +86,8 @@
         :deploying="deploying"
         :save-error="saveError"
         :handle-billing-payment="handleBillingPayment"
+        :prepare-billing-instructions-for-same-tx="prepareBillingInstructionsForSameTx"
+        :confirm-billing-from-tx-signature="confirmBillingFromTxSignature"
         @save="(p: BillingPeriod, cond?: Record<string, number>) => handleRaffleBilling(p, cond)"
         @deploy="(p: BillingPeriod, cond?: Record<string, number>) => handleRaffleBilling(p, cond)"
         @created="fetchSubscription('raffles')"
@@ -98,6 +100,8 @@
         :subscription="subscriptions.gates ?? null"
         :deploying="deploying"
         :handle-billing-payment="handleBillingPayment"
+        :prepare-billing-instructions-for-same-tx="prepareBillingInstructionsForSameTx"
+        :confirm-billing-from-tx-signature="confirmBillingFromTxSignature"
         @deploy="(p: BillingPeriod, cond?: Record<string, number | boolean>) => deployModule('gates', p, cond)"
         @created="fetchSubscription('gates')"
       />
@@ -233,7 +237,14 @@ const extending = ref(false)
 const extendingModuleId = ref<string | null>(null)
 const extendPeriod = ref<BillingPeriod>('monthly')
 
-const { handleBillingPayment, deployModule, reactivateModule, extendModule } = useAdminBilling({
+const {
+  handleBillingPayment,
+  prepareBillingInstructionsForSameTx,
+  confirmBillingFromTxSignature,
+  deployModule,
+  reactivateModule,
+  extendModule,
+} = useAdminBilling({
   saveError,
   saving,
   deploying,
@@ -518,21 +529,7 @@ async function confirmModuleActivate() {
 
 <style>
 /* Unscoped: admin__* classes used in tab components (General, Modules, Marketplace, Discord, Billing) */
-.admin__split {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--theme-space-lg);
-}
-@media (min-width: 1024px) {
-  .admin__split {
-    grid-template-columns: 1fr 300px;
-  }
-  .admin__split > .pricing-widget {
-    position: sticky;
-    top: var(--theme-space-lg);
-    align-self: start;
-  }
-}
+/* .admin__split lives in assets/global.css (shared with .layout-split) */
 .admin__panel {
   margin-bottom: var(--theme-space-lg);
 }

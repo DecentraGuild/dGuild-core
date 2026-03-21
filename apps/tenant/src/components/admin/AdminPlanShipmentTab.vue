@@ -5,7 +5,7 @@
       Load JSON, set up ship wallet, fund it, and execute the airdrop.
     </p>
 
-    <div class="plan-shipment-tab__grid">
+    <div class="plan-shipment-tab__grid admin__card-grid--2">
       <div class="plan-shipment-tab__window plan-shipment-tab__window--plan">
         <h4 class="plan-shipment-tab__window-title">Plan shipment</h4>
         <div class="plan-shipment-tab__json-row">
@@ -539,9 +539,6 @@ onMounted(() => void fetchHistory())
   line-height: 1.5;
 }
 .plan-shipment-tab__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--theme-space-lg);
   align-items: stretch;
 }
 .plan-shipment-tab__history-section {
@@ -711,12 +708,6 @@ onMounted(() => void fetchHistory())
   to { transform: rotate(360deg); }
 }
 
-.plan-shipment-tab__window--plan {
-  grid-column: 1 / 2;
-}
-.plan-shipment-tab__window--wallet {
-  grid-column: 2 / 3;
-}
 .plan-shipment-tab__history-error-row {
   display: flex;
   flex-wrap: wrap;
@@ -797,13 +788,4 @@ onMounted(() => void fetchHistory())
   text-decoration: underline;
 }
 
-@media (max-width: 1024px) {
-  .plan-shipment-tab__grid {
-    grid-template-columns: 1fr;
-  }
-  .plan-shipment-tab__window--plan,
-  .plan-shipment-tab__window--wallet {
-    grid-column: 1 / -1;
-  }
-}
 </style>

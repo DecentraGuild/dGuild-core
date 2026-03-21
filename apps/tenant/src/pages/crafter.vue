@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Crafter" module-id="crafter">
+  <PageSection title="Crafter" module-id="crafter" wide>
     <div class="crafter-page">
       <p v-if="!crafterEnabled" class="crafter-page__empty">
         Crafter is not enabled for this community. Enable it in Admin → Modules.
@@ -13,7 +13,7 @@
 
         <div v-else class="admin__split">
           <div class="admin__panel crafter-page__content">
-            <div class="crafter-page__grid">
+            <div class="crafter-page__grid admin__card-grid--auto-dense">
               <div
                 v-for="t in tokens"
                 :key="t.mint"
@@ -745,12 +745,6 @@ watch(
 .crafter-page__content {
   display: flex;
   flex-direction: column;
-  gap: var(--theme-space-lg);
-}
-
-.crafter-page__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
   gap: var(--theme-space-lg);
 }
 

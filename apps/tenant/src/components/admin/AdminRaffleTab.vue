@@ -144,7 +144,7 @@ import {
   buildClaimTicketsTransaction,
   deriveRafflePda,
 } from '@decentraguild/web3'
-import { PublicKey, Transaction } from '@solana/web3.js'
+import { ComputeBudgetProgram, PublicKey, Transaction } from '@solana/web3.js'
 import {
   createAssociatedTokenAccountInstruction,
   getAssociatedTokenAddressSync,
@@ -153,6 +153,9 @@ import {
 } from '@solana/spl-token'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useSupabase } from '~/composables/core/useSupabase'
+import type { BillingSameTxPrepare } from '~/composables/admin/useAdminBilling'
+
+const BILLING_PLUS_PROGRAM_CU = 400_000
 
 const props = defineProps<{
   slug: string
@@ -167,6 +170,17 @@ const props = defineProps<{
     slugToClaim?: string,
     conditions?: ConditionSet,
   ) => Promise<boolean>
+  prepareBillingInstructionsForSameTx?: (
+    moduleId: string,
+    period: BillingPeriod,
+    slugToClaim?: string,
+    conditions?: ConditionSet,
+  ) => Promise<BillingSameTxPrepare>
+  confirmBillingFromTxSignature?: (
+    paymentId: string,
+    txSignature: string,
+    slugToClaim?: string,
+  ) => Promise<void>
 }>()
 
 const emit = defineEmits<{
@@ -435,10 +449,11 @@ async function onCreateSubmit() {
     const conditions: ConditionSet = {
       raffleSlotsUsed: activeRaffles.value.length + 1,
     }
-    const handlePay = props.handleBillingPayment
-    if (!handlePay) throw new Error('Billing not configured')
-    const paid = await handlePay('raffles', 'monthly', undefined, conditions)
-    if (!paid) throw new Error('Payment was not completed')
+    const prepareBilling = props.prepareBillingInstructionsForSameTx
+    const confirmBilling = props.confirmBillingFromTxSignature
+    if (!prepareBilling || !confirmBilling) throw new Error('Billing not configured')
+
+    const billingPrep = await prepareBilling('raffles', 'monthly', undefined, conditions)
 
     const gate = resolveGateForTransaction(
       effectiveRaffleGate.value ?? null,
@@ -448,7 +463,7 @@ async function onCreateSubmit() {
     const whitelist = useWhitelist && gate?.account ? gate.account : undefined
 
     const seed = crypto.getRandomValues(new Uint8Array(8))
-    const tx = await buildInitializeRaffleTransaction({
+    const raffleTx = await buildInitializeRaffleTransaction({
       name,
       description: createForm.description.trim() || '',
       seed,
@@ -461,12 +476,28 @@ async function onCreateSubmit() {
       connection: connection.value,
       wallet,
     })
-    await sendAndConfirmTransaction(
+
+    const tx = new Transaction()
+    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: BILLING_PLUS_PROGRAM_CU }))
+    if (billingPrep.kind === 'usdc') {
+      for (const ix of billingPrep.instructions) {
+        tx.add(ix)
+      }
+    }
+    for (const ix of raffleTx.instructions) {
+      tx.add(ix)
+    }
+
+    const txSignature = await sendAndConfirmTransaction(
       connection.value,
       tx,
       wallet,
       wallet.publicKey,
     )
+
+    if (billingPrep.kind === 'usdc') {
+      await confirmBilling(billingPrep.paymentId, txSignature)
+    }
 
     const rafflePda = deriveRafflePda(name, seed)
     const supabase = useSupabase()
@@ -811,9 +842,6 @@ defineExpose({
   margin-bottom: var(--theme-space-sm);
 }
 :deep(.raffle-slots__grid) {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--theme-space-lg);
   margin-top: var(--theme-space-md);
 }
 

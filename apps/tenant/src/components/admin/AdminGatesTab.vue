@@ -210,6 +210,10 @@ import { useAdminGateModals } from '~/composables/admin/useAdminGateModals'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
+import type { BillingSameTxPrepare } from '~/composables/admin/useAdminBilling'
+import { ComputeBudgetProgram, Transaction } from '@solana/web3.js'
+
+const BILLING_PLUS_PROGRAM_CU = 400_000
 
 interface GateEntry {
   address: string
@@ -234,6 +238,17 @@ const props = defineProps<{
     slugToClaim?: string,
     conditions?: Record<string, number | boolean>,
   ) => Promise<boolean>
+  prepareBillingInstructionsForSameTx: (
+    moduleId: string,
+    period: BillingPeriod,
+    slugToClaim?: string,
+    conditions?: Record<string, number | boolean>,
+  ) => Promise<BillingSameTxPrepare>
+  confirmBillingFromTxSignature: (
+    paymentId: string,
+    txSignature: string,
+    slugToClaim?: string,
+  ) => Promise<void>
 }>()
 
 const emit = defineEmits<{
@@ -367,17 +382,37 @@ async function createList() {
   creating.value = true
   const supabase = useSupabase()
   try {
-    await props.handleBillingPayment('gates', 'monthly', undefined, {
-      listsCount: lists.value.length + 1,
-    })
+    const listConditions = { listsCount: lists.value.length + 1 }
+    const billingPrep = await props.prepareBillingInstructionsForSameTx(
+      'gates',
+      'monthly',
+      undefined,
+      listConditions,
+    )
 
-    const tx = await buildInitializeWhitelistTransaction({
+    const whitelistTx = await buildInitializeWhitelistTransaction({
       name,
       authority: wallet.publicKey,
       connection: connection.value,
       wallet,
     })
-    await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
+
+    const tx = new Transaction()
+    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: BILLING_PLUS_PROGRAM_CU }))
+    if (billingPrep.kind === 'usdc') {
+      for (const ix of billingPrep.instructions) {
+        tx.add(ix)
+      }
+    }
+    for (const ix of whitelistTx.instructions) {
+      tx.add(ix)
+    }
+
+    const txSignature = await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
+
+    if (billingPrep.kind === 'usdc') {
+      await props.confirmBillingFromTxSignature(billingPrep.paymentId, txSignature)
+    }
 
     const address = deriveWhitelistPda(wallet.publicKey, name).toBase58()
     const { error } = await supabase.functions.invoke('gates', {

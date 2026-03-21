@@ -1,5 +1,5 @@
 <template>
-  <section class="page-section">
+  <section :class="['page-section', { 'page-section--wide': wide }]">
     <div v-if="title || $slots.header || moduleId" class="page-section__header">
       <h2 v-if="title" class="page-section__title">{{ title }}</h2>
       <slot name="header" />
@@ -12,10 +12,15 @@
 <script setup lang="ts">
 import ModuleUserCostsInfo from '~/components/ModuleUserCostsInfo.vue'
 
-defineProps<{
-  title?: string
-  moduleId?: string
-}>()
+withDefaults(
+  defineProps<{
+    title?: string
+    moduleId?: string
+    /** Use full content width (e.g. admin / split layouts). Default keeps the narrow reading column. */
+    wide?: boolean
+  }>(),
+  { wide: false }
+)
 </script>
 
 <style scoped>
@@ -23,6 +28,11 @@ defineProps<{
   max-width: 56rem;
   margin: 0 auto;
   padding: var(--theme-space-xl) 0;
+}
+
+.page-section--wide {
+  max-width: none;
+  width: 100%;
 }
 
 .page-section__header {

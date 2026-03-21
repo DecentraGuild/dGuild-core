@@ -14,14 +14,14 @@ export const DEFAULT_TENANT_THEME: TenantTheme = {
       dark: '#007a14',
     },
     secondary: {
-      main: '#cf0000',
-      hover: '#b30000',
-      light: '#ff3333',
-      dark: '#990000',
+      main: '#007a14',
+      hover: '#006010',
+      light: '#00951a',
+      dark: '#005510',
     },
     accent: {
-      main: '#8b5cf6',
-      hover: '#7c3aed',
+      main: '#00b820',
+      hover: '#009918',
     },
     background: {
       primary: '#0a0a0f',
@@ -55,9 +55,9 @@ export const DEFAULT_TENANT_THEME: TenantTheme = {
       trade: '#ffaa00',
       tradeHover: '#cc8800',
       tradeLight: '#ffbb33',
-      swap: '#6366f1',
-      swapHover: '#4f46e5',
-      swapLight: '#818cf8',
+      swap: '#00b820',
+      swapHover: '#009918',
+      swapLight: '#00cc22',
     },
     window: {
       background: '#1a1a2e',
@@ -104,7 +104,7 @@ export const DEFAULT_TENANT_THEME: TenantTheme = {
   gradients: {
     primary: 'linear-gradient(135deg, #00951a 0%, #00cc22 50%, #007a14 100%)',
     secondary: 'linear-gradient(135deg, #ff6b35 0%, #f59e0b 100%)',
-    accent: 'linear-gradient(135deg, #00951a 0%, #cf0000 100%)',
+    accent: 'linear-gradient(135deg, #00951a 0%, #007a14 100%)',
   },
   fonts: {
     primary: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],

@@ -16,7 +16,7 @@
         <div v-else-if="redeemableVouchers.length === 0" class="admin__billing-empty">
           No vouchers to redeem. You need to hold voucher tokens in your wallet.
         </div>
-        <div v-else class="admin__vouchers-grid">
+        <div v-else class="admin__card-grid--auto-comfortable">
           <div
             v-for="v in redeemableVouchers"
             :key="v.mint"
@@ -386,12 +386,6 @@ defineExpose({ load })
   font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
   margin: 0;
-}
-
-.admin__vouchers-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--theme-space-md);
 }
 
 .admin__voucher-card {

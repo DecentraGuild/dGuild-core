@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Raffle" module-id="raffles">
+  <PageSection title="Raffle" module-id="raffles" wide>
     <div
       class="raffle-page"
       :class="{ 'raffle-page--selected': !!selectedRaffle }"
@@ -16,8 +16,8 @@
         <div v-else-if="visibleRaffles.length === 0" class="raffle-page__empty">
           <p>No active raffles yet.</p>
         </div>
-        <div v-else class="raffle-page__layout">
-          <div class="raffle-page__grid">
+        <div v-else class="raffle-page__layout layout-split">
+          <div class="raffle-page__grid layout-split__main admin__card-grid--auto-comfortable">
             <button
               v-for="r in visibleRaffles"
               :key="r.rafflePubkey"
@@ -37,6 +37,12 @@
                 <p v-if="r.chainData" class="raffle-card__tickets">
                   {{ r.chainData.ticketsSold }} / {{ r.chainData.ticketsTotal }} tickets
                 </p>
+                <p
+                  v-if="r.chainData && prizeConfigured(r.chainData)"
+                  class="raffle-card__prize"
+                >
+                  Prize: {{ formatPrizeLine(r.chainData) }}
+                </p>
                 <span
                   v-if="r.chainData"
                   class="raffle-card__state"
@@ -44,8 +50,11 @@
                 >
                   {{ r.chainData.stateDisplay }}
                 </span>
-                <div class="raffle-card__footer">
-                  <code class="raffle-card__pubkey">{{ truncateAddress(r.chainData?.ticketMint ?? '', 6, 4) }}</code>
+                <div v-if="r.chainData" class="raffle-card__footer">
+                  <span
+                    class="raffle-card__mint-name"
+                    :title="r.chainData.ticketMint"
+                  >{{ mintCatalogLabel(r.chainData.ticketMint) }}</span>
                   <a
                     :href="solscanUrl(r.rafflePubkey)"
                     target="_blank"
@@ -59,7 +68,7 @@
               </div>
             </button>
           </div>
-          <aside v-if="selectedRaffle" class="raffle-page__panel">
+          <aside v-if="selectedRaffle" class="raffle-page__panel layout-split__sidebar">
             <div class="raffle-panel">
               <h3 class="raffle-panel__title">{{ selectedRaffle.chainData?.name ?? 'Raffle' }}</h3>
               <p v-if="selectedRaffle.chainData?.description" class="raffle-panel__desc">
@@ -71,6 +80,16 @@
               <p v-if="selectedRaffle.chainData" class="raffle-panel__price">
                 {{ formatTicketPrice(selectedRaffle.chainData) }} per ticket
               </p>
+              <p v-if="selectedRaffle.chainData" class="raffle-panel__ticket-token">
+                Pay with: {{ mintCatalogLabelLong(selectedRaffle.chainData.ticketMint) }}
+              </p>
+              <div
+                v-if="selectedRaffle.chainData && prizeConfigured(selectedRaffle.chainData)"
+                class="raffle-panel__reward"
+              >
+                <h4 class="raffle-panel__reward-title">Prize</h4>
+                <p class="raffle-panel__reward-value">{{ formatPrizeLine(selectedRaffle.chainData) }}</p>
+              </div>
               <template v-if="canBuyTickets">
                 <div class="raffle-panel__field">
                   <label class="raffle-panel__label">Number of tickets</label>
@@ -111,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { truncateAddress, sanitizeTokenLabel } from '@decentraguild/display'
+import { truncateAddress, formatRawTokenAmount } from '@decentraguild/display'
 import type { RaffleChainData } from '@decentraguild/web3'
 import {
   fetchRaffleChainData,
@@ -120,18 +139,19 @@ import {
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
+import { PublicKey } from '@solana/web3.js'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import { useTenantStore } from '~/stores/tenant'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
-import { useMintMetadata } from '~/composables/mint/useMintMetadata'
+import { useMintLabels } from '~/composables/mint/useMintLabels'
 import { useSupabase } from '~/composables/core/useSupabase'
+
+const DEFAULT_MINT = PublicKey.default.toBase58()
 
 const tenantStore = useTenantStore()
 const tenantId = computed(() => tenantStore.tenantId)
 const { connection } = useSolanaConnection()
-const { fetchMetadata } = useMintMetadata()
-const _slug = computed(() => tenantStore.slug ?? '')
 
 interface RaffleItem {
   id: string
@@ -152,7 +172,6 @@ const buyAmount = ref(1)
 const buySubmitting = ref(false)
 const buyTxStatus = ref<string | null>(null)
 const buyError = ref<string | null>(null)
-const ticketSymbolByMint = ref<Record<string, string>>({})
 
 const visibleRaffles = computed((): RaffleWithChainData[] => {
   const active = raffles.value.filter((r) => !r.closedAt)
@@ -167,6 +186,40 @@ const visibleRaffles = computed((): RaffleWithChainData[] => {
       return isRaffleVisibleToUsers(r.chainData.state)
     })
 })
+
+function prizeConfigured(d: RaffleChainData): boolean {
+  return Boolean(d.prizeMint && d.prizeMint !== DEFAULT_MINT)
+}
+
+const mintsForCatalogLabels = computed(() => {
+  const s = new Set<string>()
+  for (const r of visibleRaffles.value) {
+    const d = r.chainData
+    if (!d) continue
+    if (d.ticketMint) s.add(d.ticketMint)
+    if (prizeConfigured(d)) s.add(d.prizeMint)
+  }
+  return s
+})
+
+const { labelByMint } = useMintLabels(mintsForCatalogLabels)
+
+function mintCatalogLabel(mint: string): string {
+  const l = labelByMint.value.get(mint)?.trim()
+  return l || truncateAddress(mint, 8, 4)
+}
+
+function mintCatalogLabelLong(mint: string): string {
+  const l = labelByMint.value.get(mint)?.trim()
+  return l || mint
+}
+
+function formatPrizeLine(d: RaffleChainData): string {
+  const label = mintCatalogLabelLong(d.prizeMint)
+  const amt = formatRawTokenAmount(d.prizeAmount, d.prizeDecimals, 'SPL')
+  if (amt === '0' || amt === '?') return label
+  return `${amt} ${label}`
+}
 
 const canBuyTickets = computed(() => {
   const r = selectedRaffle.value
@@ -195,8 +248,7 @@ const formatTotalCost = computed(() => {
   const whole = Number(total / BigInt(divisor))
   const frac = Number(total % BigInt(divisor))
   const fracStr = frac === 0 ? '' : `.${String(frac).padStart(dec, '0').replace(/0+$/, '')}`
-  const symbol = sanitizeTokenLabel(ticketSymbolByMint.value[r.ticketMint] ?? 'tokens') || 'tokens'
-  return `${whole}${fracStr} ${symbol}`
+  return `${whole}${fracStr} ${mintCatalogLabel(r.ticketMint)}`
 })
 
 function formatTicketPrice(data: RaffleChainData): string {
@@ -205,8 +257,7 @@ function formatTicketPrice(data: RaffleChainData): string {
   const whole = Number(data.ticketPrice / BigInt(divisor))
   const frac = Number(data.ticketPrice % BigInt(divisor))
   const fracStr = frac === 0 ? '' : `.${String(frac).padStart(dec, '0').replace(/0+$/, '')}`
-  const symbol = sanitizeTokenLabel(ticketSymbolByMint.value[data.ticketMint] ?? 'tokens') || 'tokens'
-  return `${whole}${fracStr} ${symbol}`
+  return `${whole}${fracStr} ${mintCatalogLabel(data.ticketMint)}`
 }
 
 function solscanUrl(pubkey: string): string {
@@ -221,12 +272,6 @@ function selectRaffle(r: RaffleWithChainData) {
   buyTxStatus.value = null
 }
 
-async function loadTicketSymbol(mint: string) {
-  if (ticketSymbolByMint.value[mint]) return
-  const meta = await fetchMetadata(mint)
-  if (meta?.symbol) ticketSymbolByMint.value[mint] = sanitizeTokenLabel(meta.symbol)
-}
-
 async function fetchChainData() {
   if (!connection.value) return
   const active = raffles.value.filter((r) => !r.closedAt)
@@ -235,7 +280,6 @@ async function fetchChainData() {
     try {
       const data = await fetchRaffleChainData(connection.value!, r.rafflePubkey)
       next[r.rafflePubkey] = data ?? null
-      if (data?.ticketMint) void loadTicketSymbol(data.ticketMint)
     } catch {
       next[r.rafflePubkey] = null
     }
@@ -301,14 +345,6 @@ async function onBuyTickets() {
     buyTxStatus.value = null
   }
 }
-
-watch(
-  () => visibleRaffles.value.map((x) => x.chainData?.ticketMint).filter(Boolean) as string[],
-  (mints) => {
-    for (const m of mints) void loadTicketSymbol(m)
-  },
-  { immediate: true }
-)
 
 onMounted(async () => {
   const id = tenantId.value
@@ -378,19 +414,8 @@ onMounted(async () => {
 }
 
 .raffle-page__layout {
-  display: flex;
-  gap: var(--theme-space-xl);
-  align-items: stretch;
   position: relative;
   z-index: 1;
-}
-
-.raffle-page__grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--theme-space-lg);
-  min-width: 0;
 }
 
 .raffle-card {
@@ -480,10 +505,20 @@ onMounted(async () => {
   margin-top: auto;
 }
 
-.raffle-card__pubkey {
+.raffle-card__prize {
+  font-size: var(--theme-font-sm);
+  margin: 0 0 var(--theme-space-xs);
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+.raffle-card__mint-name {
   font-size: var(--theme-font-xs);
-  font-family: var(--theme-font-mono, monospace);
-  opacity: 0.8;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
 }
 
 .raffle-card__link {
@@ -495,23 +530,8 @@ onMounted(async () => {
   color: white;
 }
 
-.raffle-page__panel {
-  flex-shrink: 0;
-  width: 320px;
-}
-
-@media (max-width: 900px) {
-  .raffle-page__layout {
-    flex-direction: column;
-  }
-  .raffle-page__panel {
-    width: 100%;
-  }
-}
-
 .raffle-panel {
   position: sticky;
-  top: var(--theme-space-md);
   top: var(--theme-space-md);
   padding: var(--theme-space-lg);
   background: var(--theme-bg-card);
@@ -539,7 +559,35 @@ onMounted(async () => {
 .raffle-panel__price {
   font-size: var(--theme-font-sm);
   font-weight: 500;
+  margin: 0 0 var(--theme-space-xs);
+}
+
+.raffle-panel__ticket-token {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
   margin: 0 0 var(--theme-space-md);
+}
+
+.raffle-panel__reward {
+  margin: 0 0 var(--theme-space-md);
+  padding-top: var(--theme-space-sm);
+  border-top: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.raffle-panel__reward-title {
+  margin: 0 0 var(--theme-space-xs);
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--theme-text-secondary);
+}
+
+.raffle-panel__reward-value {
+  margin: 0;
+  font-size: var(--theme-font-md);
+  font-weight: 600;
+  color: var(--theme-text-primary);
 }
 
 .raffle-panel__field {

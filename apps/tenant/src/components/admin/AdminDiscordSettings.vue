@@ -13,7 +13,7 @@
       @disconnect="disconnect"
     />
 
-    <div v-if="server.connected && !loading" class="discord-settings__role-reference">
+    <div v-if="server.connected && !loading" class="discord-settings__role-reference admin__card-grid--2-sm">
       <div class="discord-settings__role-col">
         <h4 class="discord-settings__role-heading">Roles the bot can assign</h4>
         <p class="discord-settings__role-hint">
@@ -426,19 +426,10 @@ onMounted(() => {
 }
 
 .discord-settings__role-reference {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--theme-space-lg);
   padding: var(--theme-space-md);
   background: var(--theme-bg-secondary);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
-}
-
-@media (min-width: 640px) {
-  .discord-settings__role-reference {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 .discord-settings__role-heading {

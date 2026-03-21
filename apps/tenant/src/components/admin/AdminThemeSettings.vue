@@ -6,7 +6,7 @@
         <p class="theme-settings__hint">
           Core colours and surfaces. Leave optional fields empty to derive from primary and background.
         </p>
-        <div class="theme-settings__grid theme-settings__grid--two">
+        <div class="theme-settings__grid admin__card-grid--auto-dense">
           <div class="theme-settings__group">
             <h4 class="theme-settings__sub">Core</h4>
             <ColorInput v-model="inputs.primary" label="Primary (buttons, links)" @update:model-value="apply" />
@@ -23,7 +23,7 @@
             <ColorInput v-model="inputs.destructive" label="Destructive (danger actions)" @update:model-value="apply" />
           </div>
         </div>
-        <div class="theme-settings__grid theme-settings__grid--two">
+        <div class="theme-settings__grid admin__card-grid--auto-dense">
           <div class="theme-settings__group">
             <h4 class="theme-settings__sub">Status</h4>
             <ColorInput v-model="statusSuccess" label="Positive" @update:model-value="applyStatus" />
@@ -40,7 +40,7 @@
         <div class="theme-settings__group">
           <OptionsSelect v-model="fontFamilyId" label="Font" :options="FONT_OPTIONS" @update:model-value="applyFont" />
         </div>
-        <div class="theme-settings__typography-row">
+        <div class="theme-settings__typography-row admin__card-grid--3">
           <FormInput v-model="typographySmall" label="Small (rem)" placeholder="0.875" @update:model-value="applyTypography" />
           <FormInput v-model="typographyBody" label="Body (rem)" placeholder="1" @update:model-value="applyTypography" />
           <FormInput v-model="typographyHeading" label="Heading (rem)" placeholder="1.25" @update:model-value="applyTypography" />
@@ -111,7 +111,7 @@
           Optional visual enhancements. Patterns and glow intensity are purely aesthetic and do not
           affect functionality.
         </p>
-        <div class="theme-settings__grid theme-settings__grid--two">
+        <div class="theme-settings__grid admin__card-grid--2-sm">
           <div class="theme-settings__group">
             <OptionsSelect v-model="effectPattern" label="Background pattern" :options="PATTERN_OPTIONS" @update:model-value="applyEffects" />
           </div>
@@ -360,9 +360,9 @@ watch(
 
 @media (min-width: var(--theme-breakpoint-lg)) {
   .theme-settings {
-    grid-template-columns: 1fr minmax(280px, 360px);
+    grid-template-columns: minmax(0, 3fr) minmax(var(--layout-sidebar-min), 1fr);
   }
-  .theme-settings__preview {
+  :deep(.theme-settings__preview) {
     position: sticky;
     top: var(--theme-space-lg);
     align-self: start;
@@ -414,17 +414,11 @@ watch(
 }
 
 .theme-settings__grid {
-  display: grid;
-  gap: var(--theme-space-md);
   margin-bottom: var(--theme-space-md);
 }
 
 .theme-settings__grid:last-child {
   margin-bottom: 0;
-}
-
-.theme-settings__grid--two {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
 .theme-settings__group {
@@ -434,12 +428,6 @@ watch(
 .theme-settings__group .color-input,
 .theme-settings__group .form-input {
   margin-bottom: var(--theme-space-sm);
-}
-
-.theme-settings__typography-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--theme-space-md);
 }
 
 .theme-settings__slider-row {

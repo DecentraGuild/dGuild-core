@@ -119,7 +119,12 @@ const canDistributeReward = computed(
   () => props.slotCard.chainData?.state === 'claimprize' && props.slotCard.chainData?.winner != null
 )
 const canClaimProceeds = computed(() => props.slotCard.chainData?.state === 'claimtickets')
-const canCloseRaffle = computed(() => props.slotCard.chainData?.state === 'done')
+
+/** Close / tear down: after full lifecycle (`done`), or before start (`created` / `ready`) if setup was wrong. */
+const canCloseRaffle = computed(() => {
+  const s = props.slotCard.chainData?.state
+  return s === 'done' || s === 'created' || s === 'ready'
+})
 
 function truncateDesc(text: string, maxLen = 60): string {
   const t = text.trim()
