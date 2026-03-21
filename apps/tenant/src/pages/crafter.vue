@@ -1,5 +1,5 @@
 <template>
-  <PageSection title="Crafter" module-id="crafter" wide>
+  <PageSection title="Crafter" module-id="crafter">
     <div class="crafter-page">
       <p v-if="!crafterEnabled" class="crafter-page__empty">
         Crafter is not enabled for this community. Enable it in Admin → Modules.

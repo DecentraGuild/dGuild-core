@@ -165,7 +165,7 @@ onUnmounted(teardown)
   gap: var(--theme-space-xl);
 }
 
-@media (min-width: var(--theme-breakpoint-md)) {
+@media (min-width: 768px) {
   .discord-page__layout {
     flex-direction: row;
     align-items: flex-start;

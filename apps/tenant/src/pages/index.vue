@@ -102,10 +102,6 @@ function moduleLink(entry: ModuleCatalogEntry) {
 </script>
 
 <style scoped>
-.home {
-  max-width: 56rem;
-}
-
 .home__modules {
   display: flex;
   flex-direction: column;
@@ -119,13 +115,13 @@ function moduleLink(entry: ModuleCatalogEntry) {
   gap: var(--theme-space-sm);
 }
 
-@media (min-width: var(--theme-breakpoint-sm)) {
+@media (min-width: 640px) {
   .home__grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
-@media (min-width: var(--theme-breakpoint-lg)) {
+@media (min-width: 1024px) {
   .home__grid {
     grid-template-columns: repeat(4, 1fr);
     gap: var(--theme-space-md);

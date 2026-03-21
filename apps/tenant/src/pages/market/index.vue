@@ -240,7 +240,7 @@ function onEscrowModalClose() {
   grid-template-columns: 1fr;
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
+@media (max-width: 768px) {
   .market-shell {
     grid-template-columns: 1fr;
   }
@@ -253,7 +253,7 @@ function onEscrowModalClose() {
   overflow: hidden;
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
+@media (max-width: 768px) {
   .market-shell__tree {
     border-right: none;
     border-bottom: var(--theme-border-thin) solid var(--theme-border);
