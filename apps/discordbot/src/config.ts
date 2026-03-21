@@ -50,16 +50,16 @@ export function hasBotSecret(): boolean {
   return Boolean(getSupabaseUrl() && getSupabaseServiceRoleKey())
 }
 
-export function logMissingSupabaseEnv(): void {
+/** Call once at startup. Bot does nothing useful without Supabase; exit instead of logging forever. */
+export function assertSupabaseEnvOrExit(): void {
   if (hasBotSecret()) return
   const missing: string[] = []
   if (!getSupabaseUrl()) missing.push('SUPABASE_URL')
-  if (!getSupabaseServiceRoleKey()) {
-    missing.push('SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY')
-  }
-  console.warn(
-    `[discordbot] Missing env: ${missing.join('; ')} — /verify and role sync disabled. See apps/discordbot/README.md.`,
+  if (!getSupabaseServiceRoleKey()) missing.push('SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_KEY)')
+  console.error(
+    `Discord bot: add these to Railway → service → Variables, save, redeploy: ${missing.join(', ')}.`,
   )
+  process.exit(1)
 }
 
 export function buildVerifyUrl(tenantSlug: string, token: string): string {

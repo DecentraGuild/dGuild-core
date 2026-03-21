@@ -5,13 +5,13 @@ import { handleVerify } from './handlers/verify.js'
 import { syncLinkedGuild } from './handlers/sync.js'
 import { fetchDiscordRoleSyncIntervalMs, waitForSupabaseReady } from './api-client.js'
 import {
+  assertSupabaseEnvOrExit,
   getApiReadinessMaxWaitMs,
   getApiReadinessPollMs,
   getDiscordBotToken,
   getDiscordRoleSyncIntervalEnvRaw,
   getRoleSyncIntervalMsDefault,
   hasBotSecret,
-  logMissingSupabaseEnv,
 } from './config.js'
 
 const GUILD_SYNC_STAGGER_MS = 2_000
@@ -19,12 +19,10 @@ const GUILD_SYNC_STAGGER_MS = 2_000
 async function main(): Promise<void> {
   const discordToken = getDiscordBotToken()
   if (!discordToken) {
-    console.error('Discord bot token is required')
+    console.error('Discord bot: set DISCORD_BOT_TOKEN on Railway, redeploy.')
     process.exit(1)
   }
-  if (!hasBotSecret()) {
-    logMissingSupabaseEnv()
-  }
+  assertSupabaseEnvOrExit()
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
   })
