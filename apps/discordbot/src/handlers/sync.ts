@@ -9,8 +9,7 @@ import {
   ApiError,
 } from '../api-client.js'
 import { hasBotSecret } from '../config.js'
-
-const GUILD_NOT_LINKED_CODE = 'GUILD_NOT_LINKED'
+import { GUILD_NOT_LINKED_CODE } from '../discord-errors.js'
 
 /** Fetch all members and return member_roles (user id -> role ids, excluding @everyone) and a member map for reuse. */
 async function fetchMemberRolesAndMap(guild: Guild): Promise<{

@@ -1,11 +1,8 @@
 import 'dotenv/config'
 
 /**
- * Bot config. Secrets from env; other defaults in constants below.
- *
- * dotenv/config must run in this module before any env read so a bundled entry that
- * imports ./config before index.ts’s side effects still sees .env (and production
- * keeps Railway-provided process.env; dotenv does not override existing vars).
+ * Secrets and tunables use bracket `process.env[key]` with keys built at runtime.
+ * Dotted access with fixed names is avoided so Railpack does not infer BuildKit secrets.
  */
 
 const DEFAULT_VERIFY_URL_TEMPLATE = 'https://{{slug}}.dguild.org/verify?token={{token}}'
@@ -13,14 +10,20 @@ const DEFAULT_API_READINESS_MAX_WAIT_MS = 30_000
 const DEFAULT_API_READINESS_POLL_MS = 1_000
 const DEFAULT_ROLE_SYNC_INTERVAL_MS = 15 * 60 * 1000
 
-export const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
+function envKey(...segments: string[]): string {
+  return segments.join('_')
+}
 
 function envTrim(key: string): string | undefined {
   return process.env[key]?.trim()
 }
+
 const _SB = 'SUPA' + 'BASE'
 
-/** Read at use time so runtime env (e.g. Railway) is visible even if load order varies. */
+export function getDiscordBotToken(): string | undefined {
+  return envTrim(envKey('DISCORD', 'BOT', 'TOKEN'))
+}
+
 export function getSupabaseUrl(): string | undefined {
   return envTrim(`${_SB}_URL`)
 }
@@ -29,14 +32,33 @@ export function getSupabaseServiceRoleKey(): string | undefined {
   return envTrim(`${_SB}_SERVICE_ROLE_KEY`)
 }
 
-const VERIFY_URL_TEMPLATE = (process.env.VERIFY_URL_TEMPLATE ?? DEFAULT_VERIFY_URL_TEMPLATE).trim()
+export function getDiscordApplicationId(): string | undefined {
+  return envTrim(envKey('DISCORD', 'APPLICATION', 'ID'))
+}
 
-export const API_READINESS_MAX_WAIT_MS = Number(
-  process.env.API_READINESS_MAX_WAIT_MS ?? DEFAULT_API_READINESS_MAX_WAIT_MS,
-)
-export const API_READINESS_POLL_MS = Number(
-  process.env.API_READINESS_POLL_MS ?? DEFAULT_API_READINESS_POLL_MS,
-)
+function getVerifyUrlTemplate(): string {
+  const k = envKey('VERIFY', 'URL', 'TEMPLATE')
+  return (process.env[k] ?? DEFAULT_VERIFY_URL_TEMPLATE).trim()
+}
+
+export function getApiReadinessMaxWaitMs(): number {
+  const k = envKey('API', 'READINESS', 'MAX', 'WAIT', 'MS')
+  return Number(process.env[k] ?? DEFAULT_API_READINESS_MAX_WAIT_MS)
+}
+
+export function getApiReadinessPollMs(): number {
+  const k = envKey('API', 'READINESS', 'POLL', 'MS')
+  return Number(process.env[k] ?? DEFAULT_API_READINESS_POLL_MS)
+}
+
+export function getRoleSyncIntervalMsDefault(): number {
+  const k = envKey('DISCORD', 'ROLE', 'SYNC', 'INTERVAL', 'MS')
+  return Number(process.env[k] ?? DEFAULT_ROLE_SYNC_INTERVAL_MS)
+}
+
+export function getDiscordRoleSyncIntervalEnvRaw(): string | undefined {
+  return process.env[envKey('DISCORD', 'ROLE', 'SYNC', 'INTERVAL', 'MS')]
+}
 
 export function hasBotSecret(): boolean {
   return Boolean(getSupabaseUrl() && getSupabaseServiceRoleKey())
@@ -45,21 +67,23 @@ export function hasBotSecret(): boolean {
 export function logMissingSupabaseEnv(): void {
   const url = getSupabaseUrl()
   const key = getSupabaseServiceRoleKey()
-  const rawUrl = process.env[`${_SB}_URL`]
-  const rawKey = process.env[`${_SB}_SERVICE_ROLE_KEY`]
+  const urlKey = `${_SB}_URL`
+  const keyKey = `${_SB}_SERVICE_ROLE_KEY`
+  const rawUrl = process.env[urlKey]
+  const rawKey = process.env[keyKey]
   const parts: string[] = []
   if (!url) {
     parts.push(
       rawUrl !== undefined && String(rawUrl).trim() === ''
-        ? `${_SB}_URL is set but empty or whitespace`
-        : `${_SB}_URL is unset`,
+        ? `${urlKey} is set but empty or whitespace`
+        : `${urlKey} is unset`,
     )
   }
   if (!key) {
     parts.push(
       rawKey !== undefined && String(rawKey).trim() === ''
-        ? `${_SB}_SERVICE_ROLE_KEY is set but empty or whitespace`
-        : `${_SB}_SERVICE_ROLE_KEY is unset`,
+        ? `${keyKey} is set but empty or whitespace`
+        : `${keyKey} is unset`,
     )
   }
   if (parts.length > 0) {
@@ -69,17 +93,13 @@ export function logMissingSupabaseEnv(): void {
     console.warn(
       `[discordbot] Supabase env missing (${parts.join('; ')}) — /verify and role sync disabled. ` +
         `process.env names matching "supa" (values not logged): ${supaKeys.length ? supaKeys.join(', ') : '(none)'}. ` +
-        'If you use Railway: ensure this service builds with Railpack (no root Dockerfile); see apps/discordbot/README.md.',
+        'Railway: see apps/discordbot/README.md and .cursor/memory/railway-railpack-secrets.md.',
     )
   }
 }
 
 export function buildVerifyUrl(tenantSlug: string, token: string): string {
-  return VERIFY_URL_TEMPLATE
+  return getVerifyUrlTemplate()
     .replace(/\{\{\s*slug\s*\}\}/gi, encodeURIComponent(tenantSlug))
     .replace(/\{\{\s*token\s*\}\}/gi, encodeURIComponent(token))
 }
-
-export const ROLE_SYNC_INTERVAL_MS = Number(
-  process.env.DISCORD_ROLE_SYNC_INTERVAL_MS ?? DEFAULT_ROLE_SYNC_INTERVAL_MS,
-)
