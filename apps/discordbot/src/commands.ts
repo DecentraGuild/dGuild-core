@@ -1,23 +1,28 @@
 import type { Client } from 'discord.js'
 import { REST, Routes } from 'discord.js'
 import { SlashCommandBuilder } from 'discord.js'
-import { DISCORD_BOT_TOKEN } from './config.js'
+import { getDiscordApplicationId, getDiscordBotToken } from './config.js'
 
 export async function registerCommands(client: Client): Promise<void> {
-  const rest = new REST().setToken(DISCORD_BOT_TOKEN!)
+  const token = getDiscordBotToken()
+  if (!token) {
+    console.error('Cannot register commands: bot token missing.')
+    return
+  }
+  const rest = new REST().setToken(token)
   const commands = [
     new SlashCommandBuilder()
       .setName('verify')
       .setDescription('Link your Solana wallet to your Discord account for role verification')
       .toJSON(),
   ]
-  let appId = client.application?.id ?? process.env.DISCORD_APPLICATION_ID
+  let appId = client.application?.id ?? getDiscordApplicationId()
   if (!appId && client.application) {
     const app = await client.application.fetch()
     appId = app.id
   }
   if (!appId) {
-    console.error('Cannot register commands: application id not available. Set DISCORD_APPLICATION_ID.')
+    console.error('Cannot register commands: application id not available. Set the Discord application id env var.')
     return
   }
   await rest.put(Routes.applicationCommands(appId), { body: commands })

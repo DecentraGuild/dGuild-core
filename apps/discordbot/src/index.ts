@@ -5,19 +5,21 @@ import { handleVerify } from './handlers/verify.js'
 import { syncLinkedGuild } from './handlers/sync.js'
 import { fetchDiscordRoleSyncIntervalMs, waitForSupabaseReady } from './api-client.js'
 import {
-  DISCORD_BOT_TOKEN,
+  getApiReadinessMaxWaitMs,
+  getApiReadinessPollMs,
+  getDiscordBotToken,
+  getDiscordRoleSyncIntervalEnvRaw,
+  getRoleSyncIntervalMsDefault,
   hasBotSecret,
   logMissingSupabaseEnv,
-  ROLE_SYNC_INTERVAL_MS,
-  API_READINESS_MAX_WAIT_MS,
-  API_READINESS_POLL_MS,
 } from './config.js'
 
 const GUILD_SYNC_STAGGER_MS = 2_000
 
 async function main(): Promise<void> {
-  if (!DISCORD_BOT_TOKEN) {
-    console.error('DISCORD_BOT_TOKEN is required')
+  const discordToken = getDiscordBotToken()
+  if (!discordToken) {
+    console.error('Discord bot token is required')
     process.exit(1)
   }
   if (!hasBotSecret()) {
@@ -36,15 +38,18 @@ async function main(): Promise<void> {
     }
   }
 
+  const apiReadinessMaxWait = getApiReadinessMaxWaitMs()
+  const apiReadinessPoll = getApiReadinessPollMs()
+
   client.once(Events.ClientReady, async () => {
     await registerCommands(client)
     if (!hasBotSecret()) return
 
-    if (API_READINESS_MAX_WAIT_MS > 0) {
+    if (apiReadinessMaxWait > 0) {
       try {
         await waitForSupabaseReady({
-          timeoutMs: API_READINESS_MAX_WAIT_MS,
-          intervalMs: API_READINESS_POLL_MS,
+          timeoutMs: apiReadinessMaxWait,
+          intervalMs: apiReadinessPoll,
         })
       } catch (err) {
         console.error('Supabase did not become ready in time:', err)
@@ -62,16 +67,17 @@ async function main(): Promise<void> {
       }
     }
 
-    let roleSyncMs = ROLE_SYNC_INTERVAL_MS
-    const rawIntervalEnv = process.env.DISCORD_ROLE_SYNC_INTERVAL_MS
+    const defaultRoleSyncMs = getRoleSyncIntervalMsDefault()
+    let roleSyncMs = defaultRoleSyncMs
+    const rawIntervalEnv = getDiscordRoleSyncIntervalEnvRaw()
     if (rawIntervalEnv !== undefined && String(rawIntervalEnv).trim() !== '') {
       const n = Number(rawIntervalEnv)
       if (Number.isFinite(n) && n > 0) roleSyncMs = n
     } else {
       try {
-        roleSyncMs = await fetchDiscordRoleSyncIntervalMs(ROLE_SYNC_INTERVAL_MS)
+        roleSyncMs = await fetchDiscordRoleSyncIntervalMs(defaultRoleSyncMs)
       } catch {
-        /* keep ROLE_SYNC_INTERVAL_MS */
+        /* keep defaultRoleSyncMs */
       }
     }
 
@@ -114,7 +120,7 @@ async function main(): Promise<void> {
     process.exit(0)
   })
 
-  await client.login(DISCORD_BOT_TOKEN)
+  await client.login(discordToken)
 }
 
 main().catch((err) => {

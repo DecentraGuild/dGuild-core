@@ -1,8 +1,7 @@
 import type { ChatInputCommandInteraction } from 'discord.js'
 import { createVerifySession, ApiError } from '../api-client.js'
 import { buildVerifyUrl, hasBotSecret } from '../config.js'
-
-const GUILD_NOT_LINKED_CODE = 'GUILD_NOT_LINKED'
+import { GUILD_NOT_LINKED_CODE } from '../discord-errors.js'
 
 export async function handleVerify(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!hasBotSecret()) {
