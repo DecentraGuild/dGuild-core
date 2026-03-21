@@ -63,7 +63,11 @@ export function logMissingSupabaseEnv(): void {
     )
   }
   if (parts.length > 0) {
-    console.warn(`[discordbot] Supabase URL/service key missing on host (${parts.join('; ')}) — /verify and role sync disabled.`)
+    console.warn(
+      `[discordbot] Supabase env missing (${parts.join('; ')}) — /verify and role sync disabled. ` +
+        'Railway scopes variables per service and does not pass them through the Docker build unless ARG is used; ' +
+        'see apps/discordbot/README.md § Railway environment variables.',
+    )
   }
 }
 
