@@ -168,7 +168,7 @@ const patternClass = computed(() => {
 @media (min-width: 1024px) {
   .app-shell__main {
     max-width: 75dvw;
-    margin-inline: auto;
+    margin-inline: 0;
   }
 }
 

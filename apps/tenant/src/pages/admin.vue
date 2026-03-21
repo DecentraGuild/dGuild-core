@@ -1,5 +1,5 @@
 <template>
-  <PageSection :title="adminPageTitle" wide>
+  <PageSection :title="adminPageTitle">
     <div class="admin">
       <AdminGeneralTab
         v-if="tab === 'general'"
