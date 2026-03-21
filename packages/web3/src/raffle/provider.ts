@@ -3,9 +3,26 @@ import { AnchorProvider, Program } from '@coral-xyz/anchor'
 import { RAFFLE_PROGRAM_ID, RAFFLE_IDL } from '@decentraguild/contracts'
 import type { Wallet } from '../escrow/types.js'
 
+/** Anchor 0.29 coder expects `publicKey`; IDL 0.30+ exports `pubkey` for the same layout. */
+function normalizeIdlPubkeyTypesForAnchor029(idl: Record<string, unknown>): void {
+  const accounts = idl.accounts
+  if (!Array.isArray(accounts)) return
+  for (const acc of accounts) {
+    if (!acc || typeof acc !== 'object') continue
+    const fields = (acc as { type?: { fields?: unknown[] } }).type?.fields
+    if (!Array.isArray(fields)) continue
+    for (const f of fields) {
+      if (f && typeof f === 'object' && (f as { type?: string }).type === 'pubkey') {
+        ;(f as { type: string }).type = 'publicKey'
+      }
+    }
+  }
+}
+
 function getIdlWithAddress(): Record<string, unknown> {
   const idl = JSON.parse(JSON.stringify(RAFFLE_IDL)) as Record<string, unknown>
   idl.address = RAFFLE_PROGRAM_ID
+  normalizeIdlPubkeyTypesForAnchor029(idl)
   if (idl.types && Array.isArray(idl.types) && idl.types.length === 0) {
     delete idl.types
   }
