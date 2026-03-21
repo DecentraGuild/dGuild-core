@@ -13,6 +13,29 @@
       @disconnect="disconnect"
     />
 
+    <div v-if="server.connected && !loading" class="discord-settings__role-reference">
+      <div class="discord-settings__role-col">
+        <h4 class="discord-settings__role-heading">Roles the bot can assign</h4>
+        <p class="discord-settings__role-hint">
+          Roles below the bot’s highest role. Used when you assign a rule to a role.
+        </p>
+        <ul v-if="guildRoles.length" class="discord-settings__role-ul">
+          <li v-for="r in guildRoles" :key="r.role_id">{{ r.name || r.role_id }}</li>
+        </ul>
+        <p v-else class="discord-settings__role-empty">None (raise the bot’s role or wait for sync).</p>
+      </div>
+      <div class="discord-settings__role-col">
+        <h4 class="discord-settings__role-heading">All server roles</h4>
+        <p class="discord-settings__role-hint">
+          Every role cached from Discord. The “Discord” condition type can require any of these.
+        </p>
+        <ul v-if="guildRolesAll.length" class="discord-settings__role-ul">
+          <li v-for="r in guildRolesAll" :key="r.role_id">{{ r.name || r.role_id }}</li>
+        </ul>
+        <p v-else class="discord-settings__role-empty">No roles synced yet.</p>
+      </div>
+    </div>
+
     <div v-if="server.connected && !loading" class="discord-settings__cards">
       <DiscordRoleCardsCarousel
         :role-cards="roleCards"
@@ -48,7 +71,7 @@
           <OptionsSelect
             v-model="quickAssignRoleId"
             :options="guildRoleOptions"
-            label="Discord role"
+            label="Role to assign"
             placeholder="Select role"
           />
           <FormInput
@@ -155,6 +178,7 @@ const linkError = ref<string | null>(null)
 
 const roleCards = ref<RoleCard[]>([])
 const guildRoles = ref<Array<{ role_id: string; name: string }>>([])
+const guildRolesAll = ref<Array<{ role_id: string; name: string }>>([])
 
 const quickAssignOpen = ref(false)
 const quickAssignSetId = ref<number | null>(null)
@@ -207,6 +231,7 @@ async function fetchGuildRoles() {
   const guildId = server.value.discord_guild_id
   if (!guildId) {
     guildRoles.value = []
+    guildRolesAll.value = []
     return
   }
   const supabase = useSupabase()
@@ -215,8 +240,13 @@ async function fetchGuildRoles() {
     .select('role_id, name, position')
     .eq('discord_guild_id', guildId)
     .order('position')
+  const rows = data ?? []
+  guildRolesAll.value = rows.map((r) => ({
+    role_id: r.role_id as string,
+    name: (r.name as string) ?? '',
+  }))
   const botPos = server.value.bot_role_position
-  const assignable = (data ?? []).filter((r) => {
+  const assignable = rows.filter((r) => {
     const pos = (r.position as number) ?? 0
     return botPos == null || pos < botPos
   })
@@ -289,6 +319,8 @@ async function disconnect() {
     })
     server.value = { connected: false }
     roleCards.value = []
+    guildRoles.value = []
+    guildRolesAll.value = []
   } finally {
     disconnecting.value = false
   }
@@ -391,6 +423,50 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--theme-space-lg);
+}
+
+.discord-settings__role-reference {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--theme-space-lg);
+  padding: var(--theme-space-md);
+  background: var(--theme-bg-secondary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+}
+
+@media (min-width: 640px) {
+  .discord-settings__role-reference {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.discord-settings__role-heading {
+  margin: 0 0 var(--theme-space-xs);
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+}
+
+.discord-settings__role-hint {
+  margin: 0 0 var(--theme-space-sm);
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+  line-height: 1.45;
+}
+
+.discord-settings__role-ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  font-size: var(--theme-font-sm);
+  line-height: 1.5;
+}
+
+.discord-settings__role-empty {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
 }
 
 .discord-settings__cards {

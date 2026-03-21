@@ -102,7 +102,9 @@
         <OptionsSelect
           v-if="cond.type === 'DISCORD' && showRoleSelector"
           v-model="roleModel"
-          :options="guildRoleOptions"
+          :options="discordRoleFlatOptions"
+          :option-groups="discordRoleSelectGroups"
+          label="Required role"
           placeholder="Role"
           class="condition-editor__role"
           @update:model-value="emit('update:required_role_id', $event)"
@@ -148,6 +150,7 @@ const props = withDefaults(
     mintsWithSnapshot: CatalogMint[]
     gateLists: Array<{ address: string; name: string }>
     guildRoles?: Array<{ value: string; label: string }>
+    guildRoleOptionGroups?: Array<{ groupLabel: string; options: Array<{ value: string; label: string }> }>
     snapshotDatesForMint: string[]
     snapshotAtForMint?: string[]
     traitKeys: string[]
@@ -158,7 +161,14 @@ const props = withDefaults(
     /** When false, logic pills (AND/OR) are hidden; parent renders them between cards. */
     showLogicPills?: boolean
   }>(),
-  { guildRoles: () => [], showRoleSelector: true, snapshotAtForMint: () => [], isWeightedMode: false, showLogicPills: true }
+  {
+    guildRoles: () => [],
+    guildRoleOptionGroups: undefined,
+    showRoleSelector: true,
+    snapshotAtForMint: () => [],
+    isWeightedMode: false,
+    showLogicPills: true,
+  }
 )
 
 const emit = defineEmits<{
@@ -305,7 +315,15 @@ const traitValueSelectOptions = computed(() =>
   props.traitValueOptions.map((v) => ({ value: v, label: v }))
 )
 
-const guildRoleOptions = computed(() => props.guildRoles ?? [])
+const discordRoleSelectGroups = computed(() => {
+  const g = props.guildRoleOptionGroups
+  return g?.length ? g : undefined
+})
+
+const discordRoleFlatOptions = computed(() => {
+  if (discordRoleSelectGroups.value?.length) return []
+  return props.guildRoles ?? []
+})
 
 function onMintOrListChange(value: string) {
   emit('update:mint_or_group', value)
