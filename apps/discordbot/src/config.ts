@@ -63,10 +63,13 @@ export function logMissingSupabaseEnv(): void {
     )
   }
   if (parts.length > 0) {
+    const supaKeys = Object.keys(process.env)
+      .filter((k) => /supa/i.test(k))
+      .sort()
     console.warn(
       `[discordbot] Supabase env missing (${parts.join('; ')}) — /verify and role sync disabled. ` +
-        'Railway scopes variables per service and does not pass them through the Docker build unless ARG is used; ' +
-        'see apps/discordbot/README.md § Railway environment variables.',
+        `process.env names matching "supa" (values not logged): ${supaKeys.length ? supaKeys.join(', ') : '(none)'}. ` +
+        'If you use Railway: ensure this service builds with Railpack (no root Dockerfile); see apps/discordbot/README.md.',
     )
   }
 }
