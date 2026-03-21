@@ -1,6 +1,4 @@
-import type { Client } from 'discord.js'
-import { REST, Routes } from 'discord.js'
-import { SlashCommandBuilder } from 'discord.js'
+import { REST, Routes, SlashCommandBuilder, type Client } from 'discord.js'
 import { getDiscordApplicationId, getDiscordBotToken } from './config.js'
 
 export async function registerCommands(client: Client): Promise<void> {
