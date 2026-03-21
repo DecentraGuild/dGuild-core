@@ -1,12 +1,12 @@
--- DecentraGuild schema (consolidated).
+-- DecentraGuild schema (single squashed migration).
 -- All tables use tenant_id (tenant_config.id) as canonical FK. Slugs are display/routing only.
--- Merged: 20260307000000 through 20260332000000. Final schema: no renames, v2 billing only.
+-- Replaces prior migration chain: Vault-only cron invoke (net.http_post), interval_timers, no tracker_address_book.
 
 -- ---------------------------------------------------------------------------
 -- Extensions
 -- ---------------------------------------------------------------------------
 
-CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "pg_net";
 CREATE EXTENSION IF NOT EXISTS "pg_cron" WITH SCHEMA "cron";
 CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
 
@@ -679,19 +679,6 @@ CREATE INDEX IF NOT EXISTS idx_platform_audit_log_created_at ON public.platform_
 -- Tracker / Watchtower (track_holders, enabled_at_holders)
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS public.tracker_address_book (
-  id SERIAL PRIMARY KEY,
-  tenant_id TEXT NOT NULL REFERENCES public.tenant_config(id),
-  mint TEXT NOT NULL,
-  tier TEXT NOT NULL DEFAULT 'base' CHECK (tier IN ('base', 'grow', 'pro')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (tenant_id, mint)
-);
-
-CREATE INDEX IF NOT EXISTS idx_tracker_address_book_tenant ON public.tracker_address_book(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_tracker_address_book_tier ON public.tracker_address_book(tenant_id, tier);
-
 CREATE TABLE IF NOT EXISTS public.watchtower_watches (
   id SERIAL PRIMARY KEY,
   tenant_id TEXT NOT NULL REFERENCES public.tenant_config(id),
@@ -725,11 +712,30 @@ CREATE TABLE IF NOT EXISTS public.tracker_holder_snapshots (
 CREATE INDEX IF NOT EXISTS idx_tracker_holder_snapshots_tenant_mint ON public.tracker_holder_snapshots(tenant_id, mint);
 CREATE INDEX IF NOT EXISTS idx_tracker_holder_snapshots_date ON public.tracker_holder_snapshots(snapshot_date);
 
-CREATE TABLE IF NOT EXISTS public.addressbook_settings (
-  tenant_id TEXT PRIMARY KEY REFERENCES public.tenant_config(id),
-  settings JSONB NOT NULL DEFAULT '{}',
+CREATE TABLE IF NOT EXISTS public.platform_watchtower_holder_tier (
+  id SERIAL PRIMARY KEY,
+  sort_order SMALLINT NOT NULL UNIQUE,
+  max_holders INT,
+  interval_minutes INT NOT NULL,
+  CONSTRAINT platform_watchtower_holder_tier_max_holders_check CHECK (max_holders IS NULL OR max_holders >= 0)
+);
+
+INSERT INTO public.platform_watchtower_holder_tier (sort_order, max_holders, interval_minutes) VALUES
+  (1, 500, 5),
+  (2, 5000, 15),
+  (3, NULL, 60)
+ON CONFLICT (sort_order) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS public.interval_timers (
+  timer_key TEXT PRIMARY KEY,
+  interval_minutes INT NOT NULL CHECK (interval_minutes > 0),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+INSERT INTO public.interval_timers (timer_key, interval_minutes) VALUES
+  ('watchtower_snapshot_bucket', 720),
+  ('discord_role_sync', 15)
+ON CONFLICT (timer_key) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
 -- Gates (access lists)
@@ -920,7 +926,7 @@ GRANT EXECUTE ON FUNCTION public.check_platform_admin() TO authenticated;
 CREATE OR REPLACE FUNCTION public.invoke_edge_function(fn_name text, body_json jsonb DEFAULT '{}'::jsonb)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public, vault, extensions
+SET search_path = public, vault, net
 AS $$
 DECLARE
   supabase_url text;
@@ -936,13 +942,19 @@ BEGIN
   );
 
   IF supabase_url IS NULL OR service_key IS NULL OR service_key = '' THEN
-    RAISE WARNING 'invoke_edge_function: Vault cron_invoke_* (or app.*) missing; skipping %', fn_name;
+    RAISE WARNING 'invoke_edge_function: cron_invoke_supabase_url or cron_invoke_service_role_key missing in Vault (or empty app.*); skipping %', fn_name;
     RETURN;
   END IF;
-  PERFORM extensions.http_post(
-    url     := rtrim(supabase_url, '/') || '/functions/v1/' || fn_name,
-    headers := jsonb_build_object('Authorization', 'Bearer ' || service_key, 'Content-Type', 'application/json'),
-    body    := body_json::text
+
+  PERFORM net.http_post(
+    url := rtrim(supabase_url, '/') || '/functions/v1/' || fn_name,
+    body := COALESCE(body_json, '{}'::jsonb),
+    params := '{}'::jsonb,
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || service_key,
+      'Content-Type', 'application/json'
+    ),
+    timeout_milliseconds := 300000
   );
 END;
 $$;
@@ -999,10 +1011,10 @@ ALTER TABLE public.crafter_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crafter_pending ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.platform_owner ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.platform_audit_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tracker_address_book ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.watchtower_watches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tracker_holder_snapshots ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.addressbook_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_watchtower_holder_tier ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.interval_timers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gate_metadata ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tenant_gate_lists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.billing_quotes ENABLE ROW LEVEL SECURITY;
@@ -1145,17 +1157,17 @@ CREATE POLICY "platform_owner_own_check" ON public.platform_owner FOR SELECT TO 
   USING (wallet_address = public.auth_wallet());
 CREATE POLICY "platform_owner_anon_block" ON public.platform_owner FOR ALL TO anon USING (false);
 
-CREATE POLICY "tracker_address_book_admin_write" ON public.tracker_address_book FOR ALL
-  USING (public.is_tenant_admin(tenant_id)) WITH CHECK (public.is_tenant_admin(tenant_id));
-
 CREATE POLICY "watchtower_watches_admin_all" ON public.watchtower_watches FOR ALL
   USING (public.is_tenant_admin(tenant_id)) WITH CHECK (public.is_tenant_admin(tenant_id));
 
 CREATE POLICY "tracker_holder_snapshots_admin_read" ON public.tracker_holder_snapshots FOR SELECT
   USING (public.is_tenant_admin(tenant_id));
 
-CREATE POLICY "addressbook_settings_admin_all" ON public.addressbook_settings FOR ALL
-  USING (public.is_tenant_admin(tenant_id)) WITH CHECK (public.is_tenant_admin(tenant_id));
+CREATE POLICY "platform_watchtower_holder_tier_no_direct_access" ON public.platform_watchtower_holder_tier
+  FOR ALL USING (false) WITH CHECK (false);
+
+CREATE POLICY "interval_timers_no_direct_access" ON public.interval_timers
+  FOR ALL USING (false) WITH CHECK (false);
 
 CREATE POLICY "bundles_admin_only" ON public.bundles FOR ALL USING (false) WITH CHECK (false);
 CREATE POLICY "bundle_entitlements_admin_only" ON public.bundle_entitlements FOR ALL USING (false) WITH CHECK (false);
@@ -1293,7 +1305,16 @@ ON CONFLICT (bundle_id, meter_key) DO UPDATE SET quantity = EXCLUDED.quantity, d
 -- ---------------------------------------------------------------------------
 
 SELECT cron.schedule('module-lifecycle', '*/15 * * * *', $$SELECT public.invoke_edge_function('cron-lifecycle')$$);
-SELECT cron.schedule('tracker-sync', '*/5 * * * *', $$SELECT public.invoke_edge_function('cron-tracker')$$);
+SELECT cron.schedule(
+  'tracker-holders',
+  '*/5 * * * *',
+  $$SELECT public.invoke_edge_function('cron-tracker', '{"mode":"holders"}'::jsonb)$$
+);
+SELECT cron.schedule(
+  'tracker-snapshots',
+  '* * * * *',
+  $$SELECT public.invoke_edge_function('cron-tracker', '{"mode":"snapshot"}'::jsonb)$$
+);
 SELECT cron.schedule('expire-stale-payments', '0 * * * *', $$SELECT public.invoke_edge_function('billing', '{"action":"expire-stale"}'::jsonb)$$);
 SELECT cron.schedule(
   'expire-entitlements',
