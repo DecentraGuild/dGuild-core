@@ -1,0 +1,6 @@
+{
+  "installCommand": "cd ../.. && corepack enable && pnpm install",
+  "buildCommand": "cd ../.. && pnpm -w run build:tenant",
+  "outputDirectory": ".output/public",
+  "ignoreCommand": "[ \"$VERCEL_GIT_COMMIT_REF\" != \"main\" ]"
+}
