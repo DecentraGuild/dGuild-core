@@ -140,22 +140,22 @@
         "fields": [
           { "name": "seed", "type": "u64" },
           { "name": "bump", "type": "u8" },
-          { "name": "creator", "type": "pubkey" },
+          { "name": "creator", "type": "publicKey" },
           { "name": "state", "type": { "defined": "RaffleState" } },
           { "name": "name", "type": "string" },
           { "name": "description", "type": "string" },
           { "name": "url", "type": "string" },
-          { "name": "ticketMint", "type": "pubkey" },
+          { "name": "ticketMint", "type": "publicKey" },
           { "name": "ticketPrice", "type": "u64" },
           { "name": "ticketDecimals", "type": "u8" },
-          { "name": "prizeMint", "type": "pubkey" },
+          { "name": "prizeMint", "type": "publicKey" },
           { "name": "prizeVaultCount", "type": "u32" },
           { "name": "prizeDecimals", "type": "u8" },
-          { "name": "tickets", "type": "pubkey" },
-          { "name": "winner", "type": "pubkey" },
+          { "name": "tickets", "type": "publicKey" },
+          { "name": "winner", "type": "publicKey" },
           { "name": "randomness", "type": { "option": { "array": ["u8", 32] } } },
           { "name": "useWhitelist", "type": "bool" },
-          { "name": "whitelist", "type": "pubkey" }
+          { "name": "whitelist", "type": "publicKey" }
         ]
       }
     },

@@ -10,16 +10,9 @@
     </div>
 
     <template v-else-if="price?.billable && (isAddUnit || isTieredWithOneTime)">
-      <div class="pricing-widget__one-time-card">
-        <span class="pricing-widget__price-kind">{{ isTieredWithOneTime ? 'Per raffle' : 'One-time' }}</span>
-        <div class="pricing-widget__tier pricing-widget__tier--flush">
-          <span class="pricing-widget__tier-name">{{ isTieredWithOneTime ? (price.oneTimeUnitName ?? 'Per raffle') : addUnitName }}</span>
-          <span class="pricing-widget__tier-price">{{ formatUsdc(isTieredWithOneTime ? oneTimePerUnitEffective : price.oneTimeTotal) }} USDC</span>
-        </div>
-        <p v-if="isTieredWithOneTime" class="pricing-widget__add-unit-hint">
-          {{ selectedTier?.name ?? 'Current' }} tier: {{ formatUsdc(oneTimePerUnitEffective) }} USDC each time you create a new raffle.
-        </p>
-        <p v-else class="pricing-widget__add-unit-hint">Paid once per new {{ addUnitName.toLowerCase() }}.</p>
+      <div class="pricing-widget__tier">
+        <span class="pricing-widget__tier-name">{{ isTieredWithOneTime ? (price.oneTimeUnitName ?? 'Per raffle') : addUnitName }}</span>
+        <span class="pricing-widget__tier-price">{{ formatUsdc(isTieredWithOneTime ? oneTimePerUnitEffective : price.oneTimeTotal) }} USDC</span>
       </div>
     </template>
 
@@ -28,9 +21,6 @@
         <span class="pricing-widget__tier-name">{{ selectedTier.name }}</span>
         <span class="pricing-widget__tier-price">
           {{ formatUsdc(selectedPeriod === 'yearly' ? price.recurringYearly / 12 : price.recurringMonthly) }} USDC/mo
-          <span v-if="selectedPeriod === 'yearly' && price.appliedYearlyDiscount" class="pricing-widget__tier-note">
-            ({{ price.appliedYearlyDiscount }}% off yearly)
-          </span>
         </span>
       </div>
 
@@ -40,23 +30,8 @@
           :key="row.key"
           class="pricing-widget__usage-row"
         >
-          <div class="pricing-widget__usage-header">
-            <span class="pricing-widget__usage-label">{{ row.label }}</span>
-            <span v-if="row.type === 'numeric'" class="pricing-widget__usage-count">
-              {{ row.stored != null ? `${row.current} / ${row.stored}` : (row.included === 0 ? String(row.current) : `${row.current} / ${row.included}`) }}
-            </span>
-            <span v-else class="pricing-widget__usage-bool">
-              <Icon v-if="row.active" icon="lucide:check" class="pricing-widget__icon-check" />
-              <span v-else class="pricing-widget__icon-dash">--</span>
-            </span>
-          </div>
-          <div v-if="row.type === 'numeric' && row.showBar" class="pricing-widget__bar-track">
-            <div
-              class="pricing-widget__bar-fill"
-              :class="{ 'pricing-widget__bar-fill--over': row.ratio > 1 }"
-              :style="{ width: `${Math.min(row.ratio * 100, 100)}%` }"
-            />
-          </div>
+          <span class="pricing-widget__usage-label">{{ row.label }}</span>
+          <span class="pricing-widget__usage-value">{{ row.valueText }}</span>
         </div>
       </div>
 
@@ -73,26 +48,18 @@
       </div>
 
       <div class="pricing-widget__totals">
-        <template v-if="selectedPeriod === 'yearly'">
-          <div class="pricing-widget__total-row">
-            <span>Effective monthly</span>
-            <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringYearly / 12) }} USDC/mo</span>
-          </div>
-          <div class="pricing-widget__total-row">
-            <span>Yearly total</span>
-            <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
-          </div>
-        </template>
-        <template v-else>
-          <div class="pricing-widget__total-row">
-            <span>Monthly</span>
-            <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringMonthly) }} USDC</span>
-          </div>
-        </template>
+        <div v-if="selectedPeriod === 'yearly'" class="pricing-widget__total-row">
+          <span>Recurring (yearly)</span>
+          <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
+        </div>
+        <div v-else class="pricing-widget__total-row">
+          <span>Recurring (monthly)</span>
+          <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringMonthly) }} USDC/mo</span>
+        </div>
       </div>
 
       <div v-if="hasActiveSubscription" class="pricing-widget__subscription">
-        <p class="pricing-widget__section-label">Current subscription</p>
+        <p class="pricing-widget__section-label">Subscription</p>
         <div class="pricing-widget__sub-row">
           <span>Period</span>
           <span>{{ subscription!.billingPeriod === 'yearly' ? 'Yearly' : 'Monthly' }}</span>
@@ -120,7 +87,7 @@
         <span class="pricing-widget__tier-price">{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
       </div>
       <div v-if="hasActiveSubscription" class="pricing-widget__subscription">
-        <p class="pricing-widget__section-label">Current subscription</p>
+        <p class="pricing-widget__section-label">Subscription</p>
         <div class="pricing-widget__sub-row">
           <span>Period</span>
           <span>Yearly</span>
@@ -503,11 +470,11 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 .pricing-widget {
   background: var(--theme-bg-card);
   border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-lg);
-  padding: var(--theme-space-lg);
+  border-radius: var(--theme-radius-md);
+  padding: var(--theme-space-md);
   display: flex;
   flex-direction: column;
-  gap: var(--theme-space-md);
+  gap: var(--theme-space-sm);
 }
 
 .pricing-widget__loading {
@@ -533,21 +500,15 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 }
 
 .pricing-widget__tier-name {
-  font-size: var(--theme-font-lg);
+  font-size: var(--theme-font-md);
   font-weight: 600;
   color: var(--theme-text-primary);
 }
 
 .pricing-widget__tier-price {
-  font-size: var(--theme-font-md);
-  color: var(--theme-primary);
+  font-size: var(--theme-font-sm);
   font-weight: 600;
-}
-
-.pricing-widget__tier-note {
-  font-size: var(--theme-font-xs);
-  font-weight: 400;
-  color: var(--theme-text-secondary);
+  color: var(--theme-text-primary);
 }
 
 .pricing-widget__usage {
@@ -558,14 +519,9 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 
 .pricing-widget__usage-row {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.pricing-widget__usage-header {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
+  gap: var(--theme-space-sm);
 }
 
 .pricing-widget__usage-label {
@@ -573,49 +529,16 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
   color: var(--theme-text-secondary);
 }
 
-.pricing-widget__usage-count {
+.pricing-widget__usage-value {
   font-size: var(--theme-font-sm);
   font-weight: 500;
   color: var(--theme-text-primary);
   font-variant-numeric: tabular-nums;
 }
 
-.pricing-widget__usage-bool {
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-primary);
-}
-
-.pricing-widget__icon-check {
-  color: var(--theme-success);
-}
-
-.pricing-widget__icon-dash {
-  color: var(--theme-text-muted);
-}
-
-.pricing-widget__bar-track {
-  height: 4px;
-  background: var(--theme-bg-secondary);
-  border-radius: var(--theme-radius-full);
-  overflow: hidden;
-}
-
-.pricing-widget__bar-fill {
-  height: 100%;
-  background: var(--theme-gradient-primary, var(--theme-primary));
-  border-radius: var(--theme-radius-full);
-  transition: width 0.3s ease;
-}
-
-.pricing-widget__bar-fill--over {
-  background: var(--theme-gradient-secondary, var(--theme-warning));
-}
-
 .pricing-widget__section-label {
   font-size: var(--theme-font-xs);
   color: var(--theme-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   margin: 0;
 }
 
@@ -637,7 +560,7 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 .pricing-widget__totals {
   display: flex;
   flex-direction: column;
-  gap: var(--theme-space-xs);
+  gap: 0;
   padding-top: var(--theme-space-sm);
   border-top: var(--theme-border-thin) solid var(--theme-border);
 }
@@ -720,12 +643,12 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 }
 
 .pricing-widget__period-btn--active {
-  background: var(--theme-gradient-primary, var(--theme-primary));
-  color: var(--theme-primary-inverse);
+  background: var(--theme-primary);
+  color: var(--theme-text-on-primary, #fff);
 }
 
 .pricing-widget__period-btn--active:hover {
-  background: var(--theme-gradient-primary, var(--theme-primary));
+  background: var(--theme-primary);
 }
 
 .pricing-widget__period-save {
