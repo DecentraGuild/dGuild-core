@@ -1,8 +1,0 @@
-# Excludes for Railway Railpack’s build context (filename is what the platform looks for).
-node_modules
-dist
-.env
-.env.*
-.git
-.gitignore
-README.md
