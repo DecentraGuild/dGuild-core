@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Syncs configs/tenants/*.json into Supabase.
- * Restores tenant_config plus module settings (marketplace, raffle, addressbook,
+ * Restores tenant_config plus module settings (marketplace, raffle,
  * watchtower, mint catalog, gates, discord rules, billing, etc.).
  * Run manually when you want to apply file changes to the DB.
  * Fails gracefully (exit 0) if Supabase is unreachable.
@@ -116,14 +116,6 @@ async function syncTenant(supabase, config) {
     }
   }
 
-  if (config.addressbookSettings !== undefined) {
-    const { error } = await supabase.from('addressbook_settings').upsert(
-      { tenant_id: tenantId, settings: config.addressbookSettings ?? {} },
-      { onConflict: 'tenant_id' }
-    )
-    if (error) throw error
-  }
-
   const replaceList = async (table, rows, toRow) => {
     if (rows === undefined) return
     await supabase.from(table).delete().eq('tenant_id', tenantId)
@@ -214,12 +206,6 @@ async function syncTenant(supabase, config) {
       if (error) throw error
     }
   }
-
-  await replaceList('tracker_address_book', config.trackerAddressBook, (r) => ({
-    tenant_id: tenantId,
-    mint: r.mint,
-    tier: r.tier ?? 'base',
-  }))
 
   if (config.mintMetadata?.length) {
     const now = new Date().toISOString()

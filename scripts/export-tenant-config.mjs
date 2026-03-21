@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Exports full tenant config from Supabase to configs/tenants/{id}.json.
- * Includes tenant_config plus module settings (marketplace, raffle, addressbook,
+ * Includes tenant_config plus module settings (marketplace, raffle,
  * watchtower, mint catalog, gates, discord rules, billing, etc.).
  * Use after Admin saves to persist settings to the file.
  *
@@ -100,13 +100,11 @@ async function main() {
     tenantRes,
     marketplaceRes,
     raffleRes,
-    addressbookRes,
     watchtowerRes,
     mintCatalogRes,
     mintScopeRes,
     gateListsRes,
     raffleSlotsRes,
-    trackerRes,
     collectionMembersRes,
     discordServerRes,
     billingPaymentsRes,
@@ -114,7 +112,6 @@ async function main() {
     supabase.from('tenant_config').select('*').eq('id', tenantId).maybeSingle(),
     supabase.from('marketplace_settings').select('settings').eq('tenant_id', tenantId).maybeSingle(),
     supabase.from('raffle_settings').select('settings').eq('tenant_id', tenantId).maybeSingle(),
-    supabase.from('addressbook_settings').select('settings').eq('tenant_id', tenantId).maybeSingle(),
     supabase
       .from('watchtower_watches')
       .select('mint, track_holders, track_snapshot, track_transactions, enabled_at_holders, enabled_at_snapshot, enabled_at_transactions, created_at')
@@ -134,10 +131,6 @@ async function main() {
     supabase
       .from('tenant_raffles')
       .select('raffle_pubkey, created_at, closed_at')
-      .eq('tenant_id', tenantId),
-    supabase
-      .from('tracker_address_book')
-      .select('mint, tier')
       .eq('tenant_id', tenantId),
     supabase
       .from('tenant_collection_scope')
@@ -174,9 +167,6 @@ async function main() {
   if (raffleRes.data?.settings) {
     json.raffleSettings = raffleRes.data.settings
   }
-  if (addressbookRes.data?.settings) {
-    json.addressbookSettings = addressbookRes.data.settings
-  }
   if (watchtowerRes.data?.length) {
     json.watchtowerWatches = watchtowerRes.data.map((r) =>
       pick(r, ['mint', 'track_holders', 'track_snapshot', 'track_transactions', 'enabled_at_holders', 'enabled_at_snapshot', 'enabled_at_transactions', 'created_at'])
@@ -204,9 +194,6 @@ async function main() {
     json.raffleSlots = raffleSlotsRes.data.map((r) =>
       pick(r, ['raffle_pubkey', 'created_at', 'closed_at'])
     )
-  }
-  if (trackerRes.data?.length) {
-    json.trackerAddressBook = trackerRes.data.map((r) => pick(r, ['mint', 'tier']))
   }
   if (collectionMembersRes.data?.length) {
     json.collectionScope = [...new Set(collectionMembersRes.data.map((r) => r.collection_mint))]
@@ -258,7 +245,6 @@ async function main() {
     allMints.add(r.mint)
     if (r.collection_mint) allMints.add(r.collection_mint)
   }
-  for (const r of trackerRes.data ?? []) allMints.add(r.mint)
   for (const r of collectionMembersRes.data ?? []) allMints.add(r.collection_mint)
   const mints = [...allMints].filter(Boolean)
   if (mints.length > 0) {

@@ -799,20 +799,6 @@ CREATE TRIGGER gate_lists_delete_trg
   FOR EACH ROW EXECUTE FUNCTION public.gate_lists_delete_fn();
 
 -- ---------------------------------------------------------------------------
--- Cron edge config (local fallback for invoke_edge_function; hosted: Vault)
--- ---------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS public.cron_edge_config (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-
-INSERT INTO public.cron_edge_config (key, value) VALUES
-  ('supabase_url', 'http://host.docker.internal:65421'),
-  ('service_role_key', '')
-ON CONFLICT (key) DO NOTHING;
-
--- ---------------------------------------------------------------------------
 -- Tenant context view
 -- ---------------------------------------------------------------------------
 
@@ -927,8 +913,8 @@ GRANT EXECUTE ON FUNCTION public.check_platform_admin() TO authenticated;
 
 -- ---------------------------------------------------------------------------
 -- invoke_edge_function (pg_cron → Edge via pg_net)
--- Credentials: optional app.* settings, then Vault secrets (hosted), then cron_edge_config (local).
--- Vault names: cron_invoke_supabase_url, cron_invoke_service_role_key (create in Dashboard → Vault or SQL).
+-- Credentials: Vault secrets cron_invoke_supabase_url, cron_invoke_service_role_key (Dashboard → Database → Vault).
+-- Fallback: DB settings app.supabase_url / app.service_role_key (e.g. local); never store keys in public tables.
 -- ---------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.invoke_edge_function(fn_name text, body_json jsonb DEFAULT '{}'::jsonb)
@@ -941,18 +927,16 @@ DECLARE
   service_key  text;
 BEGIN
   supabase_url := COALESCE(
-    NULLIF(TRIM(current_setting('app.supabase_url', true)), ''),
     NULLIF(TRIM((SELECT ds.decrypted_secret FROM vault.decrypted_secrets ds WHERE ds.name = 'cron_invoke_supabase_url' LIMIT 1)), ''),
-    NULLIF(TRIM((SELECT c.value FROM public.cron_edge_config c WHERE c.key = 'supabase_url')), '')
+    NULLIF(TRIM(current_setting('app.supabase_url', true)), '')
   );
   service_key := COALESCE(
-    NULLIF(TRIM(current_setting('app.service_role_key', true)), ''),
     NULLIF(TRIM((SELECT ds.decrypted_secret FROM vault.decrypted_secrets ds WHERE ds.name = 'cron_invoke_service_role_key' LIMIT 1)), ''),
-    NULLIF(TRIM((SELECT c.value FROM public.cron_edge_config c WHERE c.key = 'service_role_key')), '')
+    NULLIF(TRIM(current_setting('app.service_role_key', true)), '')
   );
 
   IF supabase_url IS NULL OR service_key IS NULL OR service_key = '' THEN
-    RAISE WARNING 'invoke_edge_function: supabase_url or service_role_key not set; skipping %', fn_name;
+    RAISE WARNING 'invoke_edge_function: Vault cron_invoke_* (or app.*) missing; skipping %', fn_name;
     RETURN;
   END IF;
   PERFORM extensions.http_post(
@@ -1007,7 +991,6 @@ ALTER TABLE public.meters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.meter_dependencies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.duration_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tier_rules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.cron_edge_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.billing_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tenant_raffles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.raffle_settings ENABLE ROW LEVEL SECURITY;
@@ -1120,9 +1103,6 @@ CREATE POLICY "discord_guild_roles_admin_read" ON public.discord_guild_roles FOR
   USING (public.is_guild_admin(discord_guild_id));
 
 CREATE POLICY "discord_member_roles_no_direct_access" ON public.discord_member_roles
-  FOR ALL USING (false) WITH CHECK (false);
-
-CREATE POLICY "cron_edge_config_no_direct_access" ON public.cron_edge_config
   FOR ALL USING (false) WITH CHECK (false);
 
 CREATE POLICY "crafter_pending_no_direct_access" ON public.crafter_pending
