@@ -122,7 +122,7 @@
           placeholder="Wallet to receive marketplace fees"
           disabled
         />
-        <div class="marketplace-settings__fee-row">
+        <div class="marketplace-settings__fee-row admin__card-grid--2-sm">
           <FormInput
             :model-value="String(form.shopFee.makerFlatFee ?? 0)"
             label="Maker flat fee (SOL)"
@@ -138,7 +138,7 @@
             @update:model-value="form.shopFee.takerFlatFee = Number($event) || 0"
           />
         </div>
-        <div class="marketplace-settings__fee-row">
+        <div class="marketplace-settings__fee-row admin__card-grid--2-sm">
           <FormInput
             :model-value="String(form.shopFee.makerPercentFee ?? 0)"
             label="Maker fee (bps)"
@@ -371,18 +371,6 @@ defineExpose({ save, form })
   display: flex;
   flex-direction: column;
   gap: var(--theme-space-md);
-}
-
-.marketplace-settings__fee-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--theme-space-md);
-}
-
-@media (max-width: var(--theme-breakpoint-sm)) {
-  .marketplace-settings__fee-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .marketplace-settings__actions {

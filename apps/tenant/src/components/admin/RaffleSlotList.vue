@@ -10,7 +10,7 @@
       <Icon icon="lucide:loader-2" class="raffle-slots__spinner" />
       <span>Loading...</span>
     </div>
-    <div v-else class="raffle-slots__grid">
+    <div v-else class="raffle-slots__grid admin__card-grid--auto-dense">
       <template v-for="(slot, idx) in slotCards" :key="slot.key">
         <RaffleSlotCard
           v-if="slot.raffle"

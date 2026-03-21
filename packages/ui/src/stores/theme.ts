@@ -45,10 +45,11 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
   const shadows = theme.shadows ?? {}
   const gradients = theme.gradients ?? {}
 
-  const primaryMain = colors.accent?.main ?? colors.primary?.main ?? ''
-  const primaryHover = colors.accent?.hover ?? colors.primary?.hover ?? ''
-  const primaryLight = colors.accent?.main ? lightenHex(colors.accent.main, 0.2) : (colors.primary?.light ?? '')
-  const primaryDark = colors.accent?.main ? darkenHex(colors.accent.main, 0.1) : (colors.primary?.dark ?? '')
+  const primaryMain = colors.primary?.main ?? colors.accent?.main ?? ''
+  const primaryHover =
+    colors.primary?.hover ?? colors.accent?.hover ?? (primaryMain ? darkenHex(primaryMain, 0.08) : '')
+  const primaryLight = colors.primary?.light ?? (primaryMain ? lightenHex(primaryMain, 0.2) : '')
+  const primaryDark = colors.primary?.dark ?? (primaryMain ? darkenHex(primaryMain, 0.15) : '')
   return {
     '--theme-primary': primaryMain,
     '--theme-primary-hover': primaryHover,

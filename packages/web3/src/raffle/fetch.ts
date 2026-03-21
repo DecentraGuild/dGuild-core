@@ -21,6 +21,8 @@ export interface RaffleChainData {
   ticketPrice: bigint
   ticketDecimals: number
   prizeMint: string
+  prizeAmount: bigint
+  prizeDecimals: number
   winner: string | null
   useWhitelist: boolean
   whitelist: string | null
@@ -61,6 +63,8 @@ function parseRaffleRaw(data: Buffer): {
   ticketPrice: bigint
   ticketDecimals: number
   prizeMint: string
+  prizeAmount: bigint
+  prizeDecimals: number
   winner: string | null
   useWhitelist: boolean
   whitelist: string | null
@@ -89,13 +93,30 @@ function parseRaffleRaw(data: Buffer): {
   o += 1
   const prizeMint = new PublicKey(data.subarray(o, o + 32)).toBase58()
   o += 32
-  o += 8 // prizeVaultCount (u64)
-  o += 1 // prizeDecimals (u8)
+  const prizeAmount = data.readBigUInt64LE(o)
+  o += 8
+  const prizeDecimals = data[o]
+  o += 1
   o += 32 // tickets (pubkey)
   const winnerBytes = data.subarray(o, o + 32)
   const winner = winnerBytes.every((b) => b === 0) ? null : new PublicKey(winnerBytes).toBase58()
   o += 32
-  if (o + 1 + 1 + 32 > data.length) return { state, name: nameRes.value, description: descRes.value, url: urlRes.value, ticketMint, ticketPrice, ticketDecimals, prizeMint, winner, useWhitelist: false, whitelist: null }
+  if (o + 1 + 1 + 32 > data.length)
+    return {
+      state,
+      name: nameRes.value,
+      description: descRes.value,
+      url: urlRes.value,
+      ticketMint,
+      ticketPrice,
+      ticketDecimals,
+      prizeMint,
+      prizeAmount,
+      prizeDecimals,
+      winner,
+      useWhitelist: false,
+      whitelist: null,
+    }
   const randomnessOpt = data[o]
   o += 1
   if (randomnessOpt !== 0) o += 32
@@ -103,7 +124,21 @@ function parseRaffleRaw(data: Buffer): {
   o += 1
   const whitelistBytes = data.subarray(o, o + 32)
   const whitelist = whitelistBytes.every((b) => b === 0) ? null : new PublicKey(whitelistBytes).toBase58()
-  return { state, name: nameRes.value, description: descRes.value, url: urlRes.value, ticketMint, ticketPrice, ticketDecimals, prizeMint, winner, useWhitelist, whitelist }
+  return {
+    state,
+    name: nameRes.value,
+    description: descRes.value,
+    url: urlRes.value,
+    ticketMint,
+    ticketPrice,
+    ticketDecimals,
+    prizeMint,
+    prizeAmount,
+    prizeDecimals,
+    winner,
+    useWhitelist,
+    whitelist,
+  }
 }
 
 export async function fetchRaffleChainData(
@@ -134,6 +169,8 @@ export async function fetchRaffleChainData(
       ticketPrice: parsed.ticketPrice,
       ticketDecimals: parsed.ticketDecimals,
       prizeMint: parsed.prizeMint,
+      prizeAmount: parsed.prizeAmount,
+      prizeDecimals: parsed.prizeDecimals,
       winner: parsed.winner,
       useWhitelist: parsed.useWhitelist,
       whitelist: parsed.whitelist,

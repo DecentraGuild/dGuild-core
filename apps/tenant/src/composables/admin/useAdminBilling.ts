@@ -6,12 +6,13 @@ import type { BillingPeriod, ConditionSet } from '@decentraguild/billing'
 import { getProductDisplayType, MODULE_TO_PRODUCT, toMeterOverrides } from '@decentraguild/billing'
 import {
   buildBillingTransfer,
+  buildBillingTransferInstructions,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
   getConnectorState,
   isBackpackConnector,
 } from '@decentraguild/web3'
-import { PublicKey } from '@solana/web3.js'
+import { PublicKey, type TransactionInstruction } from '@solana/web3.js'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -24,6 +25,11 @@ const TX_STATUS_LABELS: Record<string, string> = {
   sending: 'Sending...',
   confirming: 'Confirming...',
 }
+
+/** USDC billing ixs to prepend to a program tx, or no payment when price is zero. */
+export type BillingSameTxPrepare =
+  | { kind: 'free' }
+  | { kind: 'usdc'; paymentId: string; instructions: TransactionInstruction[] }
 
 export function useAdminBilling(opts: {
   saveError: Ref<string | null>
@@ -38,18 +44,25 @@ export function useAdminBilling(opts: {
   const { connection } = useSolanaConnection()
   const txNotifications = useTransactionNotificationsStore()
 
-  async function handleBillingPayment(
+  async function quoteAndChargeUsdc(
     moduleId: string,
     billingPeriod: BillingPeriod,
     slugToClaim?: string,
     conditions?: ConditionSet,
-  ): Promise<boolean> {
-    let notificationId: string | undefined
-    try {
-      const id = tenantId.value
-      if (!id) throw new Error('Tenant not set')
+  ): Promise<
+    | { kind: 'free' }
+    | {
+        kind: 'charged'
+        paymentId: string
+        amountUsdc: number
+        memo: string
+        recipientAta: string
+      }
+  > {
+    const id = tenantId.value
+    if (!id) throw new Error('Tenant not set')
 
-      const productKey = MODULE_TO_PRODUCT[moduleId] ?? moduleId
+    const productKey = MODULE_TO_PRODUCT[moduleId] ?? moduleId
     const durationDays = billingPeriod === 'yearly' ? 365 : 30
     let meterOverrides = toMeterOverrides(conditions)
     if (moduleId === 'slug' && slugToClaim) {
@@ -69,7 +82,7 @@ export function useAdminBilling(opts: {
     const quote = quoteData as { quoteId: string; priceUsdc: number }
     if (!quote?.quoteId) throw new Error('No quote returned')
 
-    if (quote.priceUsdc <= 0) return true
+    if (quote.priceUsdc <= 0) return { kind: 'free' }
 
     const wallet = getEscrowWalletFromConnector()
     if (!wallet?.publicKey) throw new Error('Wallet not connected')
@@ -87,49 +100,45 @@ export function useAdminBilling(opts: {
     const charge = chargeData as { paymentId: string; amountUsdc: number; memo: string; recipientAta: string }
     if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
-    if (!connection.value) throw new Error('Solana RPC not configured')
-    notificationId = `billing-${Date.now()}`
-    const nid = notificationId
-    txNotifications.add(nid, {
-      status: 'pending',
-      message: 'Payment. Confirm the transaction in your wallet.',
-      signature: null,
-    })
-
-    const connectorId = getConnectorState().connectorId
-    const tx = buildBillingTransfer({
-      payer: wallet.publicKey,
+    return {
+      kind: 'charged',
+      paymentId: charge.paymentId,
       amountUsdc: charge.amountUsdc,
-      recipientAta: new PublicKey(charge.recipientAta),
       memo: charge.memo,
-      connection: connection.value,
+      recipientAta: charge.recipientAta,
+    }
+  }
+
+  async function prepareBillingInstructionsForSameTx(
+    moduleId: string,
+    billingPeriod: BillingPeriod,
+    slugToClaim?: string,
+    conditions?: ConditionSet,
+  ): Promise<BillingSameTxPrepare> {
+    const r = await quoteAndChargeUsdc(moduleId, billingPeriod, slugToClaim, conditions)
+    if (r.kind === 'free') return { kind: 'free' }
+
+    const wallet = getEscrowWalletFromConnector()
+    if (!wallet?.publicKey) throw new Error('Wallet not connected')
+    const connectorId = getConnectorState().connectorId
+    const instructions = buildBillingTransferInstructions({
+      payer: wallet.publicKey,
+      amountUsdc: r.amountUsdc,
+      recipientAta: new PublicKey(r.recipientAta),
+      memo: r.memo,
       instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
     })
-    const txSignature = await sendAndConfirmTransaction(
-      connection.value,
-      tx,
-      wallet,
-      wallet.publicKey,
-      {
-        onStatus: (s) => {
-          const label = TX_STATUS_LABELS[s] ?? s
-          txNotifications.update(nid, {
-            status: 'pending',
-            message: `Payment: ${label}`,
-          })
-        },
-      },
-    )
+    return { kind: 'usdc', paymentId: r.paymentId, instructions }
+  }
 
-    txNotifications.update(nid, {
-      status: 'success',
-      message: 'Payment confirmed.',
-      signature: txSignature,
-    })
-
+  async function confirmBillingFromTxSignature(
+    paymentId: string,
+    txSignature: string,
+    slugToClaim?: string,
+  ): Promise<void> {
     const confirmBody: Record<string, unknown> = {
       action: 'confirm',
-      paymentId: charge.paymentId,
+      paymentId,
       txSignature,
     }
     if (slugToClaim) confirmBody.slugToClaim = slugToClaim
@@ -137,26 +146,86 @@ export function useAdminBilling(opts: {
     const { error: confirmErr } = await supabase.functions.invoke('billing', {
       body: confirmBody,
     })
-      if (confirmErr) {
+    if (confirmErr) throw new Error(confirmErr.message ?? 'Confirm failed')
+  }
+
+  async function handleBillingPayment(
+    moduleId: string,
+    billingPeriod: BillingPeriod,
+    slugToClaim?: string,
+    conditions?: ConditionSet,
+  ): Promise<boolean> {
+    let notificationId: string | undefined
+    try {
+      if (!connection.value) throw new Error('Solana RPC not configured')
+
+      const r = await quoteAndChargeUsdc(moduleId, billingPeriod, slugToClaim, conditions)
+      if (r.kind === 'free') return true
+
+      const wallet = getEscrowWalletFromConnector()
+      if (!wallet?.publicKey) throw new Error('Wallet not connected')
+
+      notificationId = `billing-${Date.now()}`
+      const nid = notificationId
+      txNotifications.add(nid, {
+        status: 'pending',
+        message: 'Payment. Confirm the transaction in your wallet.',
+        signature: null,
+      })
+
+      const connectorId = getConnectorState().connectorId
+      const tx = buildBillingTransfer({
+        payer: wallet.publicKey,
+        amountUsdc: r.amountUsdc,
+        recipientAta: new PublicKey(r.recipientAta),
+        memo: r.memo,
+        connection: connection.value,
+        instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
+      })
+      const txSignature = await sendAndConfirmTransaction(
+        connection.value,
+        tx,
+        wallet,
+        wallet.publicKey,
+        {
+          onStatus: (s) => {
+            const label = TX_STATUS_LABELS[s] ?? s
+            txNotifications.update(nid, {
+              status: 'pending',
+              message: `Payment: ${label}`,
+            })
+          },
+        },
+      )
+
+      txNotifications.update(nid, {
+        status: 'success',
+        message: 'Payment confirmed.',
+        signature: txSignature,
+      })
+
+      try {
+        await confirmBillingFromTxSignature(r.paymentId, txSignature, slugToClaim)
+      } catch (confirmErr) {
         txNotifications.update(notificationId, {
           status: 'error',
-          message: confirmErr.message ?? 'Confirm failed',
+          message: confirmErr instanceof Error ? confirmErr.message : 'Confirm failed',
           signature: null,
         })
-        throw new Error(confirmErr.message ?? 'Confirm failed')
+        throw confirmErr
       }
 
       return true
     } catch (e) {
-    if (notificationId) {
-      txNotifications.update(notificationId, {
-        status: 'error',
-        message: e instanceof Error ? e.message : 'Payment failed',
-        signature: null,
-      })
+      if (notificationId) {
+        txNotifications.update(notificationId, {
+          status: 'error',
+          message: e instanceof Error ? e.message : 'Payment failed',
+          signature: null,
+        })
+      }
+      throw e
     }
-    throw e
-  }
   }
 
   async function deployModule(moduleId: string, billingPeriod: BillingPeriod, conditions?: ConditionSet) {
@@ -269,5 +338,13 @@ export function useAdminBilling(opts: {
     }
   }
 
-  return { handleBillingPayment, deployModule, reactivateModule, extendModule, slug }
+  return {
+    handleBillingPayment,
+    prepareBillingInstructionsForSameTx,
+    confirmBillingFromTxSignature,
+    deployModule,
+    reactivateModule,
+    extendModule,
+    slug,
+  }
 }

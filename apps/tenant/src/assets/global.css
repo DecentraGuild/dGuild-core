@@ -34,6 +34,11 @@
     --ring: 142 76% 36%;
     --radius: 0.75rem;
     --spacing: 0.25rem;
+
+    /* Layout: main/sidebar split (3:1) and card grids — tune in one place */
+    --layout-sidebar-min: 12rem;
+    --layout-card-min-3: 280px;
+    --layout-card-min-4: 200px;
   }
 
   .dark {
@@ -64,4 +69,120 @@ html {
 
 body {
   margin: 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Shared split: main ~3/4 + sidebar ~1/4 (admin + public feature pages)       */
+/* -------------------------------------------------------------------------- */
+
+.layout-split,
+.admin__split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--theme-space-lg);
+}
+
+@media (min-width: var(--theme-breakpoint-lg)) {
+  .layout-split,
+  .admin__split {
+    grid-template-columns: minmax(0, 3fr) minmax(var(--layout-sidebar-min), 1fr);
+  }
+
+  .layout-split > .layout-split__main,
+  .admin__split > .admin__panel {
+    min-width: 0;
+  }
+
+  .layout-split > .layout-split__sidebar,
+  .admin__split > *:not(.admin__panel) {
+    align-self: start;
+  }
+
+  .layout-split .pricing-widget,
+  .admin__split .pricing-widget {
+    position: sticky;
+    top: var(--theme-space-lg);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Card grid utilities (admin + pages that share the same rhythm)              */
+/* -------------------------------------------------------------------------- */
+
+.admin__card-grid--3 {
+  display: grid;
+  gap: var(--theme-space-lg);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: var(--theme-breakpoint-md)) {
+  .admin__card-grid--3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: var(--theme-breakpoint-lg)) {
+  .admin__card-grid--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.admin__card-grid--4 {
+  display: grid;
+  gap: var(--theme-space-lg);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: var(--theme-breakpoint-sm)) {
+  .admin__card-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: var(--theme-breakpoint-md)) {
+  .admin__card-grid--4 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: var(--theme-breakpoint-xl)) {
+  .admin__card-grid--4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.admin__card-grid--auto-comfortable {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--layout-card-min-3), 100%), 1fr));
+  gap: var(--theme-space-lg);
+}
+
+.admin__card-grid--auto-dense {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--layout-card-min-4), 100%), 1fr));
+  gap: var(--theme-space-lg);
+}
+
+.admin__card-grid--2 {
+  display: grid;
+  gap: var(--theme-space-lg);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: var(--theme-breakpoint-lg)) {
+  .admin__card-grid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.admin__card-grid--2-sm {
+  display: grid;
+  gap: var(--theme-space-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: var(--theme-breakpoint-sm)) {
+  .admin__card-grid--2-sm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
