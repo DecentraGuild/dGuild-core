@@ -71,6 +71,11 @@ body {
   margin: 0;
 }
 
+/*
+ * Breakpoints use pixel literals (640 / 768 / 1024 / 1280) to match
+ * packages/ui/src/theme/vars.css. var() in @media is unreliable in some engines.
+ */
+
 /* -------------------------------------------------------------------------- */
 /* Shared split: main ~3/4 + sidebar ~1/4 (admin + public feature pages)       */
 /* -------------------------------------------------------------------------- */
@@ -82,7 +87,7 @@ body {
   gap: var(--theme-space-lg);
 }
 
-@media (min-width: var(--theme-breakpoint-lg)) {
+@media (min-width: 1024px) {
   .layout-split,
   .admin__split {
     grid-template-columns: minmax(0, 3fr) minmax(var(--layout-sidebar-min), 1fr);
@@ -115,13 +120,13 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
-@media (min-width: var(--theme-breakpoint-md)) {
+@media (min-width: 768px) {
   .admin__card-grid--3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (min-width: var(--theme-breakpoint-lg)) {
+@media (min-width: 1024px) {
   .admin__card-grid--3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -133,19 +138,19 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
-@media (min-width: var(--theme-breakpoint-sm)) {
+@media (min-width: 640px) {
   .admin__card-grid--4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (min-width: var(--theme-breakpoint-md)) {
+@media (min-width: 768px) {
   .admin__card-grid--4 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (min-width: var(--theme-breakpoint-xl)) {
+@media (min-width: 1280px) {
   .admin__card-grid--4 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -169,7 +174,7 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
-@media (min-width: var(--theme-breakpoint-lg)) {
+@media (min-width: 1024px) {
   .admin__card-grid--2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -181,7 +186,7 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
-@media (min-width: var(--theme-breakpoint-sm)) {
+@media (min-width: 640px) {
   .admin__card-grid--2-sm {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

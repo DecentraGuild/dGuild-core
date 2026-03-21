@@ -1,64 +1,66 @@
 <template>
-  <div class="admin__split">
-    <div class="admin__panel">
-      <Card>
-        <GateSelectRowModule
-          layout="stacked"
-          :slug="slug"
-          :model-value="whitelistFormValue"
-          title="Who can see Raffles"
-          hint="Who can see Raffles. Use dGuild default, admins only, public, or a specific list."
-          show-use-default
-          show-admin-only
-          show-save
-          save-label="Save"
-          :dirty="whitelistDirty"
-          :loading="savingWhitelist"
-          :save-success="whitelistSaveSuccess"
-          :save-error="whitelistSaveError"
-          @update:model-value="onWhitelistUpdate"
-          @save="saveWhitelist"
-        />
-      </Card>
+  <div class="admin-raffle-tab">
+    <div class="admin__split">
+      <div class="admin__panel">
+        <Card>
+          <GateSelectRowModule
+            layout="stacked"
+            :slug="slug"
+            :model-value="whitelistFormValue"
+            title="Who can see Raffles"
+            hint="Who can see Raffles. Use dGuild default, admins only, public, or a specific list."
+            show-use-default
+            show-admin-only
+            show-save
+            save-label="Save"
+            :dirty="whitelistDirty"
+            :loading="savingWhitelist"
+            :save-success="whitelistSaveSuccess"
+            :save-error="whitelistSaveError"
+            @update:model-value="onWhitelistUpdate"
+            @save="saveWhitelist"
+          />
+        </Card>
 
-      <Card>
-        <RaffleSlotList
-          :slot-cards="slotCards"
-          :slots-loading="slotsLoading"
-          :can-create-more="canCreateMore"
-          :action-tx-status="actionTxStatus"
-          :action-submitting="actionSubmitting"
-          :action-error="actionError"
-          :action-error-raffle="actionErrorRaffle"
-          :mint-metadata-by-ticket-mint="mintMetadataByTicketMint"
-          @add-reward="openAddRewardModal"
-          @start="openStartRaffleModal"
-          @pause="onPauseRaffle"
-          @resume="onResumeRaffle"
-          @edit="openEditRaffleModal"
-          @reveal-winner="onRevealWinner"
-          @distribute-reward="onDistributeReward"
-          @claim-proceeds="onClaimProceeds"
-          @close="onCloseRaffle"
-          @create="openCreateModal"
-          @upgrade="openUpgradeModal"
-        />
-      </Card>
-    </div>
+        <Card>
+          <RaffleSlotList
+            :slot-cards="slotCards"
+            :slots-loading="slotsLoading"
+            :can-create-more="canCreateMore"
+            :action-tx-status="actionTxStatus"
+            :action-submitting="actionSubmitting"
+            :action-error="actionError"
+            :action-error-raffle="actionErrorRaffle"
+            :mint-metadata-by-ticket-mint="mintMetadataByTicketMint"
+            @add-reward="openAddRewardModal"
+            @start="openStartRaffleModal"
+            @pause="onPauseRaffle"
+            @resume="onResumeRaffle"
+            @edit="openEditRaffleModal"
+            @reveal-winner="onRevealWinner"
+            @distribute-reward="onDistributeReward"
+            @claim-proceeds="onClaimProceeds"
+            @close="onCloseRaffle"
+            @create="openCreateModal"
+            @upgrade="openUpgradeModal"
+          />
+        </Card>
+      </div>
 
-    <div id="raffle-pricing-widget" class="raffle-pricing-wrapper">
-      <AdminPricingWidget
-        ref="pricingRef"
-        module-id="raffles"
-        :module-state="moduleState"
-        :conditions="liveConditions"
-        :subscription="subscription"
-        :saving="Boolean(savingWhitelist || saving)"
-        :deploying="deploying"
-        :save-error="saveError"
-        @save="onSave"
-        @deploy="onDeploy"
-      />
+      <div id="raffle-pricing-widget" class="raffle-pricing-wrapper">
+        <AdminPricingWidget
+          ref="pricingRef"
+          module-id="raffles"
+          :module-state="moduleState"
+          :conditions="liveConditions"
+          :subscription="subscription"
+          :saving="Boolean(savingWhitelist || saving)"
+          :deploying="deploying"
+          :save-error="saveError"
+          @save="onSave"
+          @deploy="onDeploy"
+        />
+      </div>
     </div>
 
     <SimpleModal
