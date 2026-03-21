@@ -57,10 +57,25 @@ export function usePricingDisplay(
         const inclVal = tier.included[key]
         const label = CONDITION_LABELS[key] ?? key
 
+        if (key === 'monetize_storefront') {
+          const current =
+            condVal === true || condVal === 1 || condVal === 'true' ? 1 : 0
+          const lim = typeof inclVal === 'number' ? inclVal : inclVal === true ? 1 : 0
+          const cap = lim >= 1 ? 1 : 0
+          return { key, label, valueText: `${current} / ${cap}` }
+        }
+
         if (typeof condVal === 'boolean' || typeof inclVal === 'boolean') {
           const current = condVal === true ? 1 : 0
-          const included = inclVal === true ? 1 : 0
-          return { key, label, valueText: `${current} / ${included}` }
+          const cap =
+            typeof inclVal === 'number'
+              ? inclVal >= 1
+                ? 1
+                : 0
+              : inclVal === true
+                ? 1
+                : 0
+          return { key, label, valueText: `${current} / ${cap}` }
         }
 
         const current = typeof condVal === 'number' ? condVal : 0

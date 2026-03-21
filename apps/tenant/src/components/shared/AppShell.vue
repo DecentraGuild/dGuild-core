@@ -165,13 +165,20 @@ const patternClass = computed(() => {
   padding: var(--theme-space-xl);
 }
 
-@media (min-width: var(--theme-breakpoint-md)) {
+@media (min-width: 1024px) {
+  .app-shell__main {
+    max-width: 75dvw;
+    margin-inline: auto;
+  }
+}
+
+@media (min-width: 768px) {
   .app-shell__nav {
     min-width: 12rem;
   }
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
+@media (max-width: 768px) {
   .app-shell__overlay {
     display: block;
     opacity: 0;
