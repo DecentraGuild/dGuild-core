@@ -17,77 +17,14 @@
     </template>
 
     <template v-else-if="price?.billable && selectedTier">
-      <div class="pricing-widget__tier" :class="{ 'pricing-widget__tier--marketplace': moduleId === 'marketplace' }">
-        <div class="pricing-widget__tier-text">
-          <span class="pricing-widget__tier-name">{{ marketplaceTierPrimary }}</span>
-          <span v-if="marketplaceTierSecondary" class="pricing-widget__tier-band">{{ marketplaceTierSecondary }}</span>
-        </div>
+      <div class="pricing-widget__tier">
+        <span class="pricing-widget__tier-name">{{ selectedTier.name }}</span>
         <span class="pricing-widget__tier-price">
           {{ formatUsdc(selectedPeriod === 'yearly' ? price.recurringYearly / 12 : price.recurringMonthly) }} USDC/mo
         </span>
       </div>
 
-      <div v-if="moduleId === 'marketplace'" class="pricing-widget__entitlements">
-        <p class="pricing-widget__section-label">What counts toward your plan</p>
-        <ul class="pricing-widget__ent-list">
-          <li
-            v-for="row in usageRows"
-            :key="row.key"
-            class="pricing-widget__ent-card"
-            :class="{ 'pricing-widget__ent-card--bool': row.type === 'boolean' }"
-          >
-            <template v-if="row.type === 'numeric'">
-              <div class="pricing-widget__ent-top">
-                <div class="pricing-widget__ent-icon-wrap" aria-hidden="true">
-                  <Icon :icon="marketplaceEntIcon(row.key)" class="pricing-widget__ent-icon" />
-                </div>
-                <div class="pricing-widget__ent-mid">
-                  <span class="pricing-widget__ent-title">{{ row.label }}</span>
-                  <span class="pricing-widget__ent-hint">{{ marketplaceEntHint(row.key) }}</span>
-                </div>
-                <div class="pricing-widget__ent-numbers">
-                  <span class="pricing-widget__ent-num pricing-widget__ent-num--cur">{{ row.current }}</span>
-                  <span class="pricing-widget__ent-slash">/</span>
-                  <span class="pricing-widget__ent-num pricing-widget__ent-num--max">{{ marketplaceCapLabel(row) }}</span>
-                </div>
-              </div>
-              <div v-if="marketplaceShowBar(row)" class="pricing-widget__ent-bar-track">
-                <div
-                  class="pricing-widget__ent-bar-fill"
-                  :class="{ 'pricing-widget__ent-bar-fill--over': row.ratio > 1 }"
-                  :style="{ width: `${Math.min(row.ratio * 100, 100)}%` }"
-                />
-              </div>
-              <p v-else-if="row.current > 0" class="pricing-widget__ent-prewrap">
-                Limits apply after you deploy or extend billing.
-              </p>
-            </template>
-            <template v-else>
-              <div class="pricing-widget__ent-top">
-                <div class="pricing-widget__ent-icon-wrap" aria-hidden="true">
-                  <Icon icon="lucide:percent" class="pricing-widget__ent-icon" />
-                </div>
-                <div class="pricing-widget__ent-mid">
-                  <span class="pricing-widget__ent-title">{{ row.label }}</span>
-                  <span class="pricing-widget__ent-hint">Maker/taker fees on trades</span>
-                </div>
-                <span
-                  class="pricing-widget__ent-badge"
-                  :class="{
-                    'pricing-widget__ent-badge--on': row.active && row.included,
-                    'pricing-widget__ent-badge--addon': row.active && !row.included,
-                    'pricing-widget__ent-badge--off': !row.active,
-                  }"
-                >
-                  {{ row.active ? (row.included ? 'Included' : 'Add-on') : 'Off' }}
-                </span>
-              </div>
-            </template>
-          </li>
-        </ul>
-      </div>
-
-      <div v-else class="pricing-widget__usage">
+      <div class="pricing-widget__usage">
         <div
           v-for="row in usageRows"
           :key="row.key"
@@ -269,7 +206,7 @@ import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import { formatDate, formatUsdc } from '@decentraguild/display'
 import { useQuote } from '~/composables/core/useQuote'
-import { usePricingDisplay, type NumericUsageRow } from '~/composables/core/usePricingDisplay'
+import { usePricingDisplay } from '~/composables/core/usePricingDisplay'
 import { usePricingWidgetActions } from '~/composables/core/usePricingWidgetActions'
 
 export interface SubscriptionInfo {
@@ -521,60 +458,6 @@ const { usageRows, addonComponents } = usePricingDisplay(
   storedConditionsRef
 )
 
-const MARKETPLACE_ENT_ICONS: Record<string, string> = {
-  mints_count: 'lucide:layers',
-  base_currencies_count: 'lucide:coins',
-  custom_currencies: 'lucide:wallet-cards',
-}
-
-const MARKETPLACE_ENT_HINTS: Record<string, string> = {
-  mints_count: 'NFT collections + SPL assets in your tradable list',
-  base_currencies_count: 'How many base tokens (SOL, USDC, USDT, WBTC) you accept',
-  custom_currencies: 'Payment tokens beyond the four base currencies',
-}
-
-function marketplaceEntIcon(key: string) {
-  return MARKETPLACE_ENT_ICONS[key] ?? 'lucide:gauge'
-}
-
-function marketplaceEntHint(key: string) {
-  return MARKETPLACE_ENT_HINTS[key] ?? ''
-}
-
-function marketplaceCapLabel(row: NumericUsageRow) {
-  if (row.stored != null && row.stored > 0) return String(row.stored)
-  if (row.included > 0) return String(row.included)
-  return '—'
-}
-
-function marketplaceShowBar(row: NumericUsageRow) {
-  const cap = row.stored ?? row.included
-  return cap > 0
-}
-
-const marketplaceTierPrimary = computed(() => {
-  if (props.moduleId !== 'marketplace') return selectedTier.value?.name ?? ''
-  const q = quote.value
-  const item = q?.lineItems?.find((i: QuoteLineItem) => i.meter_key === 'mints_count' && i.label)
-  const label = item?.label?.trim() ?? ''
-  const m = label.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
-  if (m) return m[1].trim()
-  if (label) return label
-  return 'Marketplace'
-})
-
-const marketplaceTierSecondary = computed(() => {
-  if (props.moduleId !== 'marketplace') return null as string | null
-  const q = quote.value
-  const item = q?.lineItems?.find((i: QuoteLineItem) => i.meter_key === 'mints_count' && i.label)
-  const label = item?.label?.trim() ?? ''
-  const m = label.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
-  if (m) return m[2].trim()
-  const hasMeters = q?.meters && Object.keys(q.meters).length > 0
-  if (hasMeters && (q?.priceUsdc ?? 0) === 0) return 'No extra charges at current usage'
-  return null
-})
-
 const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingWidgetActions({
   moduleId: props.moduleId,
   moduleState: toRef(props, 'moduleState'),
@@ -621,26 +504,7 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 .pricing-widget__tier {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--theme-space-md);
-}
-
-.pricing-widget__tier--marketplace {
-  align-items: center;
-}
-
-.pricing-widget__tier-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.pricing-widget__tier-band {
-  font-size: var(--theme-font-xs);
-  font-weight: 500;
-  color: var(--theme-text-muted);
-  line-height: 1.35;
+  align-items: baseline;
 }
 
 .pricing-widget__tier-name {
@@ -653,157 +517,6 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
   font-size: var(--theme-font-sm);
   font-weight: 600;
   color: var(--theme-text-primary);
-}
-
-.pricing-widget__entitlements {
-  display: flex;
-  flex-direction: column;
-  gap: var(--theme-space-sm);
-}
-
-.pricing-widget__ent-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--theme-space-sm);
-}
-
-.pricing-widget__ent-card {
-  background: var(--theme-bg-secondary);
-  border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-md);
-  padding: var(--theme-space-sm) var(--theme-space-md);
-}
-
-.pricing-widget__ent-card--bool {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--theme-primary) 6%, var(--theme-bg-secondary)) 0%,
-    var(--theme-bg-secondary) 100%
-  );
-}
-
-.pricing-widget__ent-top {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--theme-space-sm);
-}
-
-.pricing-widget__ent-icon-wrap {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--theme-radius-md);
-  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
-  color: var(--theme-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.pricing-widget__ent-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.pricing-widget__ent-mid {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.pricing-widget__ent-title {
-  font-size: var(--theme-font-sm);
-  font-weight: 600;
-  color: var(--theme-text-primary);
-}
-
-.pricing-widget__ent-hint {
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-  line-height: 1.35;
-}
-
-.pricing-widget__ent-numbers {
-  flex-shrink: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 1px;
-  font-variant-numeric: tabular-nums;
-}
-
-.pricing-widget__ent-num {
-  font-size: var(--theme-font-md);
-  font-weight: 700;
-  color: var(--theme-text-primary);
-}
-
-.pricing-widget__ent-num--max {
-  font-size: var(--theme-font-sm);
-  font-weight: 600;
-  color: var(--theme-text-secondary);
-}
-
-.pricing-widget__ent-slash {
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-muted);
-  margin: 0 1px;
-}
-
-.pricing-widget__ent-bar-track {
-  margin-top: var(--theme-space-sm);
-  height: 8px;
-  background: color-mix(in srgb, var(--theme-border) 50%, var(--theme-bg-card));
-  border-radius: var(--theme-radius-full);
-  overflow: hidden;
-}
-
-.pricing-widget__ent-bar-fill {
-  height: 100%;
-  background: var(--theme-gradient-primary, var(--theme-primary));
-  border-radius: var(--theme-radius-full);
-  transition: width 0.35s ease;
-}
-
-.pricing-widget__ent-bar-fill--over {
-  background: var(--theme-warning, #d97706);
-}
-
-.pricing-widget__ent-prewrap {
-  margin: var(--theme-space-xs) 0 0;
-  font-size: var(--theme-font-xs);
-  color: var(--theme-text-muted);
-  line-height: 1.4;
-}
-
-.pricing-widget__ent-badge {
-  flex-shrink: 0;
-  align-self: center;
-  padding: 4px 10px;
-  border-radius: var(--theme-radius-full);
-  font-size: var(--theme-font-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.pricing-widget__ent-badge--on {
-  background: color-mix(in srgb, var(--theme-success) 18%, transparent);
-  color: var(--theme-success);
-}
-
-.pricing-widget__ent-badge--addon {
-  background: color-mix(in srgb, var(--theme-primary) 15%, transparent);
-  color: var(--theme-primary);
-}
-
-.pricing-widget__ent-badge--off {
-  background: var(--theme-bg-muted);
-  color: var(--theme-text-muted);
 }
 
 .pricing-widget__usage {
