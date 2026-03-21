@@ -72,7 +72,7 @@ async function grantOrExtend(
   const expiresAtMax = lim?.expires_at_max ? new Date(lim.expires_at_max) : null
   const now = new Date()
 
-  if (quantityTotal >= quantity && expiresAtMax != null && expiresAtMax > now) {
+  if (quantityTotal > 0 && quantity === quantityTotal && expiresAtMax != null && expiresAtMax > now) {
     const { data: grant } = await db
       .from('granted_entitlements')
       .select('id, expires_at')
