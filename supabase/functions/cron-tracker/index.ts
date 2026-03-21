@@ -1,6 +1,7 @@
 /**
  * Tracker sync Edge Function.
  * pg_cron: tracker-holders (every 5 min) with body { mode: "holders" }; tracker-snapshots (every minute) { mode: "snapshot" } — bucket width from interval_timers (timer_key = watchtower_snapshot_bucket).
+ * Missing JSON body (legacy tracker-sync): runs holders batch then snapshot batch in one invocation (mode "legacy-sync" in response).
  * Tier intervals and snapshot bucket size: interval_timers + platform_watchtower_holder_tier.
  * Body: { mode?, offset?, syncMint?, tenantId? } — syncMint + tenantId only = immediate sync for that mint (admin save).
  */
@@ -255,7 +256,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ processed: 1, synced: 1 }, req)
   }
 
+  let legacyBare = false
   if (mode === null || mode === '') {
+    legacyBare = true
     mode = 'holders'
   }
   if (mode !== 'holders' && mode !== 'snapshot') {
@@ -276,9 +279,10 @@ Deno.serve(async (req: Request) => {
     if (watchErr) return errorResponse(watchErr.message, req, 500)
     const mints = allWatches ?? []
     if (!mints.length) {
-      return jsonResponse({ processed: 0, synced: 0, offset, hasMore: false, mode }, req)
-    }
-
+      if (!legacyBare) {
+        return jsonResponse({ processed: 0, synced: 0, offset, hasMore: false, mode }, req)
+      }
+    } else {
     console.log('[cron-tracker] holders batch', { offset, mintCount: mints.length })
 
     const tenantIds = [...new Set(mints.map((m) => String(m.tenant_id ?? '')))].filter(Boolean) as string[]
@@ -348,7 +352,11 @@ Deno.serve(async (req: Request) => {
 
     const hasMore = mints.length === CHUNK_SIZE
     console.log('[cron-tracker] holders batch done', { processed, synced, offset, hasMore })
-    return jsonResponse({ processed, synced, offset, hasMore, mode }, req)
+    if (!legacyBare) {
+      return jsonResponse({ processed, synced, offset, hasMore, mode }, req)
+    }
+    console.log('[cron-tracker] legacy bare invoke: snapshot leg same request')
+    }
   }
 
   const { snapshotAt, snapshotDate } = alignSnapshotBucket(now, config.snapshot_interval_minutes)
@@ -364,7 +372,10 @@ Deno.serve(async (req: Request) => {
   if (snapErr) return errorResponse(snapErr.message, req, 500)
   const mints = snapWatches ?? []
   if (!mints.length) {
-    return jsonResponse({ processed: 0, synced: 0, offset, hasMore: false, mode }, req)
+    return jsonResponse(
+      { processed: 0, synced: 0, offset, hasMore: false, mode: legacyBare ? 'legacy-sync' : mode },
+      req,
+    )
   }
 
   console.log('[cron-tracker] snapshot batch', { snapshotAt, offset, mintCount: mints.length })
@@ -471,5 +482,6 @@ Deno.serve(async (req: Request) => {
 
   const hasMore = mints.length === CHUNK_SIZE
   console.log('[cron-tracker] snapshot batch done', { processed, synced, offset, hasMore })
-  return jsonResponse({ processed, synced, offset, hasMore, mode }, req)
+  const outMode = legacyBare ? 'legacy-sync' : mode
+  return jsonResponse({ processed, synced, offset, hasMore, mode: outMode }, req)
 })

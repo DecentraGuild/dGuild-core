@@ -82,8 +82,8 @@ const selectedMint = ref<CatalogMintItem | null>(null)
 
 const editorOpen = ref(false)
 const editingSetId = ref<number | null>(null)
-const guildRoles = ref<Array<{ role_id: string; name: string }>>([])
-const guildRolesAll = ref<Array<{ role_id: string; name: string }>>([])
+const guildRoles = ref<Array<{ role_id: string; name: string }> | undefined>(undefined)
+const guildRolesAll = ref<Array<{ role_id: string; name: string }> | undefined>(undefined)
 const discordGuildId = ref<string | null>(null)
 
 const { gateLists, fetchGateLists } = useConditionSet(catalogMintsRef)
@@ -150,8 +150,8 @@ async function fetchDiscordServer() {
     }))
   } else {
     discordGuildId.value = null
-    guildRoles.value = []
-    guildRolesAll.value = []
+    guildRoles.value = undefined
+    guildRolesAll.value = undefined
   }
 }
 

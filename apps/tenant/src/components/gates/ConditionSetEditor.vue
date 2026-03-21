@@ -37,7 +37,7 @@
           <OptionsSelect
             v-model="roleModel"
             :options="discordRoleOptions"
-            label="Discord role"
+            label="Role to assign"
             placeholder="None"
             class="condition-set-editor__role"
           />
@@ -68,6 +68,7 @@
               :mints-with-snapshot="mintsWithSnapshot"
               :gate-lists="gateLists"
               :guild-roles="discordRoleOptionsAll"
+              :guild-role-option-groups="discordConditionRoleGroups"
               :snapshot-dates-for-mint="snapshotDatesForMint(cond.mint_or_group)"
               :snapshot-at-for-mint="snapshotAtForMint(cond.mint_or_group)"
               :trait-keys="traitOptionsForCondition(idx).trait_keys"
@@ -164,14 +165,12 @@ const props = withDefaults(
     open: boolean
     catalogMints: CatalogMint[]
     gateLists: Array<{ address: string; name: string }>
-    /** Roles the bot can assign (for set-level role dropdown). Filtered by hierarchy. */
     guildRoles?: Array<{ role_id: string; name: string }>
-    /** All guild roles (for DISCORD condition type – checking if user has role). Unfiltered. */
     guildRolesAll?: Array<{ role_id: string; name: string }>
     guildId?: string | null
     initialSetId?: number | null
   }>(),
-  { guildRoles: () => [], guildRolesAll: undefined, guildId: null, initialSetId: null }
+  { guildId: null, initialSetId: null }
 )
 
 const emit = defineEmits<{
@@ -258,8 +257,33 @@ const discordRoleOptions = computed(() => {
 })
 
 const discordRoleOptionsAll = computed(() => {
-  const roles = (props.guildRolesAll ?? props.guildRoles ?? []).map((r) => ({ value: r.role_id, label: r.name || r.role_id }))
-  return roles
+  const all = props.guildRolesAll
+  const assignable = props.guildRoles ?? []
+  const raw = all !== undefined && all !== null ? all : assignable
+  return raw.map((r) => ({ value: r.role_id, label: r.name || r.role_id }))
+})
+
+const discordConditionRoleGroups = computed(():
+  | Array<{ groupLabel: string; options: Array<{ value: string; label: string }> }>
+  | undefined => {
+  const assignable = (props.guildRoles ?? []).map((r) => ({ value: r.role_id, label: r.name || r.role_id }))
+  const allRaw =
+    props.guildRolesAll !== undefined && props.guildRolesAll !== null ? props.guildRolesAll : (props.guildRoles ?? [])
+  const allOpts = allRaw.map((r) => ({ value: r.role_id, label: r.name || r.role_id }))
+  if (allOpts.length === 0) return undefined
+  const assignSet = new Set(assignable.map((o) => o.value))
+  const others = allOpts.filter((o) => !assignSet.has(o.value))
+  if (others.length === 0) {
+    return [{ groupLabel: 'Server roles', options: allOpts }]
+  }
+  const groups: Array<{ groupLabel: string; options: typeof allOpts }> = []
+  if (assignable.length) {
+    groups.push({ groupLabel: 'Bot can assign', options: assignable })
+  }
+  if (others.length) {
+    groups.push({ groupLabel: 'Other roles (conditions only)', options: others })
+  }
+  return groups.length ? groups : undefined
 })
 
 const nameModel = computed({
