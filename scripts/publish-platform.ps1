@@ -50,7 +50,13 @@ Write-Host "    Done." -ForegroundColor Green
 Write-Step "Merging '$DevelopBranch' into '$MainBranch'..."
 git merge $DevelopBranch -m "Merge $DevelopBranch into $MainBranch for platform release"
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Merge failed (conflicts?). Resolve and push manually, or abort: git merge --abort" -ForegroundColor Red
+    Write-Host "Merge failed (conflicts?). Fix conflicts, commit, then push: git push origin $MainBranch" -ForegroundColor Red
+    Write-Host "Or abort the merge: git merge --abort" -ForegroundColor Red
+    if (Test-Path (Join-Path (git rev-parse --show-toplevel) ".git/MERGE_HEAD")) {
+        Write-Host "You are on '$MainBranch' with a merge in progress. After abort or commit, run: git checkout $DevelopBranch" -ForegroundColor Yellow
+    } else {
+        Write-Host "You are on '$MainBranch'. When done, run: git checkout $DevelopBranch (required before running this script again)." -ForegroundColor Yellow
+    }
     exit 1
 }
 Write-Host "    Done." -ForegroundColor Green
