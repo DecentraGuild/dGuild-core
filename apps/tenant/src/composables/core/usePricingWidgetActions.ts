@@ -69,7 +69,10 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
 
   const hintText = computed(() => {
     if (moduleState.value === 'staging' && isAddUnit.value) {
-      return 'Deploy to activate. Create lists from the form (25 USDC each).'
+      if (chargeAmount.value > 0) {
+        return `Deploy to activate. Create lists from the form (${formatUsdc(chargeAmount.value)} USDC each).`
+      }
+      return 'Deploy to activate. Create lists from the form; your entitlements cover the next list at no extra charge.'
     }
     if (moduleState.value === 'staging') {
       return moduleId === 'slug'

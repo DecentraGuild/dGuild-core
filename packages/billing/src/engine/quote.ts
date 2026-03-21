@@ -116,9 +116,17 @@ export async function resolveQuote(
         .eq('product_key', params.productKey)
         .eq('meter_key', meterKey)
       const tiers = (tierRows ?? []) as TierRow[]
+      if (gap > 0 && tiers.length === 0) {
+        throw new Error(`No pricing tiers configured for ${params.productKey} / ${meterKey}`)
+      }
       const isFlatTier = tiers.some((t) => t.tier_price != null && Number(t.tier_price) > 0)
       const tierLookupQty = isFlatTier ? target : gap
       const tier = findTier(tiers, tierLookupQty)
+      if (gap > 0 && !tier) {
+        throw new Error(
+          `No pricing tier matches quantity ${tierLookupQty} for ${params.productKey} / ${meterKey}`,
+        )
+      }
       if (!tier) continue
 
       const hasTierPrice = tier.tier_price != null && Number(tier.tier_price) > 0
