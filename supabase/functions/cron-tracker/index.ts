@@ -255,6 +255,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ processed: 1, synced: 1 }, req)
   }
 
+  if (mode === null || mode === '') {
+    mode = 'holders'
+  }
   if (mode !== 'holders' && mode !== 'snapshot') {
     return errorResponse('Batch requests require mode "holders" or "snapshot"', req, 400)
   }

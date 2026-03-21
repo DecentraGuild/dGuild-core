@@ -26,6 +26,11 @@ export function getDiscordApplicationId(): string | undefined {
   return trimEnv(process.env.DISCORD_APPLICATION_ID)
 }
 
+/** Same value as Supabase Edge secret `DISCORD_BOT_SECRET`. If set, Edge calls use `x-bot-secret` (avoids 401 when service_role strings differ between Railway and Edge). */
+export function getDiscordBotEdgeSecret(): string | undefined {
+  return trimEnv(process.env.DISCORD_BOT_SECRET)
+}
+
 function getVerifyUrlTemplate(): string {
   return (process.env.VERIFY_URL_TEMPLATE ?? DEFAULT_VERIFY_URL_TEMPLATE).trim()
 }

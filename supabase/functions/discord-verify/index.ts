@@ -12,15 +12,9 @@
  */
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
+import { isBotAuthorized } from '../_shared/bot-auth.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getWalletFromAuthHeader } from '../_shared/auth.ts'
-
-function isBotAuthorized(req: Request): boolean {
-  const botSecret = Deno.env.get('DISCORD_BOT_SECRET') ?? ''
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  const header = req.headers.get('x-bot-secret') ?? req.headers.get('authorization') ?? ''
-  return header === botSecret || header === `Bearer ${botSecret}` || header === `Bearer ${serviceKey}`
-}
 
 function generateToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
