@@ -1,19 +1,20 @@
-Discord bot. `/verify`: wallet–Discord link. Role sync: holder snapshots → rules → add/remove roles. Run locally: `pnpm run dev`. Env: `.env.example`.
+Discord bot. `/verify` + role sync. Local: `pnpm run dev`, copy `.env.example` → `.env`.
 
-## Deploy (Railway)
+## Railway (production)
 
-**Root Directory** = `apps/discordbot` (no leading `/`). **Config file** = `apps/discordbot/railway.json` when Railway asks ([monorepo](https://docs.railway.com/guides/monorepo)).
+1. **Service → Settings:** Root directory `apps/discordbot` (no leading slash). Watch [monorepo](https://docs.railway.com/guides/monorepo) if needed.
+2. **Service → Variables** — set exactly these, then **Deploy** (staged vars are not live until deployed):
 
-**Builder:** Railpack only — do **not** add a `Dockerfile` here; Railway will switch builders ([config-as-code](https://docs.railway.com/reference/config-as-code)).
+| Variable | Value |
+|----------|--------|
+| `DISCORD_BOT_TOKEN` | Discord application → Bot → token |
+| `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → **service_role** (long JWT) |
 
-### Env on Railway
+Same `service_role` value may appear in templates as `SUPABASE_SERVICE_KEY`; either name works.
 
-**Railway** injects service variables into **`process.env`** for the running container and for the build. See [Variables](https://docs.railway.com/guides/variables). **Deploy** after changing variables (staged changes are not live until deployed).
+3. **Build:** Railpack, no Dockerfile in this folder. **[`railpack.json`](./railpack.json)** must stay (`secrets: []` avoids a bogus BuildKit error during `npm run build`). **Do not** add `.npmrc` with `omit=dev` — build needs `tsup`.
 
-If a **Railpack** build fails with `secret … not found`, see [`.cursor/memory/railway-railpack-secrets.md`](../.cursor/memory/railway-railpack-secrets.md) (BuildKit vs dashboard vars).
+Optional: `VERIFY_URL_TEMPLATE`, `DISCORD_ROLE_SYNC_INTERVAL_MS`, `DISCORD_APPLICATION_ID`.
 
-**Do not** add an `omit=dev`-style `.npmrc` in this app: the build needs **devDependencies** (`tsup`) to compile; omitting them breaks `npm run build`.
-
-**Required service variables:** `DISCORD_BOT_TOKEN`, `SUPABASE_URL`, and **one** service-role JWT name: `SUPABASE_SERVICE_ROLE_KEY` **or** `SUPABASE_SERVICE_KEY` (same value from Supabase → Settings → API → **service_role**; not the anon key). Optional: `VERIFY_URL_TEMPLATE`, `DISCORD_ROLE_SYNC_INTERVAL_MS`, `DISCORD_APPLICATION_ID`.
-
-**Local Railway CLI:** `pnpm deploy:discordbot` or `cd apps/discordbot && railway up` after `railway link`.
+**CLI:** `cd apps/discordbot && railway link` then `pnpm deploy:discordbot`.
