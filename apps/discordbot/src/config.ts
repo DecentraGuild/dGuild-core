@@ -1,5 +1,11 @@
+import 'dotenv/config'
+
 /**
  * Bot config. Secrets from env; other defaults in constants below.
+ *
+ * dotenv/config must run in this module before any env read so a bundled entry that
+ * imports ./config before index.ts’s side effects still sees .env (and production
+ * keeps Railway-provided process.env; dotenv does not override existing vars).
  */
 
 const DEFAULT_VERIFY_URL_TEMPLATE = 'https://{{slug}}.dguild.org/verify?token={{token}}'
@@ -9,16 +15,19 @@ const DEFAULT_ROLE_SYNC_INTERVAL_MS = 15 * 60 * 1000
 
 export const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
 
-/**
- * Supabase env reads use composed keys so Railpack (if ever used) is less likely to
- * require those names as BuildKit build secrets. Dockerfile deploy is the supported path.
- */
 function envTrim(key: string): string | undefined {
   return process.env[key]?.trim()
 }
 const _SB = 'SUPA' + 'BASE'
-export const SUPABASE_URL = envTrim(_SB + '_URL')
-export const SUPABASE_SERVICE_ROLE_KEY = envTrim(_SB + '_SERVICE_ROLE_KEY')
+
+/** Read at use time so runtime env (e.g. Railway) is visible even if load order varies. */
+export function getSupabaseUrl(): string | undefined {
+  return envTrim(`${_SB}_URL`)
+}
+
+export function getSupabaseServiceRoleKey(): string | undefined {
+  return envTrim(`${_SB}_SERVICE_ROLE_KEY`)
+}
 
 const VERIFY_URL_TEMPLATE = (process.env.VERIFY_URL_TEMPLATE ?? DEFAULT_VERIFY_URL_TEMPLATE).trim()
 
@@ -30,7 +39,32 @@ export const API_READINESS_POLL_MS = Number(
 )
 
 export function hasBotSecret(): boolean {
-  return Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY)
+  return Boolean(getSupabaseUrl() && getSupabaseServiceRoleKey())
+}
+
+export function logMissingSupabaseEnv(): void {
+  const url = getSupabaseUrl()
+  const key = getSupabaseServiceRoleKey()
+  const rawUrl = process.env[`${_SB}_URL`]
+  const rawKey = process.env[`${_SB}_SERVICE_ROLE_KEY`]
+  const parts: string[] = []
+  if (!url) {
+    parts.push(
+      rawUrl !== undefined && String(rawUrl).trim() === ''
+        ? `${_SB}_URL is set but empty or whitespace`
+        : `${_SB}_URL is unset`,
+    )
+  }
+  if (!key) {
+    parts.push(
+      rawKey !== undefined && String(rawKey).trim() === ''
+        ? `${_SB}_SERVICE_ROLE_KEY is set but empty or whitespace`
+        : `${_SB}_SERVICE_ROLE_KEY is unset`,
+    )
+  }
+  if (parts.length > 0) {
+    console.warn(`[discordbot] Supabase URL/service key missing on host (${parts.join('; ')}) — /verify and role sync disabled.`)
+  }
 }
 
 export function buildVerifyUrl(tenantSlug: string, token: string): string {

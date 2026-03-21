@@ -3,10 +3,11 @@ import { Client, Events, GatewayIntentBits } from 'discord.js'
 import { registerCommands } from './commands.js'
 import { handleVerify } from './handlers/verify.js'
 import { syncLinkedGuild } from './handlers/sync.js'
-import { waitForSupabaseReady } from './api-client.js'
+import { fetchDiscordRoleSyncIntervalMs, waitForSupabaseReady } from './api-client.js'
 import {
   DISCORD_BOT_TOKEN,
   hasBotSecret,
+  logMissingSupabaseEnv,
   ROLE_SYNC_INTERVAL_MS,
   API_READINESS_MAX_WAIT_MS,
   API_READINESS_POLL_MS,
@@ -20,7 +21,7 @@ async function main(): Promise<void> {
     process.exit(1)
   }
   if (!hasBotSecret()) {
-    console.warn('[discordbot] Supabase URL/service key missing on host — /verify and role sync disabled.')
+    logMissingSupabaseEnv()
   }
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
@@ -61,6 +62,19 @@ async function main(): Promise<void> {
       }
     }
 
+    let roleSyncMs = ROLE_SYNC_INTERVAL_MS
+    const rawIntervalEnv = process.env.DISCORD_ROLE_SYNC_INTERVAL_MS
+    if (rawIntervalEnv !== undefined && String(rawIntervalEnv).trim() !== '') {
+      const n = Number(rawIntervalEnv)
+      if (Number.isFinite(n) && n > 0) roleSyncMs = n
+    } else {
+      try {
+        roleSyncMs = await fetchDiscordRoleSyncIntervalMs(ROLE_SYNC_INTERVAL_MS)
+      } catch {
+        /* keep ROLE_SYNC_INTERVAL_MS */
+      }
+    }
+
     syncIntervalId = setInterval(() => {
       if (!hasBotSecret()) return
       const guilds = [...client.guilds.cache.values()]
@@ -70,7 +84,7 @@ async function main(): Promise<void> {
         if (delayMs === 0) run()
         else setTimeout(run, delayMs)
       })
-    }, ROLE_SYNC_INTERVAL_MS)
+    }, roleSyncMs)
   })
 
   client.on('guildCreate', async (guild) => {

@@ -1,7 +1,7 @@
 /**
  * Tracker sync Edge Function.
- * pg_cron: tracker-holders (every 5 min) with body { mode: "holders" }; tracker-snapshots (0 and 12 UTC) { mode: "snapshot" }.
- * Tier intervals and snapshot bucket size: platform_watchtower_settings + platform_watchtower_holder_tier.
+ * pg_cron: tracker-holders (every 5 min) with body { mode: "holders" }; tracker-snapshots (every minute) { mode: "snapshot" } — bucket width from interval_timers (timer_key = watchtower_snapshot_bucket).
+ * Tier intervals and snapshot bucket size: interval_timers + platform_watchtower_holder_tier.
  * Body: { mode?, offset?, syncMint?, tenantId? } — syncMint + tenantId only = immediate sync for that mint (admin save).
  */
 
@@ -170,6 +170,18 @@ Deno.serve(async (req: Request) => {
       .eq('mint', syncMint)
       .maybeSingle()
     const kind = (catalog?.kind as 'SPL' | 'NFT') ?? 'NFT'
+
+    if (syncSnapshot && !syncDiscord) {
+      const { data: snapDup } = await db
+        .from('holder_snapshots')
+        .select('mint')
+        .eq('mint', syncMint)
+        .eq('snapshot_at', snapshotAt)
+        .maybeSingle()
+      if (snapDup) {
+        return jsonResponse({ processed: 0, synced: 0, message: 'Snapshot already exists for bucket' }, req)
+      }
+    }
 
     if (syncSnapshot) {
       const { data: meta } = await db
@@ -379,6 +391,18 @@ Deno.serve(async (req: Request) => {
 
     const kind = kindByMint.get(mint) ?? 'NFT'
     try {
+      const { data: existingSnap } = await db
+        .from('holder_snapshots')
+        .select('mint')
+        .eq('mint', mint)
+        .eq('snapshot_at', snapshotAt)
+        .maybeSingle()
+
+      if (existingSnap) {
+        processed++
+        continue
+      }
+
       const { data: meta } = await db
         .from('mint_metadata')
         .select('updated_at')
@@ -420,31 +444,22 @@ Deno.serve(async (req: Request) => {
         console.warn('[cron-tracker] empty holders', { mint, kind })
       }
 
-      const { data: existing } = await db
-        .from('holder_snapshots')
-        .select('mint')
-        .eq('mint', mint)
-        .eq('snapshot_at', snapshotAt)
-        .maybeSingle()
-
-      if (!existing) {
-        await db.from('holder_snapshots').upsert({
-          mint,
-          snapshot_at: snapshotAt,
-          holder_wallets: holders,
-          snapshot_date: snapshotDate,
-          created_at: now.toISOString(),
-        }, { onConflict: 'mint,snapshot_at' })
-        await db.from('tracker_holder_snapshots').upsert({
-          tenant_id: tenantId,
-          mint,
-          holder_wallets: holders,
-          snapshot_date: snapshotDate,
-          snapshot_at: snapshotAt,
-          created_at: now.toISOString(),
-        }, { onConflict: 'tenant_id,mint,snapshot_at' })
-        synced++
-      }
+      await db.from('holder_snapshots').upsert({
+        mint,
+        snapshot_at: snapshotAt,
+        holder_wallets: holders,
+        snapshot_date: snapshotDate,
+        created_at: now.toISOString(),
+      }, { onConflict: 'mint,snapshot_at' })
+      await db.from('tracker_holder_snapshots').upsert({
+        tenant_id: tenantId,
+        mint,
+        holder_wallets: holders,
+        snapshot_date: snapshotDate,
+        snapshot_at: snapshotAt,
+        created_at: now.toISOString(),
+      }, { onConflict: 'tenant_id,mint,snapshot_at' })
+      synced++
       processed++
     } catch (err) {
       console.error('[cron-tracker] mint failed', { mint, error: String(err) })

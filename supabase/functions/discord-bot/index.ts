@@ -153,7 +153,10 @@ Deno.serve(async (req: Request) => {
     if (!guildId || !Array.isArray(roles)) return errorResponse('guildId and roles required', req)
 
     const rows = roles.map((r) => ({ discord_guild_id: guildId, ...r }))
-    await db.from('discord_guild_roles').upsert(rows, { onConflict: 'discord_guild_id,role_id' })
+    const { error: upsertErr } = await db.from('discord_guild_roles').upsert(rows, {
+      onConflict: 'discord_guild_id,role_id',
+    })
+    if (upsertErr) return errorResponse(upsertErr.message, req, 500)
     return jsonResponse({ ok: true }, req)
   }
 

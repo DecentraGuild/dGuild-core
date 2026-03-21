@@ -6,14 +6,14 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from './config.js'
+import { getSupabaseServiceRoleKey, getSupabaseUrl } from './config.js'
 
 let _supabase: SupabaseClient | null = null
 
 function getClient(): SupabaseClient {
   if (_supabase) return _supabase
-  const url = SUPABASE_URL
-  const serviceKey = SUPABASE_SERVICE_ROLE_KEY
+  const url = getSupabaseUrl()
+  const serviceKey = getSupabaseServiceRoleKey()
   if (!url || !serviceKey) {
     throw new Error('Supabase URL and service role key must be set on the bot host')
   }
@@ -24,11 +24,11 @@ function getClient(): SupabaseClient {
 }
 
 function getFunctionsUrl(): string {
-  return `${SUPABASE_URL ?? ''}/functions/v1`
+  return `${getSupabaseUrl() ?? ''}/functions/v1`
 }
 
 function getServiceKey(): string {
-  return SUPABASE_SERVICE_ROLE_KEY ?? ''
+  return getSupabaseServiceRoleKey() ?? ''
 }
 
 const REQUEST_TIMEOUT_MS = 30_000
@@ -221,4 +221,19 @@ export async function getPendingRemovals(
     'discord-bot',
     { action: 'pending-removals', guildId: discordGuildId },
   )
+}
+
+const DISCORD_ROLE_SYNC_TIMER_KEY = 'discord_role_sync'
+
+export async function fetchDiscordRoleSyncIntervalMs(fallbackMs: number): Promise<number> {
+  const client = getClient()
+  const { data, error } = await client
+    .from('interval_timers')
+    .select('interval_minutes')
+    .eq('timer_key', DISCORD_ROLE_SYNC_TIMER_KEY)
+    .maybeSingle()
+  if (error || data == null) return fallbackMs
+  const min = data.interval_minutes as number
+  if (typeof min !== 'number' || !Number.isFinite(min) || min <= 0) return fallbackMs
+  return Math.floor(min * 60 * 1000)
 }
