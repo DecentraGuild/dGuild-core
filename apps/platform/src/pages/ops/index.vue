@@ -784,8 +784,8 @@ async function refreshMetadata(limit: number) {
       body: { action: 'metadata-refresh-all', limit, offset: metadataRefreshOffset.value },
     })
     if (error) throw new Error(error.message)
-    const res = data as { refreshed?: number; total?: number; message?: string; nextOffset?: number | null }
-    const msg = res.message ?? `Refreshed ${res.refreshed ?? 0} of ${res.total ?? 0} mints.`
+    const res = data as { refreshed?: number; total?: number; trackedTotal?: number; message?: string; nextOffset?: number | null }
+    const msg = res.message ?? `Refreshed ${res.refreshed ?? 0} of ${res.total ?? 0} mints${res.trackedTotal != null ? ` (${res.trackedTotal} in catalog scope)` : ''}.`
     metadataRefreshResult.value = msg
     if (res.nextOffset != null) {
       metadataRefreshOffset.value = res.nextOffset

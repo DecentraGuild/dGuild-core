@@ -1,7 +1,7 @@
 /**
  * Tracker sync Edge Function.
  * pg_cron: tracker-holders (every 5 min) with body { mode: "holders" }; tracker-snapshots (every minute) { mode: "snapshot" } — bucket width from interval_timers (timer_key = watchtower_snapshot_bucket).
- * Missing JSON body (legacy tracker-sync): runs holders batch then snapshot batch in one invocation (mode "legacy-sync" in response).
+ * Missing JSON body (legacy tracker-sync): runs **holders batch only**; snapshots must use tracker-snapshots (avoids OOM from dual work in one Edge invocation).
  * Tier intervals and snapshot bucket size: interval_timers + platform_watchtower_holder_tier.
  * Body: { mode?, offset?, syncMint?, tenantId? } — syncMint + tenantId only = immediate sync for that mint (admin save).
  */
@@ -11,17 +11,14 @@ import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getWithinLimitMints } from '../_shared/watchtower-billing.ts'
 import {
   alignSnapshotBucket,
-  holderCountFromRow,
   isHolderSyncDue,
   loadWatchtowerSyncConfig,
 } from '../_shared/watchtower-sync-config.ts'
-import { getSolanaConnection, getRpcUrl } from '../_shared/solana-connection.ts'
-import { Connection, PublicKey } from 'npm:@solana/web3.js@1'
-import { TOKEN_PROGRAM_ID } from 'npm:@solana/spl-token@0.4'
+import { getRpcUrl } from '../_shared/rpc-url.ts'
+import { fetchSplHolders } from '../_shared/fetch-spl-holders.ts'
 
 const METADATA_REFRESH_AGE_DAYS = 7
-const CHUNK_SIZE = 20
-const SPL_DATA_SIZE = 165
+const CHUNK_SIZE = 8
 
 async function fetchMintMetadata(
   rpcEndpoint: string,
@@ -68,30 +65,6 @@ async function fetchMintMetadata(
   }
 }
 
-async function fetchSplHolders(
-  connection: Connection,
-  mint: string,
-): Promise<Array<{ wallet: string; amount: string }>> {
-  const mintPk = new PublicKey(mint)
-  const accounts = await connection.getProgramAccounts(TOKEN_PROGRAM_ID, {
-    commitment: 'confirmed',
-    filters: [
-      { dataSize: SPL_DATA_SIZE },
-      { memcmp: { offset: 0, bytes: mintPk.toBase58() } },
-    ],
-  })
-  const byWallet = new Map<string, bigint>()
-  for (const { account } of accounts) {
-    const data = account.data as Uint8Array
-    if (data.length < 72) continue
-    const owner = new PublicKey(data.slice(32, 64)).toBase58()
-    const view = new DataView(data.buffer, data.byteOffset)
-    const amount = view.getBigUint64(64, true)
-    if (amount > 0n) byWallet.set(owner, (byWallet.get(owner) ?? 0n) + amount)
-  }
-  return [...byWallet.entries()].map(([wallet, amount]) => ({ wallet, amount: String(amount) }))
-}
-
 async function fetchNftHolders(
   rpcEndpoint: string,
   mint: string,
@@ -127,7 +100,6 @@ Deno.serve(async (req: Request) => {
   }
 
   const db = getAdminClient()
-  const connection = getSolanaConnection()
   const rpcEndpoint = getRpcUrl()
   const now = new Date()
 
@@ -217,7 +189,7 @@ Deno.serve(async (req: Request) => {
 
     let holders: Array<{ wallet: string; amount: string }>
     if (kind === 'SPL') {
-      holders = await fetchSplHolders(connection, syncMint)
+      holders = await fetchSplHolders(rpcEndpoint, syncMint)
     } else {
       holders = await fetchNftHolders(rpcEndpoint, syncMint)
     }
@@ -282,7 +254,12 @@ Deno.serve(async (req: Request) => {
       if (!legacyBare) {
         return jsonResponse({ processed: 0, synced: 0, offset, hasMore: false, mode }, req)
       }
-    } else {
+      return jsonResponse(
+        { processed: 0, synced: 0, offset, hasMore: false, mode: 'holders', legacyBare: true },
+        req,
+      )
+    }
+
     console.log('[cron-tracker] holders batch', { offset, mintCount: mints.length })
 
     const tenantIds = [...new Set(mints.map((m) => String(m.tenant_id ?? '')))].filter(Boolean) as string[]
@@ -293,16 +270,18 @@ Deno.serve(async (req: Request) => {
     }
 
     const mintKeys = mints.map((m) => String(m.mint ?? ''))
-    const { data: currentRows } = await db
-      .from('holder_current')
-      .select('mint, holder_wallets, last_updated')
-      .in('mint', mintKeys)
-
-    const currentByMint = new Map<string, { holder_wallets: unknown; last_updated: string }>()
-    for (const r of currentRows ?? []) {
-      currentByMint.set(r.mint as string, {
-        holder_wallets: r.holder_wallets,
-        last_updated: r.last_updated as string,
+    const { data: syncMeta, error: syncMetaErr } = await db.rpc('holder_current_sync_meta', {
+      p_mints: mintKeys,
+    })
+    if (syncMetaErr) {
+      console.error('[cron-tracker] holder_current_sync_meta', syncMetaErr.message)
+      return errorResponse(syncMetaErr.message, req, 500)
+    }
+    const currentByMint = new Map<string, { holderCount: number; last_updated: string }>()
+    for (const r of (syncMeta ?? []) as Array<{ mint: string; last_updated: string; holder_count: number }>) {
+      currentByMint.set(r.mint, {
+        holderCount: Number(r.holder_count) || 0,
+        last_updated: r.last_updated,
       })
     }
 
@@ -323,7 +302,7 @@ Deno.serve(async (req: Request) => {
       if (!within?.has(mint)) continue
 
       const cur = currentByMint.get(mint)
-      const holderCount = cur ? holderCountFromRow(cur.holder_wallets) : 0
+      const holderCount = cur?.holderCount ?? 0
       const lastUp = cur?.last_updated ?? null
       if (!isHolderSyncDue(lastUp, holderCount, config.tiers, now)) continue
 
@@ -331,7 +310,7 @@ Deno.serve(async (req: Request) => {
       try {
         let holders: Array<{ wallet: string; amount: string }>
         if (kind === 'SPL') {
-          holders = await fetchSplHolders(connection, mint)
+          holders = await fetchSplHolders(rpcEndpoint, mint)
         } else {
           holders = await fetchNftHolders(rpcEndpoint, mint)
         }
@@ -355,8 +334,17 @@ Deno.serve(async (req: Request) => {
     if (!legacyBare) {
       return jsonResponse({ processed, synced, offset, hasMore, mode }, req)
     }
-    console.log('[cron-tracker] legacy bare invoke: snapshot leg same request')
-    }
+    return jsonResponse(
+      {
+        processed,
+        synced,
+        offset,
+        hasMore,
+        mode: 'holders',
+        legacyBare: true,
+      },
+      req,
+    )
   }
 
   const { snapshotAt, snapshotDate } = alignSnapshotBucket(now, config.snapshot_interval_minutes)
@@ -450,7 +438,7 @@ Deno.serve(async (req: Request) => {
 
       let holders: Array<{ wallet: string; amount: string }>
       if (kind === 'SPL') {
-        holders = await fetchSplHolders(connection, mint)
+        holders = await fetchSplHolders(rpcEndpoint, mint)
       } else {
         holders = await fetchNftHolders(rpcEndpoint, mint)
       }

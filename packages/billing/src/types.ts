@@ -35,7 +35,13 @@ export interface QuoteLineItem {
 export interface QuoteResult {
   quoteId: string
   lineItems: QuoteLineItem[]
+  /** Amount due now (upgrade / new entitlement gaps only). */
   priceUsdc: number
+  /**
+   * Full price for the quoted duration at current target quantities (paid + pending).
+   * Use for admin “current monthly/yearly cost” when `priceUsdc` is zero but entitlements exist.
+   */
+  recurringDisplayUsdc: number
   meters: Record<string, { used: number; limit: number }>
   expiresAt: string
 }

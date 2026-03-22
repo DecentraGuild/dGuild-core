@@ -39,6 +39,28 @@ function findTier(tiers: TierRow[], quantity: number): TierRow | null {
   return best
 }
 
+function displayPriceAtTarget(
+  tiers: TierRow[],
+  target: number,
+  priceMultiplier: number,
+  productKey: string,
+  meterKey: string,
+): number {
+  if (target <= 0) return 0
+  if (tiers.length === 0) {
+    throw new Error(`No pricing tiers configured for ${productKey} / ${meterKey}`)
+  }
+  const tier = findTier(tiers, target)
+  if (!tier) {
+    throw new Error(`No pricing tier matches display quantity ${target} for ${productKey} / ${meterKey}`)
+  }
+  const hasTierPrice = tier.tier_price != null && Number(tier.tier_price) > 0
+  if (hasTierPrice) {
+    return Number(tier.tier_price) * priceMultiplier
+  }
+  return target * tier.unit_price * priceMultiplier
+}
+
 export async function resolveQuote(
   params: QuoteParams,
   db: DbClient,
@@ -50,6 +72,7 @@ export async function resolveQuote(
 
   const lineItems: QuoteLineItem[] = []
   let priceUsdc = 0
+  let recurringDisplayUsdc = 0
   const meters: Record<string, { used: number; limit: number }> = {}
 
   if (params.bundleId) {
@@ -108,7 +131,6 @@ export async function resolveQuote(
 
       const target = meterOverrides[meterKey] ?? Math.max(limit, used)
       const gap = Math.max(0, target - limit)
-      if (gap <= 0) continue
 
       const { data: tierRows } = await db
         .from('tier_rules')
@@ -116,6 +138,19 @@ export async function resolveQuote(
         .eq('product_key', params.productKey)
         .eq('meter_key', meterKey)
       const tiers = (tierRows ?? []) as TierRow[]
+
+      if (target > 0) {
+        recurringDisplayUsdc += displayPriceAtTarget(
+          tiers,
+          target,
+          durationRule.price_multiplier,
+          params.productKey,
+          meterKey,
+        )
+      }
+
+      if (gap <= 0) continue
+
       if (gap > 0 && tiers.length === 0) {
         throw new Error(`No pricing tiers configured for ${params.productKey} / ${meterKey}`)
       }
@@ -171,6 +206,7 @@ export async function resolveQuote(
       quoteId,
       lineItems,
       priceUsdc,
+      recurringDisplayUsdc,
       meters,
       expiresAt,
     },

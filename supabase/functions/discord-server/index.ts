@@ -212,22 +212,21 @@ Deno.serve(async (req: Request) => {
       return fixed.replace(/\.?0+$/, '') || '0'
     }
 
-    function conditionToRequirementText(
-      c: { type: string; payload: Record<string, unknown>; logic_to_next: string | null },
-      nextLogic?: string | null,
-    ): string {
+    function conditionToRequirementText(c: {
+      type: string
+      payload: Record<string, unknown>
+      logic_to_next: string | null
+    }): string {
       if (c.type === 'DISCORD') {
         const roleId = c.payload.required_role_id as string
         const role = roleMap.get(roleId)
         const name = role?.name ?? roleId ?? '(no role)'
-        const base = `Discord role: ${name}`
-        return nextLogic ? `${base} ${nextLogic}` : base
+        return `Discord role: ${name}`
       }
       if (c.type === 'WHITELIST') {
         const addr = c.payload.list_address as string
         const name = whitelistMap.get(addr) ?? addr ?? '(no list)'
-        const base = `Memberlist: ${name}`
-        return nextLogic ? `${base} ${nextLogic}` : base
+        return `Memberlist: ${name}`
       }
       const mint = (c.payload.mint ?? c.payload.collection_or_mint ?? '') as string
       const label = catalog.get(mint) ?? mint
@@ -235,18 +234,14 @@ Deno.serve(async (req: Request) => {
       const amountStr = formatAmount(rawAmount, mint)
       if (c.type === 'SNAPSHOTS') {
         const days = (c.payload.days as number) ?? 1
-        const base = `Holding ${amountStr} ${label} for ${days} day${days === 1 ? '' : 's'}`
-        return nextLogic ? `${base} ${nextLogic}` : base
+        return `Holding ${amountStr} ${label} for ${days} day${days === 1 ? '' : 's'}`
       }
       if (c.type === 'TRAIT') {
         const tk = (c.payload.trait_key as string) ?? ''
         const tv = (c.payload.trait_value as string) ?? ''
-        const base = `Holding ${amountStr} ${label} with a ${tk || '?'} of ${tv || '?'}`
-        return nextLogic ? `${base} ${nextLogic}` : base
+        return `Holding ${amountStr} ${label} with a ${tk || '?'} of ${tv || '?'}`
       }
       if (c.type === 'TIME_WEIGHTED') {
-        const mint = (c.payload.mint ?? c.payload.collection_or_mint ?? '') as string
-        const label = (catalog.get(mint) ?? mint) || '?'
         const minPct = typeof c.payload.min_percent === 'number' && c.payload.min_percent >= 0
           ? Math.min(100, Math.floor(c.payload.min_percent))
           : 0
@@ -262,11 +257,10 @@ Deno.serve(async (req: Request) => {
             return s.slice(0, 10)
           }
         }
-        const base = `Holding at least ${minPct}% of the total supply of ${label} during the period of ${formatDate(beginAt)} and ${formatDate(endAt)}`
-        return nextLogic ? `${base} ${nextLogic}` : base
+        const supplyLabel = label || '?'
+        return `Holding at least ${minPct}% of the total supply of ${supplyLabel} during the period of ${formatDate(beginAt)} and ${formatDate(endAt)}`
       }
-      const base = `Holding ${amountStr} ${label}`
-      return nextLogic ? `${base} ${nextLogic}` : base
+      return `Holding ${amountStr} ${label}`
     }
 
     const cards = rules.map((rule) => {
@@ -275,7 +269,7 @@ Deno.serve(async (req: Request) => {
       for (let i = 0; i < conditions.length; i++) {
         const c = conditions[i]!
         const nextLogic = i < conditions.length - 1 ? c.logic_to_next : null
-        requirements.push({ type: 'text', text: conditionToRequirementText(c, nextLogic) })
+        requirements.push({ type: 'text', text: conditionToRequirementText(c) })
         if (nextLogic === 'OR') {
           requirements.push({ type: 'separator', label: 'OR' })
         }

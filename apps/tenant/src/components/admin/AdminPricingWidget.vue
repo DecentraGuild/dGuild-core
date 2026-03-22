@@ -70,12 +70,24 @@
         </div>
         <div class="pricing-widget__sub-row">
           <span>Recurring</span>
-          <span>{{ formatUsdc(subscription!.recurringAmountUsdc) }} USDC</span>
+          <span>
+            {{ formatUsdc(subscription!.billingPeriod === 'yearly' ? price.recurringYearly : price.recurringMonthly) }}
+            {{ subscription!.billingPeriod === 'yearly' ? 'USDC/yr' : 'USDC/mo' }}
+          </span>
         </div>
       </div>
     </template>
 
-    <template v-else-if="price?.billable && chargeAmount === 0 && !isAddUnit && !isTieredWithOneTime && moduleId !== 'slug'">
+    <template
+      v-else-if="
+        price?.billable &&
+        chargeAmount === 0 &&
+        recurringDisplayTotal <= 0 &&
+        !isAddUnit &&
+        !isTieredWithOneTime &&
+        moduleId !== 'slug'
+      "
+    >
       <div class="pricing-widget__free">
         <span>Free</span>
       </div>
@@ -98,7 +110,7 @@
         </div>
         <div class="pricing-widget__sub-row">
           <span>Recurring</span>
-          <span>{{ formatUsdc(subscription!.recurringAmountUsdc) }} USDC/yr</span>
+          <span>{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
         </div>
       </div>
     </template>
@@ -341,6 +353,8 @@ const conditions = computed((): ConditionSet | null => {
   ) as ConditionSet
 })
 
+const recurringDisplayTotal = computed(() => quote.value?.recurringDisplayUsdc ?? 0)
+
 const price = computed((): PriceResult | null => {
   const q = quote.value
   if (!q) return null
@@ -356,13 +370,14 @@ const price = computed((): PriceResult | null => {
     raffleSlotsItem?.unit_price ?? (raffleSlotsItem?.quantity ? raffleSlotsItem.price_usdc / raffleSlotsItem.quantity : 0)
   const oneTimePerUnitForSelectedTier =
     fromQuote > 0 ? fromQuote : (selectedTier.value?.oneTimePerUnit ?? 0)
+  const disp = q.recurringDisplayUsdc ?? q.priceUsdc
   return {
     moduleId: props.moduleId,
     billable: true,
     components,
     oneTimeTotal: q.priceUsdc,
-    recurringMonthly: q.priceUsdc,
-    recurringYearly: q.priceUsdc * (selectedPeriod.value === 'yearly' ? 1 : 12),
+    recurringMonthly: selectedPeriod.value === 'monthly' ? disp : disp / 12,
+    recurringYearly: selectedPeriod.value === 'yearly' ? disp : disp * 12,
     appliedYearlyDiscount: null,
     selectedTierId: null,
     oneTimePerUnitForSelectedTier: isTieredWithOneTime.value ? oneTimePerUnitForSelectedTier : undefined,
@@ -425,12 +440,11 @@ const yearlyDiscountLabel = computed(() => {
 })
 
 const chargeAmount = computed(() => {
+  const q = quote.value
   if (!price.value?.billable) return 0
   if (isAddUnit.value) return price.value.oneTimeTotal
   if (isTieredWithOneTime.value) return oneTimePerUnitEffective.value
-  return selectedPeriod.value === 'yearly'
-    ? price.value.recurringYearly
-    : price.value.recurringMonthly
+  return q?.priceUsdc ?? 0
 })
 
 const upgradeRecurringAmount = computed(() => {
