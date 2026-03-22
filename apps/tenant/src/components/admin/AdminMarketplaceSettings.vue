@@ -34,7 +34,6 @@
               :disabled="saving"
               @submit="(mint, kind, entry) => addMint(mint, kind, entry)"
             />
-            <AddressBookBrowser @select="(mint, e) => addMint(mint, e.kind === 'NFT' ? 'NFT' : 'SPL', e)" />
           </div>
         </template>
       </AdminMintCatalog>
@@ -64,7 +63,7 @@
           />
           <AddressBookBrowser kind="SPL" hide-base-mints @select="(mint) => { newCurrencyMint = mint; lookupAndAddCurrency() }" />
           <Button
-            variant="secondary"
+            variant="brand"
             :disabled="!newCurrencyMint.trim() || saving"
             @click="lookupAndAddCurrency"
           >
@@ -251,14 +250,13 @@ defineExpose({ save, form })
 }
 
 .marketplace-settings__add-mint {
-  display: flex;
-  gap: var(--theme-space-sm);
-  align-items: center;
+  width: 100%;
   margin-bottom: var(--theme-space-md);
 }
 
-.marketplace-settings__add-mint .form-input {
-  flex: 1;
+.marketplace-settings__add-mint :deep(.add-mint-input) {
+  width: 100%;
+  min-width: 0;
 }
 
 .marketplace-settings__base-toggles {

@@ -40,7 +40,7 @@
         </select>
         <div class="gates-tab__list-actions">
           <Button
-            variant="secondary"
+            variant="brand"
             size="sm"
             :disabled="loading || creating"
             @click="openCreateModal"
@@ -68,7 +68,7 @@
             :disabled="updatingImage"
           />
           <Button
-            variant="secondary"
+            variant="brand"
             size="sm"
             :disabled="updatingImage"
             @click="saveImage"
@@ -88,7 +88,7 @@
             @keydown.enter.prevent="addWallet"
           />
           <Button
-            variant="secondary"
+            variant="brand"
             :disabled="!walletToAdd.trim() || adding"
             @click="addWallet"
           >

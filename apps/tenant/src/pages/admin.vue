@@ -223,6 +223,7 @@ import {
   type WatchtowerSubscriptionByScope,
 } from '~/composables/admin/useAdminSubscriptions'
 import { useAdminForm } from '~/composables/admin/useAdminForm'
+import { useAdminLiveTheme } from '~/composables/admin/useAdminLiveTheme'
 import { useAdminBilling } from '~/composables/admin/useAdminBilling'
 import { useSlugClaim } from '~/composables/core/useSlugClaim'
 
@@ -306,6 +307,9 @@ const tab = computed(() => {
   const q = route.query.tab
   return typeof q === 'string' && VALID_TABS.has(q) ? q : 'general'
 })
+
+useAdminLiveTheme(tab, form.branding, () => tenant.value?.branding)
+
 const hasWidgetTab = computed(() => WIDGET_TABS.has(tab.value) || tab.value === 'plan-shipment')
 
 async function _saveWithBilling(moduleId: string, billingPeriod: BillingPeriod) {

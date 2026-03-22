@@ -122,6 +122,10 @@ function onAddressBookSelect(mint: string, entry: AddressBookEntry) {
   min-width: 0;
   display: flex;
   align-items: center;
+  gap: var(--theme-space-sm);
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .add-mint-input__mint {

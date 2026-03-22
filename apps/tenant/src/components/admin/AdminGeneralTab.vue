@@ -37,7 +37,7 @@
               />
               <Button
                 v-if="!tenant?.slug && desiredSlug.trim()"
-                variant="secondary"
+                variant="brand"
                 size="sm"
                 :disabled="slugChecking || slugClaiming"
                 class="admin__slug-check-btn"

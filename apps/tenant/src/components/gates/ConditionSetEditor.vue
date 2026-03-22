@@ -120,7 +120,7 @@
           </template>
           <Button
             v-if="form.ruleType !== 'weighted'"
-            variant="outline"
+            variant="outlineBrand"
             size="sm"
             class="condition-set-editor__add"
             :disabled="form.conditions.length >= 10"

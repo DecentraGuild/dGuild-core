@@ -15,12 +15,12 @@
             :placeholder="JSON_PLACEHOLDER"
           />
           <div class="plan-shipment-tab__json-actions">
-            <Button variant="default" size="sm" @click="openGenerateModal">
+            <Button variant="brand" size="sm" @click="openGenerateModal">
               Generate from conditions
             </Button>
             <Button
               v-if="loadedJson"
-              variant="secondary"
+              variant="brand"
               size="sm"
               @click="copyJson"
             >
@@ -28,7 +28,7 @@
             </Button>
             <Button
               v-if="loadedJson"
-              variant="secondary"
+              variant="brand"
               size="sm"
               @click="downloadJson"
             >
@@ -69,7 +69,7 @@
             </Button>
           </div>
           <div class="plan-shipment-tab__wallet-actions">
-            <Button variant="secondary" size="sm" @click="exportSecret">
+            <Button variant="brand" size="sm" @click="exportSecret">
               Export
             </Button>
             <Button variant="ghost" size="sm" @click="removeWallet">
@@ -79,7 +79,7 @@
         </template>
         <template v-else>
           <div class="plan-shipment-tab__create-row">
-            <Button variant="secondary" :disabled="shipWallet.loading.value" @click="shipWallet.create()">
+            <Button variant="brand" :disabled="shipWallet.loading.value" @click="shipWallet.create()">
               Create ship wallet
             </Button>
             <span class="plan-shipment-tab__or">or</span>
@@ -89,7 +89,7 @@
               type="password"
               class="plan-shipment-tab__import-input"
             />
-            <Button variant="secondary" :disabled="!importKey.trim() || shipWallet.loading.value" @click="doImport">
+            <Button variant="brand" :disabled="!importKey.trim() || shipWallet.loading.value" @click="doImport">
               Import
             </Button>
           </div>
@@ -106,7 +106,7 @@
             Register token account
           </Button>
           <Button
-            variant="secondary"
+            variant="brand"
             :disabled="!canShip || shipping"
             @click="shipConfirmOpen = true"
           >
@@ -127,7 +127,7 @@
       </div>
       <div v-else-if="historyError" class="plan-shipment-tab__history-error-row">
         <p class="plan-shipment-tab__history-error">{{ historyError }}</p>
-        <Button variant="outline" size="sm" @click="fetchHistory">
+        <Button variant="outlineBrand" size="sm" @click="fetchHistory">
           Retry
         </Button>
       </div>
@@ -221,7 +221,7 @@
             <label class="plan-shipment-tab__generate-label">Token mint</label>
             <div class="plan-shipment-tab__generate-mint-row">
               <FormInput v-model="generateMint" placeholder="SPL token mint address" class="plan-shipment-tab__generate-mint-input" />
-              <Button variant="outline" size="sm" @click="addressBookModalOpen = true">
+              <Button variant="outlineBrand" size="sm" @click="addressBookModalOpen = true">
                 <Icon icon="lucide:book-open" />
                 Browse
               </Button>

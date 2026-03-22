@@ -44,7 +44,7 @@
                 <h4 class="shipment-page__card-name">{{ displayName(a) }}</h4>
                 <span class="shipment-page__card-amount">{{ formatAmount(a) }}</span>
                 <Button
-                  variant="secondary"
+                  variant="default"
                   size="sm"
                   class="shipment-page__card-btn"
                   :disabled="claiming === a.id"

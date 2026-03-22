@@ -23,7 +23,7 @@ Name, description, logo, and Discord invite. These appear in the directory and a
 
 ## Theming
 
-Set your primary and secondary colours. Changes apply across your dGuild.
+Set primary and secondary **brand** colours, surfaces, text, and layout tokens. Changes apply across your dGuild as you edit (live preview).
 
 ## Modules
 
