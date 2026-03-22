@@ -83,12 +83,12 @@ export function getModuleState(entry: TenantModuleEntry | undefined): ModuleStat
 
 export interface TenantThemeColors {
   primary?: { main: string; hover?: string; light?: string; dark?: string }
+  /** Second brand colour (gradients, outline actions); not the elevated surface. */
   secondary?: { main: string; hover?: string; light?: string; dark?: string }
-  accent?: { main: string; hover?: string }
   background?: { primary?: string; secondary?: string; card?: string; muted?: string; backdrop?: string }
   text?: { primary?: string; secondary?: string; muted?: string }
   border?: { default?: string; light?: string }
-  status?: { success?: string; error?: string; warning?: string; info?: string; destructive?: string }
+  status?: { success?: string; error?: string; warning?: string; destructive?: string }
   trade?: {
     buy?: string
     buyHover?: string
@@ -99,11 +99,7 @@ export interface TenantThemeColors {
     trade?: string
     tradeHover?: string
     tradeLight?: string
-    swap?: string
-    swapHover?: string
-    swapLight?: string
   }
-  window?: { background?: string; border?: string; header?: string }
 }
 
 export interface TenantThemeEffects {

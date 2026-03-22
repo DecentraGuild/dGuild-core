@@ -114,7 +114,7 @@ const kindIcon = computed(() => {
 
 .tree-node-row--selected .tree-node-row__content {
   background: var(--theme-bg-secondary);
-  color: var(--theme-primary);
+  color: var(--theme-secondary);
 }
 
 .tree-node-row__chevron-btn,

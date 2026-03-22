@@ -1,84 +1,62 @@
 /**
  * Theme CSS variables for DecentraGuild.
  * Import in app: @import '@decentraguild/ui/theme/vars.css';
- * Values match C2C theme.js defaults.
+ * Defaults match DEFAULT_TENANT_THEME (dark, red primary, orange brand secondary).
  */
 
 :root {
-  /* Primary */
-  --theme-primary: #00951a;
-  --theme-primary-hover: #00b820;
-  --theme-primary-light: #00cc22;
-  --theme-primary-dark: #007a14;
-
-  /* Primary contrast – white text on primary background */
+  --theme-primary: #dc2626;
+  --theme-primary-hover: #b91c1c;
+  --theme-primary-light: #f87171;
+  --theme-primary-dark: #991b1b;
   --theme-primary-inverse: #ffffff;
 
-  /* Secondary (darker brand scale — not semantic “error”) */
-  --theme-secondary: #007a14;
-  --theme-secondary-hover: #006010;
-  --theme-secondary-light: #00951a;
-  --theme-secondary-dark: #005510;
+  --theme-secondary: #ea580c;
+  --theme-secondary-hover: #c2410c;
+  --theme-secondary-light: #fb923c;
+  --theme-secondary-dark: #9a3412;
+  --theme-secondary-inverse: #ffffff;
 
-  /* Accent (highlights; defaults stay in the same hue family as primary) */
-  --theme-accent: #00b820;
-  --theme-accent-hover: #009918;
+  --theme-bg-primary: #0c0a0a;
+  --theme-bg-secondary: #18181b;
+  --theme-bg-card: #1c1917;
+  --theme-bg-muted: #27272a;
+  --theme-backdrop: rgba(12, 10, 10, 0.78);
 
-  /* Background */
-  --theme-bg-primary: #0a0a0f;
-  --theme-bg-secondary: #141420;
-  --theme-bg-card: #1a1a2e;
-  --theme-bg-muted: #252535;
-  --theme-backdrop: rgba(10, 10, 15, 0.75);
+  --theme-text-primary: #fafafa;
+  --theme-text-secondary: #a1a1aa;
+  --theme-text-muted: #71717a;
 
-  /* Text */
-  --theme-text-primary: #ffffff;
-  --theme-text-secondary: #a0a0b3;
-  --theme-text-muted: #6b6b80;
+  --theme-border: #3f3f46;
+  --theme-border-light: #52525b;
 
-  /* Border */
-  --theme-border: #2a2a3e;
-  --theme-border-light: #3a3a4e;
+  --theme-success: #22c55e;
+  --theme-error: #ef4444;
+  --theme-text-error: #ef4444;
+  --theme-surface-error: rgba(239, 68, 68, 0.12);
+  --theme-warning: #f59e0b;
+  --theme-surface-success: rgba(34, 197, 94, 0.12);
+  --theme-surface-warning: rgba(245, 158, 11, 0.12);
 
-  /* Status */
-  --theme-success: #00951a;
-  --theme-error: #cf0000;
-  --theme-text-error: #cf0000;
-  --theme-surface-error: rgba(207, 0, 0, 0.12);
-  --theme-warning: #ff6b35;
-  --theme-info: #00d4ff;
-  --theme-surface-success: rgba(0, 149, 26, 0.12);
-  --theme-surface-warning: rgba(255, 107, 53, 0.12);
-
-  /* Status aliases – used by some components with the --theme-status-* prefix */
   --theme-status-success: var(--theme-success);
   --theme-status-error: var(--theme-error);
   --theme-status-warning: var(--theme-warning);
-  --theme-status-info: var(--theme-info);
 
-  /* Trade (derived from status: Sell=Positive, Buy=Negative, Trade=Warning) */
+  --theme-destructive: #ef4444;
+
   --theme-trade-buy: var(--theme-error);
-  --theme-trade-buy-hover: #cc0000;
-  --theme-trade-buy-light: #ff3333;
+  --theme-trade-buy-hover: #dc2626;
+  --theme-trade-buy-light: #f87171;
   --theme-trade-sell: var(--theme-success);
-  --theme-trade-sell-hover: #007a14;
-  --theme-trade-sell-light: #00cc22;
+  --theme-trade-sell-hover: #16a34a;
+  --theme-trade-sell-light: #4ade80;
   --theme-trade-trade: var(--theme-warning);
-  --theme-trade-trade-hover: #cc5500;
-  --theme-trade-trade-light: #ff8844;
-  --theme-trade-swap: #00b820;
-  --theme-trade-swap-hover: #009918;
-  --theme-trade-swap-light: #00cc22;
+  --theme-trade-trade-hover: #d97706;
+  --theme-trade-trade-light: #fbbf24;
 
-  /* Window */
-  --theme-window-bg: #1a1a2e;
-  --theme-window-border: #2a2a3e;
-  --theme-window-header: #141420;
+  --theme-font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --theme-font-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", "Courier New", monospace;
 
-  /* Font family */
-  --theme-font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
-
-  /* Font sizes */
   --theme-font-xs: 0.75rem;
   --theme-font-sm: 0.875rem;
   --theme-font-md: 1rem;
@@ -90,7 +68,6 @@
   --theme-font-4xl: 2.25rem;
   --theme-font-5xl: 3rem;
 
-  /* Spacing */
   --theme-space-xs: 0.5rem;
   --theme-space-sm: 0.75rem;
   --theme-space-md: 1rem;
@@ -98,42 +75,32 @@
   --theme-space-xl: 2rem;
   --theme-space-2xl: 3rem;
 
-  /* Border radius */
   --theme-radius-sm: 0.5rem;
   --theme-radius-md: 0.75rem;
   --theme-radius-lg: 1rem;
   --theme-radius-xl: 1.25rem;
   --theme-radius-full: 9999px;
 
-  /* Control height – form inputs, selects; use in form rows for consistent alignment */
   --theme-input-height: 2.5rem;
 
-  /* Border width */
   --theme-border-thin: 1px;
   --theme-border-medium: 2px;
   --theme-border-thick: 4px;
 
-  /* Shadows */
-  --theme-shadow-glow: 0 0 20px rgba(0, 149, 26, 0.3);
-  --theme-shadow-glow-hover: 0 0 40px rgba(0, 149, 26, 0.6);
+  --theme-shadow-glow: 0 0 20px rgba(220, 38, 38, 0.28);
+  --theme-shadow-glow-hover: 0 0 40px rgba(220, 38, 38, 0.55);
   --theme-shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
 
-  /* Gradients */
-  --theme-gradient-primary: linear-gradient(135deg, #00951a 0%, #00cc22 50%, #007a14 100%);
-  --theme-gradient-secondary: linear-gradient(135deg, #ff6b35 0%, #f59e0b 100%);
-  --theme-gradient-accent: linear-gradient(135deg, #00951a 0%, #007a14 100%);
+  --theme-gradient-primary: linear-gradient(135deg, #dc2626 0%, #ea580c 50%, #991b1b 100%);
 
-  /* Effects – pattern overlay, size, and glow intensity multiplier */
   --theme-effect-pattern: none;
   --theme-effect-pattern-size: 24px;
   --theme-effect-glow-scale: 1;
 
-  /* Scrollbar (thumb / track) */
   --theme-scrollbar-thumb: var(--theme-border);
   --theme-scrollbar-thumb-hover: var(--theme-border-light);
   --theme-scrollbar-track: var(--theme-bg-secondary);
 
-  /* Breakpoints – use in media queries, e.g. @media (min-width: var(--theme-breakpoint-md)) */
   --theme-breakpoint-xs: 480px;
   --theme-breakpoint-sm: 640px;
   --theme-breakpoint-md: 768px;
@@ -141,7 +108,6 @@
   --theme-breakpoint-xl: 1280px;
 }
 
-/* Global scrollbar styling. Applies to any overflow: auto/scroll element. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--theme-scrollbar-thumb) var(--theme-scrollbar-track);

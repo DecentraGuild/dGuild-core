@@ -49,7 +49,7 @@ defineProps<{
 }
 
 .nav-link--active {
-  color: var(--theme-primary);
+  color: var(--theme-secondary);
   background-color: var(--theme-bg-card);
   box-shadow: var(--theme-shadow-glow);
 }

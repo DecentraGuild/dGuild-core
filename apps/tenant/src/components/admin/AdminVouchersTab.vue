@@ -49,7 +49,7 @@
                     @blur="checkSlugForMint(v.mint)"
                   >
                   <Button
-                    variant="secondary"
+                    variant="brand"
                     size="sm"
                     :disabled="slugCheckingMint === v.mint || !(desiredSlugByMint[v.mint] ?? '').trim()"
                     class="admin__slug-check-btn"

@@ -78,6 +78,7 @@ function selectNode(id: string | null) {
 
 .market-tree__home:hover {
   background: var(--theme-bg-secondary);
+  color: var(--theme-secondary);
 }
 
 .market-tree__home--selected .market-tree__home-icon,

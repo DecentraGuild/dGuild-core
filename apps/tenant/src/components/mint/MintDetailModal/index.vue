@@ -101,7 +101,7 @@
                   placeholder="https://..."
                 />
                 <Button
-                  variant="secondary"
+                  variant="brand"
                   size="sm"
                   :disabled="shipmentBannerSaving"
                   @click="saveShipmentBanner"

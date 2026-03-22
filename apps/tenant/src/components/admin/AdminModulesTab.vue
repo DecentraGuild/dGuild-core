@@ -60,7 +60,7 @@
                       <Icon icon="lucide:x" />
                     </button>
                   </div>
-                  <Button v-else variant="secondary" size="sm" @click="$emit('start-extend', id)">
+                  <Button v-else variant="brand" size="sm" @click="$emit('start-extend', id)">
                     Extend
                   </Button>
                 </template>

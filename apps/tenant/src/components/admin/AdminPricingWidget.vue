@@ -170,7 +170,7 @@
 
       <Button
         v-else-if="moduleState === 'deactivating'"
-        variant="secondary"
+        variant="brand"
         :disabled="saving"
         @click="$emit('reactivate', selectedPeriod)"
       >

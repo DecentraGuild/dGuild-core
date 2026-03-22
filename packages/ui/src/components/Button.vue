@@ -71,18 +71,18 @@ const variantClass = computed(() => `btn--${props.variant}`)
 
 .btn--secondary {
   background-color: transparent;
-  color: var(--theme-primary);
-  border-color: var(--theme-primary);
+  color: var(--theme-secondary);
+  border-color: var(--theme-secondary);
 }
 
 .btn--secondary:hover:not(:disabled) {
-  background-color: var(--theme-primary);
-  color: var(--theme-primary-inverse);
+  background-color: var(--theme-secondary);
+  color: var(--theme-secondary-inverse);
 }
 
 .btn--secondary:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--theme-bg-primary), 0 0 0 4px var(--theme-primary-light);
+  box-shadow: 0 0 0 2px var(--theme-bg-primary), 0 0 0 4px var(--theme-secondary-light);
 }
 
 .btn--ghost {

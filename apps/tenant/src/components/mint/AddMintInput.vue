@@ -21,7 +21,7 @@
         <option value="NFT">NFT / collection</option>
       </select>
       <Button
-        variant="secondary"
+        variant="brand"
         :disabled="!canSubmit || loading || disabled"
         @click="onSubmit"
       >
@@ -91,16 +91,29 @@ function onAddressBookSelect(mint: string, entry: AddressBookEntry) {
 </script>
 
 <style scoped>
+.add-mint-input {
+  width: 100%;
+  min-width: 0;
+}
+
 .add-mint-input__row {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--theme-space-sm);
+  flex-wrap: nowrap;
   align-items: center;
+  gap: var(--theme-space-sm);
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .add-mint-input__input {
-  flex: 1;
-  min-width: 180px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.add-mint-input__row :deep(.ab-browser) {
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .add-mint-input__input :deep(.form-input) {
@@ -118,6 +131,8 @@ function onAddressBookSelect(mint: string, entry: AddressBookEntry) {
 }
 
 .add-mint-input__select {
+  flex-shrink: 0;
+  max-width: 100%;
   height: var(--theme-input-height, 2.25rem);
   min-height: var(--theme-input-height, 2.25rem);
   padding: 0 var(--theme-space-md);

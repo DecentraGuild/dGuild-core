@@ -7,19 +7,18 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { TenantTheme, TenantBranding } from '@decentraguild/core'
 import { DEFAULT_TENANT_THEME } from '../theme/defaults'
-import { hexToRgba, hexToHsl, lightenHex, darkenHex, contrastColor } from '../theme/color-utils'
+import { hexToHsl, lightenHex, darkenHex, contrastColor } from '../theme/color-utils'
+import { buildGlowShadows } from '../theme/glow'
 
 export function mergeTheme(base: TenantTheme, override: Partial<TenantTheme>): TenantTheme {
   const colors: NonNullable<TenantTheme['colors']> = {
-    primary: { ...base.colors?.primary, ...override.colors?.primary, main: (override.colors?.primary?.main ?? base.colors?.primary?.main ?? '#00951a') as string },
-    secondary: { ...base.colors?.secondary, ...override.colors?.secondary, main: (override.colors?.secondary?.main ?? base.colors?.secondary?.main ?? '#cf0000') as string },
-    accent: { ...base.colors?.accent, ...override.colors?.accent, main: (override.colors?.accent?.main ?? base.colors?.accent?.main ?? '#8b5cf6') as string },
+    primary: { ...base.colors?.primary, ...override.colors?.primary, main: (override.colors?.primary?.main ?? base.colors?.primary?.main ?? '#dc2626') as string },
+    secondary: { ...base.colors?.secondary, ...override.colors?.secondary, main: (override.colors?.secondary?.main ?? base.colors?.secondary?.main ?? '#ea580c') as string },
     background: { ...base.colors?.background, ...override.colors?.background },
     text: { ...base.colors?.text, ...override.colors?.text },
     border: { ...base.colors?.border, ...override.colors?.border },
     status: { ...base.colors?.status, ...override.colors?.status },
     trade: { ...base.colors?.trade, ...override.colors?.trade },
-    window: { ...base.colors?.window, ...override.colors?.window },
   }
   return {
     ...base,
@@ -36,6 +35,11 @@ export function mergeTheme(base: TenantTheme, override: Partial<TenantTheme>): T
   }
 }
 
+function fontStackCss(stack: string[] | undefined): string {
+  if (!stack?.length) return ''
+  return stack.map((f) => (f.includes(' ') ? `"${f.replace(/"/g, '\\"')}"` : f)).join(', ')
+}
+
 export function themeToCssVars(theme: TenantTheme): Record<string, string> {
   const colors = theme.colors ?? {}
   const fontSize = theme.fontSize ?? {}
@@ -44,12 +48,15 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
   const borderWidth = theme.borderWidth ?? {}
   const shadows = theme.shadows ?? {}
   const gradients = theme.gradients ?? {}
+  const fonts = theme.fonts ?? {}
 
-  const primaryMain = colors.primary?.main ?? colors.accent?.main ?? ''
-  const primaryHover =
-    colors.primary?.hover ?? colors.accent?.hover ?? (primaryMain ? darkenHex(primaryMain, 0.08) : '')
+  const primaryMain = colors.primary?.main ?? ''
+  const primaryHover = colors.primary?.hover ?? (primaryMain ? darkenHex(primaryMain, 0.08) : '')
   const primaryLight = colors.primary?.light ?? (primaryMain ? lightenHex(primaryMain, 0.2) : '')
   const primaryDark = colors.primary?.dark ?? (primaryMain ? darkenHex(primaryMain, 0.15) : '')
+  const sans = fontStackCss(fonts.primary)
+  const mono = fontStackCss(fonts.mono)
+
   return {
     '--theme-primary': primaryMain,
     '--theme-primary-hover': primaryHover,
@@ -60,8 +67,7 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-secondary-hover': colors.secondary?.hover ?? '',
     '--theme-secondary-light': colors.secondary?.light ?? '',
     '--theme-secondary-dark': colors.secondary?.dark ?? '',
-    '--theme-accent': colors.accent?.main ?? '',
-    '--theme-accent-hover': colors.accent?.hover ?? '',
+    '--theme-secondary-inverse': colors.secondary?.main ? contrastColor(colors.secondary.main) : '',
     '--theme-bg-primary': colors.background?.primary ?? '',
     '--theme-bg-secondary': colors.background?.secondary ?? '',
     '--theme-bg-card': colors.background?.card ?? '',
@@ -76,12 +82,9 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-error': colors.status?.error ?? '',
     '--theme-text-error': colors.status?.error ?? '',
     '--theme-warning': colors.status?.warning ?? '',
-    '--theme-info': colors.status?.info ?? '',
-    // Aliases so components using --theme-status-* prefix also pick up tenant overrides
     '--theme-status-success': colors.status?.success ?? '',
     '--theme-status-error': colors.status?.error ?? '',
     '--theme-status-warning': colors.status?.warning ?? '',
-    '--theme-status-info': colors.status?.info ?? '',
     '--theme-destructive': (colors.status?.destructive ?? colors.status?.error) ?? '',
     '--theme-trade-buy': colors.trade?.buy ?? colors.status?.error ?? '',
     '--theme-trade-buy-hover': colors.trade?.buyHover ?? '',
@@ -92,12 +95,8 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-trade-trade': colors.trade?.trade ?? colors.status?.warning ?? '',
     '--theme-trade-trade-hover': colors.trade?.tradeHover ?? '',
     '--theme-trade-trade-light': colors.trade?.tradeLight ?? '',
-    '--theme-trade-swap': colors.trade?.swap ?? '',
-    '--theme-trade-swap-hover': colors.trade?.swapHover ?? '',
-    '--theme-trade-swap-light': colors.trade?.swapLight ?? '',
-    '--theme-window-bg': colors.window?.background ?? '',
-    '--theme-window-border': colors.window?.border ?? '',
-    '--theme-window-header': colors.window?.header ?? '',
+    ...(sans ? { '--theme-font-sans': sans } : {}),
+    ...(mono ? { '--theme-font-mono': mono } : {}),
     '--theme-font-xs': fontSize.xs ?? '',
     '--theme-font-sm': fontSize.sm ?? '',
     '--theme-font-base': fontSize.base ?? '',
@@ -125,10 +124,8 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-shadow-glow-hover': shadows.glowHover ?? '',
     '--theme-shadow-card': shadows.card ?? '',
     '--theme-gradient-primary': gradients.primary ?? '',
-    '--theme-gradient-secondary': gradients.secondary ?? '',
-    '--theme-gradient-accent': gradients.accent ?? '',
 
-    // Shadcn/Tailwind variables (HSL format) - so Card, Button, Alert etc. use tenant theme
+    // Shadcn/Tailwind (HSL). --secondary / --accent are surfaces (elevated/muted), not brand secondary.
     ...(colors.background?.primary ? { '--background': hexToHsl(colors.background.primary) } : {}),
     ...(colors.text?.primary ? { '--foreground': hexToHsl(colors.text.primary) } : {}),
     ...(colors.background?.card ? { '--card': hexToHsl(colors.background.card) } : {}),
@@ -137,6 +134,12 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     ...(colors.text?.primary ? { '--popover-foreground': hexToHsl(colors.text.primary) } : {}),
     ...(primaryMain ? { '--primary': hexToHsl(primaryMain) } : {}),
     ...(primaryMain ? { '--primary-foreground': hexToHsl(contrastColor(primaryMain)) } : {}),
+    ...(colors.secondary?.main
+      ? {
+          '--brand': hexToHsl(colors.secondary.main),
+          '--brand-foreground': hexToHsl(contrastColor(colors.secondary.main)),
+        }
+      : {}),
     ...(colors.background?.secondary ? { '--secondary': hexToHsl(colors.background.secondary) } : {}),
     ...(colors.text?.primary ? { '--secondary-foreground': hexToHsl(colors.text.primary) } : {}),
     ...(colors.background?.muted ? { '--muted': hexToHsl(colors.background.muted) } : {}),
@@ -166,23 +169,21 @@ export const useThemeStore = defineStore('theme', () => {
     // Always recompute glow/gradient from the resolved primary so they stay
     // in sync with the tenant's brand color rather than the hardcoded default.
     const primary = merged.colors?.primary?.main
+    const brandSecondary = merged.colors?.secondary?.main
+    const intensity = merged.effects?.glowIntensity
     if (primary) {
-      const primaryLight = merged.colors?.primary?.light ?? lightenHex(primary, 0.2)
       const primaryDark = merged.colors?.primary?.dark ?? darkenHex(primary, 0.15)
-      const secondary = merged.colors?.secondary?.main ?? darkenHex(primary, 0.25)
-      const warning = merged.colors?.status?.warning ?? '#ff6b35'
+      const brandMid = brandSecondary ?? '#ea580c'
+      const { glow, glowHover } = buildGlowShadows(primary, intensity)
 
       merged.shadows = {
         ...merged.shadows,
-        glow: `0 0 20px ${hexToRgba(primary, 0.28)}`,
-        glowHover: `0 0 40px ${hexToRgba(primary, 0.55)}`,
+        glow,
+        glowHover,
         card: merged.shadows?.card ?? '0 8px 32px rgba(0, 0, 0, 0.4)',
       }
       merged.gradients = {
-        ...merged.gradients,
-        primary: `linear-gradient(135deg, ${primary} 0%, ${primaryLight} 50%, ${primaryDark} 100%)`,
-        secondary: `linear-gradient(135deg, ${warning} 0%, ${lightenHex(warning, 0.2)} 100%)`,
-        accent: `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`,
+        primary: `linear-gradient(135deg, ${primary} 0%, ${brandMid} 50%, ${primaryDark} 100%)`,
       }
     }
 
@@ -204,17 +205,6 @@ export const useThemeStore = defineStore('theme', () => {
     for (const [prop, value] of Object.entries(vars)) {
       if (value) root.style.setProperty(prop, value)
     }
-    // Glow intensity: CSS scale multiplier consumed by components
-    const glowScale: Record<string, string> = {
-      none: '0',
-      subtle: '1',
-      medium: '1.6',
-      strong: '2.5',
-    }
-    const intensity = currentTheme.value.effects?.glowIntensity ?? 'subtle'
-    root.style.setProperty('--theme-effect-glow-scale', glowScale[intensity] ?? '1')
-
-    // Pattern size: controls background-size of the pattern overlay
     const patternSize = currentTheme.value.effects?.patternSize ?? 24
     root.style.setProperty('--theme-effect-pattern-size', `${patternSize}px`)
   }

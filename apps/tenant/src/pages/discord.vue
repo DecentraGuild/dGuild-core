@@ -65,7 +65,7 @@
 
             <Button
               v-if="!discordDeactivating"
-              variant="secondary"
+              variant="brand"
               size="sm"
               :disabled="addingWallet"
               class="discord-page__add"

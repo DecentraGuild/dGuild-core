@@ -4,7 +4,7 @@
       <h5 class="condition-set-catalog__title">Rules catalog</h5>
       <Button
         v-if="!hideCreateButton"
-        variant="default"
+        variant="brand"
         size="sm"
         class="condition-set-catalog__new"
         :disabled="loading"
@@ -196,12 +196,12 @@ const emit = defineEmits<{
 }
 
 .condition-set-catalog__tab:hover {
-  color: var(--theme-text-primary);
+  color: var(--theme-secondary);
 }
 
 .condition-set-catalog__tab--active {
-  color: var(--theme-primary);
-  background-color: var(--theme-bg-primary);
+  color: var(--theme-secondary);
+  background-color: var(--theme-bg-card);
 }
 
 .condition-set-catalog__hint {

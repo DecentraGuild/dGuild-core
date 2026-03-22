@@ -27,7 +27,7 @@
                   <div class="home__card-heading">
                     <span class="home__card-name-row">
                       <span class="home__card-name">{{ entry.name }}</span>
-                      <Badge v-if="entry.status === 'coming_soon'" variant="outline">Coming soon</Badge>
+                      <Badge v-if="entry.status === 'coming_soon'" variant="brand">Coming soon</Badge>
                     </span>
                   </div>
                 </div>

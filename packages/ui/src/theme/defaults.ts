@@ -1,6 +1,6 @@
 /**
- * Default theme tokens aligned with C2C theme.js defaultTheme.
- * Used as base for tenant theme merging.
+ * Default tenant theme (dark, red primary, orange brand secondary).
+ * Merged with stored tenant branding.theme from the database.
  */
 
 import type { TenantTheme } from '@decentraguild/core'
@@ -8,61 +8,49 @@ import type { TenantTheme } from '@decentraguild/core'
 export const DEFAULT_TENANT_THEME: TenantTheme = {
   colors: {
     primary: {
-      main: '#00951a',
-      hover: '#00b820',
-      light: '#00cc22',
-      dark: '#007a14',
+      main: '#dc2626',
+      hover: '#b91c1c',
+      light: '#f87171',
+      dark: '#991b1b',
     },
     secondary: {
-      main: '#007a14',
-      hover: '#006010',
-      light: '#00951a',
-      dark: '#005510',
-    },
-    accent: {
-      main: '#00b820',
-      hover: '#009918',
+      main: '#ea580c',
+      hover: '#c2410c',
+      light: '#fb923c',
+      dark: '#9a3412',
     },
     background: {
-      primary: '#0a0a0f',
-      secondary: '#141420',
-      card: '#1a1a2e',
-      muted: '#252535',
-      backdrop: 'rgba(10, 10, 15, 0.75)',
+      primary: '#0c0a0a',
+      secondary: '#18181b',
+      card: '#1c1917',
+      muted: '#27272a',
+      backdrop: 'rgba(12, 10, 10, 0.78)',
     },
     text: {
-      primary: '#ffffff',
-      secondary: '#a0a0b3',
-      muted: '#6b6b80',
+      primary: '#fafafa',
+      secondary: '#a1a1aa',
+      muted: '#71717a',
     },
     border: {
-      default: '#2a2a3e',
-      light: '#3a3a4e',
+      default: '#3f3f46',
+      light: '#52525b',
     },
     status: {
-      success: '#00951a',
-      error: '#cf0000',
-      warning: '#ff6b35',
-      info: '#00d4ff',
+      success: '#22c55e',
+      error: '#ef4444',
+      warning: '#f59e0b',
+      destructive: '#ef4444',
     },
     trade: {
-      buy: '#00ff00',
-      buyHover: '#00cc00',
-      buyLight: '#33ff33',
-      sell: '#ff0000',
-      sellHover: '#cc0000',
-      sellLight: '#ff3333',
-      trade: '#ffaa00',
-      tradeHover: '#cc8800',
-      tradeLight: '#ffbb33',
-      swap: '#00b820',
-      swapHover: '#009918',
-      swapLight: '#00cc22',
-    },
-    window: {
-      background: '#1a1a2e',
-      border: '#2a2a3e',
-      header: '#141420',
+      buy: '#ef4444',
+      buyHover: '#dc2626',
+      buyLight: '#f87171',
+      sell: '#22c55e',
+      sellHover: '#16a34a',
+      sellLight: '#4ade80',
+      trade: '#f59e0b',
+      tradeHover: '#d97706',
+      tradeLight: '#fbbf24',
     },
   },
   fontSize: {
@@ -97,14 +85,12 @@ export const DEFAULT_TENANT_THEME: TenantTheme = {
     thick: '4px',
   },
   shadows: {
-    glow: '0 0 20px rgba(0, 149, 26, 0.3)',
-    glowHover: '0 0 40px rgba(0, 149, 26, 0.6)',
+    glow: '0 0 20px rgba(220, 38, 38, 0.28)',
+    glowHover: '0 0 40px rgba(220, 38, 38, 0.55)',
     card: '0 8px 32px rgba(0, 0, 0, 0.4)',
   },
   gradients: {
-    primary: 'linear-gradient(135deg, #00951a 0%, #00cc22 50%, #007a14 100%)',
-    secondary: 'linear-gradient(135deg, #ff6b35 0%, #f59e0b 100%)',
-    accent: 'linear-gradient(135deg, #00951a 0%, #007a14 100%)',
+    primary: 'linear-gradient(135deg, #dc2626 0%, #ea580c 50%, #991b1b 100%)',
   },
   fonts: {
     primary: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],

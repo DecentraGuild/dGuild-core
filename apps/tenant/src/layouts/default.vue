@@ -368,7 +368,7 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
 }
 
 .layout-subnav__tab:hover {
-  color: var(--theme-text-primary);
+  color: var(--theme-secondary);
   background: var(--theme-bg-card);
   border-color: var(--theme-border);
 }
@@ -447,7 +447,7 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
 }
 
 .layout-subnav__dropdown-tab--active {
-  color: var(--theme-primary);
+  color: var(--theme-secondary);
   background: var(--theme-bg-secondary);
 }
 

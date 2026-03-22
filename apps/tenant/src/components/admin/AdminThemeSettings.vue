@@ -2,41 +2,55 @@
   <div class="theme-settings">
     <div class="theme-settings__form">
       <details class="theme-settings__section" open>
-        <summary class="theme-settings__heading">Colors</summary>
+        <summary class="theme-settings__heading">Brand colours</summary>
         <p class="theme-settings__hint">
-          Core colours and surfaces. Leave optional fields empty to derive from primary and background.
+          Primary is the main actions and links. Secondary is the second brand colour (gradients and outline-style actions). Surfaces below are separate.
         </p>
         <div class="theme-settings__grid admin__card-grid--auto-dense">
           <div class="theme-settings__group">
-            <h4 class="theme-settings__sub">Core</h4>
-            <ColorInput v-model="inputs.primary" label="Primary (buttons, links)" @update:model-value="apply" />
-            <ColorInput v-model="inputs.background" label="Background (page)" @update:model-value="apply" />
-            <ColorInput v-model="inputs.foreground" label="Foreground (text)" @update:model-value="apply" />
-            <ColorInput v-model="inputs.mutedForeground" label="Muted text (leave empty to derive)" @update:model-value="apply" />
-            <ColorInput v-model="inputs.border" label="Border (leave empty to derive)" @update:model-value="apply" />
-          </div>
-          <div class="theme-settings__group">
-            <h4 class="theme-settings__sub">Surfaces</h4>
-            <ColorInput v-model="inputs.card" label="Card (modals, popovers)" @update:model-value="apply" />
-            <ColorInput v-model="inputs.secondary" label="Secondary surface (ghost hover)" @update:model-value="apply" />
-            <ColorInput v-model="inputs.accent" label="Accent highlight" @update:model-value="apply" />
-            <ColorInput v-model="inputs.destructive" label="Destructive (danger actions)" @update:model-value="apply" />
+            <ColorInput v-model="inputs.primary" label="Primary" @update:model-value="apply" />
+            <ColorInput v-model="inputs.brandSecondary" label="Secondary (brand)" @update:model-value="apply" />
           </div>
         </div>
+      </details>
+
+      <details class="theme-settings__section" open>
+        <summary class="theme-settings__heading">Surfaces and text</summary>
+        <p class="theme-settings__hint">
+          Page background, elevated panels, cards, and text. Leave optional fields empty to derive from background and foreground.
+        </p>
         <div class="theme-settings__grid admin__card-grid--auto-dense">
           <div class="theme-settings__group">
-            <h4 class="theme-settings__sub">Status</h4>
-            <ColorInput v-model="statusSuccess" label="Positive" @update:model-value="applyStatus" />
-            <ColorInput v-model="statusError" label="Negative" @update:model-value="applyStatus" />
+            <h4 class="theme-settings__sub">Surfaces</h4>
+            <ColorInput v-model="inputs.background" label="Page background" @update:model-value="apply" />
+            <ColorInput v-model="inputs.elevatedSurface" label="Elevated / panel surface" @update:model-value="apply" />
+            <ColorInput v-model="inputs.card" label="Card (modals, popovers)" @update:model-value="apply" />
+          </div>
+          <div class="theme-settings__group">
+            <h4 class="theme-settings__sub">Text and border</h4>
+            <ColorInput v-model="inputs.foreground" label="Foreground (main text)" @update:model-value="apply" />
+            <ColorInput v-model="inputs.mutedForeground" label="Muted text (optional)" @update:model-value="apply" />
+            <ColorInput v-model="inputs.border" label="Border (optional)" @update:model-value="apply" />
+          </div>
+        </div>
+      </details>
+
+      <details class="theme-settings__section">
+        <summary class="theme-settings__heading">Semantic</summary>
+        <p class="theme-settings__hint">Status and danger colours for feedback and marketplace labels.</p>
+        <div class="theme-settings__grid admin__card-grid--auto-dense">
+          <div class="theme-settings__group">
+            <ColorInput v-model="statusSuccess" label="Positive / success" @update:model-value="applyStatus" />
+            <ColorInput v-model="statusError" label="Negative / error" @update:model-value="applyStatus" />
             <ColorInput v-model="statusWarning" label="Warning" @update:model-value="applyStatus" />
-            <ColorInput v-model="statusInfo" label="Info" @update:model-value="applyStatus" />
+            <ColorInput v-model="statusDestructive" label="Destructive (danger actions)" @update:model-value="applyStatus" />
           </div>
         </div>
       </details>
 
       <details class="theme-settings__section">
         <summary class="theme-settings__heading">Typography</summary>
-        <p class="theme-settings__hint">Font family and size scale: small (labels), body (main text), heading (titles).</p>
+        <p class="theme-settings__hint">Body font and size scale: small (labels), body (main text), heading (titles).</p>
         <div class="theme-settings__group">
           <OptionsSelect v-model="fontFamilyId" label="Font" :options="FONT_OPTIONS" @update:model-value="applyFont" />
         </div>
@@ -48,10 +62,8 @@
       </details>
 
       <details class="theme-settings__section">
-        <summary class="theme-settings__heading">Spacing &amp; rounding</summary>
-        <p class="theme-settings__hint">
-          Corner radius, spacing scale, and border width. One value controls each.
-        </p>
+        <summary class="theme-settings__heading">Spacing and rounding</summary>
+        <p class="theme-settings__hint">Corner radius, spacing scale, and border width.</p>
 
         <h4 class="theme-settings__sub">Corner radius</h4>
         <div class="theme-settings__slider-row">
@@ -108,8 +120,7 @@
       <details class="theme-settings__section">
         <summary class="theme-settings__heading">Effects</summary>
         <p class="theme-settings__hint">
-          Optional visual enhancements. Patterns and glow intensity are purely aesthetic and do not
-          affect functionality.
+          Background pattern and glow on interactive elements (buttons, cards). Glow follows your primary colour.
         </p>
         <div class="theme-settings__grid admin__card-grid--2-sm">
           <div class="theme-settings__group">
@@ -140,8 +151,6 @@
         </template>
       </details>
     </div>
-
-    <ThemePreview :theme="props.branding.theme" />
   </div>
 </template>
 
@@ -149,7 +158,6 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import OptionsSelect from '~/components/ui/options-select/OptionsSelect.vue'
-import ThemePreview from '~/components/admin/ThemePreview.vue'
 import { deriveTheme, themeToInputs, parseRem } from '@decentraguild/ui'
 import type { TenantTheme } from '@decentraguild/core'
 
@@ -207,27 +215,24 @@ function fontStackToId(stack: string[] | undefined): string {
   return 'inter'
 }
 
-// Derived inputs synced from the stored theme
 const inputs = reactive({
-  primary: '#00951a',
-  background: '#0a0a0f',
-  foreground: '#ffffff',
+  primary: '#dc2626',
+  brandSecondary: '#ea580c',
+  background: '#0c0a0a',
+  foreground: '#fafafa',
   mutedForeground: '',
   card: '',
-  secondary: '',
-  accent: '',
-  destructive: '',
+  elevatedSurface: '',
   border: '',
   radiusLevel: 3,
   spacingLevel: 5,
   borderWidthPx: 1,
 })
 
-// Status refs (trade uses these: Sell=Positive, Buy=Negative, Trade=Warning)
 const statusSuccess = ref('')
 const statusError = ref('')
 const statusWarning = ref('')
-const statusInfo = ref('')
+const statusDestructive = ref('')
 
 const fontFamilyId = ref('inter')
 const typographySmall = ref('0.875')
@@ -246,13 +251,12 @@ const spacingBaseLabel = computed(() => {
 function syncFromTheme() {
   const extracted = themeToInputs(props.branding.theme)
   inputs.primary = extracted.primary
+  inputs.brandSecondary = extracted.brandSecondary
   inputs.background = extracted.background
   inputs.foreground = extracted.foreground
   inputs.mutedForeground = extracted.mutedForeground ?? ''
   inputs.card = extracted.card ?? ''
-  inputs.secondary = extracted.secondary ?? ''
-  inputs.accent = extracted.accent ?? ''
-  inputs.destructive = extracted.destructive ?? ''
+  inputs.elevatedSurface = extracted.elevatedSurface ?? ''
   inputs.border = extracted.border ?? ''
   inputs.radiusLevel = extracted.radiusLevel ?? 3
   inputs.spacingLevel = extracted.spacingLevel ?? 5
@@ -262,7 +266,7 @@ function syncFromTheme() {
   statusSuccess.value = c.status?.success ?? ''
   statusError.value = c.status?.error ?? ''
   statusWarning.value = c.status?.warning ?? ''
-  statusInfo.value = c.status?.info ?? ''
+  statusDestructive.value = c.status?.destructive ?? ''
 
   fontFamilyId.value = fontStackToId(props.branding.theme.fonts?.primary)
 
@@ -280,28 +284,27 @@ function syncFromTheme() {
 function buildTheme(): TenantTheme {
   const derived = deriveTheme({
     primary: inputs.primary,
+    brandSecondary: inputs.brandSecondary,
     background: inputs.background,
     foreground: inputs.foreground,
     mutedForeground: inputs.mutedForeground || undefined,
     card: inputs.card || undefined,
-    secondary: inputs.secondary || undefined,
-    accent: inputs.accent || undefined,
-    destructive: inputs.destructive || undefined,
+    elevatedSurface: inputs.elevatedSurface || undefined,
     border: inputs.border || undefined,
     status: {
       success: statusSuccess.value || undefined,
       error: statusError.value || undefined,
       warning: statusWarning.value || undefined,
-      info: statusInfo.value || undefined,
     },
+    destructive: statusDestructive.value || undefined,
     radiusLevel: inputs.radiusLevel,
     spacingLevel: inputs.spacingLevel,
     borderWidthPx: inputs.borderWidthPx,
+    glowIntensity: effectGlow.value,
     fontPrimary: FONT_STACKS[fontFamilyId.value] ?? FONT_STACKS.inter,
     fontMono: props.branding.theme.fonts?.mono ?? DEFAULT_MONO,
   })
 
-  // Apply typography overrides if user changed them manually
   const small = parseFloat(typographySmall.value) || 0.875
   const body = parseFloat(typographyBody.value) || 1
   const heading = parseFloat(typographyHeading.value) || 1.25
@@ -333,40 +336,34 @@ function apply() {
   Object.assign(props.branding.theme, theme)
 }
 
-function applyStatus() { apply() }
-function applyFont() { apply() }
-function applyTypography() { apply() }
-function applyEffects() { apply() }
+function applyStatus() {
+  apply()
+}
+function applyFont() {
+  apply()
+}
+function applyTypography() {
+  apply()
+}
+function applyEffects() {
+  apply()
+}
 
-let _isSyncing = false
 watch(
   () => props.branding,
   async () => {
-    _isSyncing = true
     syncFromTheme()
     await nextTick()
-    _isSyncing = false
   },
   { immediate: true, deep: false },
 )
-
 </script>
 
 <style scoped>
 .theme-settings {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--theme-space-xl);
-}
-
-@media (min-width: var(--theme-breakpoint-lg)) {
-  .theme-settings {
-    grid-template-columns: minmax(0, 3fr) minmax(var(--layout-sidebar-min), 1fr);
-  }
-  :deep(.theme-settings__preview) {
-    position: sticky;
-    top: var(--theme-space-lg);
-    align-self: start;
-  }
 }
 
 .theme-settings__form {
@@ -457,5 +454,4 @@ watch(
   min-width: 3rem;
   text-align: right;
 }
-
 </style>

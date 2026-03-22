@@ -4,21 +4,11 @@
  */
 import { useThemeStore, themeToCssVars } from '@decentraguild/ui'
 
-const GLOW_SCALE: Record<string, string> = {
-  none: '0',
-  subtle: '1',
-  medium: '1.6',
-  strong: '2.5',
-}
-
 export default defineNuxtPlugin(() => {
   if (import.meta.client) return
 
   const themeStore = useThemeStore()
   const vars = themeToCssVars(themeStore.currentTheme)
-
-  const intensity = themeStore.currentTheme.effects?.glowIntensity ?? 'subtle'
-  vars['--theme-effect-glow-scale'] = GLOW_SCALE[intensity] ?? '1'
 
   const patternSize = themeStore.currentTheme.effects?.patternSize ?? 24
   vars['--theme-effect-pattern-size'] = `${patternSize}px`

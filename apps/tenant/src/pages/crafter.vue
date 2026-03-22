@@ -40,15 +40,15 @@
                   <div class="crafter-card__actions">
                     <Button
                       v-if="!t.metadata_uri"
-                      variant="secondary"
+                      variant="brand"
                       size="sm"
                       @click="openPublishModal(t)"
                     >
                       Add metadata
                     </Button>
                     <template v-if="t.metadata_uri">
-                      <Button variant="secondary" size="sm" @click="openActionModal('mint', t)">Mint</Button>
-                      <Button variant="secondary" size="sm" @click="openActionModal('burn', t)">Burn</Button>
+                      <Button variant="brand" size="sm" @click="openActionModal('mint', t)">Mint</Button>
+                      <Button variant="destructive" size="sm" @click="openActionModal('burn', t)">Burn</Button>
                       <Button variant="ghost" size="sm" @click="openActionModal('edit', t)">Edit</Button>
                     </template>
                     <a
@@ -167,7 +167,7 @@
             <template v-if="publishForm.storageBackend === 'api'">
               <Button
                 type="button"
-                variant="primary"
+                variant="default"
                 :disabled="!canPublishMedia || publishUploadLoading"
                 @click="onUploadPublishMetadata"
               >
@@ -179,7 +179,7 @@
             <template v-else>
               <Button
                 type="button"
-                variant="secondary"
+                variant="brand"
                 :disabled="!canPublishMedia"
                 @click="onGeneratePublishJson"
               >
@@ -187,8 +187,8 @@
               </Button>
               <div v-if="generatedPublishJson" class="crafter-create-form__output">
                 <div class="crafter-create-form__json-actions">
-                  <Button variant="secondary" size="sm" @click="copyPublishJson">Copy</Button>
-                  <Button variant="secondary" size="sm" @click="downloadPublishJson">Download</Button>
+                  <Button variant="brand" size="sm" @click="copyPublishJson">Copy</Button>
+                  <Button variant="brand" size="sm" @click="downloadPublishJson">Download</Button>
                 </div>
                 <pre class="crafter-create-form__pre">{{ publishJsonPreview }}</pre>
               </div>
@@ -248,7 +248,7 @@
               <template v-if="editForm.storageBackend === 'api'">
                 <Button
                   type="button"
-                  variant="primary"
+                  variant="default"
                   :disabled="!canEditUpload || editUploadLoading"
                   @click="onEditUploadMetadata"
                 >
@@ -260,7 +260,7 @@
               <template v-else>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="brand"
                   :disabled="!canEditUpload"
                   @click="onGenerateEditJson"
                 >
@@ -268,8 +268,8 @@
                 </Button>
                 <div v-if="generatedEditJson" class="crafter-create-form__output">
                   <div class="crafter-create-form__json-actions">
-                    <Button variant="secondary" size="sm" @click="copyEditJson">Copy</Button>
-                    <Button variant="secondary" size="sm" @click="downloadEditJson">Download</Button>
+                    <Button variant="brand" size="sm" @click="copyEditJson">Copy</Button>
+                    <Button variant="brand" size="sm" @click="downloadEditJson">Download</Button>
                   </div>
                   <pre class="crafter-create-form__pre">{{ editJsonPreview }}</pre>
                 </div>
