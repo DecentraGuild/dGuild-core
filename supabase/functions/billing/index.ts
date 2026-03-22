@@ -134,7 +134,7 @@ Deno.serve(async (req: Request) => {
         const voucherWallet = Deno.env.get('VOUCHER_WALLET') ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
         return jsonResponse({
           quoteId,
-          quote: { quoteId, lineItems, priceUsdc: 0, meters: {}, expiresAt },
+          quote: { quoteId, lineItems, priceUsdc: 0, recurringDisplayUsdc: 0, meters: {}, expiresAt },
           memo,
           voucherRecipientAta,
           voucherWallet,
@@ -194,7 +194,7 @@ Deno.serve(async (req: Request) => {
         const voucherWallet = Deno.env.get('VOUCHER_WALLET') ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
         return jsonResponse({
           quoteId,
-          quote: { quoteId, lineItems, priceUsdc: 0, meters: {}, expiresAt },
+          quote: { quoteId, lineItems, priceUsdc: 0, recurringDisplayUsdc: 0, meters: {}, expiresAt },
           memo,
           voucherRecipientAta,
           voucherWallet,

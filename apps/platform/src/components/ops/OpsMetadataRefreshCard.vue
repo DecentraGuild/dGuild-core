@@ -3,7 +3,7 @@
     <CardHeader>
       <CardTitle>Mint metadata</CardTitle>
       <CardDescription>
-        After db reset, run <strong>Seed from configs</strong> first to populate <code>mint_metadata</code> from platform Address Book defaults, tenant catalog, watchtower, and marketplace scope. Then use <strong>Refresh</strong> to refetch from chain.
+        After db reset, run <strong>Seed from configs</strong> first to populate <code>mint_metadata</code>. <strong>Refresh batch</strong> walks the same scope: Address Book defaults, every row in <code>tenant_mint_catalog</code>, watchtower mints, marketplace scope (including collection roots), and individual NFTs in <code>collection_members</code> for those collections. It merges chain data with existing rows so a failed DAS response does not wipe images.
       </CardDescription>
     </CardHeader>
     <CardContent>

@@ -376,7 +376,8 @@ function setLogic(value: 'AND' | 'OR') {
 }
 
 .condition-editor__amount {
-  width: 5rem;
+  flex-shrink: 0;
+  min-width: 8rem;
 }
 
 .condition-editor__trait-key,
@@ -389,7 +390,8 @@ function setLogic(value: 'AND' | 'OR') {
 }
 
 .condition-editor__days {
-  width: 4rem;
+  flex-shrink: 0;
+  min-width: 5.5rem;
 }
 
 .condition-editor__role {

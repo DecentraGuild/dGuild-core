@@ -5,7 +5,7 @@
  *   metadata                  – Fetch mint metadata (from cache or Solana RPC).
  *   metadata-refresh           – Batch refresh mint metadata (admin).
  *   metadata-seed-from-configs – Seed mint_metadata from Address Book defaults + catalog/watchtower/scope (platform admin).
- *   metadata-refresh-all       – Refresh all mints in mint_metadata from chain (platform admin).
+ *   metadata-refresh-all       – Refresh catalog-scoped mints (defaults + tenant_mint_catalog + watches + marketplace scope + collection members) from chain (platform admin).
  *   resolve              – Resolve mint to asset type (SPL/NFT).
  *   escrows              – List on-chain escrows in scope for a tenant.
  *   scope-expand         – Expand collection mints into the marketplace scope (admin, dev only).
@@ -90,6 +90,111 @@ async function fetchMintMetadataFromChain(
   } catch {
     return null
   }
+}
+
+type ChainMintMeta = NonNullable<Awaited<ReturnType<typeof fetchMintMetadataFromChain>>>
+
+function pickStr(next: string | null | undefined, prev: unknown): string | null {
+  if (next != null && String(next).trim() !== '') return next
+  const p = prev
+  if (typeof p === 'string' && p.trim() !== '') return p
+  return null
+}
+
+function pickBool(next: boolean | null | undefined, prev: unknown): boolean | null {
+  if (typeof next === 'boolean') return next
+  if (typeof prev === 'boolean') return prev
+  return null
+}
+
+function mergeMintMetadataUpsert(
+  existing: Record<string, unknown> | null | undefined,
+  chain: ChainMintMeta,
+): Record<string, unknown> {
+  const ex = existing ?? {}
+  const now = new Date().toISOString()
+  return {
+    mint: chain.mint,
+    name: pickStr(chain.name, ex.name),
+    symbol: pickStr(chain.symbol, ex.symbol),
+    image: pickStr(chain.image, ex.image),
+    decimals: chain.decimals ?? ex.decimals ?? null,
+    traits: ex.traits ?? null,
+    trait_index: ex.trait_index ?? null,
+    seller_fee_basis_points: chain.sellerFeeBasisPoints ?? ex.seller_fee_basis_points ?? null,
+    update_authority: pickStr(chain.updateAuthority, ex.update_authority),
+    uri: pickStr(chain.uri, ex.uri),
+    primary_sale_happened: pickBool(chain.primarySaleHappened, ex.primary_sale_happened),
+    is_mutable: pickBool(chain.isMutable, ex.is_mutable),
+    edition_nonce: chain.editionNonce ?? ex.edition_nonce ?? null,
+    token_standard: pickStr(chain.tokenStandard, ex.token_standard),
+    updated_at: now,
+  }
+}
+
+async function loadPlatformMetadataMintList(
+  db: ReturnType<typeof getAdminClient>,
+): Promise<string[]> {
+  const kindByMint = new Map<string, 'SPL' | 'NFT'>()
+  const mints = new Set<string>()
+
+  for (const row of ADDRESS_BOOK_DEFAULT_MINTS_DATA) {
+    mints.add(row.mint)
+    kindByMint.set(row.mint, row.kind)
+  }
+
+  const [catalogRes, watchesRes, scopeRes, tenantColScopeRes] = await Promise.all([
+    db.from('tenant_mint_catalog').select('mint, kind'),
+    db.from('watchtower_watches').select('mint'),
+    db.from('marketplace_mint_scope').select('mint, source, collection_mint'),
+    db.from('tenant_collection_scope').select('collection_mint'),
+  ])
+
+  for (const r of catalogRes.data ?? []) {
+    const m = r.mint as string
+    mints.add(m)
+    kindByMint.set(m, (r.kind as 'SPL' | 'NFT') ?? 'SPL')
+  }
+  for (const r of watchesRes.data ?? []) {
+    mints.add(r.mint as string)
+  }
+  for (const r of scopeRes.data ?? []) {
+    mints.add(r.mint as string)
+    const cm = r.collection_mint as string | null | undefined
+    if (cm) mints.add(cm)
+  }
+  for (const r of tenantColScopeRes.data ?? []) {
+    mints.add(r.collection_mint as string)
+  }
+
+  const collectionRoots = new Set<string>()
+  for (const m of mints) {
+    if (kindByMint.get(m) === 'NFT') collectionRoots.add(m)
+  }
+  for (const r of scopeRes.data ?? []) {
+    if (r.source === 'collection') {
+      collectionRoots.add((r.collection_mint ?? r.mint) as string)
+    }
+  }
+  for (const r of tenantColScopeRes.data ?? []) {
+    collectionRoots.add(r.collection_mint as string)
+  }
+
+  const roots = [...collectionRoots]
+  const chunkSize = 100
+  for (let i = 0; i < roots.length; i += chunkSize) {
+    const chunk = roots.slice(i, i + chunkSize)
+    if (chunk.length === 0) continue
+    const { data: memberRows } = await db
+      .from('collection_members')
+      .select('mint')
+      .in('collection_mint', chunk)
+    for (const row of memberRows ?? []) {
+      mints.add(row.mint as string)
+    }
+  }
+
+  return [...mints].sort()
 }
 
 // ---------------------------------------------------------------------------
@@ -300,21 +405,8 @@ Deno.serve(async (req: Request) => {
     const meta = await fetchMintMetadataFromChain(connection, mint)
     if (!meta) return errorResponse('Mint not found', req, 404)
 
-    await db.from('mint_metadata').upsert({
-      mint,
-      name: meta.name,
-      symbol: meta.symbol,
-      image: meta.image,
-      decimals: meta.decimals,
-      update_authority: meta.updateAuthority ?? null,
-      uri: meta.uri ?? null,
-      seller_fee_basis_points: meta.sellerFeeBasisPoints ?? null,
-      primary_sale_happened: meta.primarySaleHappened ?? null,
-      is_mutable: meta.isMutable ?? null,
-      edition_nonce: meta.editionNonce ?? null,
-      token_standard: meta.tokenStandard ?? null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'mint' })
+    const row = mergeMintMetadataUpsert(undefined, meta)
+    await db.from('mint_metadata').upsert(row, { onConflict: 'mint' })
 
     return jsonResponse(meta, req)
   }
@@ -326,26 +418,17 @@ Deno.serve(async (req: Request) => {
     const mints = body.mints as string[]
     if (!Array.isArray(mints)) return errorResponse('mints array required', req)
 
+    const slice = mints.slice(0, 50)
+    const { data: existingRows } = await db.from('mint_metadata').select('*').in('mint', slice)
+    const existingByMint = new Map((existingRows ?? []).map((r) => [r.mint as string, r as Record<string, unknown>]))
+
     const connection = getSolanaConnection()
     const results: Record<string, boolean> = {}
-    for (const mint of mints.slice(0, 50)) { // cap at 50 per call
+    for (const mint of slice) {
       const meta = await fetchMintMetadataFromChain(connection, mint)
       if (meta) {
-        await db.from('mint_metadata').upsert({
-          mint,
-          name: meta.name,
-          symbol: meta.symbol,
-          image: meta.image,
-          decimals: meta.decimals,
-          update_authority: meta.updateAuthority ?? null,
-          uri: meta.uri ?? null,
-          seller_fee_basis_points: meta.sellerFeeBasisPoints ?? null,
-          primary_sale_happened: meta.primarySaleHappened ?? null,
-          is_mutable: meta.isMutable ?? null,
-          edition_nonce: meta.editionNonce ?? null,
-          token_standard: meta.tokenStandard ?? null,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'mint' })
+        const row = mergeMintMetadataUpsert(existingByMint.get(mint), meta)
+        await db.from('mint_metadata').upsert(row, { onConflict: 'mint' })
         results[mint] = true
       } else {
         results[mint] = false
@@ -524,7 +607,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // ---------------------------------------------------------------------------
-  // metadata-refresh-all – refresh all mints in mint_metadata (platform admin)
+  // metadata-refresh-all – refresh catalog-scoped mints from chain (platform admin)
   // ---------------------------------------------------------------------------
   if (action === 'metadata-refresh-all') {
     const authHeader = req.headers.get('Authorization')
@@ -540,14 +623,24 @@ Deno.serve(async (req: Request) => {
     const limit = Math.min(Math.max(1, (body.limit as number) ?? 200), 500)
     const offset = Math.max(0, (body.offset as number) ?? 0)
     const db = getAdminClient()
-    const { data: rows } = await db
-      .from('mint_metadata')
-      .select('mint')
-      .range(offset, offset + limit - 1)
-    const mints = (rows ?? []).map((r) => r.mint as string)
-    if (mints.length === 0) {
-      return jsonResponse({ refreshed: 0, total: 0, message: 'No mints in mint_metadata' }, req)
+    const allMints = await loadPlatformMetadataMintList(db)
+    if (allMints.length === 0) {
+      return jsonResponse({ refreshed: 0, total: 0, trackedTotal: 0, message: 'No mints in platform catalog scope' }, req)
     }
+    if (offset >= allMints.length) {
+      return jsonResponse({
+        refreshed: 0,
+        total: 0,
+        trackedTotal: allMints.length,
+        offset,
+        nextOffset: null,
+        message: 'Offset past end of catalog mint list. Reset offset to 0.',
+      }, req)
+    }
+
+    const mints = allMints.slice(offset, offset + limit)
+    const { data: existingRows } = await db.from('mint_metadata').select('*').in('mint', mints)
+    const existingByMint = new Map((existingRows ?? []).map((r) => [r.mint as string, r as Record<string, unknown>]))
 
     const connection = getSolanaConnection()
     let refreshed = 0
@@ -555,21 +648,8 @@ Deno.serve(async (req: Request) => {
     for (const mint of mints) {
       const meta = await fetchMintMetadataFromChain(connection, mint)
       if (meta) {
-        await db.from('mint_metadata').upsert({
-          mint,
-          name: meta.name,
-          symbol: meta.symbol,
-          image: meta.image,
-          decimals: meta.decimals,
-          update_authority: meta.updateAuthority ?? null,
-          uri: meta.uri ?? null,
-          seller_fee_basis_points: meta.sellerFeeBasisPoints ?? null,
-          primary_sale_happened: meta.primarySaleHappened ?? null,
-          is_mutable: meta.isMutable ?? null,
-          edition_nonce: meta.editionNonce ?? null,
-          token_standard: meta.tokenStandard ?? null,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'mint' })
+        const row = mergeMintMetadataUpsert(existingByMint.get(mint), meta)
+        await db.from('mint_metadata').upsert(row, { onConflict: 'mint' })
         results[mint] = true
         refreshed++
       } else {
@@ -577,15 +657,17 @@ Deno.serve(async (req: Request) => {
       }
     }
     const nextOffset = offset + mints.length
+    const hasMore = nextOffset < allMints.length
     return jsonResponse({
       refreshed,
       total: mints.length,
+      trackedTotal: allMints.length,
       offset,
-      nextOffset: mints.length === limit ? nextOffset : null,
+      nextOffset: hasMore ? nextOffset : null,
       results,
-      message: mints.length === limit
-        ? `Refreshed ${refreshed} of ${mints.length} mints. Call with offset=${nextOffset} to continue.`
-        : `Refreshed ${refreshed} of ${mints.length} mints.`,
+      message: hasMore
+        ? `Refreshed ${refreshed} of ${mints.length} mints (catalog scope ${allMints.length} total). Call with offset=${nextOffset} to continue.`
+        : `Refreshed ${refreshed} of ${mints.length} mints (catalog scope ${allMints.length} total). Done.`,
     }, req)
   }
 
