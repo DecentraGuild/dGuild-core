@@ -18,6 +18,7 @@ import {
   getConnectorState,
   connectWallet as web3ConnectWallet,
   disconnectWallet as web3DisconnectWallet,
+  clearWalletConnectDisplayUri,
   type ConnectorStateSnapshot,
 } from '@decentraguild/web3/wallet'
 import type { WalletConnectorId } from '@solana/connector/headless'
@@ -114,6 +115,7 @@ export function useAuth() {
 
       wallet.value =
         (data.session?.user?.user_metadata?.wallet_address as string) ?? state.account ?? null
+      clearWalletConnectDisplayUri()
       return true
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Sign-in failed'

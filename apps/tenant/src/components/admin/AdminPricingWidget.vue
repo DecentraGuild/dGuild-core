@@ -1,210 +1,261 @@
 <template>
-  <aside class="pricing-widget">
-    <div v-if="billingDisabled" class="pricing-widget__unavailable">
-      <span>Billing temporarily unavailable</span>
-    </div>
-
-    <div v-else-if="loading" class="pricing-widget__loading">
-      <Icon icon="lucide:loader-2" class="pricing-widget__spinner" />
-      <span>Loading pricing...</span>
-    </div>
-
-    <template v-else-if="price?.billable && (isAddUnit || isTieredWithOneTime)">
-      <div class="pricing-widget__tier">
-        <span class="pricing-widget__tier-name">{{ isTieredWithOneTime ? (price.oneTimeUnitName ?? 'Per raffle') : addUnitName }}</span>
-        <span class="pricing-widget__tier-price">{{ formatUsdc(isTieredWithOneTime ? oneTimePerUnitEffective : price.oneTimeTotal) }} USDC</span>
-      </div>
-    </template>
-
-    <template v-else-if="price?.billable && selectedTier">
-      <div class="pricing-widget__tier">
-        <span class="pricing-widget__tier-name">{{ selectedTier.name }}</span>
-        <span class="pricing-widget__tier-price">
-          {{ formatUsdc(selectedPeriod === 'yearly' ? price.recurringYearly / 12 : price.recurringMonthly) }} USDC/mo
-        </span>
+  <div class="pricing-widget-stack">
+    <aside class="pricing-widget">
+      <div v-if="billingDisabled" class="pricing-widget__unavailable">
+        <span>Billing temporarily unavailable</span>
       </div>
 
-      <div class="pricing-widget__usage">
-        <div
-          v-for="row in usageRows"
-          :key="row.key"
-          class="pricing-widget__usage-row"
-        >
-          <span class="pricing-widget__usage-label">{{ row.label }}</span>
-          <span class="pricing-widget__usage-value">{{ row.valueText }}</span>
-        </div>
+      <div v-else-if="loading" class="pricing-widget__loading">
+        <Icon icon="lucide:loader-2" class="pricing-widget__spinner" />
+        <span>Loading pricing...</span>
       </div>
 
-      <div v-if="addonComponents.length" class="pricing-widget__addons">
-        <p class="pricing-widget__section-label">Add-ons</p>
-        <div
-          v-for="addon in addonComponents"
-          :key="addon.name"
-          class="pricing-widget__addon-row"
-        >
-          <span>{{ addon.name }} &times;{{ addon.quantity }}</span>
-          <span>{{ formatUsdc(addon.amount) }} USDC/mo</span>
+      <template v-else-if="price?.billable && (isAddUnit || isTieredWithOneTime)">
+        <div class="pricing-widget__tier" :class="{ 'pricing-widget__tier--stacked': isTieredWithOneTime }">
+          <span class="pricing-widget__tier-name">
+            {{ isTieredWithOneTime ? (selectedTier?.name ?? price.oneTimeUnitName ?? 'Plan') : addUnitName }}
+          </span>
+          <div v-if="isTieredWithOneTime" class="pricing-widget__tier-prices">
+            <span class="pricing-widget__tier-price-line">
+              <span class="pricing-widget__tier-price-value">{{ formatUsdc(tieredRecurringMonthlyDisplay) }} USDC/mo</span>
+              <span class="pricing-widget__tier-price-muted">recurring</span>
+            </span>
+            <span class="pricing-widget__tier-price-line">
+              <span class="pricing-widget__tier-price-value">{{ formatUsdc(oneTimePerUnitEffective) }} USDC</span>
+              <span class="pricing-widget__tier-price-muted">per new {{ marginalUnitLabel }}</span>
+            </span>
+          </div>
+          <span v-else class="pricing-widget__tier-price">{{ formatUsdc(price.oneTimeTotal) }} USDC</span>
         </div>
-      </div>
+        <div v-if="isTieredWithOneTime && usageRows.length" class="pricing-widget__usage">
+          <div
+            v-for="row in usageRows"
+            :key="row.key"
+            class="pricing-widget__usage-row"
+          >
+            <span class="pricing-widget__usage-label">{{ row.label }}</span>
+            <span class="pricing-widget__usage-value">{{ row.valueText }}</span>
+          </div>
+        </div>
+      </template>
 
-      <div class="pricing-widget__totals">
-        <div v-if="selectedPeriod === 'yearly'" class="pricing-widget__total-row">
-          <span>Recurring (yearly)</span>
-          <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
-        </div>
-        <div v-else class="pricing-widget__total-row">
-          <span>Recurring (monthly)</span>
-          <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringMonthly) }} USDC/mo</span>
-        </div>
-      </div>
-
-      <div v-if="hasActiveSubscription" class="pricing-widget__subscription">
-        <p class="pricing-widget__section-label">Subscription</p>
-        <div class="pricing-widget__sub-row">
-          <span>Period</span>
-          <span>{{ subscription!.billingPeriod === 'yearly' ? 'Yearly' : 'Monthly' }}</span>
-        </div>
-        <div class="pricing-widget__sub-row">
-          <span>Renews / expires</span>
-          <span>{{ formatDate(subscription!.periodEnd) }}</span>
-        </div>
-        <div class="pricing-widget__sub-row">
-          <span>Recurring</span>
-          <span>
-            {{ formatUsdc(subscription!.billingPeriod === 'yearly' ? price.recurringYearly : price.recurringMonthly) }}
-            {{ subscription!.billingPeriod === 'yearly' ? 'USDC/yr' : 'USDC/mo' }}
+      <template v-else-if="price?.billable && selectedTier">
+        <div class="pricing-widget__tier">
+          <span class="pricing-widget__tier-name">{{ selectedTier.name }}</span>
+          <span class="pricing-widget__tier-price">
+            {{ formatUsdc(selectedPeriod === 'yearly' ? price.recurringYearly / 12 : price.recurringMonthly) }} USDC/mo
           </span>
         </div>
-      </div>
-    </template>
 
-    <template
-      v-else-if="
-        price?.billable &&
-        chargeAmount === 0 &&
-        recurringDisplayTotal <= 0 &&
-        !isAddUnit &&
-        !isTieredWithOneTime &&
-        moduleId !== 'slug'
-      "
+        <div class="pricing-widget__usage">
+          <div
+            v-for="row in usageRows"
+            :key="row.key"
+            class="pricing-widget__usage-row"
+          >
+            <span class="pricing-widget__usage-label">{{ row.label }}</span>
+            <span class="pricing-widget__usage-value">{{ row.valueText }}</span>
+          </div>
+        </div>
+
+        <div v-if="addonComponents.length" class="pricing-widget__addons">
+          <p class="pricing-widget__section-label">Add-ons</p>
+          <div
+            v-for="addon in addonComponents"
+            :key="addon.name"
+            class="pricing-widget__addon-row"
+          >
+            <span>{{ addon.name }} &times;{{ addon.quantity }}</span>
+            <span>{{ formatUsdc(addon.amount) }} USDC/mo</span>
+          </div>
+        </div>
+
+        <div class="pricing-widget__totals">
+          <div v-if="selectedPeriod === 'yearly'" class="pricing-widget__total-row">
+            <span>Recurring (yearly)</span>
+            <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
+          </div>
+          <div v-else class="pricing-widget__total-row">
+            <span>Recurring (monthly)</span>
+            <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringMonthly) }} USDC/mo</span>
+          </div>
+        </div>
+
+        <div v-if="hasActiveSubscription" class="pricing-widget__subscription">
+          <p class="pricing-widget__section-label">Subscription</p>
+          <div class="pricing-widget__sub-row">
+            <span>Period</span>
+            <span>{{ subscription!.billingPeriod === 'yearly' ? 'Yearly' : 'Monthly' }}</span>
+          </div>
+          <div class="pricing-widget__sub-row">
+            <span>Renews / expires</span>
+            <span>{{ formatDate(subscription!.periodEnd) }}</span>
+          </div>
+          <div class="pricing-widget__sub-row">
+            <span>Recurring</span>
+            <span>
+              {{ formatUsdc(subscription!.billingPeriod === 'yearly' ? price.recurringYearly : price.recurringMonthly) }}
+              {{ subscription!.billingPeriod === 'yearly' ? 'USDC/yr' : 'USDC/mo' }}
+            </span>
+          </div>
+        </div>
+      </template>
+
+      <template
+        v-else-if="
+          price?.billable &&
+            chargeAmount === 0 &&
+            recurringDisplayTotal <= 0 &&
+            !isAddUnit &&
+            !isTieredWithOneTime &&
+            moduleId !== 'slug'
+        "
+      >
+        <div class="pricing-widget__free">
+          <span>Free</span>
+        </div>
+      </template>
+
+      <template v-else-if="price?.billable && moduleId === 'slug'">
+        <div class="pricing-widget__tier">
+          <span class="pricing-widget__tier-name">Custom slug</span>
+          <span class="pricing-widget__tier-price">{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
+        </div>
+        <div v-if="hasActiveSubscription" class="pricing-widget__subscription">
+          <p class="pricing-widget__section-label">Subscription</p>
+          <div class="pricing-widget__sub-row">
+            <span>Period</span>
+            <span>Yearly</span>
+          </div>
+          <div class="pricing-widget__sub-row">
+            <span>Renews / expires</span>
+            <span>{{ formatDate(subscription!.periodEnd) }}</span>
+          </div>
+          <div class="pricing-widget__sub-row">
+            <span>Recurring</span>
+            <span>{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
+          </div>
+        </div>
+      </template>
+
+      <div v-else-if="price && !price.billable" class="pricing-widget__free">
+        <span>No billing for this module</span>
+      </div>
+
+      <div v-if="error" class="pricing-widget__error">{{ error }}</div>
+
+      <div class="pricing-widget__actions">
+        <div v-if="showPeriodToggle" class="pricing-widget__period-toggle">
+          <button
+            class="pricing-widget__period-btn"
+            :class="{ 'pricing-widget__period-btn--active': selectedPeriod === 'monthly' }"
+            @click="selectedPeriod = 'monthly'"
+          >
+            Monthly
+          </button>
+          <button
+            class="pricing-widget__period-btn"
+            :class="{ 'pricing-widget__period-btn--active': selectedPeriod === 'yearly' }"
+            @click="selectedPeriod = 'yearly'"
+          >
+            Yearly
+            <span v-if="yearlyDiscountLabel" class="pricing-widget__period-save">
+              ({{ yearlyDiscountLabel }}% off)
+            </span>
+          </button>
+        </div>
+
+        <p v-if="canReactivateWithoutPayment" class="pricing-widget__hint">
+          Still within your paid period. Click Reactivate to turn the module back on without a new payment.
+        </p>
+        <p v-else-if="hintText" class="pricing-widget__hint">
+          {{ hintText }}
+        </p>
+
+        <Button
+          v-if="moduleState === 'staging' || (moduleState === 'active' && hasDeficit && !isAddUnit)"
+          variant="default"
+          :disabled="deploying || saving"
+          @click="$emit('deploy', selectedPeriod, conditions ?? undefined)"
+        >
+          <Icon v-if="deploying || saving" icon="lucide:loader-2" class="pricing-widget__spinner" />
+          {{ deployLabel }}
+        </Button>
+
+        <Button
+          v-if="moduleState === 'active' && isTieredWithOneTime && !hasDeficit"
+          variant="default"
+          :disabled="saving"
+          @click="$emit('save', selectedPeriod, conditions ?? undefined)"
+        >
+          {{ saveButtonLabel }}
+        </Button>
+
+        <Button
+          v-else-if="moduleState === 'deactivating'"
+          variant="brand"
+          :disabled="saving"
+          @click="$emit('reactivate', selectedPeriod)"
+        >
+          Reactivate
+        </Button>
+
+        <Button
+          v-else-if="moduleState === 'active' && moduleId === 'slug'"
+          variant="default"
+          :disabled="saving"
+          @click="$emit('extend', selectedPeriod)"
+        >
+          {{ saving ? 'Extending...' : 'Extend' }}
+        </Button>
+        <Button
+          v-else-if="moduleState === 'active' && !isAddUnit && !hasDeficit"
+          variant="default"
+          :disabled="saving"
+          @click="$emit('save', selectedPeriod, conditions ?? undefined)"
+        >
+          {{ saving ? 'Saving...' : 'Save' }}
+        </Button>
+
+        <p v-if="saveError" class="pricing-widget__save-error">{{ saveError }}</p>
+      </div>
+    </aside>
+
+    <aside
+      v-if="showCatalogPricingPanel && catalogPricingLines.length"
+      class="pricing-widget pricing-widget--catalog"
+      aria-label="Plan overview"
     >
-      <div class="pricing-widget__free">
-        <span>Free</span>
-      </div>
-    </template>
-
-    <template v-else-if="price?.billable && moduleId === 'slug'">
-      <div class="pricing-widget__tier">
-        <span class="pricing-widget__tier-name">Custom slug</span>
-        <span class="pricing-widget__tier-price">{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
-      </div>
-      <div v-if="hasActiveSubscription" class="pricing-widget__subscription">
-        <p class="pricing-widget__section-label">Subscription</p>
-        <div class="pricing-widget__sub-row">
-          <span>Period</span>
-          <span>Yearly</span>
-        </div>
-        <div class="pricing-widget__sub-row">
-          <span>Renews / expires</span>
-          <span>{{ formatDate(subscription!.periodEnd) }}</span>
-        </div>
-        <div class="pricing-widget__sub-row">
-          <span>Recurring</span>
-          <span>{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
-        </div>
-      </div>
-    </template>
-
-    <div v-else-if="price && !price.billable" class="pricing-widget__free">
-      <span>No billing for this module</span>
-    </div>
-
-    <div v-if="error" class="pricing-widget__error">{{ error }}</div>
-
-    <div class="pricing-widget__actions">
-      <div v-if="showPeriodToggle" class="pricing-widget__period-toggle">
-        <button
-          class="pricing-widget__period-btn"
-          :class="{ 'pricing-widget__period-btn--active': selectedPeriod === 'monthly' }"
-          @click="selectedPeriod = 'monthly'"
-        >
-          Monthly
-        </button>
-        <button
-          class="pricing-widget__period-btn"
-          :class="{ 'pricing-widget__period-btn--active': selectedPeriod === 'yearly' }"
-          @click="selectedPeriod = 'yearly'"
-        >
-          Yearly
-          <span v-if="yearlyDiscountLabel" class="pricing-widget__period-save">
-            ({{ yearlyDiscountLabel }}% off)
-          </span>
-        </button>
-      </div>
-
-      <p v-if="canReactivateWithoutPayment" class="pricing-widget__hint">
-        Still within your paid period. Click Reactivate to turn the module back on without a new payment.
-      </p>
-      <p v-else-if="hintText" class="pricing-widget__hint">
-        {{ hintText }}
-      </p>
-
-      <Button
-        v-if="moduleState === 'staging' || (moduleState === 'active' && hasDeficit && !isAddUnit)"
-        variant="default"
-        :disabled="deploying"
-        @click="$emit('deploy', selectedPeriod, conditions ?? undefined)"
-      >
-        <Icon v-if="deploying" icon="lucide:loader-2" class="pricing-widget__spinner" />
-        {{ deployLabel }}
-      </Button>
-
-      <Button
-        v-if="moduleState === 'active' && isTieredWithOneTime && !hasDeficit"
-        variant="default"
-        :disabled="saving"
-        @click="$emit('save', selectedPeriod, conditions ?? undefined)"
-      >
-        {{ saveButtonLabel }}
-      </Button>
-
-      <Button
-        v-else-if="moduleState === 'deactivating'"
-        variant="brand"
-        :disabled="saving"
-        @click="$emit('reactivate', selectedPeriod)"
-      >
-        Reactivate
-      </Button>
-
-      <Button
-        v-else-if="moduleState === 'active' && moduleId === 'slug'"
-        variant="default"
-        :disabled="saving"
-        @click="$emit('extend', selectedPeriod)"
-      >
-        {{ saving ? 'Extending...' : 'Extend' }}
-      </Button>
-      <Button
-        v-else-if="moduleState === 'active' && !isAddUnit && !hasDeficit"
-        variant="default"
-        :disabled="saving"
-        @click="$emit('save', selectedPeriod, conditions ?? undefined)"
-      >
-        {{ saving ? 'Saving...' : 'Save' }}
-      </Button>
-
-      <p v-if="saveError" class="pricing-widget__save-error">{{ saveError }}</p>
-    </div>
-  </aside>
+      <p class="pricing-widget__section-label pricing-widget__catalog-heading">Plan overview</p>
+      <ul class="pricing-widget__catalog-list">
+        <li v-for="(line, i) in catalogPricingLines" :key="i" class="pricing-widget__catalog-item">
+          {{ line }}
+        </li>
+      </ul>
+    </aside>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, toRef, watch } from 'vue'
 import { watchDebounced } from '@vueuse/core'
 import type { ModuleState } from '@decentraguild/core'
-import type { BillingPeriod, PriceResult, ConditionSet, TieredAddonsPricing, TieredWithOneTimePerUnitPricing, TierDefinition, QuoteLineItem } from '@decentraguild/billing'
-import { getProductDisplayType, getProductUnitLabel, getRafflesTiers, CONDITION_TO_METER } from '@decentraguild/billing'
+import type {
+  BillingPeriod,
+  PriceResult,
+  ConditionSet,
+  TieredAddonsPricing,
+  TieredWithOneTimePerUnitPricing,
+  TierDefinition,
+  QuoteLineItem,
+} from '@decentraguild/billing'
+import {
+  getProductDisplayType,
+  getProductUnitLabel,
+  CONDITION_TO_METER,
+  primaryQuotedMeterKey,
+  tierDefinitionFromQuotedMeter,
+} from '@decentraguild/billing'
 import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
@@ -217,7 +268,7 @@ export interface SubscriptionInfo {
   billingPeriod: BillingPeriod
   periodEnd: string
   recurringAmountUsdc: number
-  /** Tier id for tiered modules (e.g. raffles); used to show current tier and per-unit price. */
+  /** Tier id for tiered modules; used to show current tier and per-unit price. */
   selectedTierId?: string
 }
 
@@ -236,8 +287,10 @@ const props = withDefaults(
     subscription?: SubscriptionInfo | null
     /** When true, hide monthly/yearly toggle and use yearly only (e.g. slug). */
     yearlyOnly?: boolean
+    /** When true, show catalog docs.pricing below the main pricing card (module catalog). */
+    showCatalogPricingPanel?: boolean
   }>(),
-  { yearlyOnly: false },
+  { yearlyOnly: false, showCatalogPricingPanel: true },
 )
 
 defineEmits<{
@@ -332,17 +385,40 @@ defineExpose({ refresh, selectedPeriod })
 
 const catalogEntry = computed(() => getModuleCatalogEntry(props.moduleId))
 
+/** Catalog prose for tiers; slug addon has no docs — use admin entry. */
+const catalogPricingRaw = computed(() => {
+  const direct = catalogEntry.value?.docs?.pricing?.trim()
+  if (direct) return direct
+  if (props.moduleId === 'slug') {
+    return getModuleCatalogEntry('admin')?.docs?.pricing?.trim() ?? ''
+  }
+  return ''
+})
+
+const catalogPricingLines = computed(() =>
+  catalogPricingRaw.value
+    .split(/\n\n+/)
+    .map((p) => p.replace(/\n/g, ' ').trim())
+    .filter(Boolean),
+)
+
 /** V2 product key (slug -> admin for billing). */
 const productKey = computed(() => (props.moduleId === 'slug' ? 'admin' : props.moduleId))
 
 /** V2: one-time per unit (gates, crafter). From billing product config, not catalog. */
 const isAddUnit = computed(() => getProductDisplayType(productKey.value) === 'one_time_per_unit')
 
-/** V2: tiered with one-time per unit (raffles). From billing product config, not catalog. */
+/** V2: tiered with one-time per unit. From billing product config, not catalog. */
 const isTieredWithOneTime = computed(() => getProductDisplayType(productKey.value) === 'tiered_with_one_time')
 
 /** V2: unit label for one-time display. From billing product config, not catalog. */
 const addUnitName = computed(() => getProductUnitLabel(productKey.value))
+
+const marginalUnitLabel = computed(() => addUnitName.value.toLowerCase())
+
+const tieredQuotedMeterKey = computed(() =>
+  primaryQuotedMeterKey(quote.value, hasLiveConditions.value ? (props.conditions ?? undefined) : undefined),
+)
 
 const conditions = computed((): ConditionSet | null => {
   if (hasLiveConditions.value) return props.conditions!
@@ -365,11 +441,10 @@ const price = computed((): PriceResult | null => {
     unitPrice: item.unit_price ?? (item.quantity ? item.price_usdc / item.quantity : 0),
     amount: item.price_usdc,
   }))
-  const raffleSlotsItem = q.lineItems.find((i: QuoteLineItem) => i.meter_key === 'raffle_slots')
-  const fromQuote =
-    raffleSlotsItem?.unit_price ?? (raffleSlotsItem?.quantity ? raffleSlotsItem.price_usdc / raffleSlotsItem.quantity : 0)
-  const oneTimePerUnitForSelectedTier =
-    fromQuote > 0 ? fromQuote : (selectedTier.value?.oneTimePerUnit ?? 0)
+  const mk = tieredQuotedMeterKey.value
+  const tieredDef =
+    isTieredWithOneTime.value && mk ? tierDefinitionFromQuotedMeter(q, mk) : null
+  const oneTimePerUnitForSelectedTier = isTieredWithOneTime.value ? (tieredDef?.oneTimePerUnit ?? 0) : 0
   const disp = q.recurringDisplayUsdc ?? q.priceUsdc
   return {
     moduleId: props.moduleId,
@@ -381,24 +456,41 @@ const price = computed((): PriceResult | null => {
     appliedYearlyDiscount: null,
     selectedTierId: null,
     oneTimePerUnitForSelectedTier: isTieredWithOneTime.value ? oneTimePerUnitForSelectedTier : undefined,
-    oneTimeUnitName: isTieredWithOneTime.value ? 'Per raffle' : undefined,
+    oneTimeUnitName: isTieredWithOneTime.value ? getProductUnitLabel(productKey.value) : undefined,
   }
 })
 
 const pricingModel = computed((): TieredAddonsPricing | TieredWithOneTimePerUnitPricing | null => {
   const q = quote.value
-  if (!q?.meters) return null
-  const conditionKeys = Object.keys(q.meters)
-  if (isTieredWithOneTime.value && productKey.value === 'raffles') {
+  if (isTieredWithOneTime.value) {
+    const mk = tieredQuotedMeterKey.value
+    if (!q || !mk || !q.meters[mk]) return null
+    let conditionKeys: string[]
+    if (hasLiveConditions.value && props.conditions) {
+      conditionKeys = [
+        ...new Set(
+          Object.keys(props.conditions)
+            .map((k) => CONDITION_TO_METER[k] ?? k)
+            .filter((meterKey) => q.meters[meterKey] != null),
+        ),
+      ]
+    } else {
+      conditionKeys = Object.keys(q.meters)
+    }
+    if (!conditionKeys.length) return null
+    const tierDef = tierDefinitionFromQuotedMeter(q, mk)
+    if (!tierDef) return null
     return {
       modelType: 'tiered_with_one_time_per_unit',
       conditionKeys,
-      tiers: getRafflesTiers(),
+      tiers: [tierDef],
       addons: [],
       yearlyDiscountPercent: 0,
-      oneTimeUnitName: 'Per raffle',
+      oneTimeUnitName: getProductUnitLabel(productKey.value),
     } as TieredWithOneTimePerUnitPricing
   }
+  if (!q?.meters) return null
+  const conditionKeys = Object.keys(q.meters)
   const included = Object.fromEntries(
     (Object.entries(q.meters) as [string, { used: number; limit: number }][]).map(([k, v]) => [k, v.limit]),
   )
@@ -413,20 +505,20 @@ const pricingModel = computed((): TieredAddonsPricing | TieredWithOneTimePerUnit
 
 const selectedTier = computed((): TierDefinition | null => {
   const pm = pricingModel.value
-  const cond = conditions.value
   if (!pm) return null
-  if (isTieredWithOneTime.value && productKey.value === 'raffles' && cond) {
-    const slots = cond.raffle_slots ?? cond.raffleSlotsUsed ?? 0
-    const tiers = (pm as TieredWithOneTimePerUnitPricing).tiers
-    const num = typeof slots === 'number' ? slots : 0
-    if (num >= 4) return tiers.find((t) => t.id === 'pro') ?? tiers[2] ?? null
-    if (num >= 2) return tiers.find((t) => t.id === 'grow') ?? tiers[1] ?? null
-    return tiers.find((t) => t.id === 'base') ?? tiers[0] ?? null
+  if (isTieredWithOneTime.value) {
+    return (pm as TieredWithOneTimePerUnitPricing).tiers[0] ?? null
   }
   return (pm as TieredAddonsPricing).tiers[0] ?? null
 })
 
 const oneTimePerUnitEffective = computed(() => price.value?.oneTimePerUnitForSelectedTier ?? 0)
+
+const tieredRecurringMonthlyDisplay = computed(() => {
+  const p = price.value
+  if (!p) return 0
+  return selectedPeriod.value === 'yearly' ? p.recurringYearly / 12 : p.recurringMonthly
+})
 
 const yearlyDiscountLabel = computed(() => {
   if (!price.value?.appliedYearlyDiscount) {
@@ -477,10 +569,42 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
   isTieredWithOneTime,
   upgradeRecurringAmount,
   selectedPeriod,
+  marginalUnitLabel,
 })
 </script>
 
 <style scoped>
+.pricing-widget-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-md);
+  min-width: 0;
+}
+
+.pricing-widget--catalog {
+  gap: var(--theme-space-sm);
+}
+
+.pricing-widget__catalog-heading {
+  margin: 0 0 var(--theme-space-xs);
+}
+
+.pricing-widget__catalog-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+  line-height: 1.45;
+}
+
+.pricing-widget__catalog-item {
+  margin: 0 0 var(--theme-space-xs);
+}
+
+.pricing-widget__catalog-item:last-child {
+  margin-bottom: 0;
+}
+
 .pricing-widget {
   background: var(--theme-bg-card);
   border: var(--theme-border-thin) solid var(--theme-border);
@@ -511,6 +635,41 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+}
+
+.pricing-widget__tier--stacked {
+  align-items: flex-start;
+  gap: var(--theme-space-xs);
+}
+
+.pricing-widget__tier-prices {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.pricing-widget__tier-price-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: var(--theme-space-xs);
+  font-size: var(--theme-font-sm);
+  line-height: 1.3;
+}
+
+.pricing-widget__tier-price-value {
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pricing-widget__tier-price-muted {
+  font-size: var(--theme-font-xs);
+  font-weight: 400;
+  color: var(--theme-text-muted);
 }
 
 .pricing-widget__tier-name {

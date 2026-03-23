@@ -11,11 +11,8 @@
             :class="{ 'admin__module-row--staging': form.modulesById[id] === 'staging' }"
           >
             <div class="admin__module-cell admin__module-cell--action">
-              <template v-if="id === 'admin'">
-                <span class="admin__module-badge admin__module-badge--always">Always on</span>
-              </template>
               <Button
-                v-else
+                v-if="id !== 'admin'"
                 :variant="moduleActionVariant(id)"
                 size="sm"
                 :disabled="isDeactivating(id)"
@@ -27,48 +24,9 @@
             <div class="admin__module-cell admin__module-cell--name">
               <span class="admin__module-name">{{ MODULE_NAV[id]?.label ?? id }}</span>
             </div>
-            <div class="admin__module-cell admin__module-cell--status">
-              <span v-if="id === 'admin' || isAlwaysOnModule(id)" class="admin__module-always-on">Always on</span>
-              <template v-else>
-                <span v-if="moduleDeactivationDate(id)" class="admin__module-date">
-                  Deactivate at {{ formatDeactivationDate(moduleDeactivationDate(id)) }}
-                </span>
-                <span v-else-if="form.modulesById[id] === 'staging'" class="admin__module-staging-label">Staging</span>
-                <template v-else-if="form.modulesById[id] === 'active' && isModuleBillable(id)">
-                  <span v-if="isAddUnitOnly(id)" class="admin__module-always-on">Always on</span>
-                  <div v-else-if="extendingModuleId === id" class="admin__extend-inline">
-                    <div class="pricing-widget__period-toggle">
-                      <button
-                        class="pricing-widget__period-btn"
-                        :class="{ 'pricing-widget__period-btn--active': extendPeriod === 'monthly' }"
-                        @click="$emit('update:extendPeriod', 'monthly')"
-                      >
-                        Month
-                      </button>
-                      <button
-                        class="pricing-widget__period-btn"
-                        :class="{ 'pricing-widget__period-btn--active': extendPeriod === 'yearly' }"
-                        @click="$emit('update:extendPeriod', 'yearly')"
-                      >
-                        Year
-                      </button>
-                    </div>
-                    <Button variant="default" size="sm" :disabled="extending" @click="$emit('confirm-extend', id)">
-                      {{ extending ? 'Extending...' : 'Confirm' }}
-                    </Button>
-                    <button class="admin__extend-cancel" @click="$emit('cancel-extend')">
-                      <Icon icon="lucide:x" />
-                    </button>
-                  </div>
-                  <Button v-else variant="brand" size="sm" @click="$emit('start-extend', id)">
-                    Extend
-                  </Button>
-                </template>
-              </template>
-            </div>
             <div class="admin__module-cell admin__module-cell--actions">
               <button
-                v-if="id !== 'admin' && getModuleCatalogEntry(id)"
+                v-if="getModuleCatalogEntry(id)"
                 type="button"
                 class="admin__module-info-btn"
                 :aria-label="`Info about ${MODULE_NAV[id]?.label ?? id}`"
@@ -88,6 +46,10 @@
       >
         <div v-if="infoModule" class="admin__module-info-modal">
           <p class="admin__module-info-desc">{{ infoModule.longDescription }}</p>
+          <div v-if="moduleInfoPricing" class="admin__module-info-pricing">
+            <p class="admin__module-info-pricing-title">Pricing</p>
+            <p class="admin__module-info-pricing-text">{{ moduleInfoPricing }}</p>
+          </div>
           <a
             :href="docsModuleUrl"
             target="_blank"
@@ -105,16 +67,15 @@
 </template>
 
 <script setup lang="ts">
-import type { BillingPeriod } from '@decentraguild/billing'
 import type { ModuleState } from '@decentraguild/core'
 import { Card } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import { Icon } from '@iconify/vue'
 import { getModuleCatalogEntry } from '@decentraguild/catalog'
-import { getProductDisplayType } from '@decentraguild/billing'
-import { MODULE_NAV } from '~/config/modules'
 import type { ModuleCatalogEntry } from '@decentraguild/catalog'
+import { MODULE_NAV } from '~/config/modules'
+import type { AdminForm } from '~/composables/admin/useAdminForm'
 
 const config = useRuntimeConfig()
 const platformDocsBase = config.public.platformDocsUrl as string ?? 'https://dguild.org/docs'
@@ -129,29 +90,27 @@ const docsModuleUrl = computed(() =>
     : ''
 )
 
+/** `docs.pricing` from catalog; slug addon inherits admin catalog pricing copy. */
+const moduleInfoPricing = computed(() => {
+  const m = infoModule.value
+  if (!m) return ''
+  const direct = m.docs?.pricing?.trim()
+  if (direct) return direct
+  if (m.id === 'slug') return getModuleCatalogEntry('admin')?.docs?.pricing?.trim() ?? ''
+  return ''
+})
+
 function openModuleInfo(id: string) {
   infoModuleId.value = id
 }
 
-import type { TenantConfig } from '@decentraguild/core'
-import type { AdminForm } from '~/composables/admin/useAdminForm'
-
 const props = defineProps<{
   form: AdminForm
-  tenant: TenantConfig | null
   moduleIds: string[]
-  subscriptions: Record<string, { periodEnd?: string } | null>
-  extendingModuleId: string | null
-  extending: boolean
-  extendPeriod: BillingPeriod
 }>()
 
 const emit = defineEmits<{
   'module-toggle': [id: string, on: boolean]
-  'start-extend': [id: string]
-  'confirm-extend': [id: string]
-  'cancel-extend': []
-  'update:extendPeriod': [value: BillingPeriod]
 }>()
 
 function getModuleState(moduleId: string): ModuleState {
@@ -187,35 +146,5 @@ function onModuleAction(moduleId: string) {
   } else if (s === 'staging' || s === 'active') {
     emit('module-toggle', moduleId, false)
   }
-}
-
-function moduleDeactivationDate(moduleId: string): string | null {
-  const entry = props.tenant?.modules?.[moduleId] as { deactivatedate?: string | null } | undefined
-  const d = entry?.deactivatedate
-  return d && typeof d === 'string' ? d : null
-}
-
-function formatDeactivationDate(iso: string): string {
-  try {
-    const date = new Date(iso)
-    if (Number.isNaN(date.getTime())) return iso
-    return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
-  } catch {
-    return iso
-  }
-}
-
-function isModuleBillable(moduleId: string): boolean {
-  return getModuleCatalogEntry(moduleId)?.pricing != null
-}
-
-function isAddUnitOnly(moduleId: string): boolean {
-  const productKey = moduleId === 'slug' ? 'admin' : moduleId
-  return getProductDisplayType(productKey) === 'one_time_per_unit'
-}
-
-function isAlwaysOnModule(moduleId: string): boolean {
-  const entry = getModuleCatalogEntry(moduleId) as { alwaysOn?: boolean } | undefined
-  return entry?.alwaysOn === true
 }
 </script>

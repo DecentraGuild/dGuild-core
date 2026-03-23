@@ -43,7 +43,7 @@
 
 <script setup lang="ts">
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '~/components/ui/card'
-import { formatDateTime } from '@decentraguild/core'
+import { formatDateTime } from '@decentraguild/display'
 
 defineProps<{
   entries: Array<{

@@ -30,9 +30,11 @@
     "@decentraguild/display": "workspace:^",
     "@iconify/vue": "^4.1.2",
     "pinia": "^3.0.0",
+    "qrcode": "^1.5.4",
     "vue": "^3.4.0"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "tsup": "^8.0.0",
     "typescript": "^5.3.0"
   },

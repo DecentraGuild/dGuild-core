@@ -4,9 +4,9 @@
 import type { Ref } from 'vue'
 import type { QuoteResult } from '@decentraguild/billing'
 import { MODULE_TO_PRODUCT } from '@decentraguild/billing'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
-import { getEdgeFunctionErrorMessage } from '~/utils/edgeFunctionError'
 
 export function useQuote(opts: {
   moduleId: Ref<string>
@@ -49,11 +49,10 @@ export function useQuote(opts: {
         body.durationDays = 365
       }
 
-      const { data, error: fnError } = await supabase.functions.invoke('billing', { body })
-      if (fnError) throw new Error(getEdgeFunctionErrorMessage(fnError, 'Quote failed'))
+      const data = await invokeEdgeFunction<QuoteResult>(supabase, 'billing', body, { errorFallback: 'Quote failed' })
       if (!data) throw new Error('No quote returned')
 
-      quote.value = data as QuoteResult
+      quote.value = data
       billingDisabled.value = false
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Quote failed'

@@ -1,21 +1,14 @@
 /**
  * Shared USDC payment verification for billing and crafter.
  */
-import { Connection, PublicKey } from 'npm:@solana/web3.js@1'
+import { PublicKey } from 'npm:@solana/web3.js@1'
 import { TOKEN_PROGRAM_ID } from 'npm:@solana/spl-token@0.4'
+import { getSolanaConnection } from './solana-connection.ts'
 
 export const BILLING_WALLET = new PublicKey('4CJYmVAcBrgYL6iX4gUKSMeJxTm4hK3eNAzuzaYBZMCv')
 export const BILLING_WALLET_ATA = new PublicKey('FoxSYPF93hPnpNoZ3eUjEAii3p6fdEESNZJe6fHbRUxr')
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')
 const USDC_DECIMALS = 6
-
-function getSolanaConnection(): Connection {
-  const rpcUrl =
-    Deno.env.get('HELIUS_RPC_URL') ??
-    Deno.env.get('SOLANA_RPC_URL') ??
-    'https://api.mainnet-beta.solana.com'
-  return new Connection(rpcUrl, 'confirmed')
-}
 
 export async function verifyBillingPayment(params: {
   txSignature: string

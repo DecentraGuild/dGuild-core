@@ -37,7 +37,9 @@ defineProps<{
   display: flex;
   align-items: center;
   gap: var(--theme-space-sm);
+  min-height: 44px;
   padding: var(--theme-space-sm) var(--theme-space-md);
+  touch-action: manipulation;
   color: var(--theme-text-secondary);
   text-decoration: none;
   border-radius: var(--theme-radius-md);

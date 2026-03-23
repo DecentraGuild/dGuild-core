@@ -71,8 +71,12 @@ const auth = useAuth()
 const tenant = computed(() => tenantStore.tenant)
 const { navModules } = useNavModules()
 
-const displayName = ref('dGuild')
-const brandLogo = ref('')
+const displayName = computed(
+  () => (themeStore.branding.name ?? tenant.value?.name) || 'dGuild',
+)
+const brandLogo = computed(
+  () => themeStore.branding.logo ?? tenant.value?.branding?.logo ?? '',
+)
 
 const showConnectCta = computed(() => !auth.wallet.value)
 
@@ -81,14 +85,6 @@ const displayModules = computed(() => {
     .map((m) => getModuleCatalogEntry(m.id))
     .filter((e): e is ModuleCatalogEntry => !!e?.routePath)
 })
-
-function applyTenant() {
-  const t = tenantStore.tenant
-  displayName.value = (themeStore.branding.name ?? t?.name) || 'dGuild'
-  brandLogo.value = themeStore.branding.logo ?? t?.branding?.logo ?? ''
-}
-onMounted(applyTenant)
-watch([tenant, () => themeStore.branding], applyTenant)
 
 const { shouldAppendTenantToLinks } = useTenantInLinks()
 

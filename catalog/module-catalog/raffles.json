@@ -24,7 +24,7 @@
     "overview": "Raffles enable fair prize distribution through blockchain-based randomness.",
     "mechanics": "Ticket minting\n\nLocked raffle lifecycle\n\nRandom winner selection\n\nAutomatic reward distribution",
     "setup": "Define ticket parameters\n\nAdd reward\n\nLaunch raffle\n\nWait for sell-out\n\nDraw winner",
-    "pricing": "Base: 5 USDC per raffle, 1 active raffle\n\nGrowth: 15 USDC/month, 3 active raffles\n\nPro: 29 USDC/month, 10 active raffles"
+    "pricing": "Base: 0 USDC/month, 5 USDC per raffle, 1 slot\n\nGrowth: 15 USDC/month, 0 USDC per raffle, 3 slots\n\nPro: 29 USDC/month, 0 USDC per raffle, 10 slots"
   },
   "activationInstructions": {
     "intro": "Summon your community. Announce the prize. Let fate decide the victor.",

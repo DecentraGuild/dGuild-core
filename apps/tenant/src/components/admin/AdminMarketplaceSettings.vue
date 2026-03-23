@@ -53,22 +53,17 @@
         </label>
       </div>
       <div class="marketplace-settings__custom">
-        <p class="marketplace-settings__hint">Custom currencies</p>
+        <h4 class="marketplace-settings__add-title">Custom currencies</h4>
         <div class="marketplace-settings__add-mint">
-          <FormInput
+          <AddMintInput
             v-model="newCurrencyMint"
-            placeholder="Mint address"
+            v-model:kind="newCurrencyKind"
+            book-kind="SPL"
+            hide-book-base-mints
             :error="addCurrencyError"
-            @keydown.enter.prevent="lookupAndAddCurrency"
+            :disabled="saving"
+            @submit="addCurrencyFromInput"
           />
-          <AddressBookBrowser kind="SPL" hide-base-mints @select="(mint) => { newCurrencyMint = mint; lookupAndAddCurrency() }" />
-          <Button
-            variant="brand"
-            :disabled="!newCurrencyMint.trim() || saving"
-            @click="lookupAndAddCurrency"
-          >
-            Add
-          </Button>
         </div>
         <ul v-if="customCurrencies.length" class="marketplace-settings__mint-list">
           <li
@@ -183,7 +178,6 @@ import { useMarketplaceSettings } from '~/composables/marketplace/useMarketplace
 import AdminMintCatalog from './AdminMintCatalog.vue'
 import MintDetailModal from '~/components/mint/MintDetailModal/index.vue'
 import AddMintInput from '~/components/mint/AddMintInput.vue'
-import AddressBookBrowser from '~/components/shared/AddressBookBrowser.vue'
 
 const props = defineProps<{
   slug: string
@@ -207,6 +201,7 @@ const {
   addMintError,
   adding,
   newCurrencyMint,
+  newCurrencyKind,
   addCurrencyError,
   saving,
   saveError,
@@ -218,7 +213,7 @@ const {
   onDeleteMint,
   addMint,
   onBaseToggle,
-  lookupAndAddCurrency,
+  addCurrencyFromInput,
   removeCustomCurrency,
   save,
 } = useMarketplaceSettings({

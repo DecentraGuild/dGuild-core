@@ -2,6 +2,7 @@
  * Admin billing subscriptions. Reads from granted_entitlements and tenant_meter_limits (pricing engine v2).
  */
 import type { BillingPeriod } from '@decentraguild/billing'
+import { tenantMeterLimitKeyForModule } from '@decentraguild/billing'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 
@@ -68,15 +69,7 @@ export function useAdminSubscriptions() {
       return
     }
 
-    const meterByModule: Record<string, string> = {
-      marketplace: 'mints_count',
-      raffles: 'raffle_slots',
-      gates: 'gate_lists',
-      crafter: 'crafter_tokens',
-      admin: 'registration',
-      slug: 'slug',
-    }
-    const meterKey = meterByModule[moduleId] ?? moduleId
+    const meterKey = tenantMeterLimitKeyForModule(moduleId)
 
     const { data: limit } = await supabase
       .from('tenant_meter_limits')

@@ -56,7 +56,6 @@ export interface UsePlanShipmentFormOptions {
     recipientCount: number
     totalAmount: number
     txSignature: string
-    createdBy: string
   }) => Promise<unknown>
 }
 
@@ -209,7 +208,6 @@ export function usePlanShipmentForm(options: UsePlanShipmentFormOptions) {
         recipientCount: json.recipients.length,
         totalAmount: totalAmount.value,
         txSignature: sig,
-        createdBy: kp.publicKey.toBase58(),
       })
       loadedJson.value = null
       jsonInput.value = ''

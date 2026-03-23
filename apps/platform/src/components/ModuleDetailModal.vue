@@ -29,7 +29,7 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { formatUsdc } from '@decentraguild/core'
+import { formatUsdc } from '@decentraguild/display'
 import { Modal } from '@decentraguild/ui/components'
 import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 import type { PricingModel } from '@decentraguild/billing'

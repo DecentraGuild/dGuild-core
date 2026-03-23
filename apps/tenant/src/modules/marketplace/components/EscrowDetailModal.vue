@@ -323,7 +323,7 @@ const cannotFillReason = computed(() => {
   align-items: start;
 }
 
-@media (max-width: var(--theme-breakpoint-xs)) {
+@media (max-width: 479px) {
   .escrow-modal__details-cols {
     grid-template-columns: 1fr;
   }

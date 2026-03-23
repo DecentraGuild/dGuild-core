@@ -85,6 +85,7 @@ definePageMeta({ middleware: 'gates-module' })
 import { getModuleState, isModuleVisibleToMembers } from '@decentraguild/core'
 import { Icon } from '@iconify/vue'
 import { useAuth } from '@decentraguild/auth'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
 import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
@@ -150,11 +151,8 @@ async function fetchMemberships() {
   loading.value = true
   try {
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('gates', {
-      body: { action: 'my-memberships', tenantId: id },
-    })
-    if (error) throw error
-    memberships.value = (data as { memberships?: Membership[] }).memberships ?? []
+    const data = await invokeEdgeFunction<{ memberships?: Membership[] }>(supabase, 'gates', { action: 'my-memberships', tenantId: id })
+    memberships.value = data.memberships ?? []
   } catch {
     memberships.value = []
   } finally {
@@ -171,11 +169,8 @@ async function fetchMembersForSelected() {
   membersLoading.value = true
   try {
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('gates', {
-      body: { action: 'entries-public', listAddress: addr },
-    })
-    if (error) throw error
-    memberWallets.value = (data as { entries?: string[] }).entries ?? []
+    const data = await invokeEdgeFunction<{ entries?: string[] }>(supabase, 'gates', { action: 'entries-public', listAddress: addr })
+    memberWallets.value = data.entries ?? []
   } catch {
     memberWallets.value = []
   } finally {
@@ -290,7 +285,10 @@ watch(wallet, () => {
 
 .gates-page__detail {
   flex-shrink: 0;
-  width: 320px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: var(--theme-space-md);
   border-radius: var(--theme-radius-lg);
   border: var(--theme-border-thin) solid var(--theme-border);
@@ -326,6 +324,14 @@ watch(wallet, () => {
   background: var(--theme-bg-secondary);
   padding: 2px var(--theme-space-xs);
   border-radius: var(--theme-radius-sm);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1024px) {
+  .gates-page__detail {
+    max-width: 320px;
+  }
 }
 
 .gates-page__copy-btn {

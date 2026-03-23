@@ -1,22 +1,4 @@
 {
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "jsx": "preserve",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "esModuleInterop": true,
-    "lib": ["ESNext", "DOM"],
-    "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "~/*": ["./src/*"],
-      "~/lib/*": ["./src/lib/*"],
-      "~/components/*": ["./src/components/*"],
-      "~/composables/*": ["./src/composables/*"]
-    }
-  },
-  "include": ["src/**/*", "components.json"]
+  "extends": "./.nuxt/tsconfig.json",
+  "include": ["components.json"]
 }

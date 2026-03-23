@@ -10,6 +10,7 @@ import {
 } from '@decentraguild/web3/wallet'
 import { truncateAddress } from '@decentraguild/display'
 import { useAuth } from '@decentraguild/auth'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
 import type { RoleCard } from '~/components/DiscordRoleCardsCarousel.vue'
@@ -40,10 +41,19 @@ export function useDiscordPage() {
     loadingMe.value = true
     try {
       const supabase = useSupabase()
-      const { data, error } = await supabase.functions.invoke('discord-verify', {
-        body: { action: 'me' },
-      })
-      if (error || !(data as { linked?: boolean }).linked) {
+      let data: {
+        linked?: boolean
+        discordUserId?: string
+        linkedWallets?: Array<{ wallet: string; linkedAt: string }>
+      }
+      try {
+        data = await invokeEdgeFunction(supabase, 'discord-verify', { action: 'me' })
+      } catch {
+        signedIn.value = Boolean(auth.wallet.value)
+        me.value = null
+        return
+      }
+      if (!data.linked) {
         signedIn.value = Boolean(auth.wallet.value)
         me.value = null
         return
@@ -56,7 +66,7 @@ export function useDiscordPage() {
       }
       me.value = {
         discord_user_id: result.discordUserId,
-        linked_wallets: result.linkedWallets.map((w) => w.wallet),
+        linked_wallets: (result.linkedWallets ?? []).map((w) => w.wallet),
         session_wallet: auth.wallet.value ?? '',
       }
     } catch {
@@ -71,11 +81,8 @@ export function useDiscordPage() {
     if (!id) return
     try {
       const supabase = useSupabase()
-      const { data, error } = await supabase.functions.invoke('discord-server', {
-        body: { action: 'role-cards', tenantId: id },
-      })
-      if (error) return
-      roleCards.value = (data as { cards?: RoleCard[] }).cards ?? []
+      const data = await invokeEdgeFunction<{ cards?: RoleCard[] }>(supabase, 'discord-server', { action: 'role-cards', tenantId: id })
+      roleCards.value = data.cards ?? []
     } catch {
       roleCards.value = []
     }
@@ -89,11 +96,11 @@ export function useDiscordPage() {
     if (!ok) throw new Error(auth.error.value ?? 'Sign-in failed')
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('discord-verify', {
-      body: { action: 'link-additional', discordUserId },
+    const data = await invokeEdgeFunction<{ ok?: boolean; error?: string }>(supabase, 'discord-verify', {
+      action: 'link-additional',
+      discordUserId,
     })
-    if (error) throw new Error(error.message ?? 'Link failed')
-    const result = data as { ok?: boolean; error?: string }
+    const result = data
     if (result.error) throw new Error(result.error)
   }
 
@@ -122,12 +129,12 @@ export function useDiscordPage() {
     revoking.value = addr
     try {
       const supabase = useSupabase()
-      const { error } = await supabase.functions.invoke('discord-verify', {
-        body: { action: 'revoke', wallet: addr },
-      })
-      if (!error) {
+      try {
+        await invokeEdgeFunction(supabase, 'discord-verify', { action: 'revoke', wallet: addr })
         await fetchMe()
         await fetchRoleCards()
+      } catch {
+        /* keep prior state */
       }
     } finally {
       revoking.value = null

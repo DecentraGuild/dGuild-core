@@ -20,15 +20,6 @@ export default [
     },
   },
   {
-    files: [
-      '**/RaffleCreateForm.vue',
-      '**/OpsBundleCreateCard.vue',
-      '**/OpsBundleEditModal.vue',
-      '**/OpsVoucherEditModal.vue',
-    ],
-    rules: { 'vue/no-mutating-props': 'off' },
-  },
-  {
     files: ['**/*.vue'],
     languageOptions: {
       parserOptions: {

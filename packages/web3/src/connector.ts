@@ -19,16 +19,91 @@ export interface ConnectorStateSnapshot {
   connectors: { id: string; name: string; ready: boolean }[]
 }
 
+export type ConnectorWebOptions = {
+  appUrl?: string
+  walletConnectProjectId?: string
+}
+
+let webOptions: ConnectorWebOptions = {}
+
 let clientInstance: ConnectorClient | null = null
+
+let walletConnectDisplayUri: string | null = null
+const walletConnectUriListeners = new Set<(uri: string | null) => void>()
+
+function setWalletConnectDisplayUri(uri: string | null): void {
+  if (walletConnectDisplayUri === uri) return
+  walletConnectDisplayUri = uri
+  for (const fn of walletConnectUriListeners) {
+    fn(uri)
+  }
+}
+
+export function setConnectorWebOptions(opts: ConnectorWebOptions): void {
+  webOptions = { ...webOptions, ...opts }
+  clientInstance = null
+  setWalletConnectDisplayUri(null)
+}
+
+export function subscribeWalletConnectUri(listener: (uri: string | null) => void): () => void {
+  walletConnectUriListeners.add(listener)
+  listener(walletConnectDisplayUri)
+  return () => {
+    walletConnectUriListeners.delete(listener)
+  }
+}
+
+export function getWalletConnectDisplayUri(): string | null {
+  return walletConnectDisplayUri
+}
+
+export function clearWalletConnectDisplayUri(): void {
+  setWalletConnectDisplayUri(null)
+}
+
+function resolveAppUrl(): string {
+  const trimmed = webOptions.appUrl?.trim()
+  if (trimmed) return trimmed.replace(/\/$/, '')
+  if (typeof globalThis !== 'undefined' && 'location' in globalThis) {
+    const origin = (globalThis as { location?: { origin?: string } }).location?.origin
+    if (origin) return origin.replace(/\/$/, '')
+  }
+  return 'http://localhost:3002'
+}
+
+function createConnectorClient(): ConnectorClient {
+  const appUrl = resolveAppUrl()
+  const wcId = webOptions.walletConnectProjectId?.trim() ?? ''
+  const walletConnectConfig =
+    wcId.length > 0
+      ? {
+          projectId: wcId,
+          metadata: {
+            name: 'DecentraGuild',
+            description: 'Solana community dApp',
+            url: appUrl,
+            icons: [`${appUrl}/favicon.ico`],
+          },
+          onDisplayUri: (uri: string) => {
+            setWalletConnectDisplayUri(uri)
+          },
+        }
+      : undefined
+
+  return new ConnectorClient(
+    getDefaultConfig({
+      appName: 'DecentraGuild',
+      appUrl,
+      autoConnect: true,
+      enableMobile: true,
+      ...(walletConnectConfig ? { walletConnect: walletConnectConfig } : {}),
+    }),
+  )
+}
 
 function getClient(): ConnectorClient {
   if (!clientInstance) {
-    clientInstance = new ConnectorClient(
-      getDefaultConfig({
-        appName: 'DecentraGuild',
-        autoConnect: true,
-      })
-    )
+    clientInstance = createConnectorClient()
   }
   return clientInstance
 }
@@ -64,6 +139,7 @@ export function subscribeToConnectorState(listener: (state: ConnectorState) => v
 }
 
 export async function connectWallet(connectorId: WalletConnectorId): Promise<void> {
+  setWalletConnectDisplayUri(null)
   const client = getClient()
   await client.connectWallet(connectorId)
 }
@@ -71,9 +147,9 @@ export async function connectWallet(connectorId: WalletConnectorId): Promise<voi
 export async function disconnectWallet(): Promise<void> {
   const client = getClient()
   await client.disconnectWallet()
+  setWalletConnectDisplayUri(null)
 }
 
-/** True when the connected wallet is Backpack. Use to pick billing tx instruction order (memoFirst) so Backpack shows USDC. */
 export function isBackpackConnector(connectorId: string | null): boolean {
   if (!connectorId) return false
   return connectorId.toLowerCase().includes('backpack')
@@ -94,10 +170,6 @@ export function getWalletAndAccount(client: ConnectorClient): { wallet: Wallet; 
   return { wallet, account: walletAccount }
 }
 
-/**
- * Sign a message with the currently connected wallet.
- * Returns the signature as base64.
- */
 export async function signMessageForAuth(message: string): Promise<{ signature: string; message: string }> {
   const client = getClient()
   const pair = getWalletAndAccount(client)
@@ -120,11 +192,6 @@ export async function signMessageForAuth(message: string): Promise<{ signature: 
   return { signature, message }
 }
 
-/**
- * Returns a Supabase signInWithWeb3-compatible wallet adapter.
- * Use with supabase.auth.signInWithWeb3({ chain: 'solana', wallet, statement }).
- * Returns null when not connected.
- */
 export function getSupabaseWalletAdapter(): {
   publicKey: { toBase58: () => string }
   signMessage: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
@@ -147,10 +214,6 @@ export function getSupabaseWalletAdapter(): {
   }
 }
 
-/**
- * Sign a raw message (Uint8Array) with the connected wallet.
- * Returns the raw signature bytes. Used by Supabase signInWithWeb3.
- */
 export async function signMessageWithConnector(
   _connectorId: WalletConnectorId,
   message: Uint8Array,
@@ -173,11 +236,6 @@ export async function signMessageWithConnector(
     : new Uint8Array(Buffer.from(signatureBytes as string, 'base64'))
 }
 
-/**
- * Build an Anchor-compatible Wallet for escrow transactions from the connector.
- * Returns null when not connected or no account selected.
- * Uses the connector's signTransaction/signAllTransactions (Wallet Standard API).
- */
 export function getEscrowWalletFromConnector(): EscrowWallet | null {
   const client = getClient()
   const pair = getWalletAndAccount(client)

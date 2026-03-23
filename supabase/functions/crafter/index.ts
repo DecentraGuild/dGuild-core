@@ -13,40 +13,10 @@
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
-import { getWalletFromAuthHeader } from '../_shared/auth.ts'
+import { requireTenantAdmin } from '../_shared/auth.ts'
 import { verifyBillingPayment } from '../_shared/billing-verify.ts'
 
 const PENDING_EXPIRY_MINUTES = 30
-
-async function requireTenantAdmin(
-  authHeader: string | null,
-  tenantId: string,
-  req: Request,
-): Promise<{ ok: true; wallet: string } | { ok: false; response: Response }> {
-  const wallet = await getWalletFromAuthHeader(authHeader)
-  if (!wallet) {
-    return { ok: false, response: errorResponse('Not signed in. Connect your wallet and sign in first.', req, 401) }
-  }
-
-  const db = getAdminClient()
-  const { data: tenant, error } = await db
-    .from('tenant_config')
-    .select('admins')
-    .eq('id', tenantId)
-    .maybeSingle()
-
-  if (error || !tenant) {
-    return { ok: false, response: errorResponse('Tenant not found', req, 404) }
-  }
-
-  const admins = tenant.admins as string[]
-  const isAdmin = Array.isArray(admins) && admins.some((a) => String(a).toLowerCase() === wallet.toLowerCase())
-  if (!isAdmin) {
-    return { ok: false, response: errorResponse('Tenant admin only', req, 403) }
-  }
-
-  return { ok: true, wallet }
-}
 
 Deno.serve(async (req: Request) => {
   const preflight = handlePreflight(req)
@@ -64,11 +34,10 @@ Deno.serve(async (req: Request) => {
   const tenantId = (body.tenantId as string)?.trim()
   if (!tenantId) return errorResponse('tenantId required', req)
 
-  const check = await requireTenantAdmin(authHeader, tenantId, req)
+  const db = getAdminClient()
+  const check = await requireTenantAdmin(authHeader, tenantId, db)
   if (!check.ok) return check.response
   const adminWallet = check.wallet
-
-  const db = getAdminClient()
   const now = new Date()
   const nowIso = now.toISOString()
 

@@ -10,10 +10,10 @@ import {
 import { PublicKey } from '@solana/web3.js'
 import { useTenantStore } from '~/stores/tenant'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import type { Ref } from 'vue'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
-import { getEdgeFunctionErrorMessage } from '~/utils/edgeFunctionError'
 import type { TenantConfig } from '@decentraguild/core'
 
 export function useSlugClaim(opts: {
@@ -96,17 +96,14 @@ export function useSlugClaim(opts: {
     saving.value = true
     saveError.value = null
     try {
-      const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
-        body: {
-          action: 'quote',
-          tenantId: id,
-          productKey: 'admin',
-          meterOverrides: { slug: 1 },
-          durationDays: 365,
-        },
-      })
-      if (quoteErr) throw new Error(getEdgeFunctionErrorMessage(quoteErr, 'Quote failed'))
-      const quote = quoteData as { quoteId: string; priceUsdc: number }
+      const quoteData = await invokeEdgeFunction<{ quoteId: string; priceUsdc: number }>(supabase, 'billing', {
+        action: 'quote',
+        tenantId: id,
+        productKey: 'admin',
+        meterOverrides: { slug: 1 },
+        durationDays: 365,
+      }, { errorFallback: 'Quote failed' })
+      const quote = quoteData
       if (!quote?.quoteId) throw new Error('No quote returned')
 
       if (quote.priceUsdc <= 0) {
@@ -118,16 +115,18 @@ export function useSlugClaim(opts: {
       if (!wallet?.publicKey) throw new Error('Wallet not connected')
       const payerWallet = wallet.publicKey.toBase58()
 
-      const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
-        body: {
+      const chargeData = await invokeEdgeFunction<{ paymentId: string; amountUsdc: number; memo: string; recipientAta: string }>(
+        supabase,
+        'billing',
+        {
           action: 'charge',
           quoteId: quote.quoteId,
           payerWallet,
           paymentMethod: 'usdc',
         },
-      })
-      if (chargeErr) throw new Error(getEdgeFunctionErrorMessage(chargeErr, 'Charge failed'))
-      const charge = chargeData as { paymentId: string; amountUsdc: number; memo: string; recipientAta: string }
+        { errorFallback: 'Charge failed' },
+      )
+      const charge = chargeData
       if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
       const notificationId = `slug-extend-${charge.paymentId}`
@@ -153,15 +152,14 @@ export function useSlugClaim(opts: {
           wallet.publicKey,
         )
 
-        const { data: confirmData, error: confirmError } = await supabase.functions.invoke(
+        const confirmData = await invokeEdgeFunction<{ tenant?: Record<string, unknown> }>(
+          supabase,
           'billing',
-          {
-            body: { action: 'confirm', paymentId: charge.paymentId, txSignature },
-          },
+          { action: 'confirm', paymentId: charge.paymentId, txSignature },
+          { errorFallback: 'Confirm failed' },
         )
-        if (confirmError) throw new Error(getEdgeFunctionErrorMessage(confirmError, 'Confirm failed'))
 
-        const result = confirmData as { tenant?: Record<string, unknown> }
+        const result = confirmData
         if (result.tenant) tenantStore.setTenant(result.tenant as unknown as TenantConfig)
         await fetchSubscription('slug')
 

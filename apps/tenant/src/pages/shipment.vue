@@ -318,7 +318,7 @@ watch([wallet, rpcUrl], () => fetchAssets(), { immediate: true })
 .shipment-page__card {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   min-height: 100px;
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
@@ -369,5 +369,11 @@ watch([wallet, rpcUrl], () => fetchAssets(), { immediate: true })
 .shipment-page__card-right--fade {
   mask-image: linear-gradient(to right, transparent 0%, black 50%);
   -webkit-mask-image: linear-gradient(to right, transparent 0%, black 50%);
+}
+
+@media (min-width: 640px) {
+  .shipment-page__card {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 </style>

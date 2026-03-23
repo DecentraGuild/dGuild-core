@@ -1,16 +1,6 @@
-/**
- * Ensures tenant context for current tenant (id or slug from URL/subdomain).
- * On single host (e.g. dapp.dguild.org) we use tenant ID in URL and cache so
- * subscription and ops are keyed by id; slug is display-only and can change.
- */
 import { getTenantSlugFromHost } from '@decentraguild/core'
 import { useThemeStore } from '@decentraguild/ui'
 import { useTenantStore } from '~/stores/tenant'
-import { MODULE_NAV, IMPLEMENTED_MODULES } from '~/config/modules'
-
-const MODULE_PATHS = Array.from(IMPLEMENTED_MODULES)
-  .map((id) => MODULE_NAV[id]?.path)
-  .filter((path): path is string => Boolean(path))
 
 const LAST_TENANT_STORAGE_KEY = 'dg_last_tenant'
 
@@ -31,6 +21,14 @@ function setCachedTenantId(tenantId: string): void {
   } catch {
     /* ignore */
   }
+}
+
+function queryTenantAsString(q: unknown): string | null {
+  if (q == null) return null
+  const raw = Array.isArray(q) ? q[0] : q
+  if (typeof raw !== 'string') return null
+  const t = raw.trim()
+  return t || null
 }
 
 /** Tenant param from URL (id or slug). On single host with no param, uses cached tenant id. */
@@ -58,10 +56,6 @@ function getTenantParamFromUrl(): string | null {
   return slug || null
 }
 
-function isModulePath(path: string): boolean {
-  return MODULE_PATHS.some((p) => path === p || path.startsWith(p + '/'))
-}
-
 export default defineNuxtPlugin(async () => {
   if (import.meta.server) return
 
@@ -70,7 +64,6 @@ export default defineNuxtPlugin(async () => {
   const route = useRoute()
   const router = useRouter()
   const config = useRuntimeConfig()
-  const pollSeconds = Number((config.public as { tenantContextPollSeconds?: number }).tenantContextPollSeconds ?? 60)
 
   async function ensureTenantContext(slug: string | null) {
     if (!slug) return
@@ -108,7 +101,7 @@ export default defineNuxtPlugin(async () => {
   const tenantIdForUrl = tenantStore.tenantId ?? tenantStore.slug
 
   if (isSingleHost && tenantIdForUrl && router) {
-    const currentQuery = route.query?.tenant
+    const currentQuery = queryTenantAsString(route.query.tenant)
     if (currentQuery !== tenantIdForUrl) {
       router.replace({ path: route.path, query: { ...route.query, tenant: tenantIdForUrl } })
     }
@@ -129,58 +122,15 @@ export default defineNuxtPlugin(async () => {
   )
 
   watch(
-    () => [route.fullPath, route.query?.tenant],
+    () => [route.fullPath, route.query.tenant] as const,
     () => {
       const newParam = getTenantParamFromUrl()
-      if (newParam && newParam !== tenantStore.slug && newParam !== tenantStore.tenantId) {
+      if (!newParam) return
+      if (newParam !== tenantStore.slug && newParam !== tenantStore.tenantId) {
+        tenantStore.clearTenant()
         tenantStore.setSlug(newParam)
-        void ensureTenantContext(newParam)
+        void tenantStore.fetchTenantContext(newParam)
       }
     }
   )
-
-  watch(
-    () => route.path,
-    (newPath, oldPath) => {
-      if (newPath !== oldPath && isModulePath(newPath) && (tenantStore.slug ?? tenantStore.tenantId)) {
-        void tenantStore.refetchTenantContext()
-      }
-    }
-  )
-
-  if (pollSeconds > 0 && typeof document !== 'undefined') {
-    let pollTimer: ReturnType<typeof setInterval> | null = null
-    function startPoll() {
-      if (pollTimer) return
-      pollTimer = setInterval(() => {
-        if (document.visibilityState === 'visible' && (tenantStore.slug ?? tenantStore.tenantId) && isModulePath(route.path)) {
-          void tenantStore.refetchTenantContext()
-        }
-      }, pollSeconds * 1000)
-    }
-    function stopPoll() {
-      if (pollTimer) {
-        clearInterval(pollTimer)
-        pollTimer = null
-      }
-    }
-    watch(
-      () => route.path,
-      () => {
-        if (document.visibilityState === 'visible' && isModulePath(route.path)) {
-          startPoll()
-        } else {
-          stopPoll()
-        }
-      },
-      { immediate: true }
-    )
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') {
-        stopPoll()
-      } else if (isModulePath(route.path)) {
-        startPoll()
-      }
-    })
-  }
 })

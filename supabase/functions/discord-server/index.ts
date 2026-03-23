@@ -12,28 +12,7 @@
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
-import { getWalletFromAuthHeader } from '../_shared/auth.ts'
-
-async function requireTenantAdmin(
-  authHeader: string | null,
-  tenantId: string,
-  db: ReturnType<typeof getAdminClient>,
-): Promise<{ ok: true } | { ok: false; response: Response }> {
-  const wallet = await getWalletFromAuthHeader(authHeader)
-  if (!wallet) {
-    return { ok: false, response: new Response(JSON.stringify({ error: 'Unauthenticated' }), { status: 401 }) }
-  }
-  const { data: tenant } = await db
-    .from('tenant_config')
-    .select('admins')
-    .eq('id', tenantId)
-    .maybeSingle()
-  const admins = (tenant?.admins as string[]) ?? []
-  if (!admins.includes(wallet)) {
-    return { ok: false, response: new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 }) }
-  }
-  return { ok: true }
-}
+import { requireTenantAdmin } from '../_shared/auth.ts'
 
 Deno.serve(async (req: Request) => {
   const preflight = handlePreflight(req)

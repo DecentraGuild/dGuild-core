@@ -52,7 +52,7 @@
                       <Button variant="ghost" size="sm" @click="openActionModal('edit', t)">Edit</Button>
                     </template>
                     <a
-                      :href="solscanUrl(t.mint)"
+                      :href="tokenUrl(t.mint)"
                       target="_blank"
                       rel="noopener"
                       class="crafter-card__link"
@@ -129,62 +129,26 @@
             <p class="crafter-create-form__hint">
               Publish metadata on-chain. Edit name/symbol if needed (e.g. for ops-imported tokens).
             </p>
-            <FormInput
-              v-model="publishForm.name"
-              label="Name"
-              placeholder="Token name"
-            />
-            <FormInput
-              v-model="publishForm.symbol"
-              label="Symbol"
-              placeholder="e.g. TKN"
-            />
-            <FormInput
-              v-model="publishForm.description"
-              label="Description"
-              placeholder="Optional"
-            />
-            <FormInput
-              v-model="publishForm.imageUrl"
-              label="Image URL"
-              placeholder="Optional"
-            />
-            <FormInput
-              v-model="publishForm.sellerFeeBasisPoints"
-              type="number"
-              label="Royalty (basis points)"
-              placeholder="0"
-            />
+            <FormInput v-model="publishForm.name" label="Name" placeholder="Token name" />
+            <FormInput v-model="publishForm.symbol" label="Symbol" placeholder="e.g. TKN" />
+            <FormInput v-model="publishForm.description" label="Description" placeholder="Optional" />
+            <FormInput v-model="publishForm.imageUrl" label="Image URL" placeholder="Optional" />
+            <FormInput v-model="publishForm.sellerFeeBasisPoints" type="number" label="Royalty (basis points)" placeholder="0" />
             <OptionsSelect
               v-model="publishForm.storageBackend"
               label="Storage"
-              :options="[
-                { value: 'api', label: 'DecentraGuild API' },
-                { value: 'selfhost', label: 'Self-hosted' },
-              ]"
+              :options="[{ value: 'api', label: 'DecentraGuild API' }, { value: 'selfhost', label: 'Self-hosted' }]"
               content-class="z-[9999]"
             />
             <template v-if="publishForm.storageBackend === 'api'">
-              <Button
-                type="button"
-                variant="default"
-                :disabled="!canPublishMedia || publishUploadLoading"
-                @click="onUploadPublishMetadata"
-              >
+              <Button type="button" variant="default" :disabled="!canPublishMedia || publishUploadLoading" @click="onUploadPublishMetadata">
                 <Icon v-if="publishUploadLoading" icon="lucide:loader-2" class="crafter-create-form__spinner" />
                 <span v-else>Upload to dGuild</span>
               </Button>
               <p v-if="publishForm.metadataUri" class="crafter-create-form__uri-hint">Metadata uploaded</p>
             </template>
             <template v-else>
-              <Button
-                type="button"
-                variant="brand"
-                :disabled="!canPublishMedia"
-                @click="onGeneratePublishJson"
-              >
-                Generate JSON
-              </Button>
+              <Button type="button" variant="brand" :disabled="!canPublishMedia" @click="onGeneratePublishJson">Generate JSON</Button>
               <div v-if="generatedPublishJson" class="crafter-create-form__output">
                 <div class="crafter-create-form__json-actions">
                   <Button variant="brand" size="sm" @click="copyPublishJson">Copy</Button>
@@ -193,18 +157,11 @@
                 <pre class="crafter-create-form__pre">{{ publishJsonPreview }}</pre>
               </div>
               <p class="crafter-create-form__selfhost-hint">Host the JSON, then paste the URI below.</p>
-              <FormInput
-                v-model="publishForm.metadataUri"
-                label="Metadata URI"
-                placeholder="https://arweave.net/... or IPFS link"
-                required
-              />
+              <FormInput v-model="publishForm.metadataUri" label="Metadata URI" placeholder="https://arweave.net/... or IPFS link" required />
             </template>
             <p v-if="publishError" class="crafter-create-form__error">{{ publishError }}</p>
             <div class="crafter-create-form__actions">
-              <Button variant="secondary" type="button" @click="showPublishModal = false">
-                Cancel
-              </Button>
+              <Button variant="secondary" type="button" @click="showPublishModal = false">Cancel</Button>
               <Button type="submit" :disabled="publishSubmitting || !canPublish">
                 <Icon v-if="publishSubmitting" icon="lucide:loader-2" class="crafter-create-form__spinner" />
                 <span v-else>Publish metadata</span>
@@ -239,33 +196,18 @@
               <OptionsSelect
                 v-model="editForm.storageBackend"
                 label="Storage"
-                :options="[
-                  { value: 'api', label: 'DecentraGuild API' },
-                  { value: 'selfhost', label: 'Self-hosted' },
-                ]"
+                :options="[{ value: 'api', label: 'DecentraGuild API' }, { value: 'selfhost', label: 'Self-hosted' }]"
                 content-class="z-[9999]"
               />
               <template v-if="editForm.storageBackend === 'api'">
-                <Button
-                  type="button"
-                  variant="default"
-                  :disabled="!canEditUpload || editUploadLoading"
-                  @click="onEditUploadMetadata"
-                >
+                <Button type="button" variant="default" :disabled="!canEditUpload || editUploadLoading" @click="onEditUploadMetadata">
                   <Icon v-if="editUploadLoading" icon="lucide:loader-2" class="crafter-create-form__spinner" />
                   <span v-else>Upload to dGuild</span>
                 </Button>
                 <p v-if="editForm.metadataUri" class="crafter-create-form__uri-hint">Metadata uploaded</p>
               </template>
               <template v-else>
-                <Button
-                  type="button"
-                  variant="brand"
-                  :disabled="!canEditUpload"
-                  @click="onGenerateEditJson"
-                >
-                  Generate JSON
-                </Button>
+                <Button type="button" variant="brand" :disabled="!canEditUpload" @click="onGenerateEditJson">Generate JSON</Button>
                 <div v-if="generatedEditJson" class="crafter-create-form__output">
                   <div class="crafter-create-form__json-actions">
                     <Button variant="brand" size="sm" @click="copyEditJson">Copy</Button>
@@ -274,12 +216,7 @@
                   <pre class="crafter-create-form__pre">{{ editJsonPreview }}</pre>
                 </div>
                 <p class="crafter-create-form__selfhost-hint">Host the JSON, then paste the URI below.</p>
-                <FormInput
-                  v-model="editForm.metadataUri"
-                  label="Metadata URI"
-                  placeholder="https://arweave.net/... or IPFS link"
-                  required
-                />
+                <FormInput v-model="editForm.metadataUri" label="Metadata URI" placeholder="https://arweave.net/... or IPFS link" required />
               </template>
             </template>
             <p v-if="actionError" class="crafter-create-form__error">{{ actionError }}</p>
@@ -298,12 +235,15 @@
 </template>
 
 <script setup lang="ts">
-import { truncateAddress, formatRawTokenAmount, toRawUnits } from '@decentraguild/display'
+import { truncateAddress, formatRawTokenAmount } from '@decentraguild/display'
+import { useExplorerLinks } from '@decentraguild/nuxt-composables'
 import { Icon } from '@iconify/vue'
 import { Button } from '~/components/ui/button'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import OptionsSelect from '~/components/ui/options-select/OptionsSelect.vue'
-import { useCrafter, type CrafterToken, type CrafterCreateForm } from '~/composables/crafter/useCrafter'
+import { useCrafter, type CrafterCreateForm } from '~/composables/crafter/useCrafter'
+import { useCrafterPublish } from '~/composables/crafter/useCrafterPublish'
+import { useCrafterActions } from '~/composables/crafter/useCrafterActions'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import AdminPricingWidget from '~/components/admin/AdminPricingWidget.vue'
 import { useTenantStore } from '~/stores/tenant'
@@ -315,30 +255,14 @@ definePageMeta({ middleware: 'admin-auth' })
 
 const { subscriptions, fetchSubscription } = useAdminSubscriptions()
 const tenantStore = useTenantStore()
+const auth = useAuth()
 const crafterModuleState = computed(() => getModuleState(tenantStore.tenant?.modules?.crafter))
-
-const clampBasisPoints = (v: unknown) => Math.max(0, Math.min(10000, Number(v) || 0))
 const crafterEnabled = computed(() => {
   const mod = tenantStore.tenant?.modules?.crafter
   return mod && isModuleVisibleInAdmin(getModuleState(mod))
 })
 
-const auth = useAuth()
-const {
-  tokens,
-  loading,
-  createSubmitting,
-  createError,
-  createTxStatus,
-  list,
-  create,
-  publishMetadata,
-  prepareMetadata,
-  fetchSupplyAndBalance,
-  mint: doMint,
-  burn: doBurn,
-  editMetadata: doEditMetadata,
-} = useCrafter()
+const { tokens, loading, createSubmitting, createError, createTxStatus, list, create, publishMetadata, prepareMetadata, fetchSupplyAndBalance, mint: doMint, burn: doBurn, editMetadata: doEditMetadata } = useCrafter()
 
 const supplyByMint = ref<Record<string, string>>({})
 const balanceByMint = ref<Record<string, string>>({})
@@ -351,371 +275,43 @@ async function refreshSupplyAndBalance() {
     balanceByMint.value[t.mint] = formatRawTokenAmount(walletBalance, t.decimals, 'SPL')
   }
 }
-async function refreshAll() {
-  await list()
-  await refreshSupplyAndBalance()
-}
+async function refreshAll() { await list(); await refreshSupplyAndBalance() }
 
 const canCreate = computed(() => true)
-
 const showCreateModal = ref(false)
-const createForm = ref<CrafterCreateForm>({
-  decimals: '6',
-})
-
-const showPublishModal = ref(false)
-const publishToken = ref<CrafterToken | null>(null)
-const publishSubmitting = ref(false)
-const publishError = ref<string | null>(null)
-const publishUploadLoading = ref(false)
-const publishForm = ref({
-  name: '',
-  symbol: '',
-  metadataUri: '',
-  description: '',
-  imageUrl: '',
-  sellerFeeBasisPoints: '0',
-  storageBackend: 'api' as 'api' | 'selfhost',
-})
-const generatedPublishJson = ref<Record<string, unknown> | null>(null)
-
-const canPublishMedia = computed(() => Boolean(publishToken.value))
-const publishJsonPreview = computed(() =>
-  generatedPublishJson.value ? JSON.stringify(generatedPublishJson.value, null, 2) : ''
-)
-const canPublish = computed(() => publishForm.value.metadataUri.trim().length > 0)
-
-function openPublishModal(t: CrafterToken) {
-  publishToken.value = t
-  publishForm.value = {
-    name: t.name || '',
-    symbol: t.symbol || '',
-    metadataUri: '',
-    description: '',
-    imageUrl: '',
-    sellerFeeBasisPoints: '0',
-    storageBackend: 'api',
-  }
-  generatedPublishJson.value = null
-  publishError.value = null
-  showPublishModal.value = true
-}
-
-async function onUploadPublishMetadata() {
-  if (!publishToken.value) return
-  publishUploadLoading.value = true
-  publishError.value = null
-  try {
-    const result = await prepareMetadata({
-      name: publishForm.value.name.trim() || publishToken.value.name || 'Token',
-      symbol: publishForm.value.symbol.trim() || publishToken.value.symbol || 'TKN',
-      decimals: publishToken.value.decimals,
-      description: '',
-      imageUrl: publishForm.value.imageUrl,
-      sellerFeeBasisPoints: clampBasisPoints(publishForm.value.sellerFeeBasisPoints),
-    })
-    if (result.metadataUri) {
-      publishForm.value.metadataUri = result.metadataUri
-    } else if (result.error) {
-      publishError.value = result.error
-    }
-  } finally {
-    publishUploadLoading.value = false
-  }
-}
-
-function onGeneratePublishJson() {
-  if (!publishToken.value) return
-  const tenantId = tenantStore.tenantId ?? ''
-  const meta = {
-    name: publishForm.value.name.trim() || publishToken.value.name || 'Token',
-    symbol: publishForm.value.symbol.trim() || publishToken.value.symbol || 'TKN',
-    description: publishForm.value.description.trim() || '',
-    image: publishForm.value.imageUrl.trim() || undefined,
-    seller_fee_basis_points: clampBasisPoints(publishForm.value.sellerFeeBasisPoints),
-    external_url: '',
-    attributes: [],
-    properties: { files: [], category: 'token' },
-    decentraguild: {
-      tenantId,
-      createdVia: 'crafter',
-      version: 1,
-    },
-  }
-  generatedPublishJson.value = meta
-}
-
-function copyPublishJson() {
-  if (!generatedPublishJson.value) return
-  navigator.clipboard.writeText(JSON.stringify(generatedPublishJson.value, null, 2))
-}
-
-function downloadPublishJson() {
-  if (!generatedPublishJson.value || !publishToken.value) return
-  const blob = new Blob([JSON.stringify(generatedPublishJson.value, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `metadata-${publishToken.value.symbol.toLowerCase() || 'token'}.json`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-async function onPublishSubmit() {
-  if (!publishToken.value || !canPublish.value) return
-  publishSubmitting.value = true
-  publishError.value = null
-  try {
-    const result = await publishMetadata(publishToken.value.mint, {
-      metadataUri: publishForm.value.metadataUri.trim(),
-      name: publishForm.value.name.trim() || undefined,
-      symbol: publishForm.value.symbol.trim() || undefined,
-      description: publishForm.value.description.trim() || undefined,
-      imageUrl: publishForm.value.imageUrl.trim() || undefined,
-      sellerFeeBasisPoints: clampBasisPoints(publishForm.value.sellerFeeBasisPoints),
-    })
-    if (result.success) {
-      showPublishModal.value = false
-      publishToken.value = null
-    } else {
-      publishError.value = result.error ?? 'Publish failed'
-    }
-  } finally {
-    publishSubmitting.value = false
-  }
-}
-
-function solscanUrl(mint: string): string {
-  const cluster = process.env.NODE_ENV === 'production' ? '' : '?cluster=devnet'
-  return `https://solscan.io/token/${mint}${cluster}`
-}
-
-async function onEditUploadMetadata() {
-  if (!actionToken.value) return
-  editUploadLoading.value = true
-  actionError.value = null
-  try {
-    const result = await prepareMetadata({
-      name: editForm.value.name.trim() || actionToken.value.name || 'Token',
-      symbol: editForm.value.symbol.trim() || actionToken.value.symbol || 'TKN',
-      decimals: actionToken.value.decimals,
-      description: editForm.value.description.trim() || '',
-      imageUrl: editForm.value.imageUrl,
-      sellerFeeBasisPoints: clampBasisPoints(editForm.value.sellerFeeBasisPoints),
-    })
-    if (result.metadataUri) editForm.value.metadataUri = result.metadataUri
-    else if (result.error) actionError.value = result.error
-  } finally {
-    editUploadLoading.value = false
-  }
-}
-
-function onGenerateEditJson() {
-  if (!actionToken.value) return
-  const tenantId = tenantStore.tenantId ?? ''
-  const meta = {
-    name: editForm.value.name.trim() || actionToken.value.name || 'Token',
-    symbol: editForm.value.symbol.trim() || actionToken.value.symbol || 'TKN',
-    description: editForm.value.description.trim() || '',
-    image: editForm.value.imageUrl.trim() || undefined,
-    seller_fee_basis_points: clampBasisPoints(editForm.value.sellerFeeBasisPoints),
-    external_url: '',
-    attributes: [],
-    properties: { files: [], category: 'token' },
-    decentraguild: {
-      tenantId,
-      createdVia: 'crafter',
-      version: 1,
-    },
-  }
-  generatedEditJson.value = meta
-}
-
-function copyEditJson() {
-  if (!generatedEditJson.value) return
-  navigator.clipboard.writeText(JSON.stringify(generatedEditJson.value, null, 2))
-}
-
-function downloadEditJson() {
-  if (!generatedEditJson.value || !actionToken.value) return
-  const blob = new Blob([JSON.stringify(generatedEditJson.value, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `metadata-${actionToken.value.symbol.toLowerCase() || 'token'}.json`
-  a.click()
-  URL.revokeObjectURL(url)
-}
+const createForm = ref<CrafterCreateForm>({ decimals: '6' })
 
 async function onCreateSubmit() {
   const decimals = Number(createForm.value.decimals) || 6
   const result = await create({ ...createForm.value, decimals })
-  if (result.success) {
-    showCreateModal.value = false
-    createForm.value = { decimals: '6' }
-  }
+  if (result.success) { showCreateModal.value = false; createForm.value = { decimals: '6' } }
 }
 
-type ActionType = 'mint' | 'burn' | 'edit'
-const actionType = ref<ActionType | null>(null)
-const actionToken = ref<CrafterToken | null>(null)
-const actionError = ref<string | null>(null)
-const actionSubmitting = ref(false)
-const actionForm = ref<Record<string, string>>({})
+const {
+  showPublishModal, publishToken, publishSubmitting, publishError, publishUploadLoading,
+  publishForm, generatedPublishJson, publishJsonPreview, canPublishMedia, canPublish,
+  openPublishModal, onUploadPublishMetadata, onGeneratePublishJson, copyPublishJson, downloadPublishJson, onPublishSubmit,
+} = useCrafterPublish(prepareMetadata, publishMetadata)
 
-const editForm = ref({
-  name: '',
-  symbol: '',
-  description: '',
-  imageUrl: '',
-  sellerFeeBasisPoints: '0',
-  storageBackend: 'api' as 'api' | 'selfhost',
-  metadataUri: '',
-})
-const editUploadLoading = ref(false)
-const generatedEditJson = ref<Record<string, unknown> | null>(null)
-const canEditUpload = computed(() => Boolean(actionToken.value))
-const editJsonPreview = computed(() =>
-  generatedEditJson.value ? JSON.stringify(generatedEditJson.value, null, 2) : ''
-)
+const {
+  actionType, actionToken, actionError, actionSubmitting, actionForm,
+  editForm, editUploadLoading, generatedEditJson, editJsonPreview, canEditUpload,
+  actionModalTitle, actionSubmitLabel, canSubmitAction,
+  openActionModal, onEditUploadMetadata, onGenerateEditJson, copyEditJson, downloadEditJson, onActionSubmit,
+} = useCrafterActions(doMint, doBurn, doEditMetadata, prepareMetadata, refreshAll)
 
-const actionModalTitle = computed(() =>
-  actionType.value === 'edit' ? 'Edit metadata' : actionType.value ? actionType.value.charAt(0).toUpperCase() + actionType.value.slice(1) : ''
-)
-const actionSubmitLabel = computed(() =>
-  actionType.value === 'edit' ? 'Save' : actionType.value ?? ''
-)
-const canSubmitAction = computed(() => {
-  if (!actionType.value || !actionToken.value) return false
-  switch (actionType.value) {
-    case 'mint':
-      return actionForm.value.destination?.trim() && actionForm.value.amount?.trim()
-    case 'burn':
-      return !!actionForm.value.amount?.trim()
-    case 'edit':
-      return editForm.value.name?.trim() && editForm.value.symbol?.trim() && editForm.value.metadataUri?.trim()
-    default:
-      return false
-  }
-})
-
-function openActionModal(type: ActionType, t: CrafterToken) {
-  actionType.value = type
-  actionToken.value = t
-  actionError.value = null
-  if (type === 'mint') actionForm.value = { destination: auth.wallet.value ?? '', amount: '' }
-  else if (type === 'burn') actionForm.value = { amount: '' }
-  else if (type === 'edit') {
-    editForm.value = {
-      name: t.name || '',
-      symbol: t.symbol || '',
-      description: t.description || '',
-      imageUrl: t.image_url || '',
-      sellerFeeBasisPoints: String(t.seller_fee_basis_points ?? 0),
-      storageBackend: t.storage_backend ?? 'api',
-      metadataUri: t.metadata_uri || '',
-    }
-    generatedEditJson.value = null
-  } else actionForm.value = {}
-}
-
-async function onActionSubmit() {
-  const token = actionToken.value
-  const type = actionType.value
-  if (!token || !type) return
-
-  if (type === 'mint') {
-    const dest = actionForm.value.destination?.trim()
-    const amt = actionForm.value.amount?.trim()
-    if (!dest || !amt) return
-    const amountRaw = BigInt(toRawUnits(parseFloat(amt) || 0, token.decimals))
-    if (amountRaw <= 0n) {
-      actionError.value = 'Amount must be positive'
-      return
-    }
-    actionSubmitting.value = true
-    actionError.value = null
-    try {
-      const result = await doMint(token.mint, dest, amountRaw)
-      if (result.success) {
-        actionType.value = null
-        await refreshAll()
-      } else {
-        actionError.value = result.error ?? 'Mint failed'
-      }
-    } finally {
-      actionSubmitting.value = false
-    }
-    return
-  }
-
-  if (type === 'burn') {
-    const amt = actionForm.value.amount?.trim()
-    if (!amt) return
-    const amountRaw = BigInt(toRawUnits(parseFloat(amt) || 0, token.decimals))
-    if (amountRaw <= 0n) {
-      actionError.value = 'Amount must be positive'
-      return
-    }
-    actionSubmitting.value = true
-    actionError.value = null
-    try {
-      const result = await doBurn(token.mint, amountRaw)
-      if (result.success) {
-        actionType.value = null
-        await refreshAll()
-      } else {
-        actionError.value = result.error ?? 'Burn failed'
-      }
-    } finally {
-      actionSubmitting.value = false
-    }
-    return
-  }
-
-  if (type === 'edit') {
-    const name = editForm.value.name?.trim()
-    const symbol = editForm.value.symbol?.trim()
-    const uri = editForm.value.metadataUri?.trim()
-    if (!name || !symbol || !uri) return
-    actionSubmitting.value = true
-    actionError.value = null
-    try {
-      const result = await doEditMetadata(token.mint, {
-        name,
-        symbol,
-        description: editForm.value.description?.trim() || undefined,
-        imageUrl: editForm.value.imageUrl?.trim() || undefined,
-        sellerFeeBasisPoints: clampBasisPoints(editForm.value.sellerFeeBasisPoints),
-        metadataUri: uri,
-      })
-      if (result.success) actionType.value = null
-      else actionError.value = result.error ?? 'Edit failed'
-    } finally {
-      actionSubmitting.value = false
-    }
-    return
-  }
-}
+const { tokenUrl } = useExplorerLinks()
 
 onMounted(() => {
-  if (crafterEnabled.value) {
-    void list()
-    void fetchSubscription('crafter')
-  }
+  if (crafterEnabled.value) { void list(); void fetchSubscription('crafter') }
 })
 watch(crafterEnabled, (enabled) => {
-  if (enabled) {
-    void list()
-    void fetchSubscription('crafter')
-  }
+  if (enabled) { void list(); void fetchSubscription('crafter') }
 })
 watch(
   () => [tokens.value, auth.wallet.value],
-  () => {
-    if (tokens.value.length && crafterEnabled.value) void refreshSupplyAndBalance()
-  },
-  { immediate: true }
+  () => { if (tokens.value.length && crafterEnabled.value) void refreshSupplyAndBalance() },
+  { immediate: true },
 )
 </script>
 
@@ -851,9 +447,7 @@ watch(
   margin-bottom: var(--theme-space-sm);
 }
 
-.crafter-card__stat {
-  display: block;
-}
+.crafter-card__stat { display: block; }
 
 .crafter-card__actions {
   display: flex;
@@ -867,9 +461,7 @@ watch(
   color: var(--theme-primary);
 }
 
-.crafter-card__link:hover {
-  text-decoration: underline;
-}
+.crafter-card__link:hover { text-decoration: underline; }
 
 .crafter-create-form {
   display: flex;
@@ -897,11 +489,6 @@ watch(
   margin-top: var(--theme-space-md);
   padding-top: var(--theme-space-md);
   border-top: var(--theme-border-thin) solid var(--theme-border);
-}
-
-.crafter-create-form__output h4 {
-  font-size: var(--theme-font-md);
-  margin: 0 0 var(--theme-space-sm);
 }
 
 .crafter-create-form__json-actions {
@@ -940,9 +527,5 @@ watch(
 
 .crafter-create-form__spinner {
   animation: crafter-spin 1s linear infinite;
-}
-
-.crafter-page__btn-icon {
-  margin-right: var(--theme-space-xs);
 }
 </style>

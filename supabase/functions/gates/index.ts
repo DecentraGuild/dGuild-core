@@ -17,7 +17,7 @@
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
-import { getWalletFromAuthHeader } from '../_shared/auth.ts'
+import { getWalletFromAuthHeader, requireTenantAdmin } from '../_shared/auth.ts'
 import { getSolanaConnection } from '../_shared/solana-connection.ts'
 import { Connection, PublicKey } from 'npm:@solana/web3.js@1'
 
@@ -120,11 +120,8 @@ Deno.serve(async (req: Request) => {
     const tenantId = body.tenantId as string
     if (!tenantId) return errorResponse('tenantId required', req)
 
-    const wallet = await getWalletFromAuthHeader(authHeader)
-    if (!wallet) return errorResponse('Unauthenticated', req, 401)
-
-    const { data: tenant } = await db.from('tenant_config').select('admins').eq('id', tenantId).maybeSingle()
-    if (!((tenant?.admins as string[]) ?? []).includes(wallet)) return errorResponse('Forbidden', req, 403)
+    const check = await requireTenantAdmin(authHeader, tenantId, db, req)
+    if (!check.ok) return check.response
 
     const lists = await getListsForTenant(db, tenantId)
     return jsonResponse({ lists }, req)
@@ -188,11 +185,10 @@ Deno.serve(async (req: Request) => {
     const tenantId = body.tenantId as string
     if (!tenantId) return errorResponse('tenantId required', req)
 
-    const wallet = await getWalletFromAuthHeader(authHeader)
-    if (!wallet) return errorResponse('Unauthenticated', req, 401)
+    const check = await requireTenantAdmin(authHeader, tenantId, db, req)
+    if (!check.ok) return check.response
 
-    const { data: tenant } = await db.from('tenant_config').select('id, admins').eq('id', tenantId).maybeSingle()
-    if (!((tenant?.admins as string[]) ?? []).includes(wallet)) return errorResponse('Forbidden', req, 403)
+    const { data: tenant } = await db.from('tenant_config').select('id').eq('id', tenantId).maybeSingle()
 
     if (action === 'list-create') {
       const { data: created, error } = await db.from('gate_lists').insert({

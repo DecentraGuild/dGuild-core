@@ -8,7 +8,7 @@
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
-import { getWalletFromAuthHeader } from '../_shared/auth.ts'
+import { requireTenantAdmin } from '../_shared/auth.ts'
 import { getSolanaConnection } from '../_shared/solana-connection.ts'
 import { fetchMintMetadata } from '../_shared/mint-metadata.ts'
 import {
@@ -21,27 +21,6 @@ import { Connection, PublicKey } from 'npm:@solana/web3.js@1'
 
 const WHITELIST_PROGRAM_ID =
   Deno.env.get('WHITELIST_PROGRAM_ID') ?? 'WLSTEvb5PEG1HN6M5HAomdWQ6NyR7zFPwSVbzVJKHDZ'
-
-async function requireTenantAdmin(
-  authHeader: string | null,
-  tenantId: string,
-  db: ReturnType<typeof getAdminClient>,
-): Promise<{ ok: true } | { ok: false; response: Response }> {
-  const wallet = await getWalletFromAuthHeader(authHeader)
-  if (!wallet) {
-    return { ok: false, response: new Response(JSON.stringify({ error: 'Unauthenticated' }), { status: 401 }) }
-  }
-  const { data: tenant } = await db
-    .from('tenant_config')
-    .select('admins')
-    .eq('id', tenantId)
-    .maybeSingle()
-  const admins = (tenant?.admins as string[]) ?? []
-  if (!admins.includes(wallet)) {
-    return { ok: false, response: new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 }) }
-  }
-  return { ok: true }
-}
 
 async function fetchGateEntries(connection: Connection, listAddress: string): Promise<string[]> {
   try {

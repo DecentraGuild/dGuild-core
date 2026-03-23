@@ -368,6 +368,7 @@ export function useEscrowDetail(props: {
       if (supabaseConfigured) {
         try {
           const supabase = useSupabase()
+          // Raw invoke (not invokeEdgeFunction): Promise.race timeout + soft fallback to RPC on any failure.
           const invokePromise = supabase.functions.invoke('marketplace', {
             body: { action: 'escrow', escrowId: id },
           })

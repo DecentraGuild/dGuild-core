@@ -38,7 +38,9 @@ const variantClass = computed(() => `btn--${props.variant}`)
   align-items: center;
   justify-content: center;
   gap: var(--theme-space-sm);
+  min-height: 40px;
   padding: var(--theme-space-sm) var(--theme-space-md);
+  touch-action: manipulation;
   font-size: var(--theme-font-sm);
   font-weight: 500;
   border-radius: var(--theme-radius-md);

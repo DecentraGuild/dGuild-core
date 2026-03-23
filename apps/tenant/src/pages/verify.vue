@@ -55,6 +55,7 @@ import {
 } from '@decentraguild/web3/wallet'
 import type { WalletConnectorId } from '@solana/connector/headless'
 import { useAuth } from '@decentraguild/auth'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 
 const route = useRoute()
@@ -88,14 +89,17 @@ async function checkSession() {
   if (!token.value) return
   try {
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('discord-verify', {
-      body: { action: 'session-status', token: token.value },
-    })
-    if (error) {
+    let result: { valid?: boolean; reason?: string }
+    try {
+      result = await invokeEdgeFunction<{ valid?: boolean; reason?: string }>(
+        supabase,
+        'discord-verify',
+        { action: 'session-status', token: token.value },
+      )
+    } catch {
       sessionError.value = 'This link is invalid or has expired.'
       return
     }
-    const result = data as { valid?: boolean; reason?: string }
     if (!result.valid) {
       sessionError.value =
         result.reason === 'expired'
@@ -129,14 +133,16 @@ async function doLink(_wallet: string) {
     }
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('discord-verify', {
-      body: { action: 'link', token: token.value },
-    })
-    if (error) {
-      linkError.value = error.message ?? 'Link failed'
+    let result: { ok?: boolean; error?: string }
+    try {
+      result = await invokeEdgeFunction<{ ok?: boolean; error?: string }>(supabase, 'discord-verify', {
+        action: 'link',
+        token: token.value,
+      })
+    } catch (e) {
+      linkError.value = e instanceof Error ? e.message : 'Link failed'
       return
     }
-    const result = data as { ok?: boolean; error?: string }
     if (result.error) {
       linkError.value = result.error
       return

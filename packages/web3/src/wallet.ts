@@ -14,5 +14,10 @@ export {
   getWalletAndAccount,
   getEscrowWalletFromConnector,
   getSupabaseWalletAdapter,
+  setConnectorWebOptions,
+  subscribeWalletConnectUri,
+  getWalletConnectDisplayUri,
+  clearWalletConnectDisplayUri,
   type ConnectorStateSnapshot,
+  type ConnectorWebOptions,
 } from './connector.js'

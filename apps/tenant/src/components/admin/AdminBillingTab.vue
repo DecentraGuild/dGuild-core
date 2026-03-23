@@ -10,41 +10,99 @@
         <div v-else-if="payments.length === 0" class="admin__billing-empty">
           No payments recorded yet.
         </div>
-        <table v-else class="admin__billing-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Product</th>
-              <th>Amount</th>
-              <th>Tx</th>
-              <th>Invoice</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in payments" :key="p.id">
-              <td>{{ formatPaymentDate(p.confirmedAt) }}</td>
-              <td>{{ p.productLabel }}</td>
-              <td class="admin__billing-amount">{{ formatAmount(p) }}</td>
-              <td>
-                <a
-                  v-if="p.txSignature"
-                  :href="txExplorerUrl(p.txSignature)"
-                  target="_blank"
-                  rel="noopener"
-                  class="admin__billing-tx-link"
-                >
-                  <Icon icon="lucide:external-link" />
-                </a>
-                <span v-else class="admin__billing-tx-muted">--</span>
-              </td>
-              <td>
-                <button class="admin__billing-invoice-btn" title="Download invoice" @click="downloadInvoice(p.id)">
-                  <Icon icon="lucide:download" />
+        <div v-else class="table-scroll">
+          <table class="admin__billing-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Product</th>
+                <th>Amount</th>
+                <th>Tx</th>
+                <th>Invoice</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in payments" :key="p.id">
+                <td>{{ formatPaymentDate(p.confirmedAt) }}</td>
+                <td>{{ p.productLabel }}</td>
+                <td class="admin__billing-amount">{{ formatAmount(p) }}</td>
+                <td>
+                  <a
+                    v-if="p.txSignature"
+                    :href="txExplorerUrl(p.txSignature)"
+                    target="_blank"
+                    rel="noopener"
+                    class="admin__billing-tx-link"
+                  >
+                    <Icon icon="lucide:external-link" />
+                  </a>
+                  <span v-else class="admin__billing-tx-muted">--</span>
+                </td>
+                <td>
+                  <button class="admin__billing-invoice-btn" title="Download invoice" @click="downloadInvoice(p.id)">
+                    <Icon icon="lucide:download" />
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card>
+        <h3>Extend subscriptions</h3>
+        <p v-if="saveError" class="admin__billing-extend-error">{{ saveError }}</p>
+        <p v-if="extendableModuleIds.length === 0" class="admin__billing-empty">
+          No active subscription modules to extend. Per-unit modules are renewed from their feature pages.
+        </p>
+        <div v-else class="admin__module-grid admin__billing-extend-grid">
+          <div
+            v-for="id in extendableModuleIds"
+            :key="id"
+            class="admin__module-row"
+          >
+            <div class="admin__module-cell admin__module-cell--name">
+              <span class="admin__module-name">{{ MODULE_NAV[id]?.label ?? id }}</span>
+            </div>
+            <div class="admin__module-cell admin__module-cell--status">
+              <span v-if="moduleDeactivationDate(id)" class="admin__module-date">
+                Deactivate at {{ formatDeactivationDate(moduleDeactivationDate(id)) }}
+              </span>
+              <span v-else-if="subscriptionPeriodEnd(id)" class="admin__module-date">
+                Paid through {{ formatDeactivationDate(subscriptionPeriodEnd(id)!) }}
+              </span>
+            </div>
+            <div class="admin__module-cell admin__module-cell--action">
+              <div v-if="extendingModuleId === id" class="admin__extend-inline">
+                <div class="pricing-widget__period-toggle">
+                  <button
+                    class="pricing-widget__period-btn"
+                    :class="{ 'pricing-widget__period-btn--active': extendPeriod === 'monthly' }"
+                    @click="$emit('update:extendPeriod', 'monthly')"
+                  >
+                    Month
+                  </button>
+                  <button
+                    class="pricing-widget__period-btn"
+                    :class="{ 'pricing-widget__period-btn--active': extendPeriod === 'yearly' }"
+                    @click="$emit('update:extendPeriod', 'yearly')"
+                  >
+                    Year
+                  </button>
+                </div>
+                <Button variant="default" size="sm" :disabled="extending" @click="$emit('confirm-extend', id)">
+                  {{ extending ? 'Extending...' : 'Confirm' }}
+                </Button>
+                <button type="button" class="admin__extend-cancel" @click="$emit('cancel-extend')">
+                  <Icon icon="lucide:x" />
                 </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </div>
+              <Button v-else variant="brand" size="sm" @click="$emit('start-extend', id)">
+                Extend
+              </Button>
+            </div>
+          </div>
+        </div>
       </Card>
     </div>
     <div aria-hidden="true" />
@@ -52,17 +110,84 @@
 </template>
 
 <script setup lang="ts">
+import type { BillingPeriod } from '@decentraguild/billing'
+import { getProductDisplayType } from '@decentraguild/billing'
 import { formatUsdc } from '@decentraguild/display'
+import type { TenantConfig } from '@decentraguild/core'
+import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import { Card } from '~/components/ui/card'
+import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import { useTenantStore } from '~/stores/tenant'
 import { MODULE_NAV } from '~/config/modules'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
+import type { AdminForm } from '~/composables/admin/useAdminForm'
+import type { SubscriptionInfo, WatchtowerSubscriptionByScope } from '~/composables/admin/useAdminSubscriptions'
 
-defineProps<{
+const props = defineProps<{
   slug: string | null
+  form: AdminForm
+  tenant: TenantConfig | null
+  moduleIds: string[]
+  subscriptions: Record<string, { periodEnd?: string } | null>
+  extendingModuleId: string | null
+  extending: boolean
+  extendPeriod: BillingPeriod
+  saveError: string | null
 }>()
+
+defineEmits<{
+  'start-extend': [id: string]
+  'confirm-extend': [id: string]
+  'cancel-extend': []
+  'update:extendPeriod': [value: BillingPeriod]
+}>()
+
+function isModuleBillable(moduleId: string): boolean {
+  return getModuleCatalogEntry(moduleId)?.pricing != null
+}
+
+function isAddUnitOnly(moduleId: string): boolean {
+  const productKey = moduleId === 'slug' ? 'admin' : moduleId
+  return getProductDisplayType(productKey) === 'one_time_per_unit'
+}
+
+const extendableModuleIds = computed(() =>
+  props.moduleIds.filter(
+    (id) =>
+      id !== 'admin' &&
+      props.form.modulesById[id] === 'active' &&
+      isModuleBillable(id) &&
+      !isAddUnitOnly(id),
+  ),
+)
+
+function moduleDeactivationDate(moduleId: string): string | null {
+  const entry = props.tenant?.modules?.[moduleId] as { deactivatedate?: string | null } | undefined
+  const d = entry?.deactivatedate
+  return d && typeof d === 'string' ? d : null
+}
+
+function subscriptionPeriodEnd(moduleId: string): string | null {
+  const s = props.subscriptions[moduleId]
+  if (!s) return null
+  if (typeof (s as SubscriptionInfo).periodEnd === 'string') return (s as SubscriptionInfo).periodEnd
+  const byScope = s as WatchtowerSubscriptionByScope
+  const ends = Object.values(byScope).map((x) => x.periodEnd).filter(Boolean) as string[]
+  if (ends.length === 0) return null
+  return ends.reduce((a, b) => (a < b ? a : b))
+}
+
+function formatDeactivationDate(iso: string): string {
+  try {
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) return iso
+    return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
+}
 
 const tenantStore = useTenantStore()
 const tenantId = computed(() => tenantStore.tenantId)
@@ -310,5 +435,15 @@ defineExpose({ load })
 
 .admin__billing-invoice-btn:hover {
   color: var(--theme-text-primary);
+}
+
+.admin__billing-extend-grid .admin__module-row {
+  grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 16rem) minmax(12rem, max-content);
+}
+
+.admin__billing-extend-error {
+  margin: 0 0 var(--theme-space-md);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-error, hsl(var(--destructive)));
 }
 </style>

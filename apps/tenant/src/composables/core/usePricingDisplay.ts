@@ -6,24 +6,12 @@ import type { Ref } from 'vue'
 import { computed } from 'vue'
 import type { ConditionSet, PriceResult, TierDefinition } from '@decentraguild/billing'
 import type { TieredAddonsPricing, TieredWithOneTimePerUnitPricing } from '@decentraguild/billing'
-
-export const PRICING_WIDGET_SKIP_USAGE_METERS = new Set(['base_currencies_count'])
-
-export const CONDITION_LABELS: Record<string, string> = {
-  mints_count: 'Tradable mints in scope',
-  base_currencies_count: 'Base pay currencies',
-  custom_currencies: 'Custom pay currencies',
-  monetize_storefront: 'Monetize storefront',
-  raffleSlotsUsed: 'Raffle slots',
-  mintsBase: 'Metadata mints',
-  mintsGrow: 'Snapshot mints',
-  mintsPro: 'Transaction mints',
-  mints_current: 'Current holders',
-  mints_snapshot: 'Snapshot',
-  mints_transactions: 'Transactions',
-  mintsSnapshot: 'Snapshot',
-  mintsTransactions: 'Transactions',
-}
+import {
+  USAGE_DISPLAY_SKIP_METERS,
+  usageMeterLabel,
+  valueFromConditionSetForMeter,
+  numberFromConditionSetForMeter,
+} from '@decentraguild/billing'
 
 export interface UsageRowDisplay {
   key: string
@@ -51,11 +39,11 @@ export function usePricingDisplay(
     if (!pm || !cond || !tier) return []
     const storedCond = storedConditions?.value ?? null
     return pm.conditionKeys
-      .filter((key) => !PRICING_WIDGET_SKIP_USAGE_METERS.has(key))
+      .filter((key) => !USAGE_DISPLAY_SKIP_METERS.has(key))
       .map((key) => {
-        const condVal = cond[key]
+        const condVal = valueFromConditionSetForMeter(cond, key)
         const inclVal = tier.included[key]
-        const label = CONDITION_LABELS[key] ?? key
+        const label = usageMeterLabel(key)
 
         if (key === 'monetize_storefront') {
           const current =
@@ -80,8 +68,7 @@ export function usePricingDisplay(
 
         const current = typeof condVal === 'number' ? condVal : 0
         const included = typeof inclVal === 'number' ? inclVal : 0
-        const stored =
-          storedCond != null && typeof storedCond[key] === 'number' ? (storedCond[key] as number) : null
+        const stored = storedCond != null ? numberFromConditionSetForMeter(storedCond, key) : null
         const valueText =
           stored != null
             ? `${current} / ${stored}`

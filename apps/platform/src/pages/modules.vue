@@ -85,7 +85,7 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Modules' })
 import { Icon } from '@iconify/vue'
-import { formatUsdc } from '@decentraguild/core'
+import { formatUsdc } from '@decentraguild/display'
 import { getModuleCatalogList } from '@decentraguild/catalog'
 import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 import DguildCenter from '~/components/DguildCenter.vue'
@@ -173,19 +173,18 @@ const displayModules = computed(() =>
 
 .modules__grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: var(--theme-space-md);
 }
 
-@media (min-width: var(--theme-breakpoint-sm)) {
+@media (min-width: 640px) {
   .modules__grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (min-width: var(--theme-breakpoint-lg)) {
+@media (min-width: 1024px) {
   .modules__grid {
-    grid-template-columns: repeat(4, 1fr);
     gap: var(--theme-space-lg);
   }
 }

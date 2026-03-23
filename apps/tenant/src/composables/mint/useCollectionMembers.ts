@@ -2,9 +2,9 @@
  * Member NFTs for a collection from tenant_mint_catalog (central store).
  * Used by MintDetailModal (Address Book) and Watchtower modal.
  */
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
-import { getEdgeFunctionErrorMessage } from '~/utils/edgeFunctionError'
 
 export interface CollectionMemberNft {
   mint: string
@@ -33,11 +33,13 @@ export function useCollectionMembers(collectionMint: Ref<string | null>) {
     error.value = null
     try {
       const supabase = useSupabase()
-      const { data, err } = await supabase.functions.invoke('tenant_catalog', {
-        body: { action: 'list-members', tenantId: id, collectionMint: mint },
-      })
-      if (err) throw new Error(getEdgeFunctionErrorMessage(err, 'Failed to load member NFTs'))
-      const entries = (data as { entries?: Array<{ mint: string; name?: string | null; image?: string | null; traits?: unknown; owner?: string | null }> })?.entries ?? []
+      const data = await invokeEdgeFunction<{ entries?: Array<{ mint: string; name?: string | null; image?: string | null; traits?: unknown; owner?: string | null }> }>(
+        supabase,
+        'tenant_catalog',
+        { action: 'list-members', tenantId: id, collectionMint: mint },
+        { errorFallback: 'Failed to load member NFTs' },
+      )
+      const entries = data?.entries ?? []
       assets.value = entries.map((e) => ({
         mint: e.mint,
         metadata: {

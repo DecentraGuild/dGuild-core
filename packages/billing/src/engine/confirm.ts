@@ -1,6 +1,7 @@
 /**
  * confirm(): Verify payment, grant entitlements from quote line items.
- * Extend-or-add: if tenant already has active entitlements for a meter, extend expiry; else add.
+ * Extend-or-add: if tenant already has active entitlements for a meter, add duration to that
+ * grant's expires_at (current end + duration); else insert a new grant.
  */
 import type { DbClient } from '../types.js'
 import type { ConfirmParams, QuoteLineItem } from '../types.js'
@@ -84,16 +85,22 @@ async function grantOrExtend(
       .limit(1)
       .maybeSingle()
 
-    if (grant) {
+    if (grant && grant.expires_at) {
       const g = grant as GrantRow
-      const currentExpires = g.expires_at ? new Date(g.expires_at) : null
-      const newExpires = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000)
-      const extended = currentExpires && currentExpires > newExpires ? currentExpires : newExpires
+      const durationMs = durationDays * 24 * 60 * 60 * 1000
+      const extended = new Date(new Date(g.expires_at as string).getTime() + durationMs)
 
       await db
         .from('granted_entitlements')
         .update({ expires_at: extended.toISOString() })
         .eq('id', g.id)
+
+      await db
+        .from('entitlement_expiry_queue')
+        .update({ expires_at: extended.toISOString() })
+        .eq('entitlement_id', g.id)
+        .eq('processed', false)
+
       return
     }
   }

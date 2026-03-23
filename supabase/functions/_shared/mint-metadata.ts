@@ -3,6 +3,8 @@
  * Shared by tenant_catalog and marketplace for consistent metadata.
  */
 
+import { classifyDasAssetKind, getOnChainSplMintState } from './spl-mint-guard.ts'
+
 export interface MintMetadataResult {
   kind: 'SPL' | 'NFT'
   name: string | null
@@ -21,6 +23,25 @@ export interface MintMetadataResult {
   isMutable?: boolean | null
   editionNonce?: number | null
   tokenStandard?: string | null
+}
+
+function traitIndexFromDasAsset(asset: Record<string, unknown>): Record<string, unknown> {
+  const traitKeys = new Set<string>()
+  const traitOptions: Record<string, Set<string>> = {}
+  const attrs = ((asset.content as Record<string, unknown>)?.metadata as Record<string, unknown>)
+    ?.attributes as Array<{ trait_type?: string; value?: string }> | undefined
+  if (attrs) {
+    for (const a of attrs) {
+      if (!a.trait_type) continue
+      traitKeys.add(a.trait_type)
+      if (!traitOptions[a.trait_type]) traitOptions[a.trait_type] = new Set()
+      if (a.value) traitOptions[a.trait_type].add(String(a.value))
+    }
+  }
+  return {
+    trait_keys: [...traitKeys],
+    trait_options: Object.fromEntries([...Object.entries(traitOptions)].map(([k, v]) => [k, [...v]])),
+  }
 }
 
 /** Extract extended metadata from DAS getAsset result. */
@@ -81,6 +102,8 @@ export async function fetchMintMetadata(
       const colData = await colRes.json() as { result?: { total?: number } }
       const collectionSize = colData.result?.total ?? 0
       if (collectionSize > 0) {
+        const onChain = await getOnChainSplMintState(rpcUrl, mint)
+        if (!onChain.ok) return null
         const traitKeys = new Set<string>()
         const traitOptions: Record<string, Set<string>> = {}
         let pgN = 1
@@ -120,8 +143,9 @@ export async function fetchMintMetadata(
         })
         const metaData = await metaRes.json() as { result?: Record<string, unknown> }
         const assetResult = metaData.result
-        const assetMeta = (assetResult?.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
-        const links = (assetResult?.content as Record<string, unknown>)?.links as Record<string, unknown> | undefined
+        if (!assetResult) return null
+        const assetMeta = (assetResult.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
+        const links = (assetResult.content as Record<string, unknown>)?.links as Record<string, unknown> | undefined
         const name = assetMeta?.name as string ?? null
         const image = links?.image as string ?? null
         const ext = extractExtendedMetadata(assetResult as Record<string, unknown>)
@@ -147,14 +171,42 @@ export async function fetchMintMetadata(
     })
     const data = await res.json() as { result?: Record<string, unknown> }
     const asset = data.result
-    const meta = (asset?.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
-    const links = (asset?.content as Record<string, unknown>)?.links as Record<string, unknown> | undefined
-    const tokenInfo = asset?.token_info as Record<string, unknown> | undefined
+    if (!asset) return null
+
+    const onChain = await getOnChainSplMintState(rpcUrl, mint)
+    if (!onChain.ok) return null
+
+    let classified = classifyDasAssetKind(asset as Record<string, unknown>)
+    if (!classified) {
+      if (onChain.decimals > 0) classified = 'SPL'
+      else if (kindHint === 'SPL') classified = 'SPL'
+      else if (kindHint === 'NFT') classified = 'NFT'
+      else return null
+    }
+    if (kindHint === 'SPL' && classified !== 'SPL') return null
+    if (kindHint === 'NFT' && classified !== 'NFT') return null
+
+    const meta = (asset.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
+    const links = (asset.content as Record<string, unknown>)?.links as Record<string, unknown> | undefined
+    const tokenInfo = asset.token_info as Record<string, unknown> | undefined
     const name = meta?.name as string ?? null
     const symbol = meta?.symbol as string ?? null
     const image = links?.image as string ?? null
-    const decimals = typeof tokenInfo?.decimals === 'number' ? tokenInfo.decimals : null
+    const decimals = typeof tokenInfo?.decimals === 'number' ? tokenInfo.decimals : onChain.decimals
     const ext = extractExtendedMetadata(asset as Record<string, unknown>)
+
+    if (classified === 'NFT') {
+      return {
+        kind: 'NFT',
+        name,
+        label: name,
+        image,
+        collectionSize: 0,
+        traitIndex: traitIndexFromDasAsset(asset as Record<string, unknown>),
+        ...ext,
+      }
+    }
+
     return {
       kind: 'SPL',
       name,

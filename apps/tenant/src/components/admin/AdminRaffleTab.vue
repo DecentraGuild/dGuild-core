@@ -56,7 +56,7 @@
           :subscription="subscription"
           :saving="Boolean(savingWhitelist || saving)"
           :deploying="deploying"
-          :save-error="saveError"
+          :save-error="saveError ?? null"
           @save="onSave"
           @deploy="onDeploy"
         />
@@ -72,6 +72,10 @@
       <RaffleUpgradeModal
         v-if="raffleModalMode === 'upgrade'"
         :effective-tier-id="effectiveTierId"
+        :grow-plan="growPlan"
+        :pro-plan="proPlan"
+        :plans-loading="upgradePlansLoading"
+        :plans-error="upgradePlansError"
         @select-tier="selectUpgradeTier"
       />
       <RaffleAddRewardForm
@@ -98,7 +102,7 @@
       />
       <RaffleCreateForm
         v-else-if="raffleModalMode === 'create'"
-        :form="createForm"
+        v-model:form="createForm"
         :slug="slug"
         :show-gate-select="isDefaultGatePublic"
         :submitting="createSubmitting"
@@ -111,8 +115,10 @@
 </template>
 
 <script setup lang="ts">
-import type { ModuleState } from '@decentraguild/core'
+import type { MarketplaceGateSettings, ModuleState, TransactionGateOverride } from '@decentraguild/core'
 import type { BillingPeriod, ConditionSet } from '@decentraguild/billing'
+import type { BillingSameTxPrepare } from '~/composables/admin/useAdminBilling'
+import type { SubscriptionInfo } from '~/composables/admin/useAdminSubscriptions'
 import { Card } from '~/components/ui/card'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import AdminPricingWidget from '~/components/admin/AdminPricingWidget.vue'
@@ -122,47 +128,23 @@ import RaffleStartConfirm from '~/components/admin/RaffleStartConfirm.vue'
 import RaffleEditForm from '~/components/admin/RaffleEditForm.vue'
 import RaffleCreateForm from '~/components/admin/RaffleCreateForm.vue'
 import RaffleUpgradeModal from '~/components/admin/RaffleUpgradeModal.vue'
-import { useTenantStore } from '~/stores/tenant'
-import { nextTick, watch } from 'vue'
+import { useTenantStore, type RaffleSettings } from '~/stores/tenant'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useQuote } from '~/composables/core/useQuote'
-import { useMintMetadataForInput } from '~/composables/mint/useMintMetadataForInput'
 import { useAdminRaffleActions } from '~/composables/admin/useAdminRaffleActions'
 import { useAdminRaffleModals } from '~/composables/admin/useAdminRaffleModals'
-import { useRaffleSlots, type SlotCard, type RaffleItem } from '~/composables/raffles/useRaffleSlots'
-import { toRef } from 'vue'
-import { resolveGateForTransaction } from '@decentraguild/core'
+import { useRaffleSlots } from '~/composables/raffles/useRaffleSlots'
 import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
-import {
-  getEscrowWalletFromConnector,
-  sendAndConfirmTransaction,
-  buildInitializeRaffleTransaction,
-  buildPrepareRaffleTransaction,
-  buildCloseRaffleTransaction,
-  buildEnableRaffleTransaction,
-  buildDisableRaffleTransaction,
-  buildEditRaffleTransaction,
-  buildRevealWinnersTransaction,
-  buildClaimPrizeTransaction,
-  buildClaimTicketsTransaction,
-  deriveRafflePda,
-} from '@decentraguild/web3'
-import { ComputeBudgetProgram, PublicKey, Transaction } from '@solana/web3.js'
-import {
-  createAssociatedTokenAccountInstruction,
-  getAssociatedTokenAddressSync,
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-} from '@solana/spl-token'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useSupabase } from '~/composables/core/useSupabase'
-import type { BillingSameTxPrepare } from '~/composables/admin/useAdminBilling'
-
-const BILLING_PLUS_PROGRAM_CU = 400_000
+import { useAdminRaffleCreate } from '~/composables/admin/useAdminRaffleCreate'
+import { useAdminRaffleSlotActions } from '~/composables/admin/useAdminRaffleSlotActions'
+import { useRaffleUpgradePlans } from '~/composables/admin/useRaffleUpgradePlans'
 
 const props = defineProps<{
   slug: string
   moduleState: ModuleState
-  subscription: { periodEnd?: string; selectedTierId?: string } | null
+  subscription: SubscriptionInfo | null
   saving?: boolean
   deploying?: boolean
   saveError?: string | null
@@ -214,32 +196,18 @@ const {
   openStartRaffleModal: openStartRaffleModalBase,
   openUpgradeModal: openUpgradeModalBase,
 } = useAdminRaffleModals()
-const addRewardSubmitting = ref(false)
-const addRewardError = ref<string | null>(null)
-const editForm = reactive({ name: '', description: '', url: '' })
-const addRewardForm = reactive({
-  prizeMint: '',
-  amountDisplay: '',
-  imageUrl: '',
-})
 const upgradeConditionsOverride = ref<ConditionSet | null>(null)
-const createSubmitting = ref(false)
-const createError = ref<string | null>(null)
+const {
+  grow: growPlan,
+  pro: proPlan,
+  loading: upgradePlansLoading,
+  error: upgradePlansError,
+  fetchPlans,
+} = useRaffleUpgradePlans()
 
-const createForm = reactive({
-  name: '',
-  description: '',
-  ticketMint: '',
-  ticketPriceDisplay: '',
-  maxTicketsDisplay: '',
-  gate: null as { programId: string; account: string } | null | 'use-default',
+watch(raffleModalMode, (m) => {
+  if (m === 'upgrade') void fetchPlans()
 })
-
-const createTicketMeta = useMintMetadataForInput(
-  toRef(createForm, 'ticketMint'),
-  toRef(createForm, 'ticketPriceDisplay'),
-  { fieldLabel: 'Ticket price' }
-)
 
 const tenantIdRef = computed(() => tenantStore.tenantId)
 const moduleIdRef = ref('raffles')
@@ -256,14 +224,12 @@ watch(quote, (q) => {
   conditions.value = { raffleSlotsUsed: q.meters.raffle_slots?.used ?? 0 }
 }, { immediate: true })
 
-/** For pricing widget: show price for adding next raffle (raffle_slots target). */
 const rafflePricingConditions = computed(() => ({
   raffleSlotsUsed: activeRaffles.value.length + 1,
 }))
 
 const liveConditions = computed(() => upgradeConditionsOverride.value ?? rafflePricingConditions.value)
 
-/** Slot limit from grants or tier. Base 1 (default), Grow 3, Pro 10. */
 const slotLimit = computed(() => {
   const limit = quote.value?.meters?.raffle_slots?.limit
   if (limit != null && limit >= 1) return limit
@@ -271,7 +237,6 @@ const slotLimit = computed(() => {
   return tierId === 'pro' ? 10 : tierId === 'grow' ? 3 : 1
 })
 
-/** Tier id for upgrade modal display. */
 const effectiveTierId = computed(() =>
   slotLimit.value >= 10 ? 'pro' : slotLimit.value >= 3 ? 'grow' : 'base',
 )
@@ -296,7 +261,9 @@ function openUpgradeModal() {
 }
 
 function selectUpgradeTier(tier: 'grow' | 'pro') {
-  upgradeConditionsOverride.value = { raffleSlotsUsed: tier === 'pro' ? 10 : 3 }
+  const limit =
+    tier === 'pro' ? (proPlan.value?.slotLimit ?? 10) : (growPlan.value?.slotLimit ?? 3)
+  upgradeConditionsOverride.value = { raffleSlotsUsed: limit }
   closeRaffleModal()
   nextTick(() => {
     document.getElementById('raffle-pricing-widget')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -309,19 +276,22 @@ const canCreateMore = computed(() => {
 })
 
 const raffleSettings = computed(() => tenantStore.raffleSettings)
-const whitelistFormValue = computed(() => {
+
+type RaffleWhitelistFormValue = TransactionGateOverride | 'admin-only' | null
+
+const whitelistFormValue = computed((): RaffleWhitelistFormValue => {
   const rw = raffleSettings.value?.defaultGate
   if (rw === undefined) return 'use-default'
   if (rw === null || rw === 'public') return null
   if (rw === 'use-default') return 'use-default'
   if (rw === 'admin-only') return 'admin-only'
-  if (typeof rw === 'object' && rw.account) return rw
+  if (typeof rw === 'object' && rw.programId && rw.account) return rw
   return null
 })
 
 const isDefaultGatePublic = computed(() => whitelistFormValue.value === null)
 
-function whitelistToCompareStr(v: typeof whitelistFormValue.value): string {
+function whitelistToCompareStr(v: RaffleWhitelistFormValue): string {
   if (v === 'use-default') return '__use_default__'
   if (v === 'admin-only') return '__admin_only__'
   return (v && typeof v === 'object' ? v.account : '') ?? ''
@@ -334,9 +304,12 @@ const savingWhitelist = ref(false)
 const whitelistSaveSuccess = ref(false)
 const whitelistSaveError = ref<string | null>(null)
 
-function onWhitelistUpdate(value: { programId: string; account: string } | null | 'use-default' | 'admin-only') {
-  const next = { ...(raffleSettings.value ?? {}), defaultGate: value === 'use-default' ? 'use-default' : value }
-  tenantStore.setRaffleSettings(next)
+function onWhitelistUpdate(
+  value: MarketplaceGateSettings | null | 'use-default' | 'admin-only',
+) {
+  const defaultGate: RaffleSettings['defaultGate'] =
+    value === 'use-default' ? 'use-default' : value
+  tenantStore.setRaffleSettings({ ...(raffleSettings.value ?? {}), defaultGate })
 }
 
 async function saveWhitelist(): Promise<boolean> {
@@ -347,7 +320,16 @@ async function saveWhitelist(): Promise<boolean> {
   whitelistSaveSuccess.value = false
   try {
     const wl = whitelistFormValue.value
-    const settings = { defaultGate: wl === 'use-default' ? 'use-default' : (wl === null ? 'public' : wl) }
+    const settings: RaffleSettings = {
+      defaultGate:
+        wl === 'use-default'
+          ? 'use-default'
+          : wl === null
+            ? 'public'
+            : wl === 'admin-only'
+              ? 'admin-only'
+              : wl,
+    }
 
     const supabase = useSupabase()
     const { error } = await supabase
@@ -385,141 +367,6 @@ async function onDeploy(period: BillingPeriod) {
   emit('deploy', period, upgradeConditionsOverride.value ?? undefined)
 }
 
-function openCreateModal(_slotIndex: number) {
-  createForm.name = ''
-  createForm.description = ''
-  createForm.ticketMint = ''
-  createForm.ticketPriceDisplay = ''
-  createForm.maxTicketsDisplay = ''
-  if (isDefaultGatePublic.value) {
-    createForm.gate = null
-  } else {
-    createForm.gate = whitelistFormValue.value === 'use-default' ? 'use-default' : whitelistFormValue.value
-  }
-  createError.value = null
-  openCreateModalBase()
-}
-
-async function onCreateSubmit() {
-  const name = createForm.name.trim()
-  const ticketMint = createForm.ticketMint.trim()
-  const maxTicketsParsed = parseInt(createForm.maxTicketsDisplay, 10)
-  const maxTickets = maxTicketsParsed > 0 ? maxTicketsParsed : 0
-  if (!name || !ticketMint) {
-    createError.value = 'Name and ticket mint are required'
-    return
-  }
-  if (maxTickets < 1) {
-    createError.value = 'Total tickets is required (minimum 1)'
-    return
-  }
-  const dec = createTicketMeta.metadata.value?.decimals
-  if (dec == null) {
-    createError.value = 'Enter a valid ticket mint to load decimals first'
-    return
-  }
-  const ticketPriceRaw = createTicketMeta.toRawAmount()
-  if (!ticketPriceRaw || ticketPriceRaw === '0') {
-    createError.value = 'Ticket price is required'
-    return
-  }
-  const ticketPriceNum = parseFloat(createForm.ticketPriceDisplay) || 0
-  if (ticketPriceNum < 0) {
-    createError.value = 'Ticket price must be zero or positive'
-    return
-  }
-
-  const wallet = getEscrowWalletFromConnector()
-  if (!wallet?.publicKey) {
-    createError.value = 'Wallet not connected'
-    return
-  }
-  if (!connection.value) {
-    createError.value = 'Solana RPC not configured'
-    return
-  }
-
-  const id = tenantIdRef.value
-  if (!id) {
-    createError.value = 'Tenant not set'
-    return
-  }
-
-  createSubmitting.value = true
-  createError.value = null
-  try {
-    const conditions: ConditionSet = {
-      raffleSlotsUsed: activeRaffles.value.length + 1,
-    }
-    const prepareBilling = props.prepareBillingInstructionsForSameTx
-    const confirmBilling = props.confirmBillingFromTxSignature
-    if (!prepareBilling || !confirmBilling) throw new Error('Billing not configured')
-
-    const billingPrep = await prepareBilling('raffles', 'monthly', undefined, conditions)
-
-    const gate = resolveGateForTransaction(
-      effectiveRaffleGate.value ?? null,
-      createForm.gate,
-    )
-    const useWhitelist = Boolean(gate?.account?.trim())
-    const whitelist = useWhitelist && gate?.account ? gate.account : undefined
-
-    const seed = crypto.getRandomValues(new Uint8Array(8))
-    const raffleTx = await buildInitializeRaffleTransaction({
-      name,
-      description: createForm.description.trim() || '',
-      seed,
-      ticketMint,
-      ticketPrice: ticketPriceRaw,
-      ticketDecimals: dec,
-      maxTickets,
-      useWhitelist,
-      whitelist: whitelist ?? null,
-      connection: connection.value,
-      wallet,
-    })
-
-    const tx = new Transaction()
-    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: BILLING_PLUS_PROGRAM_CU }))
-    if (billingPrep.kind === 'usdc') {
-      for (const ix of billingPrep.instructions) {
-        tx.add(ix)
-      }
-    }
-    for (const ix of raffleTx.instructions) {
-      tx.add(ix)
-    }
-
-    const txSignature = await sendAndConfirmTransaction(
-      connection.value,
-      tx,
-      wallet,
-      wallet.publicKey,
-    )
-
-    if (billingPrep.kind === 'usdc') {
-      await confirmBilling(billingPrep.paymentId, txSignature)
-    }
-
-    const rafflePda = deriveRafflePda(name, seed)
-    const supabase = useSupabase()
-    const { error: bindErr } = await supabase.functions.invoke('platform', {
-      body: { action: 'raffle-bind-tenant', tenantId: id, rafflePubkey: rafflePda.toBase58() },
-    })
-    if (bindErr) throw new Error(bindErr.message ?? 'Failed to bind raffle')
-
-    closeRaffleModal()
-    await fetchRaffles()
-    await fetchChainDataForRaffles()
-    pricingRef.value?.refresh?.()
-    emit('created')
-  } catch (e) {
-    createError.value = e instanceof Error ? e.message : 'Failed to create'
-  } finally {
-    createSubmitting.value = false
-  }
-}
-
 const {
   actionSubmitting,
   actionTxStatus,
@@ -530,226 +377,65 @@ const {
   runRaffleAction,
 } = useAdminRaffleActions({ connection, onSuccess: fetchChainDataForRaffles })
 
-const prizeMintMeta = useMintMetadataForInput(
-  toRef(addRewardForm, 'prizeMint'),
-  toRef(addRewardForm, 'amountDisplay'),
-  { fieldLabel: 'Amount' }
-)
+const pricingRef = ref<InstanceType<typeof AdminPricingWidget> | null>(null)
 
-function openStartRaffleModal(slot: SlotCard) {
-  openStartRaffleModalBase(slot)
-}
+const {
+  createForm,
+  createSubmitting,
+  createError,
+  openCreateModal,
+  onCreateSubmit,
+} = useAdminRaffleCreate({
+  connection,
+  tenantId: tenantIdRef,
+  activeRaffleCount: computed(() => activeRaffles.value.length),
+  effectiveRaffleGate,
+  isDefaultGatePublic,
+  whitelistFormValue,
+  prepareBilling: computed(() => props.prepareBillingInstructionsForSameTx),
+  confirmBilling: computed(() => props.confirmBillingFromTxSignature),
+  closeRaffleModal,
+  openCreateModalBase,
+  fetchRaffles,
+  fetchChainDataForRaffles,
+  onCreated: () => emit('created'),
+  refreshPricing: () => pricingRef.value?.refresh?.(),
+})
 
-async function onConfirmStartRaffle() {
-  const slot = selectedRaffleForStart.value
-  if (!slot?.raffle || !connection.value) return
-  const wallet = getEscrowWalletFromConnector()
-  if (!wallet?.publicKey) return
-  closeRaffleModal()
-  await runRaffleAction(slot.raffle.rafflePubkey, async () => {
-    const tx = await buildEnableRaffleTransaction({ rafflePubkey: slot.raffle!.rafflePubkey, wallet })
-    const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
-    if (!sig) throw new Error('Transaction failed')
-  }, 'Failed to start raffle')
-}
-
-function onCancelStartRaffle() {
-  closeRaffleModal()
-}
-
-async function onPauseRaffle(slot: SlotCard) {
-  if (!slot.raffle) return
-  await runRaffleAction(slot.raffle.rafflePubkey, async () => {
-    const wallet = getEscrowWalletFromConnector()!
-    const tx = await buildDisableRaffleTransaction({ rafflePubkey: slot.raffle!.rafflePubkey, wallet })
-    const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
-    if (!sig) throw new Error('Transaction failed')
-  }, 'Failed to pause raffle')
-}
-
-async function onResumeRaffle(slot: SlotCard) {
-  if (!slot.raffle) return
-  await runRaffleAction(slot.raffle.rafflePubkey, async () => {
-    const wallet = getEscrowWalletFromConnector()!
-    const tx = await buildEnableRaffleTransaction({ rafflePubkey: slot.raffle!.rafflePubkey, wallet })
-    const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
-    if (!sig) throw new Error('Transaction failed')
-  }, 'Failed to resume raffle')
-}
-
-function openEditRaffleModal(slot: SlotCard) {
-  editForm.name = slot.chainData?.name ?? ''
-  editForm.description = slot.chainData?.description ?? ''
-  editForm.url = slot.chainData?.url ?? ''
-  openEditRaffleModalBase(slot)
-}
-
-async function onEditRaffleSubmit() {
-  const slot = selectedRaffleForEdit.value
-  if (!slot?.raffle || !connection.value) return
-  const wallet = getEscrowWalletFromConnector()
-  if (!wallet?.publicKey) return
-  closeRaffleModal()
-  await runRaffleAction(slot.raffle.rafflePubkey, async () => {
-    const tx = await buildEditRaffleTransaction({
-      rafflePubkey: slot.raffle!.rafflePubkey,
-      name: editForm.name.trim(),
-      description: editForm.description.trim(),
-      url: editForm.url.trim(),
-      wallet,
-    })
-    const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
-    if (!sig) throw new Error('Transaction failed')
-  }, 'Failed to edit raffle')
-}
-
-async function onRevealWinner(slot: SlotCard) {
-  if (!slot.raffle) return
-  await runRaffleAction(slot.raffle.rafflePubkey, async () => {
-    const wallet = getEscrowWalletFromConnector()!
-    const tx = await buildRevealWinnersTransaction({ rafflePubkey: slot.raffle!.rafflePubkey, wallet })
-    const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
-    if (!sig) throw new Error('Transaction failed')
-  }, 'Failed to reveal winner')
-}
-
-async function onDistributeReward(slot: SlotCard) {
-  if (!slot.raffle || !slot.chainData?.winner || !connection.value) return
-  const wallet = getEscrowWalletFromConnector()
-  if (!wallet?.publicKey) return
-  const prizeMintPk = new PublicKey(slot.chainData.prizeMint)
-  const winnerPk = new PublicKey(slot.chainData.winner)
-  const winnerAta = getAssociatedTokenAddressSync(prizeMintPk, winnerPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
-  await runRaffleAction(slot.raffle.rafflePubkey, async () => {
-    const conn = connection.value!
-    const claimTx = await buildClaimPrizeTransaction({
-      rafflePubkey: slot.raffle!.rafflePubkey,
-      prizeMint: slot.chainData!.prizeMint,
-      winnerAta,
-      connection: conn,
-      wallet,
-    })
-    const tx = new Transaction()
-    const winnerAtaInfo = await conn.getAccountInfo(winnerAta)
-    if (!winnerAtaInfo) {
-      tx.add(createAssociatedTokenAccountInstruction(wallet.publicKey, winnerAta, winnerPk, prizeMintPk, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID))
-    }
-    tx.add(...claimTx.instructions)
-    const sig = await sendWithTxStatus(conn, tx, wallet, wallet.publicKey)
-    if (!sig) throw new Error('Transaction failed')
-  }, 'Failed to distribute reward')
-}
-
-async function onClaimProceeds(slot: SlotCard) {
-  if (!slot.raffle || !slot.chainData || !connection.value) return
-  const wallet = getEscrowWalletFromConnector()
-  if (!wallet?.publicKey) return
-  const ticketMintPk = new PublicKey(slot.chainData.ticketMint)
-  const creatorAta = getAssociatedTokenAddressSync(ticketMintPk, wallet.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
-  await runRaffleAction(slot.raffle.rafflePubkey, async () => {
-    const conn = connection.value!
-    const claimTx = await buildClaimTicketsTransaction({
-      rafflePubkey: slot.raffle!.rafflePubkey,
-      ticketMint: slot.chainData!.ticketMint,
-      creatorAta,
-      wallet,
-    })
-    const tx = new Transaction()
-    const creatorAtaInfo = await conn.getAccountInfo(creatorAta)
-    if (!creatorAtaInfo) {
-      tx.add(createAssociatedTokenAccountInstruction(wallet.publicKey, creatorAta, wallet.publicKey, ticketMintPk, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID))
-    }
-    tx.add(...claimTx.instructions)
-    const sig = await sendWithTxStatus(conn, tx, wallet, wallet.publicKey)
-    if (!sig) throw new Error('Transaction failed')
-  }, 'Failed to claim proceeds')
-}
-
-async function onCloseRaffle(raffle: RaffleItem) {
-  await runRaffleAction(
-    raffle.rafflePubkey,
-    async () => {
-      const wallet = getEscrowWalletFromConnector()
-      if (!wallet?.publicKey) throw new Error('Wallet not connected')
-      const tx = await buildCloseRaffleTransaction({
-        rafflePubkey: raffle.rafflePubkey,
-        connection: connection.value!,
-        wallet,
-      })
-      const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
-      if (!sig) throw new Error('Transaction failed')
-      const supabase = useSupabase()
-      const { error: closeError } = await supabase
-        .from('tenant_raffles')
-        .update({ closed_at: new Date().toISOString() })
-        .eq('tenant_id', tenantIdRef.value)
-        .eq('raffle_pubkey', raffle.rafflePubkey)
-      if (closeError) throw new Error(closeError.message)
-    },
-    'Failed to close raffle',
-    fetchRaffles
-  )
-}
-
-function openAddRewardModal(raffle: RaffleItem) {
-  addRewardForm.prizeMint = ''
-  addRewardForm.amountDisplay = ''
-  addRewardForm.imageUrl = ''
-  addRewardError.value = null
-  openAddRewardModalBase(raffle)
-}
-
-async function onAddRewardSubmit() {
-  const raffle = selectedRaffleForReward.value
-  if (!raffle || !connection.value) return
-
-  const prizeMint = addRewardForm.prizeMint.trim()
-  const _amountStr = addRewardForm.amountDisplay.trim()
-  if (!prizeMint) {
-    addRewardError.value = 'Prize mint is required'
-    return
-  }
-  const dec = prizeMintMeta.metadata.value?.decimals
-  if (dec == null) {
-    addRewardError.value = 'Enter a valid prize mint to load decimals first'
-    return
-  }
-  const amountRaw = prizeMintMeta.toRawAmount()
-  if (!amountRaw || amountRaw === '0') {
-    addRewardError.value = 'Amount is required'
-    return
-  }
-
-  const wallet = getEscrowWalletFromConnector()
-  if (!wallet?.publicKey) {
-    addRewardError.value = 'Wallet not connected'
-    return
-  }
-
-  addRewardSubmitting.value = true
-  addRewardError.value = null
-  try {
-    const raffleTx = await buildPrepareRaffleTransaction({
-      rafflePubkey: raffle.rafflePubkey,
-      prizeMint,
-      amount: BigInt(amountRaw),
-      imageUrl: addRewardForm.imageUrl.trim() || undefined,
-      connection: connection.value,
-      wallet,
-    })
-
-    const sig = await sendWithTxStatus(connection.value, raffleTx, wallet, wallet.publicKey)
-    if (!sig) throw new Error('Transaction failed')
-
-    closeRaffleModal()
-    await fetchRaffles()
-  } catch (e) {
-    addRewardError.value = e instanceof Error ? e.message : 'Failed to add reward'
-  } finally {
-    addRewardSubmitting.value = false
-    actionTxStatus.value = null
-  }
-}
+const {
+  editForm,
+  addRewardForm,
+  addRewardSubmitting,
+  addRewardError,
+  prizeMintMeta,
+  openStartRaffleModal,
+  onConfirmStartRaffle,
+  onCancelStartRaffle,
+  onPauseRaffle,
+  onResumeRaffle,
+  openEditRaffleModal,
+  onEditRaffleSubmit,
+  onRevealWinner,
+  onDistributeReward,
+  onClaimProceeds,
+  onCloseRaffle,
+  openAddRewardModal,
+  onAddRewardSubmit,
+} = useAdminRaffleSlotActions({
+  connection,
+  tenantId: tenantIdRef,
+  selectedRaffleForStart,
+  selectedRaffleForReward,
+  selectedRaffleForEdit,
+  closeRaffleModal,
+  openStartRaffleModalBase,
+  openEditRaffleModalBase,
+  openAddRewardModalBase,
+  sendWithTxStatus,
+  runRaffleAction,
+  actionTxStatus,
+  fetchRaffles,
+})
 
 onMounted(async () => {
   const id = tenantIdRef.value
@@ -765,7 +451,25 @@ onMounted(async () => {
     if (data?.settings) {
       const s = data.settings as Record<string, unknown>
       const dg = s.defaultGate
-      const val = dg === undefined ? 'use-default' : dg === null || dg === 'public' ? null : dg === 'use-default' ? 'use-default' : dg === 'admin-only' ? 'admin-only' : (dg && typeof dg === 'object' && (dg as { account?: string }).account ? (dg as { account: string }) : null)
+      let val: RaffleWhitelistFormValue
+      if (dg === undefined) {
+        val = 'use-default'
+      } else if (dg === null || dg === 'public') {
+        val = null
+      } else if (dg === 'use-default') {
+        val = 'use-default'
+      } else if (dg === 'admin-only') {
+        val = 'admin-only'
+      } else if (
+        dg &&
+        typeof dg === 'object' &&
+        typeof (dg as MarketplaceGateSettings).programId === 'string' &&
+        typeof (dg as MarketplaceGateSettings).account === 'string'
+      ) {
+        val = dg as MarketplaceGateSettings
+      } else {
+        val = null
+      }
       initialWhitelist.value = whitelistToCompareStr(val)
     }
   } catch {
@@ -773,7 +477,6 @@ onMounted(async () => {
   }
 })
 
-const pricingRef = ref<InstanceType<typeof AdminPricingWidget> | null>(null)
 function clearUpgradeConditions() {
   upgradeConditionsOverride.value = null
 }
@@ -920,6 +623,11 @@ defineExpose({
   margin: 0;
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
+}
+:deep(.raffle-upgrade-modal__error) {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-error);
 }
 :deep(.raffle-upgrade-modal__options) {
   display: grid;
