@@ -5,6 +5,7 @@
 import { PublicKey } from '@solana/web3.js'
 import { watch } from 'vue'
 import { useTenantStore } from '~/stores/tenant'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import BN from 'bn.js'
 import { escrowPriceToHuman } from '@decentraguild/display'
@@ -99,10 +100,13 @@ export function useEscrowsForMints(
     const supabase = useSupabase()
     for (const listAddr of listAddresses) {
       try {
-        const { data, error } = await supabase.functions.invoke('whitelist', {
-          body: { action: 'check', tenantId, listAddress: listAddr, wallet },
+        const data = await invokeEdgeFunction<{ listed?: boolean }>(supabase, 'whitelist', {
+          action: 'check',
+          tenantId,
+          listAddress: listAddr,
+          wallet,
         })
-        if (!error && (data as { listed?: boolean }).listed) allowed.add(listAddr)
+        if (data.listed) allowed.add(listAddr)
       } catch {
         // skip
       }
@@ -180,14 +184,10 @@ export function useEscrowsForMints(
       if (tenantId) {
         try {
           const supabase = useSupabase()
-          const { data, error: fnError } = await supabase.functions.invoke('marketplace', {
-            body: { action: 'escrows', tenantId },
-          })
-          if (!fnError && data) {
-            const raw = ((data as { escrows?: EscrowApiShape[] }).escrows) ?? []
-            rawEscrows.value = raw.map(apiEscrowToFull)
-            return
-          }
+          const data = await invokeEdgeFunction<{ escrows?: EscrowApiShape[] }>(supabase, 'marketplace', { action: 'escrows', tenantId })
+          const raw = data.escrows ?? []
+          rawEscrows.value = raw.map(apiEscrowToFull)
+          return
         } catch {
           /* fall through to RPC */
         }

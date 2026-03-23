@@ -50,7 +50,7 @@
 
 <script setup lang="ts">
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
-import { formatDateTime, formatUsdc } from '@decentraguild/core'
+import { formatDateTime, formatUsdc } from '@decentraguild/display'
 
 defineProps<{
   summary: { totalMrrUsdc: number; activeSubscriptions: number }

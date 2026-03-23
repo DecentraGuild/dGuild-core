@@ -88,13 +88,17 @@ import { Button } from '~/components/ui/button'
 const props = defineProps<{
   voucher: { mint: string; type: string; bundleId?: string; label?: string } | null
   bundleLabel?: string
-  bundleForm: { tokensRequired: number }
-  individualForm: { label: string; entitlements: Array<{ meter_key: string; quantity: number; duration_days: number }> }
   maxRedemptions: number | null
   meters: Array<{ meter_key: string; product_key: string }>
   saving: boolean
   error: string | null
 }>()
+
+const bundleForm = defineModel<{ tokensRequired: number }>('bundleForm', { required: true })
+const individualForm = defineModel<{
+  label: string
+  entitlements: Array<{ meter_key: string; quantity: number; duration_days: number }>
+}>('individualForm', { required: true })
 
 const emit = defineEmits<{
   close: []
@@ -113,14 +117,14 @@ watch(
 function onSubmit() {
   if (props.voucher?.type === 'bundle') {
     emit('save', {
-      tokensRequired: props.bundleForm.tokensRequired,
+      tokensRequired: bundleForm.value.tokensRequired,
       maxRedemptionsPerTenant: localMaxRedemptions.value ?? undefined,
     })
   } else {
     emit('save', {
-      label: props.individualForm.label || undefined,
+      label: individualForm.value.label || undefined,
       maxRedemptionsPerTenant: localMaxRedemptions.value ?? undefined,
-      entitlements: props.individualForm.entitlements.filter((e) => e.meter_key?.trim()),
+      entitlements: individualForm.value.entitlements.filter((e) => e.meter_key?.trim()),
     })
   }
 }

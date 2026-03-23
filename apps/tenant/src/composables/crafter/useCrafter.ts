@@ -23,6 +23,7 @@ import {
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -80,11 +81,12 @@ export function useCrafter() {
     try {
       const headers = await getAuthHeaders()
       if (!headers) throw new Error('Sign in required')
-      const { data, error } = await supabase.functions.invoke('crafter', {
-        body: { action: 'list', tenantId: id },
-        headers,
-      })
-      if (error) throw error
+      const data = await invokeEdgeFunction<{ tokens?: Array<Record<string, unknown>> }>(
+        supabase,
+        'crafter',
+        { action: 'list', tenantId: id },
+        { headers },
+      )
       tokens.value = (data?.tokens ?? []).map((t: Record<string, unknown>) => ({
         id: t.id as number,
         mint: t.mint as string,
@@ -119,31 +121,35 @@ export function useCrafter() {
 
     try {
       const currentCount = tokens.value.length
-      const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
-        body: {
+      const quoteData = await invokeEdgeFunction<{ quoteId?: string; priceUsdc?: number }>(
+        supabase,
+        'billing',
+        {
           action: 'quote',
           tenantId: id,
           productKey: 'crafter',
           meterOverrides: { crafter_tokens: currentCount + 1 },
           durationDays: 30,
         },
-      })
-      if (quoteErr) throw new Error(quoteErr.message ?? 'Quote failed')
-      const quote = quoteData as { quoteId?: string; priceUsdc?: number }
+        { errorFallback: 'Quote failed' },
+      )
+      const quote = quoteData
       if (!quote?.quoteId) throw new Error('No quote returned')
 
       createTxStatus.value = 'Charging...'
       const payerWallet = wallet.publicKey.toBase58()
-      const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
-        body: {
+      const chargeData = await invokeEdgeFunction<{ paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }>(
+        supabase,
+        'billing',
+        {
           action: 'charge',
           quoteId: quote.quoteId,
           payerWallet,
           paymentMethod: 'usdc',
         },
-      })
-      if (chargeErr) throw new Error(chargeErr.message ?? 'Charge failed')
-      const charge = chargeData as { paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }
+        { errorFallback: 'Charge failed' },
+      )
+      const charge = chargeData
       if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
       const mintKeypair = Keypair.generate()
@@ -152,17 +158,18 @@ export function useCrafter() {
       if (!headers) throw new Error('Sign in required')
 
       createTxStatus.value = 'Creating pending...'
-      const { error: createErr } = await supabase.functions.invoke('crafter', {
-        body: {
+      await invokeEdgeFunction(
+        supabase,
+        'crafter',
+        {
           action: 'create',
           tenantId: id,
           mint: mintKeypair.publicKey.toBase58(),
           decimals,
           memo: charge.memo,
         },
-        headers,
-      })
-      if (createErr) throw new Error(createErr.message ?? 'Create pending failed')
+        { headers, errorFallback: 'Create pending failed' },
+      )
 
       createTxStatus.value = 'Sending transaction...'
       const tx = await buildCreateMintAndBillingTransaction({
@@ -179,23 +186,26 @@ export function useCrafter() {
       })
 
       createTxStatus.value = 'Confirming payment...'
-      const { error: confirmErr } = await supabase.functions.invoke('billing', {
-        body: { action: 'confirm', paymentId: charge.paymentId, txSignature },
-      })
-      if (confirmErr) throw new Error(confirmErr.message ?? 'Confirm failed')
+      await invokeEdgeFunction(
+        supabase,
+        'billing',
+        { action: 'confirm', paymentId: charge.paymentId, txSignature },
+        { errorFallback: 'Confirm failed' },
+      )
 
       createTxStatus.value = 'Confirming token...'
-      const { error: crafterConfirmErr } = await supabase.functions.invoke('crafter', {
-        body: {
+      await invokeEdgeFunction(
+        supabase,
+        'crafter',
+        {
           action: 'confirm',
           tenantId: id,
           mint: mintKeypair.publicKey.toBase58(),
           txSignature,
           memo: charge.memo,
         },
-        headers,
-      })
-      if (crafterConfirmErr) throw new Error(crafterConfirmErr.message ?? 'Token confirm failed')
+        { headers, errorFallback: 'Token confirm failed' },
+      )
 
       await list()
       return { success: true, mint: mintKeypair.publicKey.toBase58() }
@@ -238,8 +248,10 @@ export function useCrafter() {
 
       const headers = await getAuthHeaders()
       if (!headers) throw new Error('Sign in required')
-      const { data, error } = await supabase.functions.invoke('crafter', {
-        body: {
+      const data = await invokeEdgeFunction<{ success?: boolean }>(
+        supabase,
+        'crafter',
+        {
           action: 'publish-metadata',
           tenantId: id,
           mint,
@@ -250,9 +262,8 @@ export function useCrafter() {
           imageUrl: form.imageUrl?.trim() || null,
           sellerFeeBasisPoints: form.sellerFeeBasisPoints,
         },
-        headers,
-      })
-      if (error) throw error
+        { headers },
+      )
       if (!data?.success) throw new Error('Publish failed')
 
       await list()
@@ -279,8 +290,10 @@ export function useCrafter() {
     try {
       const headers = await getAuthHeaders()
       if (!headers) return { error: 'Sign in required' }
-      const { data, error } = await supabase.functions.invoke('crafter', {
-        body: {
+      const data = await invokeEdgeFunction<{ metadataUri?: string }>(
+        supabase,
+        'crafter',
+        {
           action: 'prepare-metadata',
           tenantId: id,
           name: form.name.trim(),
@@ -290,9 +303,8 @@ export function useCrafter() {
           imageUrl: form.imageUrl.trim() || null,
           sellerFeeBasisPoints: form.sellerFeeBasisPoints,
         },
-        headers,
-      })
-      if (error) throw error
+        { headers },
+      )
       const uri = data?.metadataUri as string | undefined
       if (!uri) throw new Error('No metadata URI returned')
       return { metadataUri: uri }
@@ -432,8 +444,10 @@ export function useCrafter() {
       await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
       const headers = await getAuthHeaders()
       if (headers) {
-        await supabase.functions.invoke('crafter', {
-          body: {
+        await invokeEdgeFunction(
+          supabase,
+          'crafter',
+          {
             action: 'update-metadata',
             tenantId: id,
             mint,
@@ -444,8 +458,8 @@ export function useCrafter() {
             sellerFeeBasisPoints: form.sellerFeeBasisPoints ?? 0,
             metadataUri: uri,
           },
-          headers,
-        })
+          { headers },
+        )
       }
       await list()
       return { success: true }
@@ -484,11 +498,7 @@ export function useCrafter() {
     try {
       const headers = await getAuthHeaders()
       if (!headers) return { success: false, error: 'Sign in required' }
-      const { error } = await supabase.functions.invoke('crafter', {
-        body: { action: 'remove', tenantId: id, mint },
-        headers,
-      })
-      if (error) throw error
+      await invokeEdgeFunction(supabase, 'crafter', { action: 'remove', tenantId: id, mint }, { headers })
       tokens.value = tokens.value.filter((t) => t.mint !== mint)
       return { success: true }
     } catch (e) {

@@ -3,9 +3,9 @@
  * Uses tenant_catalog Edge Function (bypasses RLS) for admin CRUD.
  */
 
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
-import { getEdgeFunctionErrorMessage } from '~/utils/edgeFunctionError'
 
 export interface CatalogEntry {
   id: number
@@ -33,11 +33,7 @@ export function useTenantCatalog() {
     if (!id) return []
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('tenant_catalog', {
-      body: { action: 'list', tenantId: id },
-    })
-
-    if (error) throw new Error(getEdgeFunctionErrorMessage(error, 'Failed to load catalog'))
+    const data = await invokeEdgeFunction<{ entries?: CatalogEntry[] }>(supabase, 'tenant_catalog', { action: 'list', tenantId: id }, { errorFallback: 'Failed to load catalog' })
     return (data?.entries ?? []) as CatalogEntry[]
   }
 
@@ -47,11 +43,7 @@ export function useTenantCatalog() {
     if (!id) return []
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('tenant_catalog', {
-      body: { action: 'list-discord', tenantId: id },
-    })
-
-    if (error) throw new Error(getEdgeFunctionErrorMessage(error, 'Failed to load Discord catalog'))
+    const data = await invokeEdgeFunction<{ entries?: CatalogEntry[] }>(supabase, 'tenant_catalog', { action: 'list-discord', tenantId: id }, { errorFallback: 'Failed to load Discord catalog' })
     return (data?.entries ?? []) as CatalogEntry[]
   }
 
@@ -66,8 +58,10 @@ export function useTenantCatalog() {
     if (!id) throw new Error('No tenant')
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('tenant_catalog', {
-      body: {
+    const data = await invokeEdgeFunction<{ entry?: CatalogEntry }>(
+      supabase,
+      'tenant_catalog',
+      {
         action: 'add',
         tenantId: id,
         mint: params.mint,
@@ -76,10 +70,9 @@ export function useTenantCatalog() {
         label: params.label ?? params.name ?? null,
         image: params.image ?? null,
       },
-    })
-
-    if (error) throw new Error(getEdgeFunctionErrorMessage(error, 'Failed to add mint'))
-    return data?.entry as CatalogEntry
+      { errorFallback: 'Failed to add mint' },
+    )
+    return data.entry as CatalogEntry
   }
 
   async function updateShipmentDisplay(mint: string, params: { image?: string | null }): Promise<void> {
@@ -87,16 +80,17 @@ export function useTenantCatalog() {
     if (!id) throw new Error('No tenant')
 
     const supabase = useSupabase()
-    const { error } = await supabase.functions.invoke('tenant_catalog', {
-      body: {
+    await invokeEdgeFunction(
+      supabase,
+      'tenant_catalog',
+      {
         action: 'update-shipment-display',
         tenantId: id,
         mint,
         shipmentBannerImage: params.image ?? null,
       },
-    })
-
-    if (error) throw new Error(getEdgeFunctionErrorMessage(error, 'Failed to update shipment display'))
+      { errorFallback: 'Failed to update shipment display' },
+    )
   }
 
   async function remove(mint: string): Promise<void> {
@@ -104,11 +98,7 @@ export function useTenantCatalog() {
     if (!id) throw new Error('No tenant')
 
     const supabase = useSupabase()
-    const { error } = await supabase.functions.invoke('tenant_catalog', {
-      body: { action: 'remove', tenantId: id, mint },
-    })
-
-    if (error) throw new Error(getEdgeFunctionErrorMessage(error, 'Failed to remove mint'))
+    await invokeEdgeFunction(supabase, 'tenant_catalog', { action: 'remove', tenantId: id, mint }, { errorFallback: 'Failed to remove mint' })
   }
 
   async function sync(
@@ -118,11 +108,7 @@ export function useTenantCatalog() {
     if (!id || !mints.length) return 0
 
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('tenant_catalog', {
-      body: { action: 'sync', tenantId: id, mints },
-    })
-
-    if (error) throw new Error(getEdgeFunctionErrorMessage(error, 'Failed to sync catalog'))
+    const data = await invokeEdgeFunction<{ synced?: number }>(supabase, 'tenant_catalog', { action: 'sync', tenantId: id, mints }, { errorFallback: 'Failed to sync catalog' })
     return (data?.synced as number) ?? 0
   }
 

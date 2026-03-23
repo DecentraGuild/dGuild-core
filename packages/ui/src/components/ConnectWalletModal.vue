@@ -1,9 +1,32 @@
 <template>
-  <Modal :model-value="open" :title="title" @update:model-value="$emit('close')">
+  <Modal :model-value="open" :title="title" :wide="!!walletConnectUri" @update:model-value="$emit('close')">
     <div class="connect-wallet-modal">
       <p v-if="description" class="connect-wallet-modal__description">
         {{ description }}
       </p>
+
+      <div v-if="showMobileAppLinks" class="connect-wallet-modal__mobile-links">
+        <p class="connect-wallet-modal__mobile-links-title">Open in wallet app</p>
+        <div class="connect-wallet-modal__mobile-links-row">
+          <a
+            class="connect-wallet-modal__app-link"
+            :href="phantomBrowseUrl"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Phantom
+          </a>
+          <a
+            class="connect-wallet-modal__app-link"
+            :href="solflareBrowseUrl"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Solflare
+          </a>
+        </div>
+      </div>
+
       <ul class="connect-wallet-modal__list">
         <li
           v-for="connector in connectors"
@@ -25,6 +48,14 @@
           </button>
         </li>
       </ul>
+
+      <div v-if="walletConnectUri" class="connect-wallet-modal__wc-inline">
+        <p class="connect-wallet-modal__wc-hint">
+          Scan with your mobile wallet or copy the link.
+        </p>
+        <WalletConnectQr :uri="walletConnectUri" />
+      </div>
+
       <p v-if="connectors.length === 0 && !loading" class="connect-wallet-modal__empty">
         No wallets detected. Install a Solana wallet (e.g. Phantom, Backpack) to continue.
       </p>
@@ -34,8 +65,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import Modal from './Modal.vue'
+import WalletConnectQr from './WalletConnectQr.vue'
+
+const MOBILE_UA_RE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
 
 withDefaults(
   defineProps<{
@@ -45,24 +80,101 @@ withDefaults(
     connectors: { id: string; name: string; ready: boolean }[]
     loading?: boolean
     error?: string | null
+    walletConnectUri?: string | null
   }>(),
   {
     title: 'Connect wallet',
     description: '',
     loading: false,
     error: null,
-  }
+    walletConnectUri: null,
+  },
 )
 
 defineEmits<{
   close: []
   select: [connectorId: string]
 }>()
+
+const showMobileAppLinks = computed(() => {
+  if (typeof navigator === 'undefined') return false
+  return MOBILE_UA_RE.test(navigator.userAgent)
+})
+
+const pageHref = computed(() => {
+  if (typeof window === 'undefined') return ''
+  return window.location.href
+})
+
+const phantomBrowseUrl = computed(() => {
+  const u = encodeURIComponent(pageHref.value || 'https://')
+  return `https://phantom.app/ul/v1/browse?url=${u}`
+})
+
+const solflareBrowseUrl = computed(() => {
+  const u = encodeURIComponent(pageHref.value || 'https://')
+  return `https://solflare.com/ul/v1/browse/?url=${u}`
+})
 </script>
 
 <style scoped>
 .connect-wallet-modal__description {
   margin: 0 0 var(--theme-space-md);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+}
+
+.connect-wallet-modal__mobile-links {
+  margin-bottom: var(--theme-space-md);
+  padding: var(--theme-space-md);
+  background: var(--theme-bg-secondary);
+  border-radius: var(--theme-radius-md);
+  border: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.connect-wallet-modal__mobile-links-title {
+  margin: 0 0 var(--theme-space-sm);
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.connect-wallet-modal__mobile-links-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-space-sm);
+}
+
+.connect-wallet-modal__app-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 var(--theme-space-md);
+  touch-action: manipulation;
+  font-size: var(--theme-font-sm);
+  font-weight: 500;
+  color: var(--theme-primary);
+  text-decoration: none;
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-bg-card);
+}
+
+.connect-wallet-modal__app-link:hover {
+  border-color: var(--theme-primary);
+}
+
+.connect-wallet-modal__wc-inline {
+  margin-bottom: var(--theme-space-md);
+  padding: var(--theme-space-md);
+  background: var(--theme-bg-secondary);
+  border-radius: var(--theme-radius-md);
+  border: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.connect-wallet-modal__wc-hint {
+  margin: 0 0 var(--theme-space-sm);
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
 }
@@ -86,7 +198,9 @@ defineEmits<{
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-height: 48px;
   padding: var(--theme-space-md) var(--theme-space-lg);
+  touch-action: manipulation;
   text-align: left;
   background: var(--theme-bg-secondary);
   border: var(--theme-border-thin) solid var(--theme-border);

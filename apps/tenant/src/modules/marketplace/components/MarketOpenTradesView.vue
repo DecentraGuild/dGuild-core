@@ -137,6 +137,7 @@ import MintLabel from './MintLabel.vue'
 import { useTenantStore } from '~/stores/tenant'
 import { useMarketplaceEscrowLinks } from '~/composables/marketplace/useMarketplaceEscrowLinks'
 import { useMarketplaceScope } from '~/composables/marketplace/useMarketplaceScope'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useAuth } from '@decentraguild/auth'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -271,15 +272,15 @@ async function load() {
   try {
     if (supabaseConfigured.value && tid) {
       try {
-        const { data, error: fnError } = await supabase.functions.invoke('marketplace', {
-          body: { action: 'escrows', tenantId: tid, wallet: addr },
-        })
-        if (!fnError && data) {
-          const raw = ((data as { escrows?: Array<{ publicKey: string; account: Record<string, unknown> }> })?.escrows) ?? []
-          const converted = raw.map(apiEscrowToFull)
-          escrows.value = converted.filter((e) => !isEffectivelyComplete(e.account.tokensDepositRemaining, e.account.decimals))
-          return
-        }
+        const data = await invokeEdgeFunction<{ escrows?: Array<{ publicKey: string; account: Record<string, unknown> }> }>(
+          supabase,
+          'marketplace',
+          { action: 'escrows', tenantId: tid, wallet: addr },
+        )
+        const raw = data.escrows ?? []
+        const converted = raw.map(apiEscrowToFull)
+        escrows.value = converted.filter((e) => !isEffectivelyComplete(e.account.tokensDepositRemaining, e.account.decimals))
+        return
       } catch {
         /* fall through to RPC */
       }

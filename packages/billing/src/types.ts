@@ -32,17 +32,34 @@ export interface QuoteLineItem {
   price_multiplier?: number
 }
 
+/** Tier row matching `target` quantity for a meter; from `tier_rules` + duration multiplier. */
+export interface QuotedMeterTierInfo {
+  label: string | null
+  minQuantity: number
+  maxQuantity: number | null
+  /**
+   * OTC for one marginal unit at this tier (after duration multiplier).
+   * Zero when the tier uses flat `tier_price` (Grow/Pro style).
+   */
+  perMarginalUnitUsdc: number
+}
+
 export interface QuoteResult {
   quoteId: string
   lineItems: QuoteLineItem[]
   /** Amount due now (upgrade / new entitlement gaps only). */
   priceUsdc: number
   /**
-   * Full price for the quoted duration at current target quantities (paid + pending).
-   * Use for admin “current monthly/yearly cost” when `priceUsdc` is zero but entitlements exist.
+   * Recurring component for admin display (flat `tier_price` rows, and quantity×`unit_price` for
+   * classic metered products like watchtower). For `tiered_with_one_time`, only flat `tier_price`
+   * counts — marginal `unit_price` is OTC only (`quotedMeterTiers.perMarginalUnitUsdc`).
    */
   recurringDisplayUsdc: number
   meters: Record<string, { used: number; limit: number }>
+  /**
+   * Per-meter tier match at quoted target (from `tier_rules`). UI must not hardcode tier prices.
+   */
+  quotedMeterTiers?: Record<string, QuotedMeterTierInfo>
   expiresAt: string
 }
 

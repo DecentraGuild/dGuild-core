@@ -1,8 +1,5 @@
-/**
- * Composable for raffle slots: fetch raffles, chain data, slot cards, slot limit.
- * Extracted from AdminRaffleTab.
- */
 import type { Ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { fetchRaffleChainData } from '@decentraguild/web3'
 import type { RaffleChainData } from '@decentraguild/web3'
 import type { Connection } from '@solana/web3.js'
@@ -24,7 +21,7 @@ export interface SlotCard {
 }
 
 export function useRaffleSlots(
-  tenantId: Ref<string | undefined>,
+  tenantId: Ref<string | null | undefined>,
   connection: Ref<Connection | null>,
   slotLimit: Ref<number>
 ) {
@@ -100,7 +97,7 @@ export function useRaffleSlots(
 
   watch(
     chainDataByRaffle,
-    async (chain) => {
+    async (chain: Record<string, RaffleChainData | null>) => {
       const mints = new Set<string>()
       for (const data of Object.values(chain)) {
         if (data?.ticketMint) mints.add(data.ticketMint)

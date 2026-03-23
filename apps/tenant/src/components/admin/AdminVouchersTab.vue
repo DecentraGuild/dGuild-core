@@ -88,9 +88,9 @@ import { Card } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import { useTenantStore } from '~/stores/tenant'
+import { invokeEdgeFunction, useRpc } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useAuth } from '@decentraguild/auth'
-import { useRpc } from '@decentraguild/nuxt-composables'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { fetchWalletTokenBalances } from '~/composables/core/useWalletTokenBalances'
 import {
@@ -101,7 +101,6 @@ import {
   isBackpackConnector,
 } from '@decentraguild/web3'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
-import { getEdgeFunctionErrorMessageAsync } from '~/utils/edgeFunctionError'
 import { formatRawTokenAmount } from '@decentraguild/display'
 
 const tenantStore = useTenantStore()
@@ -206,13 +205,21 @@ function truncateMint(mint: string): string {
 }
 
 async function load() {
+  const id = tenantId.value
+  if (!id) {
+    vouchers.value = []
+    balancesByMint.value = new Map()
+    return
+  }
   loading.value = true
   try {
-    const { data, error } = await supabase.functions.invoke('billing', {
-      body: { action: 'list-voucher-mints' },
-    })
-    if (error) throw new Error(error.message ?? 'Failed to list vouchers')
-    const list = (data as { vouchers?: VoucherDef[] })?.vouchers ?? []
+    const data = await invokeEdgeFunction<{ vouchers?: VoucherDef[] }>(
+      supabase,
+      'billing',
+      { action: 'list-voucher-mints', tenantId: id },
+      { errorFallback: 'Failed to list vouchers' },
+    )
+    const list = data?.vouchers ?? []
     vouchers.value = list
 
     if (walletAddress.value && rpcUrl.value && list.length > 0) {
@@ -258,38 +265,37 @@ async function redeem(v: RedeemableVoucher) {
   redeemingMint.value = v.mint
   const notificationId = `voucher-${Date.now()}`
   try {
-    const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
-      body: {
-        action: 'voucher-quote',
-        tenantId: id,
-        voucherMint: v.mint,
-      },
-    })
-    if (quoteErr) throw new Error(await getEdgeFunctionErrorMessageAsync(quoteErr, 'Quote failed'))
-    const quote = quoteData as {
+    const quoteData = await invokeEdgeFunction<{
       quoteId?: string
       memo?: string
       voucherRecipientAta?: string
       voucherWallet?: string
       tokensRequired?: number
-    }
+    }>(supabase, 'billing', {
+      action: 'voucher-quote',
+      tenantId: id,
+      voucherMint: v.mint,
+    }, { errorFallback: 'Quote failed' })
+    const quote = quoteData
     if (!quote?.quoteId || !quote?.memo || !quote?.voucherRecipientAta) {
       throw new Error('Invalid quote response')
     }
     const tokensRequired = quote.tokensRequired ?? v.tokensRequired
     const voucherWallet = quote.voucherWallet ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
 
-    const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
-      body: {
+    const chargeData = await invokeEdgeFunction<{ paymentId?: string }>(
+      supabase,
+      'billing',
+      {
         action: 'charge',
         quoteId: quote.quoteId,
         payerWallet: wallet.publicKey.toBase58(),
         paymentMethod: 'voucher',
         voucherMint: v.mint,
       },
-    })
-    if (chargeErr) throw new Error(await getEdgeFunctionErrorMessageAsync(chargeErr, 'Charge failed'))
-    const charge = chargeData as { paymentId?: string }
+      { errorFallback: 'Charge failed' },
+    )
+    const charge = chargeData
     if (!charge?.paymentId) throw new Error('Invalid charge response')
 
     txNotifications.add(notificationId, {
@@ -345,11 +351,8 @@ async function redeem(v: RedeemableVoucher) {
     }
     if (slugToClaim) confirmBody.slugToClaim = slugToClaim
 
-    const { data: confirmData, error: confirmErr } = await supabase.functions.invoke('billing', {
-      body: confirmBody,
-    })
-    if (confirmErr) throw new Error(await getEdgeFunctionErrorMessageAsync(confirmErr, 'Confirm failed'))
-    const confirm = confirmData as { success?: boolean }
+    const confirmData = await invokeEdgeFunction<{ success?: boolean }>(supabase, 'billing', confirmBody, { errorFallback: 'Confirm failed' })
+    const confirm = confirmData
     if (!confirm?.success) throw new Error('Confirmation failed')
 
     if (slugToClaim) {

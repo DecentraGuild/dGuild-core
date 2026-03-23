@@ -83,6 +83,8 @@ export default defineNuxtConfig({
       explorerTxUrl: process.env.NUXT_PUBLIC_EXPLORER_TX_URL ?? 'https://solscan.io/tx',
       explorerAccountUrl: process.env.NUXT_PUBLIC_EXPLORER_ACCOUNT_URL ?? 'https://solscan.io/account',
       explorerTokenUrl: process.env.NUXT_PUBLIC_EXPLORER_TOKEN_URL ?? 'https://solscan.io/token',
+      appUrl: process.env.NUXT_PUBLIC_APP_URL ?? '',
+      walletConnectProjectId: process.env.NUXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? '',
     },
   },
 })

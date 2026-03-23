@@ -88,6 +88,26 @@ function onClose() {
   max-width: 42rem;
 }
 
+@media (max-width: 640px) {
+  .modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal__content,
+  .modal__content--wide {
+    width: 100%;
+    max-width: 100%;
+    max-height: 85dvh;
+    border-radius: var(--theme-radius-lg) var(--theme-radius-lg) 0 0;
+  }
+
+  .modal-enter-from .modal__content,
+  .modal-leave-to .modal__content {
+    transform: translateY(100%);
+  }
+}
+
 .modal__header {
   display: flex;
   align-items: center;

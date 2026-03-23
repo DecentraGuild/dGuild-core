@@ -6,6 +6,7 @@
 import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
 import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import type { TieredAddonsPricing } from '@decentraguild/catalog'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
 import type { AddressBookEntry, CatalogMintItem } from '~/types/mints'
@@ -180,6 +181,7 @@ export function useMarketplaceSettings(opts: {
   const addMintError = ref('')
   const adding = ref(false)
   const newCurrencyMint = ref('')
+  const newCurrencyKind = ref<'auto' | 'SPL' | 'NFT'>('auto')
   const addCurrencyError = ref('')
   const saving = ref(false)
   const saveError = ref<string | null>(null)
@@ -388,11 +390,12 @@ export function useMarketplaceSettings(opts: {
         continue
       }
       try {
-        const { data } = await supabase.functions.invoke('marketplace', {
-          body: { action: 'collection-preview', mint: m.mint },
-        })
-        if (!data) continue
-        const d = data as { collectionSize?: number; uniqueTraitCount?: number; traitTypes?: string[] }
+        const d = await invokeEdgeFunction<{ collectionSize?: number; uniqueTraitCount?: number; traitTypes?: string[] }>(
+          supabase,
+          'marketplace',
+          { action: 'collection-preview', mint: m.mint },
+        )
+        if (!d) continue
         const existing = form.collectionMints[i]
         if (existing && existing.mint === m.mint) {
           existing.collectionSize = d.collectionSize ?? 0
@@ -479,39 +482,45 @@ export function useMarketplaceSettings(opts: {
     }
   }
 
-  async function lookupAndAddCurrency() {
-    const mint = newCurrencyMint.value.trim()
-    if (!mint || mint.length < 32) {
+  async function addCurrencyFromInput(mint: string, kind: 'auto' | 'SPL' | 'NFT', entry?: AddressBookEntry) {
+    const trimmed = mint.trim()
+    if (!trimmed || trimmed.length < 32) {
       addCurrencyError.value = 'Invalid mint address'
       return
     }
+    const entryKind = entry?.kind
+    if (kind === 'NFT' || entryKind === 'NFT') {
+      addCurrencyError.value = 'Only SPL tokens can be used as a currency'
+      return
+    }
     const baseMints = new Set(BASE_CURRENCY_MINTS.map((b) => b.mint))
-    if (baseMints.has(mint)) {
+    if (baseMints.has(trimmed)) {
       addCurrencyError.value = 'Already in base currencies'
       return
     }
-    if (form.currencyMints.some((c) => c.mint === mint)) {
+    if (form.currencyMints.some((c) => c.mint === trimmed)) {
       addCurrencyError.value = 'Currency already added'
       return
     }
     addCurrencyError.value = ''
     const item: CurrencyMint = {
-      mint,
+      mint: trimmed,
       name: '',
       symbol: '',
       _loading: true,
     }
     form.currencyMints.push(item)
     newCurrencyMint.value = ''
+    newCurrencyKind.value = 'auto'
     const idx = form.currencyMints.length - 1
     try {
       const supabase = useSupabase()
-      const { data, error } = await supabase.functions.invoke('marketplace', {
-        body: { action: 'spl-preview', mint },
-      })
-      if (error) throw new Error(error.message)
-      const d = data as { name?: string; symbol?: string; image?: string; decimals?: number; sellerFeeBasisPoints?: number }
-      form.currencyMints[idx] = { mint, name: d.name ?? '', symbol: d.symbol ?? '', image: d.image ?? undefined, decimals: d.decimals ?? undefined, sellerFeeBasisPoints: d.sellerFeeBasisPoints ?? undefined }
+      const d = await invokeEdgeFunction<{ name?: string; symbol?: string; image?: string; decimals?: number; sellerFeeBasisPoints?: number }>(
+        supabase,
+        'marketplace',
+        { action: 'spl-preview', mint: trimmed },
+      )
+      form.currencyMints[idx] = { mint: trimmed, name: d.name ?? '', symbol: d.symbol ?? '', image: d.image ?? undefined, decimals: d.decimals ?? undefined, sellerFeeBasisPoints: d.sellerFeeBasisPoints ?? undefined }
     } catch (e) {
       form.currencyMints[idx] = { ...item, _loading: false, _error: e instanceof Error ? e.message : 'Failed to load' }
     }
@@ -598,22 +607,26 @@ export function useMarketplaceSettings(opts: {
       const colls = (payload.collectionMints as Array<{ mint: string }>) ?? []
       const spls = (payload.splAssetMints as Array<{ mint: string }>) ?? []
       if (colls.length || spls.length || currencies.length) {
-        const { error: syncErr } = await supabase.functions.invoke('marketplace', {
-          body: {
+        try {
+          await invokeEdgeFunction(supabase, 'marketplace', {
             action: 'scope-sync',
             tenantId: tenantId.value,
             collectionMints: colls,
             splAssetMints: spls,
             currencyMints: currencies,
-          },
-        })
-        if (!syncErr && colls.length > 0) {
-          for (const c of colls) {
-            await supabase.functions.invoke('marketplace', {
-              body: { action: 'scope-expand', tenantId: tenantId.value, collectionMint: c.mint },
-            })
+          })
+          if (colls.length > 0) {
+            for (const c of colls) {
+              try {
+                await invokeEdgeFunction(supabase, 'marketplace', {
+                  action: 'scope-expand',
+                  tenantId: tenantId.value,
+                  collectionMint: c.mint,
+                })
+              } catch { /* ignore per collection */ }
+            }
           }
-        }
+        } catch { /* ignore sync failures; DB state still saved */ }
       }
 
       saveSuccess.value = true
@@ -645,6 +658,7 @@ export function useMarketplaceSettings(opts: {
     addMintError,
     adding,
     newCurrencyMint,
+    newCurrencyKind,
     addCurrencyError,
     saving,
     saveError,
@@ -657,7 +671,7 @@ export function useMarketplaceSettings(opts: {
     onDeleteMint,
     addMint,
     onBaseToggle,
-    lookupAndAddCurrency,
+    addCurrencyFromInput,
     removeCustomCurrency,
     save,
   }

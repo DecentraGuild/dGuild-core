@@ -4,7 +4,7 @@
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
-import { getWalletFromAuthHeader } from '../_shared/auth.ts'
+import { getWalletFromAuthHeader, isServiceRoleAuthorization, requireTenantAdmin } from '../_shared/auth.ts'
 import { verifyBillingPayment, BILLING_WALLET_ATA } from '../_shared/billing-verify.ts'
 import { getVoucherRecipientAta, verifyVoucherPayment } from '../_shared/voucher-verify.ts'
 import {
@@ -45,6 +45,9 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === 'expire-stale') {
+    if (!isServiceRoleAuthorization(req)) {
+      return errorResponse('Unauthorized', req, 401)
+    }
     const { error } = await db
       .from('billing_payments')
       .update({ status: 'expired' })
@@ -210,6 +213,12 @@ Deno.serve(async (req: Request) => {
 
   if (action === 'list-voucher-mints') {
     try {
+      const authHeader = req.headers.get('Authorization')
+      const listTenantId = (body.tenantId as string)?.trim()
+      if (!listTenantId) return errorResponse('tenantId required', req)
+      const adminCheck = await requireTenantAdmin(authHeader, listTenantId, db, req)
+      if (!adminCheck.ok) return adminCheck.response
+
       const { data: bundleMints } = await db
         .from('bundle_vouchers')
         .select('token_mint, bundle_id, tokens_required')
@@ -383,6 +392,9 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === 'expire-entitlements') {
+    if (!isServiceRoleAuthorization(req)) {
+      return errorResponse('Unauthorized', req, 401)
+    }
     const { data: pending, error } = await db
       .from('entitlement_expiry_queue')
       .select('id, tenant_id, meter_key, quantity')

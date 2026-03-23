@@ -11,18 +11,22 @@
     "db:sync": "node scripts/sync-tenant-config.mjs",
     "sync:address-book-defaults": "node scripts/sync-address-book-defaults.mjs",
     "db:export-tenant": "node scripts/export-tenant-config.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "pnpm exec eslint apps packages",
+    "typecheck": "pnpm exec turbo run typecheck",
     "build:platform": "pnpm exec turbo run build --filter=./packages/* --filter=@decentraguild/catalog && pnpm --filter platform generate",
     "build:tenant": "pnpm exec turbo run build --filter=./packages/* --filter=./catalog && pnpm --filter tenant generate",
     "deploy:discordbot": "pnpm --filter discord-bot deploy"
   },
   "devDependencies": {
-    "@supabase/supabase-js": "^2.98.0",
     "@eslint/js": "^10.0.0",
-    "supabase": "^2.0.0",
+    "@supabase/supabase-js": "^2.98.0",
     "eslint": "^10.0.0",
     "eslint-plugin-vue": "^10.0.0",
+    "supabase": "^2.0.0",
     "turbo": "^2.8.9",
-    "typescript-eslint": "^8.0.0"
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.0"
   }
 }

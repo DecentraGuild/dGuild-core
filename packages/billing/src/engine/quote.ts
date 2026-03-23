@@ -2,8 +2,9 @@
  * Quote resolution: adapter → usage → tier_rules + duration_rules → lineItems.
  */
 import type { DbClient } from '../types.js'
-import type { QuoteLineItem, QuoteParams, QuoteResult } from '../types.js'
+import type { QuoteLineItem, QuoteParams, QuoteResult, QuotedMeterTierInfo } from '../types.js'
 import { getAdapter } from '../adapters/registry.js'
+import { getProductDisplayType } from '../product-display.js'
 
 const QUOTE_TTL_MINUTES = 60
 const DURATION_WHITELIST = [0, 30, 90, 365] as const
@@ -27,6 +28,16 @@ interface BundleRow {
   version: number
   price_version: number
   label: string
+}
+
+function mapTierRow(r: Record<string, unknown>): TierRow {
+  return {
+    min_quantity: Number(r.min_quantity),
+    max_quantity: r.max_quantity == null || r.max_quantity === '' ? null : Number(r.max_quantity),
+    unit_price: Number(r.unit_price),
+    tier_price: r.tier_price == null || r.tier_price === '' ? null : Number(r.tier_price),
+    label: (r.label as string | null) ?? null,
+  }
 }
 
 function findTier(tiers: TierRow[], quantity: number): TierRow | null {
@@ -58,6 +69,11 @@ function displayPriceAtTarget(
   if (hasTierPrice) {
     return Number(tier.tier_price) * priceMultiplier
   }
+  // tiered_with_one_time: `unit_price` is OTC per marginal unit only (see quotedMeterTiers).
+  // Recurring display is `tier_price` when set; never quantity × unit_price (that would double-count Base).
+  if (getProductDisplayType(productKey) === 'tiered_with_one_time') {
+    return 0
+  }
   return target * tier.unit_price * priceMultiplier
 }
 
@@ -74,6 +90,7 @@ export async function resolveQuote(
   let priceUsdc = 0
   let recurringDisplayUsdc = 0
   const meters: Record<string, { used: number; limit: number }> = {}
+  const quotedMeterTiers: Record<string, QuotedMeterTierInfo> = {}
 
   if (params.bundleId) {
     const { data: bundle } = await db
@@ -137,9 +154,21 @@ export async function resolveQuote(
         .select('min_quantity, max_quantity, unit_price, tier_price, label')
         .eq('product_key', params.productKey)
         .eq('meter_key', meterKey)
-      const tiers = (tierRows ?? []) as TierRow[]
+      const tiers = ((tierRows ?? []) as Record<string, unknown>[]).map((row) => mapTierRow(row))
 
-      if (target > 0) {
+      if (target > 0 && tiers.length > 0) {
+        const displayTier = findTier(tiers, target)
+        if (displayTier) {
+          const hasFlat = displayTier.tier_price != null && Number(displayTier.tier_price) > 0
+          const mult = durationRule.price_multiplier
+          const perMarginalUnitUsdc = hasFlat ? 0 : Number(displayTier.unit_price) * mult
+          quotedMeterTiers[meterKey] = {
+            label: displayTier.label,
+            minQuantity: displayTier.min_quantity,
+            maxQuantity: displayTier.max_quantity,
+            perMarginalUnitUsdc,
+          }
+        }
         recurringDisplayUsdc += displayPriceAtTarget(
           tiers,
           target,
@@ -154,7 +183,7 @@ export async function resolveQuote(
       if (gap > 0 && tiers.length === 0) {
         throw new Error(`No pricing tiers configured for ${params.productKey} / ${meterKey}`)
       }
-      const isFlatTier = tiers.some((t) => t.tier_price != null && Number(t.tier_price) > 0)
+      const isFlatTier = tiers.some((t: TierRow) => t.tier_price != null && Number(t.tier_price) > 0)
       const tierLookupQty = isFlatTier ? target : gap
       const tier = findTier(tiers, tierLookupQty)
       if (gap > 0 && !tier) {
@@ -208,6 +237,7 @@ export async function resolveQuote(
       priceUsdc,
       recurringDisplayUsdc,
       meters,
+      quotedMeterTiers: Object.keys(quotedMeterTiers).length > 0 ? quotedMeterTiers : undefined,
       expiresAt,
     },
     quoteId,

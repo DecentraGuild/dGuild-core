@@ -149,7 +149,7 @@ const protocolLayer =
   margin-bottom: 0;
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
+@media (max-width: 767px) {
   .dguild-center {
     flex-direction: column;
   }

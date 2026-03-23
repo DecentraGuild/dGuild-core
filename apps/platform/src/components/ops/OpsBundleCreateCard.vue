@@ -105,14 +105,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 
+const form = defineModel<{
+  id: string
+  label: string
+  productKey: string
+  priceUsdc: number
+  entitlements: Array<{ meter_key: string; quantity: number; duration_days: number }>
+}>('form', { required: true })
+
 defineProps<{
-  form: {
-    id: string
-    label: string
-    productKey: string
-    priceUsdc: number
-    entitlements: Array<{ meter_key: string; quantity: number; duration_days: number }>
-  }
   meters: Array<{ meter_key: string; product_key: string }>
   loading: boolean
   createError: string | null

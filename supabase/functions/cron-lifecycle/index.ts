@@ -11,6 +11,7 @@
 
 import { jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
+import { isServiceRoleAuthorization } from '../_shared/auth.ts'
 
 const DEACTIVATING_MINUTES = Number(Deno.env.get('MODULE_LIFECYCLE_DEACTIVATING_MINUTES') ?? '1440')
 
@@ -80,6 +81,10 @@ function applyLifecycleTransitions(
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204 })
+  }
+
+  if (!isServiceRoleAuthorization(req)) {
+    return errorResponse('Unauthorized', req, 401)
   }
 
   const db = getAdminClient()

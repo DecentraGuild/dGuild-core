@@ -1240,8 +1240,12 @@ INSERT INTO public.tier_rules (product_key, meter_key, min_quantity, max_quantit
   ('watchtower', 'mints_current', 1, 4, 5, NULL, 'Current holders'),
   ('watchtower', 'mints_current', 5, 9, 4, NULL, 'Current holders (tier 2)'),
   ('watchtower', 'mints_current', 10, NULL, 3.5, NULL, 'Current holders (tier 3)'),
-  ('watchtower', 'mints_snapshot', 1, NULL, 5, NULL, 'Snapshot track'),
-  ('watchtower', 'mints_transactions', 1, NULL, 20, NULL, 'Transactions track'),
+  ('watchtower', 'mints_snapshot', 1, 4, 5, NULL, 'Snapshot track'),
+  ('watchtower', 'mints_snapshot', 5, 9, 4, NULL, 'Snapshot track (tier 2)'),
+  ('watchtower', 'mints_snapshot', 10, NULL, 3.5, NULL, 'Snapshot track (tier 3)'),
+  ('watchtower', 'mints_transactions', 1, 4, 20, NULL, 'Transactions track'),
+  ('watchtower', 'mints_transactions', 5, 9, 18, NULL, 'Transactions track (tier 2)'),
+  ('watchtower', 'mints_transactions', 10, NULL, 15, NULL, 'Transactions track (tier 3)'),
   ('marketplace', 'mints_count', 1, 25, 0, 19, 'Starter (1–25 mints)'),
   ('marketplace', 'mints_count', 26, 100, 0, 29, 'Growth (26–100 mints)'),
   ('marketplace', 'mints_count', 101, 250, 0, 39, 'Pro (101–250 mints)'),
@@ -1249,10 +1253,10 @@ INSERT INTO public.tier_rules (product_key, meter_key, min_quantity, max_quantit
   ('raffles', 'raffle_slots', 1, 1, 5, NULL, 'Base (1 slot, 5 USDC per raffle)'),
   ('raffles', 'raffle_slots', 2, 3, 0, 15, 'Grow (3 slots)'),
   ('raffles', 'raffle_slots', 4, 10, 0, 29, 'Pro (10 slots)'),
-  ('gates', 'gate_lists', 1, NULL, 5, NULL, 'Gate list'),
+  ('gates', 'gate_lists', 1, NULL, 50, NULL, 'Gate list'),
   ('crafter', 'crafter_tokens', 1, NULL, 5, NULL, 'Token'),
   ('admin', 'registration', 1, NULL, 10, NULL, 'dGuild registration'),
-  ('admin', 'slug', 1, NULL, 19, NULL, 'Custom slug'),
+  ('admin', 'slug', 1, NULL, (49::numeric / 9), NULL, 'Custom slug'),
   ('shipment', 'recipients_count', 1, NULL, 0, NULL, 'Recipient')
 ON CONFLICT (product_key, meter_key, min_quantity) DO NOTHING;
 

@@ -96,15 +96,16 @@ const gateLabel = getGateLabel()
 
 const addressBookModalOpen = ref(false)
 
-const props = defineProps<{
-  form: {
-    name: string
-    description: string
-    ticketMint: string
-    ticketPriceDisplay: string
-    maxTicketsDisplay: string
-    gate: { programId: string; account: string } | null | 'use-default'
-  }
+const form = defineModel<{
+  name: string
+  description: string
+  ticketMint: string
+  ticketPriceDisplay: string
+  maxTicketsDisplay: string
+  gate: { programId: string; account: string } | null | 'use-default'
+}>('form', { required: true })
+
+defineProps<{
   slug: string
   showGateSelect: boolean
   submitting: boolean
@@ -112,7 +113,7 @@ const props = defineProps<{
 }>()
 
 const ticketPriceDisplaySafe = computed(() => {
-  const v = props.form.ticketPriceDisplay
+  const v = form.value.ticketPriceDisplay
   return typeof v === 'string' ? v : ''
 })
 

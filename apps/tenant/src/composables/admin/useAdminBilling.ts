@@ -13,6 +13,7 @@ import {
   isBackpackConnector,
 } from '@decentraguild/web3'
 import { PublicKey, type TransactionInstruction } from '@solana/web3.js'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -69,17 +70,19 @@ export function useAdminBilling(opts: {
       meterOverrides = { slug: 1 }
     }
 
-    const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
-      body: {
+    const quoteData = await invokeEdgeFunction<{ quoteId: string; priceUsdc: number }>(
+      supabase,
+      'billing',
+      {
         action: 'quote',
         tenantId: id,
         productKey,
         durationDays,
         meterOverrides,
       },
-    })
-    if (quoteErr) throw new Error(quoteErr.message ?? 'Quote failed')
-    const quote = quoteData as { quoteId: string; priceUsdc: number }
+      { errorFallback: 'Quote failed' },
+    )
+    const quote = quoteData
     if (!quote?.quoteId) throw new Error('No quote returned')
 
     if (quote.priceUsdc <= 0) return { kind: 'free' }
@@ -88,16 +91,18 @@ export function useAdminBilling(opts: {
     if (!wallet?.publicKey) throw new Error('Wallet not connected')
     const payerWallet = wallet.publicKey.toBase58()
 
-    const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
-      body: {
+    const chargeData = await invokeEdgeFunction<{ paymentId: string; amountUsdc: number; memo: string; recipientAta: string }>(
+      supabase,
+      'billing',
+      {
         action: 'charge',
         quoteId: quote.quoteId,
         payerWallet,
         paymentMethod: 'usdc',
       },
-    })
-    if (chargeErr) throw new Error(chargeErr.message ?? 'Charge failed')
-    const charge = chargeData as { paymentId: string; amountUsdc: number; memo: string; recipientAta: string }
+      { errorFallback: 'Charge failed' },
+    )
+    const charge = chargeData
     if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
     return {
@@ -143,10 +148,7 @@ export function useAdminBilling(opts: {
     }
     if (slugToClaim) confirmBody.slugToClaim = slugToClaim
 
-    const { error: confirmErr } = await supabase.functions.invoke('billing', {
-      body: confirmBody,
-    })
-    if (confirmErr) throw new Error(confirmErr.message ?? 'Confirm failed')
+    await invokeEdgeFunction(supabase, 'billing', confirmBody, { errorFallback: 'Confirm failed' })
   }
 
   async function handleBillingPayment(

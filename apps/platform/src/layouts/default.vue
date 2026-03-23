@@ -58,7 +58,9 @@
             </nav>
           </SheetContent>
         </Sheet>
-        <AuthWidget />
+        <div class="platform-header__auth">
+          <AuthWidget />
+        </div>
       </div>
     </header>
 
@@ -179,11 +181,21 @@ watch(
   display: none;
 }
 
+.platform-header__auth {
+  display: flex;
+  align-items: center;
+}
+
+.platform-header__auth :deep(.btn) {
+  min-height: 2.25rem;
+  padding: 0.375rem 1rem;
+}
+
 .platform-main {
   padding: var(--theme-space-xl);
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
+@media (max-width: 767px) {
   .platform-header {
     padding: 0 var(--theme-space-md);
   }

@@ -179,21 +179,11 @@ watch(() => route.path, () => {
 
 const tenant = computed(() => tenantStore.tenant)
 
-// Header branding only after client mount so SSR and first client paint match (avoids hydration mismatch: server span vs client img).
-const headerLogo = ref('')
-const headerName = ref('dGuild')
 const tenantName = computed(() => (themeStore.branding.name ?? tenant.value?.name) || 'dGuild')
 const isMarketPath = computed(() => route.path === '/market' || route.path.startsWith('/market/'))
-function updateHeaderBranding() {
-  headerLogo.value = themeStore.branding.logo ?? ''
-  headerName.value = isMarketPath.value
-    ? `Marketplace [${tenantName.value}]`
-    : tenantName.value
-}
-onMounted(updateHeaderBranding)
-watch(
-  () => [themeStore.branding.logo, themeStore.branding.name, tenant.value?.name, route.path],
-  updateHeaderBranding
+const headerLogo = computed(() => themeStore.branding.logo ?? tenant.value?.branding?.logo ?? '')
+const headerName = computed(() =>
+  isMarketPath.value ? `Marketplace [${tenantName.value}]` : tenantName.value,
 )
 
 const tenantDefaultListAddress = computed(() => {
@@ -274,15 +264,26 @@ function updateAdminMoreDropdownPosition() {
   const el = adminMoreWrapRef.value
   if (!el) return
   const rect = el.getBoundingClientRect()
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1024
+  const padding = 16
+  const dropdownWidth = 280
+  let left = rect.left
+  if (left + dropdownWidth > vw - padding) {
+    left = Math.max(padding, vw - padding - dropdownWidth)
+  }
   adminMoreDropdownPosition.value = {
     top: rect.bottom + 2,
-    left: rect.left,
+    left,
   }
 }
 
 const adminMoreDropdownStyle = computed(() => {
   const { top, left } = adminMoreDropdownPosition.value
-  return { top: `${top}px`, left: `${left}px` }
+  return {
+    top: `${top}px`,
+    left: `${left}px`,
+    maxWidth: 'min(18rem, calc(100vw - 2rem))',
+  }
 })
 
 watch(adminMoreOpen, (open) => {
@@ -358,7 +359,10 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
 
 .layout-subnav__tab {
   flex-shrink: 0;
+  min-height: 44px;
   padding: var(--theme-space-sm) var(--theme-space-md);
+  touch-action: manipulation;
+  box-sizing: border-box;
   color: var(--theme-text-secondary);
   text-decoration: none;
   border-radius: var(--theme-radius-md);
@@ -456,8 +460,11 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   align-items: center;
   justify-content: center;
   width: var(--theme-input-height);
+  min-width: 44px;
   height: var(--theme-input-height);
+  min-height: 44px;
   padding: 0;
+  touch-action: manipulation;
   background: none;
   border: none;
   border-radius: var(--theme-radius-md);
@@ -471,7 +478,7 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   background: var(--theme-bg-card);
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
+@media (max-width: 767px) {
   .layout-nav-toggle {
     display: flex;
   }

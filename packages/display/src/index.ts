@@ -124,6 +124,16 @@ export function formatDate(iso: string | Date): string {
 }
 
 /**
+ * Format ISO date string with time for display.
+ */
+export function formatDateTime(value: string | Date | null): string {
+  if (!value) return ''
+  const d = typeof value === 'string' ? new Date(value) : value
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString()
+}
+
+/**
  * Escrow price: program stores human-readable per-unit price (request tokens per 1 deposit unit).
  * Use as-is. Do not scale by decimals or any other factor.
  */

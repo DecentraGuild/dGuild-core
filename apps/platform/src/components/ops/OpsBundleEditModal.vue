@@ -91,17 +91,18 @@ import { Button } from '~/components/ui/button'
 
 defineProps<{
   bundleId: string | null
-  form: {
-    label: string
-    productKey: string
-    priceUsdc: number
-    entitlements: Array<{ meter_key: string; quantity: number; duration_days: number }>
-  } | null
   meters: Array<{ meter_key: string; product_key: string }>
   loading: boolean
   saving: boolean
   error: string | null
 }>()
+
+const form = defineModel<{
+  label: string
+  productKey: string
+  priceUsdc: number
+  entitlements: Array<{ meter_key: string; quantity: number; duration_days: number }>
+} | null>('form', { required: true })
 
 defineEmits<{
   close: []

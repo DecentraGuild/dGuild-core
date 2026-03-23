@@ -46,6 +46,25 @@ function getWalletFromToken(token: string): string | null {
  * Get wallet from Authorization header. Same source for all Edge Functions.
  * When JWT has no wallet, calls Auth API (getUser) to read user_metadata.
  */
+/**
+ * True when the request uses the project's service role JWT (same value as pg_cron → invoke_edge_function).
+ * Use to gate cron-only Edge paths; never accept the anon key here.
+ */
+export function isServiceRoleAuthorization(req: Request): boolean {
+  const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '').trim()
+  if (!key) return false
+  const auth = (req.headers.get('Authorization') ?? '').trim()
+  return auth === `Bearer ${key}`
+}
+
+/** Case-insensitive wallet membership in tenant_config.admins (normalized trim). */
+export function walletMatchesTenantAdmins(wallet: string, admins: unknown): boolean {
+  const w = normalizeWallet(wallet).toLowerCase()
+  if (!w) return false
+  const list = Array.isArray(admins) ? (admins as string[]) : []
+  return list.some((a) => normalizeWallet(String(a)).toLowerCase() === w)
+}
+
 export async function getWalletFromAuthHeader(authHeader: string | null): Promise<string | null> {
   const bearer = authHeader?.trim()
   if (!bearer || !bearer.toLowerCase().startsWith('bearer ')) return null
@@ -63,4 +82,63 @@ export async function getWalletFromAuthHeader(authHeader: string | null): Promis
   }
 
   return wallet
+}
+
+type AdminCheckOk = { ok: true; wallet: string }
+type AdminCheckFail = { ok: false; response: Response }
+type AdminCheckResult = AdminCheckOk | AdminCheckFail
+
+export async function requireTenantAdmin(
+  authHeader: string | null,
+  tenantId: string,
+  db: ReturnType<typeof import('./supabase-admin.ts').getAdminClient>,
+  req?: Request,
+): Promise<AdminCheckResult> {
+  const wallet = await getWalletFromAuthHeader(authHeader)
+  if (!wallet) {
+    const body = JSON.stringify({ error: 'Not signed in. Connect your wallet and sign in first.' })
+    return { ok: false, response: new Response(body, { status: 401, headers: { 'Content-Type': 'application/json' } }) }
+  }
+
+  const { data: tenant } = await db
+    .from('tenant_config')
+    .select('admins')
+    .eq('id', tenantId)
+    .maybeSingle()
+
+  if (!tenant) {
+    const body = JSON.stringify({ error: 'Tenant not found' })
+    return { ok: false, response: new Response(body, { status: 404, headers: { 'Content-Type': 'application/json' } }) }
+  }
+
+  const isAdmin = walletMatchesTenantAdmins(wallet, tenant.admins)
+  if (!isAdmin) {
+    const body = JSON.stringify({ error: 'Tenant admin only' })
+    return { ok: false, response: new Response(body, { status: 403, headers: { 'Content-Type': 'application/json' } }) }
+  }
+
+  return { ok: true, wallet }
+}
+
+export async function requirePlatformAdmin(
+  authHeader: string | null,
+  req: Request,
+): Promise<AdminCheckResult> {
+  const bearer = authHeader?.trim()
+  if (!bearer || !bearer.toLowerCase().startsWith('bearer ')) {
+    const body = JSON.stringify({ error: 'Not signed in. Connect your wallet and sign in first.' })
+    return { ok: false, response: new Response(body, { status: 401, headers: { 'Content-Type': 'application/json' } }) }
+  }
+
+  const userClient = getUserClient(authHeader)
+  const { data: wallet, error } = await userClient.rpc('check_platform_admin')
+  if (error) {
+    const body = JSON.stringify({ error: `Auth error: ${error.message}` })
+    return { ok: false, response: new Response(body, { status: 401, headers: { 'Content-Type': 'application/json' } }) }
+  }
+  if (!wallet) {
+    const body = JSON.stringify({ error: 'Platform admin only. Your wallet is not authorised.' })
+    return { ok: false, response: new Response(body, { status: 403, headers: { 'Content-Type': 'application/json' } }) }
+  }
+  return { ok: true, wallet: wallet as string }
 }

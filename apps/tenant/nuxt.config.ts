@@ -89,14 +89,14 @@ export default defineNuxtConfig({
       devTenantSlug: process.env.NUXT_PUBLIC_DEV_TENANT ?? '',
       // When true, Deploy sets deactivatedate to now+2m so cron moves active->deactivating after 2 mins (testing).
       moduleLifecycleTestTiming: process.env.NUXT_PUBLIC_MODULE_LIFECYCLE_TEST_TIMING === 'true',
-      // Poll tenant context every N seconds when on a module page and tab visible (0 = disable). Default 60.
-      tenantContextPollSeconds: Number(process.env.NUXT_PUBLIC_TENANT_CONTEXT_POLL_SECONDS ?? 60),
       // Explorer base URLs for tx, account, token links (default: Solscan). No trailing slash.
       explorerTxUrl: process.env.NUXT_PUBLIC_EXPLORER_TX_URL ?? 'https://solscan.io/tx',
       explorerAccountUrl: process.env.NUXT_PUBLIC_EXPLORER_ACCOUNT_URL ?? 'https://solscan.io/account',
       explorerTokenUrl: process.env.NUXT_PUBLIC_EXPLORER_TOKEN_URL ?? 'https://solscan.io/token',
       platformDocsUrl: process.env.NUXT_PUBLIC_PLATFORM_DOCS_URL ?? 'https://dguild.org/docs',
       platformBaseUrl: process.env.NUXT_PUBLIC_PLATFORM_BASE_URL ?? (process.env.NODE_ENV === 'production' ? 'https://dguild.org' : 'http://localhost:3000'),
+      appUrl: process.env.NUXT_PUBLIC_APP_URL ?? '',
+      walletConnectProjectId: process.env.NUXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? '',
       // Single host for ?tenant= entry (e.g. dapp.dguild.org). When on this host and URL has no ?tenant=, we use cached last tenant so refresh keeps the same org.
       tenantSingleHost: process.env.NUXT_PUBLIC_TENANT_SINGLE_HOST ?? 'dapp.dguild.org',
     },

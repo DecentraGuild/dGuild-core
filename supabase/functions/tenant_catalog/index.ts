@@ -17,37 +17,7 @@ function isBaseCurrencyMint(mint: string): boolean {
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
-import { getWalletFromAuthHeader } from '../_shared/auth.ts'
-
-async function requireTenantAdmin(
-  authHeader: string | null,
-  tenantId: string,
-  req: Request,
-): Promise<{ ok: true } | { ok: false; response: Response }> {
-  const wallet = await getWalletFromAuthHeader(authHeader)
-  if (!wallet) {
-    return { ok: false, response: errorResponse('Not signed in. Connect your wallet and sign in first.', req, 401) }
-  }
-
-  const db = getAdminClient()
-  const { data: tenant, error } = await db
-    .from('tenant_config')
-    .select('admins')
-    .eq('id', tenantId)
-    .maybeSingle()
-
-  if (error || !tenant) {
-    return { ok: false, response: errorResponse('Tenant not found', req, 404) }
-  }
-
-  const admins = tenant.admins as string[]
-  const isAdmin = Array.isArray(admins) && admins.some((a) => String(a).toLowerCase() === wallet.toLowerCase())
-  if (!isAdmin) {
-    return { ok: false, response: errorResponse('Tenant admin only', req, 403) }
-  }
-
-  return { ok: true }
-}
+import { requireTenantAdmin } from '../_shared/auth.ts'
 
 Deno.serve(async (req: Request) => {
   const preflight = handlePreflight(req)
@@ -65,10 +35,9 @@ Deno.serve(async (req: Request) => {
   const tenantId = (body.tenantId as string)?.trim()
   if (!tenantId) return errorResponse('tenantId required', req)
 
-  const check = await requireTenantAdmin(authHeader, tenantId, req)
-  if (!check.ok) return check.response
-
   const db = getAdminClient()
+  const check = await requireTenantAdmin(authHeader, tenantId, db)
+  if (!check.ok) return check.response
   const now = new Date().toISOString()
 
   if (action === 'resolve-full') {
@@ -273,35 +242,34 @@ Deno.serve(async (req: Request) => {
     if (!mint) return errorResponse('mint required', req)
 
     const { fetchMintMetadata } = await import('../_shared/mint-metadata.ts')
-    const meta = await fetchMintMetadata(mint, kind === 'SPL' ? 'SPL' : undefined)
-    if (meta) {
-      kind = meta.kind
-      if (!name && !label && !image) {
-        name = meta.name ?? null
-        label = meta.label ?? meta.name ?? null
-        image = meta.image ?? null
-      }
-      traitIndex = meta.traitIndex ?? null
+    const meta = await fetchMintMetadata(mint, kind)
+    if (!meta) {
+      return errorResponse('Not a valid SPL token or NFT mint address.', req, 400)
     }
+    kind = meta.kind
+    if (!name && !label && !image) {
+      name = meta.name ?? null
+      label = meta.label ?? meta.name ?? null
+      image = meta.image ?? null
+    }
+    traitIndex = meta.traitIndex ?? null
 
-    if (meta) {
-      await db.from('mint_metadata').upsert({
-        mint,
-        name: name ?? null,
-        symbol: (meta as { symbol?: string }).symbol ?? null,
-        image: image ?? null,
-        trait_index: traitIndex,
-        decimals: meta.decimals ?? null,
-        update_authority: meta.updateAuthority ?? null,
-        uri: meta.uri ?? null,
-        seller_fee_basis_points: meta.sellerFeeBasisPoints ?? null,
-        primary_sale_happened: meta.primarySaleHappened ?? null,
-        is_mutable: meta.isMutable ?? null,
-        edition_nonce: meta.editionNonce ?? null,
-        token_standard: meta.tokenStandard ?? null,
-        updated_at: now,
-      }, { onConflict: 'mint' })
-    }
+    await db.from('mint_metadata').upsert({
+      mint,
+      name: name ?? null,
+      symbol: (meta as { symbol?: string }).symbol ?? null,
+      image: image ?? null,
+      trait_index: traitIndex,
+      decimals: meta.decimals ?? null,
+      update_authority: meta.updateAuthority ?? null,
+      uri: meta.uri ?? null,
+      seller_fee_basis_points: meta.sellerFeeBasisPoints ?? null,
+      primary_sale_happened: meta.primarySaleHappened ?? null,
+      is_mutable: meta.isMutable ?? null,
+      edition_nonce: meta.editionNonce ?? null,
+      token_standard: meta.tokenStandard ?? null,
+      updated_at: now,
+    }, { onConflict: 'mint' })
 
     const { data: entry, error } = await db
       .from('tenant_mint_catalog')

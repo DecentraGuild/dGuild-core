@@ -3,6 +3,7 @@
  * Calls qualification API (rules-mode-json or weighted-time-json).
  */
 import type { LoadedShipmentJson } from '~/composables/shipment/usePlanShipmentForm'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 
 export interface GenerateParams {
@@ -27,16 +28,12 @@ export function useShipmentJsonGenerator() {
     const body = isWeighted
       ? { action, tenantId, conditionSetId, totalAmount, mint: mint.trim() }
       : { action, tenantId, conditionSetId, fixedAmount, mint: mint.trim() }
-    const { data, error } = await supabase.functions.invoke('qualification', {
-      body,
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    })
-    if (error) throw new Error(error.message ?? 'Failed to generate')
-    const result = data as {
+    const data = await invokeEdgeFunction<{
       mint?: string
       recipients?: Array<{ address: string; amount: number }>
       totalAmount?: number
-    }
+    }>(supabase, 'qualification', body, { headers: { Authorization: `Bearer ${session.access_token}` }, errorFallback: 'Failed to generate' })
+    const result = data
     if (!result?.mint || !Array.isArray(result.recipients)) {
       throw new Error('Invalid response from qualification')
     }

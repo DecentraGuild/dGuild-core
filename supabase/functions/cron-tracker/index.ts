@@ -8,6 +8,7 @@
 
 import { jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
+import { getWalletFromAuthHeader, isServiceRoleAuthorization, walletMatchesTenantAdmins } from '../_shared/auth.ts'
 import { getWithinLimitMints } from '../_shared/watchtower-billing.ts'
 import {
   alignSnapshotBucket,
@@ -116,6 +117,21 @@ Deno.serve(async (req: Request) => {
   } catch { /* no body */ }
 
   if (syncMint && syncTenantId) {
+    const authHeader = req.headers.get('Authorization')
+    const wallet = await getWalletFromAuthHeader(authHeader)
+    if (!wallet) {
+      return errorResponse('Authentication required for single-mint sync', req, 401)
+    }
+    const { data: tenant } = await db
+      .from('tenant_config')
+      .select('admins')
+      .eq('id', syncTenantId)
+      .maybeSingle()
+    const admins = (tenant?.admins as string[]) ?? []
+    if (!walletMatchesTenantAdmins(wallet, admins)) {
+      return errorResponse('Forbidden: not a tenant admin', req, 403)
+    }
+
     const config = await loadWatchtowerSyncConfig(db)
     const { snapshotAt, snapshotDate } = alignSnapshotBucket(now, config.snapshot_interval_minutes)
     const { data: watch } = await db
@@ -228,6 +244,10 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ processed: 1, synced: 1 }, req)
   }
 
+  if (!isServiceRoleAuthorization(req)) {
+    return errorResponse('Unauthorized', req, 401)
+  }
+
   let legacyBare = false
   if (mode === null || mode === '') {
     legacyBare = true
@@ -260,8 +280,6 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    console.log('[cron-tracker] holders batch', { offset, mintCount: mints.length })
-
     const tenantIds = [...new Set(mints.map((m) => String(m.tenant_id ?? '')))].filter(Boolean) as string[]
     const withinByTenant = new Map<string, Set<string>>()
     for (const tid of tenantIds) {
@@ -274,7 +292,6 @@ Deno.serve(async (req: Request) => {
       p_mints: mintKeys,
     })
     if (syncMetaErr) {
-      console.error('[cron-tracker] holder_current_sync_meta', syncMetaErr.message)
       return errorResponse(syncMetaErr.message, req, 500)
     }
     const currentByMint = new Map<string, { holderCount: number; last_updated: string }>()
@@ -314,9 +331,6 @@ Deno.serve(async (req: Request) => {
         } else {
           holders = await fetchNftHolders(rpcEndpoint, mint)
         }
-        if (holders.length === 0) {
-          console.warn('[cron-tracker] empty holders', { mint, kind })
-        }
         await db.from('holder_current').upsert({
           mint,
           holder_wallets: holders,
@@ -324,13 +338,12 @@ Deno.serve(async (req: Request) => {
         }, { onConflict: 'mint' })
         synced++
         processed++
-      } catch (err) {
-        console.error('[cron-tracker] mint failed', { mint, error: String(err) })
+      } catch {
+        void 0
       }
     }
 
     const hasMore = mints.length === CHUNK_SIZE
-    console.log('[cron-tracker] holders batch done', { processed, synced, offset, hasMore })
     if (!legacyBare) {
       return jsonResponse({ processed, synced, offset, hasMore, mode }, req)
     }
@@ -365,8 +378,6 @@ Deno.serve(async (req: Request) => {
       req,
     )
   }
-
-  console.log('[cron-tracker] snapshot batch', { snapshotAt, offset, mintCount: mints.length })
 
   const tenantIds = [...new Set(mints.map((m) => String(m.tenant_id ?? '')))].filter(Boolean) as string[]
   const withinSnap = new Map<string, Set<string>>()
@@ -442,10 +453,6 @@ Deno.serve(async (req: Request) => {
       } else {
         holders = await fetchNftHolders(rpcEndpoint, mint)
       }
-      if (holders.length === 0) {
-        console.warn('[cron-tracker] empty holders', { mint, kind })
-      }
-
       await db.from('holder_snapshots').upsert({
         mint,
         snapshot_at: snapshotAt,
@@ -463,13 +470,12 @@ Deno.serve(async (req: Request) => {
       }, { onConflict: 'tenant_id,mint,snapshot_at' })
       synced++
       processed++
-    } catch (err) {
-      console.error('[cron-tracker] mint failed', { mint, error: String(err) })
+    } catch {
+      void 0
     }
   }
 
   const hasMore = mints.length === CHUNK_SIZE
-  console.log('[cron-tracker] snapshot batch done', { processed, synced, offset, hasMore })
   const outMode = legacyBare ? 'legacy-sync' : mode
   return jsonResponse({ processed, synced, offset, hasMore, mode: outMode }, req)
 })

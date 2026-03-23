@@ -1,14 +1,65 @@
 /**
- * Platform app theme overrides.
- * Darker cyan blue primary (only for platform app).
+ * Platform-only --theme-* tokens. Loaded after packages/ui vars.css so the
+ * ops/docs shell does not pick up tenant DEFAULT_TENANT_THEME surfaces.
+ * Aligns with shadcn variables in global.css (violet primary, cool dark base).
  */
 :root {
-  --theme-primary: #8a8aff;
-  --theme-primary-hover: #0d9488;
-  --theme-primary-light: #22d3ee;
-  --theme-primary-dark: #6c6cce;
-  --theme-success: #0e7490;
-  --theme-shadow-glow: 0 0 20px rgba(14, 116, 144, 0.3);
-  --theme-shadow-glow-hover: 0 0 40px rgba(14, 116, 144, 0.5);
-  --theme-gradient-primary: linear-gradient(135deg, #0e7490 0%, #22d3ee 50%, #0c4a6e 100%);
+  --theme-primary: #9999ff;
+  --theme-primary-hover: #7a7aff;
+  --theme-primary-light: #c4c4ff;
+  --theme-primary-dark: #6666e6;
+  --theme-primary-inverse: #09090b;
+
+  --theme-secondary: #8b8bf0;
+  --theme-secondary-hover: #7878e8;
+  --theme-secondary-light: #b8b8ff;
+  --theme-secondary-dark: #6363d4;
+  --theme-secondary-inverse: #f8fafc;
+
+  --theme-bg-primary: #09090b;
+  --theme-bg-secondary: #12121c;
+  --theme-bg-card: #15151f;
+  --theme-bg-muted: #22222e;
+  --theme-backdrop: rgba(9, 9, 11, 0.78);
+
+  --theme-text-primary: #f8fafc;
+  --theme-text-secondary: #a1a1aa;
+  --theme-text-muted: #71717a;
+
+  --theme-border: #2a2a38;
+  --theme-border-light: #3f3f4d;
+
+  --theme-success: #22c55e;
+  --theme-error: #ef4444;
+  --theme-text-error: #ef4444;
+  --theme-surface-error: rgba(239, 68, 68, 0.12);
+  --theme-warning: #f59e0b;
+  --theme-surface-success: rgba(34, 197, 94, 0.12);
+  --theme-surface-warning: rgba(245, 158, 11, 0.12);
+
+  --theme-status-success: var(--theme-success);
+  --theme-status-error: var(--theme-error);
+  --theme-status-warning: var(--theme-warning);
+
+  --theme-destructive: #ef4444;
+
+  --theme-trade-buy: var(--theme-error);
+  --theme-trade-buy-hover: #dc2626;
+  --theme-trade-buy-light: #f87171;
+  --theme-trade-sell: var(--theme-success);
+  --theme-trade-sell-hover: #16a34a;
+  --theme-trade-sell-light: #4ade80;
+  --theme-trade-trade: var(--theme-warning);
+  --theme-trade-trade-hover: #d97706;
+  --theme-trade-trade-light: #fbbf24;
+
+  --theme-shadow-glow: 0 0 20px rgba(153, 153, 255, 0.28);
+  --theme-shadow-glow-hover: 0 0 40px rgba(153, 153, 255, 0.45);
+  --theme-shadow-card: 0 8px 32px rgba(0, 0, 0, 0.45);
+
+  --theme-gradient-primary: linear-gradient(135deg, #6666e6 0%, #9999ff 45%, #4c4cbf 100%);
+
+  --theme-scrollbar-thumb: var(--theme-border);
+  --theme-scrollbar-thumb-hover: var(--theme-border-light);
+  --theme-scrollbar-track: var(--theme-bg-secondary);
 }

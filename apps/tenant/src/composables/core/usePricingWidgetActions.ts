@@ -20,6 +20,8 @@ export interface UsePricingWidgetActionsOptions {
   isTieredWithOneTime: Ref<boolean>
   upgradeRecurringAmount: Ref<number>
   selectedPeriod: Ref<BillingPeriod>
+  /** Lowercase marginal unit label from billing (e.g. "raffle", "token"). */
+  marginalUnitLabel: Ref<string>
 }
 
 export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions) {
@@ -29,13 +31,14 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
     deploying,
     saving,
     chargeAmount,
-    selectedTier,
+    selectedTier: _selectedTier,
     yearlyOnly = false,
     hasActiveSubscription,
     isAddUnit,
     isTieredWithOneTime,
     upgradeRecurringAmount,
     selectedPeriod,
+    marginalUnitLabel,
   } = options
 
   const periodLocked = computed(() => hasActiveSubscription.value)
@@ -50,8 +53,25 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
 
   const deployLabel = computed(() => {
     if (deploying.value) return moduleId === 'slug' ? 'Claiming...' : 'Deploying...'
+    if (saving.value) return 'Saving...'
     if (moduleId === 'slug') {
       return chargeAmount.value > 0 ? `Claim for ${formatUsdc(chargeAmount.value)} USDC/yr` : 'Claim slug'
+    }
+    if (isTieredWithOneTime.value) {
+      const r = upgradeRecurringAmount.value
+      const u = chargeAmount.value
+      const period = selectedPeriod.value === 'yearly' ? '/yr' : '/mo'
+      const ul = marginalUnitLabel.value
+      if (r > 0 && u > 0) {
+        return `Deploy for ${formatUsdc(r)} USDC${period} + ${formatUsdc(u)} USDC per ${ul}`
+      }
+      if (r > 0) {
+        return `Deploy for ${formatUsdc(r)} USDC${period}`
+      }
+      if (u > 0) {
+        return `Deploy for ${formatUsdc(u)} USDC`
+      }
+      return 'Deploy'
     }
     if (chargeAmount.value > 0) {
       return `Deploy for ${formatUsdc(chargeAmount.value)} USDC`
@@ -83,9 +103,10 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
       return 'Module is deactivating.'
     }
     if (moduleState.value === 'active' && (isAddUnit.value || isTieredWithOneTime.value)) {
-      return isTieredWithOneTime.value
-        ? `Create raffles from the form above (${formatUsdc(chargeAmount.value)} USDC each on ${selectedTier.value?.name ?? 'current'} tier).`
-        : `Create new lists from the form above (${formatUsdc(chargeAmount.value)} USDC each).`
+      if (isTieredWithOneTime.value) {
+        return null
+      }
+      return `Create new lists from the form above (${formatUsdc(chargeAmount.value)} USDC each).`
     }
     return null
   })

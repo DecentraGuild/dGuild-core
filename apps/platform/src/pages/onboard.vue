@@ -63,7 +63,7 @@ import {
   buildBillingTransfer,
   sendAndConfirmTransaction,
 } from '@decentraguild/web3'
-import { useSupabase } from '~/composables/useSupabase'
+import { useSupabase, invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useRpc } from '~/composables/useRpc'
 
 const auth = useAuth()
@@ -117,32 +117,30 @@ async function submit() {
   try {
     const tenantId = crypto.randomUUID().replace(/-/g, '').slice(0, 7)
 
-    const { data: quoteData, error: quoteErr } = await supabase.functions.invoke('billing', {
-      body: {
-        action: 'quote',
-        tenantId,
-        productKey: 'admin',
-        meterOverrides: { registration: 1 },
-        durationDays: 0,
-      },
+    const quoteData = await invokeEdgeFunction<{ quoteId?: string; priceUsdc?: number }>(supabase, 'billing', {
+      action: 'quote',
+      tenantId,
+      productKey: 'admin',
+      meterOverrides: { registration: 1 },
+      durationDays: 0,
     })
-    if (quoteErr) throw new Error(quoteErr.message ?? 'Quote failed')
-    const quote = quoteData as { quoteId?: string; priceUsdc?: number }
+    const quote = quoteData
     if (!quote?.quoteId) throw new Error('No quote returned')
 
     if ((quote.priceUsdc ?? 0) <= 0) throw new Error('Registration pricing not configured')
 
     const payerWallet = wallet.publicKey.toBase58()
-    const { data: chargeData, error: chargeErr } = await supabase.functions.invoke('billing', {
-      body: {
+    const chargeData = await invokeEdgeFunction<{ paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }>(
+      supabase,
+      'billing',
+      {
         action: 'charge',
         quoteId: quote.quoteId,
         payerWallet,
         paymentMethod: 'usdc',
       },
-    })
-    if (chargeErr) throw new Error(chargeErr.message ?? 'Charge failed')
-    const charge = chargeData as { paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }
+    )
+    const charge = chargeData
     if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
     const connection = createConnection(rpcUrl.value)
@@ -157,15 +155,14 @@ async function submit() {
     })
     const txSignature = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
 
-    const { error: confirmErr } = await supabase.functions.invoke('billing', {
-      body: { action: 'confirm', paymentId: charge.paymentId, txSignature },
-    })
-    if (confirmErr) throw new Error(confirmErr.message ?? 'Confirm failed')
+    await invokeEdgeFunction(supabase, 'billing', { action: 'confirm', paymentId: charge.paymentId, txSignature })
 
     const { data: session } = await supabase.auth.getSession()
     const token = session?.session?.access_token
-    const { error: createErr } = await supabase.functions.invoke('billing', {
-      body: {
+    await invokeEdgeFunction(
+      supabase,
+      'billing',
+      {
         action: 'register-create',
         paymentId: charge.paymentId,
         name: form.name.trim(),
@@ -173,9 +170,8 @@ async function submit() {
         logo: form.logo.trim() || null,
         discordInviteLink: form.discordInviteLink.trim() || null,
       },
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-    if (createErr) throw new Error(createErr.message ?? 'Create organisation failed')
+      token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+    )
 
     const config = useRuntimeConfig()
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')

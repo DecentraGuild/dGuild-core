@@ -3,11 +3,11 @@
  * Supabase Edge Functions require explicit CORS handling for browser clients.
  */
 
-const ALLOWED_ORIGINS = [
-  'https://dguild.org',
-  'https://dapp.dguild.org',
-  // Tenant subdomains: *.dguild.org is handled dynamically below.
-]
+const DEFAULT_ORIGINS = 'https://dguild.org,https://dapp.dguild.org'
+
+const ALLOWED_ORIGINS = (
+  Deno.env.get('CORS_ALLOWED_ORIGINS') ?? DEFAULT_ORIGINS
+).split(',').map(o => o.trim()).filter(Boolean)
 
 export function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('Origin') ?? ''

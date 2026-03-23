@@ -141,7 +141,7 @@
           <button
             type="button"
             class="plan-shipment-tab__history-row"
-            @click="expandedId = expandedId === r.id ? null : r.id"
+            @click="toggleExpanded(r.id)"
           >
             <span class="plan-shipment-tab__history-mint">{{ truncateAddress(r.mint, 8, 6) }}</span>
             <span class="plan-shipment-tab__history-meta">{{ r.recipient_count }} recipients</span>
@@ -190,7 +190,7 @@
       v-if="generateModalOpen"
       :model-value="generateModalOpen"
       title="Generate from conditions"
-      @update:model-value="(v: boolean) => (generateModalOpen = v)"
+      @update:model-value="(v: boolean) => (generateModalOpen.value = v)"
     >
       <div class="plan-shipment-tab__generate-modal">
         <ConditionSetCatalog
@@ -261,16 +261,16 @@ import AddressBookModal from '~/components/shared/AddressBookModal.vue'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import ConfirmTransactionModal from '~/components/ui/confirm-transaction-modal/ConfirmTransactionModal.vue'
 import ConditionSetCatalog from '~/components/gates/ConditionSetCatalog.vue'
-import { truncateAddress } from '@decentraguild/display'
+import { truncateAddress, formatDate, formatDateTime } from '@decentraguild/display'
 import { useShipWallet } from '~/composables/shipment/useShipWallet'
 import { usePlanShipmentForm, JSON_PLACEHOLDER } from '~/composables/shipment/usePlanShipmentForm'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
-import { useConditionSetCatalog } from '~/composables/conditions/useConditionSetCatalog'
-import { useShipmentJsonGenerator } from '~/composables/shipment/useShipmentJsonGenerator'
+import { useShipmentHistory } from '~/composables/shipment/useShipmentHistory'
+import { useShipmentGenerateModal } from '~/composables/shipment/useShipmentGenerateModal'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
-import type { CatalogMint } from '~/types/mints'
 
 defineProps<{
   slug: string
@@ -281,50 +281,19 @@ const route = useRoute()
 const tenantStore = useTenantStore()
 const { tenantId } = storeToRefs(tenantStore)
 const shipWallet = useShipWallet()
-const catalogMintsRef = ref<CatalogMint[]>([])
-const gateListsRef = ref<Array<{ address: string; name: string }>>([])
-const {
-  filteredItems: rulesCatalogFilteredItems,
-  filter: rulesCatalogFilter,
-  setFilter: setRulesCatalogFilter,
-  loading: rulesCatalogLoading,
-  error: rulesCatalogError,
-  fetchCatalog: fetchRulesCatalog,
-} = useConditionSetCatalog({
-  catalogMints: catalogMintsRef,
-  gateLists: gateListsRef,
-})
 const { connection, rpcUrl } = useSolanaConnection()
 const explorerLinks = useExplorerLinks()
 const supabase = useSupabase()
-const { generate: generateShipmentJson } = useShipmentJsonGenerator()
 
-const historyRecords = ref<Array<{ id: number; mint: string; recipient_count: number; total_amount: string; tx_signature: string; created_by: string; created_at: string }>>([])
-const historyLoading = ref(false)
-const historyError = ref<string | null>(null)
-const expandedId = ref<number | null>(null)
-
-async function fetchHistory() {
-  const id = tenantId.value
-  if (!id) return
-  historyLoading.value = true
-  historyError.value = null
-  try {
-    const { data, error: err } = await supabase
-      .from('shipment_records')
-      .select('id, mint, recipient_count, total_amount, tx_signature, created_by, created_at')
-      .eq('tenant_id', id)
-      .order('created_at', { ascending: false })
-      .limit(50)
-    if (err) throw new Error(err.message)
-    historyRecords.value = (data ?? []) as typeof historyRecords.value
-  } catch (e) {
-    historyError.value = e instanceof Error ? e.message : 'Failed to load shipment history'
-    historyRecords.value = []
-  } finally {
-    historyLoading.value = false
-  }
-}
+const {
+  records: historyRecords,
+  loading: historyLoading,
+  error: historyError,
+  expandedId,
+  fetch: fetchHistory,
+  toggleExpanded,
+  formatTotalAmount,
+} = useShipmentHistory(tenantId)
 
 const form = usePlanShipmentForm({
   connection,
@@ -334,35 +303,15 @@ const form = usePlanShipmentForm({
   hasWallet: shipWallet.hasWallet,
   getKeypair: () => shipWallet.getKeypair(),
   recordShipment: async (params) => {
-    await supabase.functions.invoke('shipment', {
-      body: {
-        action: 'record-shipment',
-        tenantId: tenantId.value,
-        ...params,
-      },
-    })
+    await invokeEdgeFunction(supabase, 'shipment', { action: 'record-shipment', tenantId: tenantId.value, ...params } as Record<string, unknown>)
   },
 })
 
 const {
-  importKey,
-  jsonInput,
-  loadedJson,
-  mint,
-  totalAmount,
-  canShip,
-  canRegisterMint,
-  solBalance,
-  tokenBalance,
-  balanceLoading,
-  shipping,
-  registering,
-  registerMessage,
-  shipError,
-  setJson,
-  refreshBalance,
-  registerMint,
-  ship,
+  importKey, jsonInput, loadedJson, mint, totalAmount,
+  canShip, canRegisterMint, solBalance, tokenBalance, balanceLoading,
+  shipping, registering, registerMessage, shipError,
+  setJson, refreshBalance, registerMint, ship,
 } = form
 
 const registerConfirmOpen = ref(false)
@@ -375,84 +324,36 @@ const shipFeeEstimate = computed(() => {
   const total = (SHIP_FEE_PER_RECIPIENT * n).toFixed(4)
   return `~${total} SOL (${n} recipient${n === 1 ? '' : 's'})`
 })
-const generateModalOpen = ref(false)
-const addressBookModalOpen = ref(false)
-const generateRuleId = ref<number | null>(null)
-const generateFixedAmountStr = ref('100')
-const generateTotalAmountStr = ref('10000')
-const generateMint = ref('')
-const generating = ref(false)
 
-const selectedRule = computed(() =>
-  rulesCatalogItems.value.find((r) => r.id === generateRuleId.value)
-)
-const rulesCatalogItems = computed(() => rulesCatalogFilteredItems.value)
-const isWeightedRule = computed(() => selectedRule.value?.ruleType === 'weighted')
-
-const generateFixedAmount = computed(() => {
-  const n = Number.parseInt(generateFixedAmountStr.value, 10)
-  return Number.isFinite(n) && n >= 0 ? n : 0
-})
-const generateTotalAmount = computed(() => {
-  const n = Number.parseInt(generateTotalAmountStr.value, 10)
-  return Number.isFinite(n) && n >= 0 ? n : 0
-})
-const canGenerate = computed(() => {
-  const amountOk = isWeightedRule.value ? generateTotalAmount.value >= 0 : generateFixedAmount.value >= 0
-  return !!(
-    tenantId.value &&
-    generateRuleId.value != null &&
-    generateRuleId.value > 0 &&
-    generateMint.value.trim().length >= 32 &&
-    amountOk
-  )
-})
-
-function setGenerateMint(m: string) {
-  generateMint.value = m
-}
-
-function openGenerateModal() {
-  generateRuleId.value = null
-  generateFixedAmountStr.value = '100'
-  generateTotalAmountStr.value = '10000'
-  generateMint.value = ''
-  generateModalOpen.value = true
-  fetchRulesCatalog()
-}
+const {
+  open: generateModalOpen,
+  addressBookModalOpen,
+  generateRuleId,
+  generateFixedAmountStr,
+  generateTotalAmountStr,
+  generateMint,
+  generating,
+  rulesCatalogFilteredItems,
+  rulesCatalogFilter,
+  setRulesCatalogFilter,
+  rulesCatalogLoading,
+  rulesCatalogError,
+  isWeightedRule,
+  canGenerate,
+  openModal: openGenerateModal,
+  closeModal: closeGenerateModal,
+  setGenerateMint,
+  generateJson,
+} = useShipmentGenerateModal(tenantId, (json) => setJson(json as Parameters<typeof setJson>[0]))
 
 function goToConditions() {
-  generateModalOpen.value = false
+  closeGenerateModal()
   navigateTo({ path: route.path, query: { ...route.query, tab: 'conditions' } })
 }
 
 function goToConditionsEdit(setId: number) {
-  generateModalOpen.value = false
+  closeGenerateModal()
   navigateTo({ path: route.path, query: { ...route.query, tab: 'conditions', edit: String(setId) } })
-}
-
-async function generateJson() {
-  const id = tenantId.value
-  if (!id || !canGenerate.value) return
-  generating.value = true
-  try {
-    const generated = await generateShipmentJson({
-      tenantId: id,
-      conditionSetId: generateRuleId.value!,
-      mint: generateMint.value.trim(),
-      fixedAmount: generateFixedAmount.value,
-      totalAmount: generateTotalAmount.value,
-      isWeighted: isWeightedRule.value,
-    })
-    if (generated) {
-      setJson(generated)
-      generateModalOpen.value = false
-    }
-  } catch (e) {
-    alert(e instanceof Error ? e.message : 'Failed to generate JSON')
-  } finally {
-    generating.value = false
-  }
 }
 
 function copyJson() {
@@ -473,10 +374,8 @@ function downloadJson() {
 
 watch(
   () => [shipWallet.address.value, mint.value],
-  () => {
-    if (shipWallet.hasWallet.value) refreshBalance()
-  },
-  { immediate: true }
+  () => { if (shipWallet.hasWallet.value) refreshBalance() },
+  { immediate: true },
 )
 
 function copyAddress() {
@@ -511,24 +410,7 @@ async function onShipConfirm() {
   if (!shipError.value) shipConfirmOpen.value = false
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
-
-function formatTotalAmount(raw: string): string {
-  const n = Number(raw)
-  if (!Number.isFinite(n)) return raw
-  return n.toLocaleString(undefined, { maximumFractionDigits: 6 })
-}
-
 onMounted(() => void fetchHistory())
-
 </script>
 
 <style scoped>

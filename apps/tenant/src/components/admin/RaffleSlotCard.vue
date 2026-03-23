@@ -64,6 +64,7 @@
 
 <script setup lang="ts">
 import { truncateAddress, sanitizeTokenLabel } from '@decentraguild/display'
+import { useExplorerLinks } from '@decentraguild/nuxt-composables'
 import type { RaffleChainData } from '@decentraguild/web3'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
@@ -102,10 +103,7 @@ defineEmits<{
   close: []
 }>()
 
-function accountUrl(pubkey: string): string {
-  const cluster = process.env.NODE_ENV === 'production' ? '' : '?cluster=devnet'
-  return `https://solscan.io/account/${pubkey}${cluster}`
-}
+const { accountUrl } = useExplorerLinks()
 
 const isSubmitting = computed(() => props.actionSubmitting === props.slotCard.raffle?.rafflePubkey)
 

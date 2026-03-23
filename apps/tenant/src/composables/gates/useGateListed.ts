@@ -2,6 +2,7 @@
  * Check whether the current wallet is on any gate for this tenant.
  * Used for gating public module visibility in the nav.
  */
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useAuth } from '@decentraguild/auth'
@@ -22,11 +23,8 @@ export function useGateListed() {
     loading.value = true
     try {
       const supabase = useSupabase()
-      const { data, error } = await supabase.functions.invoke('gates', {
-        body: { action: 'is-listed', tenantId: id, wallet: w },
-      })
-      if (error) throw error
-      isListed.value = (data as { listed: boolean }).listed ?? false
+      const data = await invokeEdgeFunction<{ listed: boolean }>(supabase, 'gates', { action: 'is-listed', tenantId: id, wallet: w })
+      isListed.value = data.listed ?? false
     } catch {
       isListed.value = false
     } finally {

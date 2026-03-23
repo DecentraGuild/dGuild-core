@@ -162,13 +162,20 @@ const patternClass = computed(() => {
   padding: var(--theme-space-xl);
 }
 
-@media (min-width: var(--theme-breakpoint-md)) {
+@media (max-width: 767px) {
+  .app-shell__main {
+    padding: var(--theme-space-md);
+  }
+}
+
+/* 768px — literal px required; var() is invalid inside @media */
+@media (min-width: 768px) {
   .app-shell__nav {
     min-width: 12rem;
   }
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
+@media (max-width: 767px) {
   .app-shell__overlay {
     display: block;
     opacity: 0;
@@ -193,6 +200,7 @@ const patternClass = computed(() => {
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .app-shell--nav-open .app-shell__nav {

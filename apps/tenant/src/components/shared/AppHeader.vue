@@ -72,7 +72,7 @@ defineProps<{
   min-width: 0;
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
+@media (max-width: 767px) {
   .app-header__nav {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;

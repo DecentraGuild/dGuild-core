@@ -1,3 +1,4 @@
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
 import type { SplAssetMint, CollectionMint } from '~/types/mints'
@@ -22,16 +23,17 @@ export function useMintResolution() {
     resolving.value = true
     try {
       const supabase = useSupabase()
-      const { data, error } = await supabase.functions.invoke('tenant_catalog', {
-        body: {
+      const data = await invokeEdgeFunction<{ kind?: string; spl?: SplAssetMint; collection?: CollectionMint }>(
+        supabase,
+        'tenant_catalog',
+        {
           action: 'resolve-full',
           tenantId,
           mint,
           kind: kindHint ?? 'auto',
         },
-      })
-      if (error) throw error
-      const d = data as { kind?: string; spl?: SplAssetMint; collection?: CollectionMint }
+      )
+      const d = data
       if (d?.kind === 'SPL' && d.spl) return { kind: 'SPL', spl: { ...d.spl, mint } }
       if (d?.kind === 'NFT' && d.collection) return { kind: 'NFT', collection: { ...d.collection, mint } }
       throw new Error('Could not resolve mint as NFT collection or SPL token')

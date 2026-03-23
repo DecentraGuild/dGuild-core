@@ -43,17 +43,8 @@
       <AdminModulesTab
         v-else-if="tab === 'modules'"
         :form="form"
-        :tenant="tenant ?? null"
         :module-ids="moduleIds"
-        :subscriptions="subscriptions"
-        :extending-module-id="extendingModuleId"
-        :extending="extending"
-        :extend-period="extendPeriod"
         @module-toggle="onModuleToggle"
-        @start-extend="startExtend"
-        @confirm-extend="confirmExtend"
-        @cancel-extend="cancelExtend"
-        @update:extend-period="setExtendPeriod"
       />
 
       <AdminMarketplaceTab
@@ -143,6 +134,18 @@
       <AdminBillingTab
         v-else-if="tab === 'billing'"
         :slug="slug"
+        :form="form"
+        :tenant="tenant ?? null"
+        :module-ids="moduleIds"
+        :subscriptions="subscriptions"
+        :extending-module-id="extendingModuleId"
+        :extending="extending"
+        :extend-period="extendPeriod"
+        :save-error="saveError"
+        @start-extend="startExtend"
+        @confirm-extend="confirmExtend"
+        @cancel-extend="cancelExtend"
+        @update:extend-period="setExtendPeriod"
       />
 
       <div v-if="!hasWidgetTab && tab !== 'billing' && tab !== 'vouchers' && tab !== 'addressbook' && tab !== 'modules' && tab !== 'gating' && tab !== 'conditions'" class="admin__actions">
@@ -217,14 +220,11 @@ const AdminVouchersTab = defineAsyncComponent(() => import('~/components/admin/A
 const AdminBillingTab = defineAsyncComponent(() => import('~/components/admin/AdminBillingTab.vue'))
 const AdminModuleActivationModal = defineAsyncComponent(() => import('~/components/admin/AdminModuleActivationModal.vue'))
   const AdminPricingWidget = defineAsyncComponent(() => import('~/components/admin/AdminPricingWidget.vue'))
-import {
-  useAdminSubscriptions,
-  type SubscriptionInfo,
-  type WatchtowerSubscriptionByScope,
-} from '~/composables/admin/useAdminSubscriptions'
+import { useAdminSubscriptions } from '~/composables/admin/useAdminSubscriptions'
 import { useAdminForm } from '~/composables/admin/useAdminForm'
 import { useAdminLiveTheme } from '~/composables/admin/useAdminLiveTheme'
 import { useAdminBilling } from '~/composables/admin/useAdminBilling'
+import { useAdminModuleToggles } from '~/composables/admin/useAdminModuleToggles'
 import { useSlugClaim } from '~/composables/core/useSlugClaim'
 
 const route = useRoute()
@@ -235,8 +235,6 @@ const { form, tenant, moduleIds, saving, saveError, save } = useAdminForm(subscr
 
 const deploying = ref(false)
 const extending = ref(false)
-const extendingModuleId = ref<string | null>(null)
-const extendPeriod = ref<BillingPeriod>('monthly')
 
 const {
   handleBillingPayment,
@@ -261,6 +259,22 @@ const slugClaim = useSlugClaim({
   fetchSubscription,
 })
 
+const {
+  showActivationModal, activationModalModuleId,
+  showDeactivateConfirm, pendingDeactivateModuleId,
+  extendingModuleId, extendPeriod,
+  getSubscriptionPeriodEnd, formatDeactivationDate,
+  onModuleToggle, confirmDeactivate, cancelDeactivate,
+  onActivationModalClose, confirmModuleActivate,
+  startExtend, confirmExtend, cancelExtend, setExtendPeriod,
+  handleRaffleBilling: _handleRaffleBilling,
+  handleWatchtowerSave: _handleWatchtowerSave,
+  handleReactivate,
+} = useAdminModuleToggles({
+  subscriptions, save, form, handleBillingPayment, fetchSubscription,
+  extendModule, reactivateModule, deploying, extending, saving, saveError,
+})
+
 const desiredSlug = computed(() => slugClaim.desiredSlug.value)
 const slugCheckStatus = computed(() => slugClaim.slugCheckStatus.value)
 const slugChecking = computed(() => slugClaim.slugChecking.value)
@@ -273,8 +287,6 @@ const adminPageTitle = computed(() => {
   return tabEntry ? `Admin - ${tabEntry.label}` : 'Admin'
 })
 
-const showActivationModal = ref(false)
-const activationModalModuleId = ref<string | null>(null)
 const marketplaceSettings = computed(() => {
   const s = tenantStore.marketplaceSettings
   if (!s) return null
@@ -312,122 +324,15 @@ useAdminLiveTheme(tab, form.branding, () => tenant.value?.branding)
 
 const hasWidgetTab = computed(() => WIDGET_TABS.has(tab.value) || tab.value === 'plan-shipment')
 
-async function _saveWithBilling(moduleId: string, billingPeriod: BillingPeriod) {
-  await save()
-  await handleBillingPayment(moduleId, billingPeriod)
-}
-
 const raffleTabRef = ref<InstanceType<typeof AdminRaffleTab> | null>(null)
 const watchtowerTabRef = ref<InstanceType<typeof AdminWatchtowerTab> | null>(null)
 
-async function handleRaffleBilling(period: BillingPeriod, conditions?: Record<string, number>) {
-  deploying.value = true
-  saveError.value = null
-  try {
-    await handleBillingPayment('raffles', period, undefined, conditions)
-    await fetchSubscription('raffles')
-    raffleTabRef.value?.clearUpgradeConditions?.()
-  } catch (e) {
-    saveError.value = e instanceof Error ? e.message : 'Billing failed'
-  } finally {
-    deploying.value = false
-  }
+function handleRaffleBilling(period: BillingPeriod, conditions?: Record<string, number>) {
+  return _handleRaffleBilling(period, conditions, raffleTabRef.value?.clearUpgradeConditions?.bind(raffleTabRef.value))
 }
 
-async function handleWatchtowerSave(period: BillingPeriod, conditions?: Record<string, number>) {
-  saving.value = true
-  deploying.value = true
-  saveError.value = null
-  try {
-    await handleBillingPayment('watchtower', period, undefined, conditions)
-    const ok = await watchtowerTabRef.value?.saveWatches?.()
-    if (!ok) {
-      saveError.value = 'Failed to save watchtower settings'
-      return
-    }
-    await fetchSubscription('watchtower')
-  } catch (e) {
-    saveError.value = e instanceof Error ? e.message : 'Billing failed'
-  } finally {
-    saving.value = false
-    deploying.value = false
-  }
-}
-
-function formatDeactivationDate(iso: string): string {
-  try {
-    const date = new Date(iso)
-    if (Number.isNaN(date.getTime())) return iso
-    return date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
-  } catch {
-    return iso
-  }
-}
-
-const showDeactivateConfirm = ref(false)
-const pendingDeactivateModuleId = ref<string | null>(null)
-
-function getSubscriptionPeriodEnd(moduleId: string): string | null {
-  const s = subscriptions[moduleId]
-  if (!s) return null
-  if (typeof (s as SubscriptionInfo).periodEnd === 'string') return (s as SubscriptionInfo).periodEnd
-  const byScope = s as WatchtowerSubscriptionByScope
-  const ends = Object.values(byScope).map((x) => x.periodEnd).filter(Boolean) as string[]
-  if (ends.length === 0) return null
-  return ends.reduce((a, b) => (a < b ? a : b))
-}
-
-function isWithinPaidPeriod(moduleId: string): boolean {
-  const periodEnd = getSubscriptionPeriodEnd(moduleId)
-  if (!periodEnd) return false
-  try {
-    return new Date(periodEnd) > new Date()
-  } catch {
-    return false
-  }
-}
-
-function onModuleToggle(id: string, on: boolean) {
-  if (on) {
-    const entry = getModuleCatalogEntry(id)
-    if (entry?.pricing && isWithinPaidPeriod(id)) {
-      form.modulesById[id] = 'active'
-      save()
-    } else {
-      activationModalModuleId.value = id
-      showActivationModal.value = true
-    }
-  } else {
-    const current = form.modulesById[id] ?? 'off'
-    if (current === 'staging' || current === 'active') {
-      pendingDeactivateModuleId.value = id
-      showDeactivateConfirm.value = true
-    }
-  }
-}
-
-async function confirmDeactivate() {
-  const id = pendingDeactivateModuleId.value
-  if (id) {
-    form.modulesById[id] = isWithinPaidPeriod(id) ? 'deactivating' : 'off'
-    await save()
-  }
-  pendingDeactivateModuleId.value = null
-  showDeactivateConfirm.value = false
-}
-
-function cancelDeactivate() {
-  pendingDeactivateModuleId.value = null
-  showDeactivateConfirm.value = false
-}
-
-function cancelExtend() {
-  extendingModuleId.value = null
-  extendPeriod.value = 'monthly'
-}
-
-function setExtendPeriod(v: BillingPeriod) {
-  extendPeriod.value = v
+function handleWatchtowerSave(period: BillingPeriod, conditions?: Record<string, number>) {
+  return _handleWatchtowerSave(period, conditions, watchtowerTabRef.value?.saveWatches?.bind(watchtowerTabRef.value))
 }
 
 async function onMarketplaceSaved(settings: Record<string, unknown>) {
@@ -438,35 +343,23 @@ async function onMarketplaceSaved(settings: Record<string, unknown>) {
     gate?: unknown
     shopFee?: unknown
   }
-  const gateVal = s.gate
   tenantStore.setMarketplaceSettings(
-    s
-      ? {
-          collectionMints: s.collectionMints ?? [],
-          splAssetMints: (s.splAssetMints as Array<{ mint: string; name?: string; symbol?: string }>) ?? [],
-          currencyMints: (s.currencyMints as Array<{ mint: string; name: string; symbol: string }>) ?? [],
-          gate: gateVal,
-          shopFee: (s.shopFee as MarketplaceSettings['shopFee']) ?? {
-            wallet: '',
-            makerFlatFee: 0,
-            takerFlatFee: 0,
-            makerPercentFee: 0,
-            takerPercentFee: 0,
-          },
-        }
-      : null
+    s ? {
+      collectionMints: s.collectionMints ?? [],
+      splAssetMints: (s.splAssetMints as Array<{ mint: string; name?: string; symbol?: string }>) ?? [],
+      currencyMints: (s.currencyMints as Array<{ mint: string; name: string; symbol: string }>) ?? [],
+      gate: s.gate,
+      shopFee: (s.shopFee as MarketplaceSettings['shopFee']) ?? { wallet: '', makerFlatFee: 0, takerFlatFee: 0, makerPercentFee: 0, takerPercentFee: 0 },
+    } : null,
   )
   await fetchSubscription('marketplace')
   await tenantStore.refetchTenantContext()
 }
+
 onMounted(() => {
   const q = route.query.tab
   if (typeof q !== 'string' || !VALID_TABS.has(q)) {
-    navigateTo({
-      path: route.path,
-      query: { ...route.query, tab: 'general' },
-      replace: true,
-    })
+    navigateTo({ path: route.path, query: { ...route.query, tab: 'general' }, replace: true })
   }
 })
 
@@ -482,53 +375,6 @@ watch(tab, (t) => {
     }
   }
 }, { immediate: true })
-
-function startExtend(moduleId: string) {
-  extendingModuleId.value = moduleId
-  extendPeriod.value = 'monthly'
-}
-
-async function confirmExtend(moduleId: string) {
-  await extendModule(moduleId, extendPeriod.value)
-  extendingModuleId.value = null
-}
-
-async function reactivateWithinPeriod(moduleId: string) {
-  form.modulesById[moduleId] = 'active'
-  await save()
-  await fetchSubscription(moduleId)
-}
-
-async function handleReactivate(moduleId: string, period: BillingPeriod) {
-  if (isWithinPaidPeriod(moduleId)) {
-    await reactivateWithinPeriod(moduleId)
-  } else {
-    await reactivateModule(moduleId, period)
-    await fetchSubscription(moduleId)
-  }
-}
-
-function onActivationModalClose(open: boolean) {
-  if (!open && activationModalModuleId.value) {
-    form.modulesById[activationModalModuleId.value] = 'off'
-  }
-  showActivationModal.value = open
-  if (!open) activationModalModuleId.value = null
-}
-
-async function confirmModuleActivate() {
-  const id = activationModalModuleId.value
-  if (!id) return
-  const entry = getModuleCatalogEntry(id)
-  if (isWithinPaidPeriod(id)) {
-    form.modulesById[id] = 'active'
-  } else {
-    form.modulesById[id] = entry?.goActiveImmediately === true ? 'active' : 'staging'
-  }
-  showActivationModal.value = false
-  activationModalModuleId.value = null
-  await save()
-}
 </script>
 
 <style>
@@ -622,7 +468,7 @@ async function confirmModuleActivate() {
 }
 .admin__module-row {
   display: grid;
-  grid-template-columns: minmax(6rem, 7rem) minmax(8rem, 1fr) minmax(14rem, 18rem) auto;
+  grid-template-columns: minmax(6rem, 7rem) minmax(8rem, 1fr) auto;
   align-items: center;
   gap: var(--theme-space-md);
   padding: var(--theme-space-xs) 0;
@@ -640,14 +486,6 @@ async function confirmModuleActivate() {
 .admin__module-cell--action {
   justify-content: flex-start;
   align-items: center;
-}
-.admin__module-badge {
-  font-size: var(--theme-font-xs);
-  font-weight: 500;
-  color: var(--theme-text-muted);
-}
-.admin__module-badge--always {
-  color: var(--theme-text-secondary);
 }
 .admin__module-cell--name {
   min-width: 0;
@@ -698,6 +536,26 @@ async function confirmModuleActivate() {
   color: var(--theme-text-secondary);
   line-height: 1.5;
 }
+.admin__module-info-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-xs);
+}
+.admin__module-info-pricing-title {
+  margin: 0;
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.admin__module-info-pricing-text {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  white-space: pre-line;
+}
 .admin__module-info-link {
   display: inline-flex;
   align-items: center;
@@ -708,13 +566,7 @@ async function confirmModuleActivate() {
 .admin__module-info-link:hover {
   text-decoration: underline;
 }
-.admin__module-staging-label {
-  font-size: var(--theme-font-sm);
-  font-weight: 500;
-  color: var(--theme-warning);
-}
-.admin__module-date,
-.admin__module-always-on {
+.admin__module-date {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
 }

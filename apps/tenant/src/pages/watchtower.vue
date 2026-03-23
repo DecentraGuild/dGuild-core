@@ -115,6 +115,7 @@ import { truncateAddress } from '@decentraguild/display'
 import { Icon } from '@iconify/vue'
 import { Card } from '~/components/ui/card'
 import { useTenantStore } from '~/stores/tenant'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { isModuleVisibleToMembers } from '@decentraguild/core'
 import MintDetailModal from '~/components/mint/MintDetailModal/index.vue'
@@ -167,11 +168,7 @@ async function fetchCatalog() {
   fetchError.value = null
   try {
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('watchtower', {
-      body: { action: 'catalog', tenantId: id },
-    })
-    if (error) throw error
-    const body = data as { entries?: CatalogEntry[]; error?: string }
+    const body = await invokeEdgeFunction<{ entries?: CatalogEntry[]; error?: string }>(supabase, 'watchtower', { action: 'catalog', tenantId: id })
     if (body?.error) throw new Error(body.error)
     entries.value = body?.entries ?? []
   } catch (e) {
@@ -298,7 +295,7 @@ function openMint(entry: CatalogEntry) {
 
 .watchtower-page__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
   gap: var(--theme-space-md);
 }
 

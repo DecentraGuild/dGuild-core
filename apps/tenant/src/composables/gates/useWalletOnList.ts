@@ -3,6 +3,7 @@
  * Uses shared cache + request coalescing so multiple useWalletOnList instances for the same list
  * (e.g. gates, marketplace, raffles all use-default) only trigger one API call.
  */
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useAuth } from '@decentraguild/auth'
@@ -26,11 +27,8 @@ async function fetchListed(list: string, wallet: string): Promise<boolean> {
   const promise = (async () => {
     try {
       const supabase = useSupabase()
-      const { data, error } = await supabase.functions.invoke('gates', {
-        body: { action: 'check', listAddress: list, wallet },
-      })
-      if (error) throw error
-      const result = (data as { listed: boolean }).listed ?? false
+      const data = await invokeEdgeFunction<{ listed: boolean }>(supabase, 'gates', { action: 'check', listAddress: list, wallet })
+      const result = data.listed ?? false
       cache.set(key, { result, at: Date.now() })
       return result
     } catch {

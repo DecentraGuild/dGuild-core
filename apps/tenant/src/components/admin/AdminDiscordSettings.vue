@@ -112,6 +112,7 @@ import AdminDiscordServerCard from '~/components/AdminDiscordServerCard.vue'
 import ConditionSetCatalog from '~/components/gates/ConditionSetCatalog.vue'
 import DiscordRoleCardsCarousel from '~/components/DiscordRoleCardsCarousel.vue'
 import type { RoleCard } from '~/components/DiscordRoleCardsCarousel.vue'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useConditionSet } from '~/composables/conditions/useConditionSet'
 import { useTenantStore } from '~/stores/tenant'
@@ -202,20 +203,26 @@ async function fetchInviteUrl() {
   const id = tenantId.value
   if (!id) return
   const supabase = useSupabase()
-  const { data } = await supabase.functions.invoke('discord-server', {
-    body: { action: 'invite-url', tenantId: id },
-  })
-  inviteUrl.value = (data as { url?: string | null })?.url ?? null
+  try {
+    const data = await invokeEdgeFunction<{ url?: string | null }>(supabase, 'discord-server', { action: 'invite-url', tenantId: id })
+    inviteUrl.value = data?.url ?? null
+  } catch {
+    inviteUrl.value = null
+  }
 }
 
 async function fetchServer() {
   const id = tenantId.value
   if (!id) return
   const supabase = useSupabase()
-  const { data } = await supabase.functions.invoke('discord-server', {
-    body: { action: 'get', tenantId: id },
-  })
-  const srv = (data as { server?: Record<string, unknown> | null })?.server
+  let data: { server?: Record<string, unknown> | null }
+  try {
+    data = await invokeEdgeFunction(supabase, 'discord-server', { action: 'get', tenantId: id })
+  } catch {
+    server.value = { connected: false }
+    return
+  }
+  const srv = data?.server
   server.value = srv
     ? {
         connected: true,
@@ -261,10 +268,12 @@ async function fetchRoleCards() {
   if (!id) return
   try {
     const supabase = useSupabase()
-    const { data } = await supabase.functions.invoke('discord-server', {
-      body: { action: 'role-cards', tenantId: id, includeAdminFields: true },
+    const data = await invokeEdgeFunction<{ cards?: RoleCard[] }>(supabase, 'discord-server', {
+      action: 'role-cards',
+      tenantId: id,
+      includeAdminFields: true,
     })
-    roleCards.value = (data as { cards?: RoleCard[] }).cards ?? []
+    roleCards.value = data.cards ?? []
   } catch {
     roleCards.value = []
   }
@@ -291,11 +300,10 @@ async function onLink(payload: { guildId: string }) {
   linkError.value = null
   try {
     const supabase = useSupabase()
-    const { error } = await supabase.functions.invoke('discord-server', {
-      body: { action: 'link', tenantId: id, guildId },
-    })
-    if (error) {
-      linkError.value = error.message ?? 'Failed to link server'
+    try {
+      await invokeEdgeFunction(supabase, 'discord-server', { action: 'link', tenantId: id, guildId })
+    } catch (e) {
+      linkError.value = e instanceof Error ? e.message : 'Failed to link server'
       return
     }
     guildIdInput.value = ''
@@ -314,9 +322,11 @@ async function disconnect() {
   disconnecting.value = true
   try {
     const supabase = useSupabase()
-    await supabase.functions.invoke('discord-server', {
-      body: { action: 'unlink', tenantId: id },
-    })
+    try {
+      await invokeEdgeFunction(supabase, 'discord-server', { action: 'unlink', tenantId: id })
+    } catch {
+      /* still clear local state */
+    }
     server.value = { connected: false }
     roleCards.value = []
     guildRoles.value = []

@@ -34,7 +34,9 @@
         >
           <Icon icon="mdi:menu" aria-hidden />
         </button>
-        <AuthWidget />
+        <div class="platform-header__auth">
+          <AuthWidget />
+        </div>
       </div>
     </header>
 
@@ -193,6 +195,16 @@ watch(
   display: none;
 }
 
+.platform-header__auth {
+  display: flex;
+  align-items: center;
+}
+
+.platform-header__auth :deep(.btn) {
+  min-height: 2.25rem;
+  padding: 0.375rem 1rem;
+}
+
 .docs-body {
   display: flex;
   flex: 1;
@@ -224,7 +236,7 @@ watch(
   display: none;
 }
 
-@media (max-width: var(--theme-breakpoint-md)) {
+@media (max-width: 767px) {
   .platform-header {
     padding: var(--theme-space-md);
   }

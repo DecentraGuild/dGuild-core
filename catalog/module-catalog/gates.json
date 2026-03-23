@@ -26,7 +26,7 @@
     "overview": "The Gates module allows you to define who can access your systems. It acts as your guild's permission layer.",
     "mechanics": "Each gate = on-chain wallet list\n\nCan be applied to: Entire guild, Specific modules, Individual actions\n\nIntegrates with: Marketplace, Raffles, Discord roles, Shipments",
     "setup": "Create a gate\n\nAdd wallet addresses\n\nAssign gate to modules or actions",
-    "pricing": "5 USDC per gate list\n\nOn-chain storage cost per wallet slot (reclaimable)"
+    "pricing": "50 USDC per gate list\n\nOn-chain storage cost per wallet slot (reclaimable)"
   },
   "activationInstructions": {
     "intro": "Decide who may enter your halls. Forge your access scroll and seal it on-chain.",

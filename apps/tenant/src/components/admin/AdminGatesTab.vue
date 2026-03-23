@@ -207,6 +207,7 @@ import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import { Icon } from '@iconify/vue'
 import AdminPricingWidget from '~/components/admin/AdminPricingWidget.vue'
 import { useAdminGateModals } from '~/composables/admin/useAdminGateModals'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
@@ -352,11 +353,8 @@ async function fetchEntries() {
   }
   try {
     const supabase = useSupabase()
-    const { data, error } = await supabase.functions.invoke('gates', {
-      body: { action: 'entries', listAddress: selectedListAddress.value },
-    })
-    if (error) { entries.value = []; return }
-    const wallets = (data as { entries?: string[] }).entries ?? []
+    const data = await invokeEdgeFunction<{ entries?: string[] }>(supabase, 'gates', { action: 'entries', listAddress: selectedListAddress.value })
+    const wallets = data.entries ?? []
     entries.value = wallets.map((wallet) => ({ publicKey: '', wallet }))
   } catch {
     entries.value = []
@@ -415,17 +413,14 @@ async function createList() {
     }
 
     const address = deriveWhitelistPda(wallet.publicKey, name).toBase58()
-    const { error } = await supabase.functions.invoke('gates', {
-      body: {
-        action: 'list-create',
-        tenantId: tenantId.value,
-        address,
-        name,
-        authority: wallet.publicKey.toBase58(),
-        imageUrl: createListImageUrl.value.trim() || null,
-      },
-    })
-    if (error) throw new Error(error.message ?? 'Failed to save list')
+    await invokeEdgeFunction(supabase, 'gates', {
+      action: 'list-create',
+      tenantId: tenantId.value,
+      address,
+      name,
+      authority: wallet.publicKey.toBase58(),
+      imageUrl: createListImageUrl.value.trim() || null,
+    }, { errorFallback: 'Failed to save list' })
 
     await fetchLists()
     pricingRef.value?.refresh?.()

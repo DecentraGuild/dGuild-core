@@ -5,6 +5,7 @@
  */
 import type { Ref } from 'vue'
 import { computed, ref, watch } from 'vue'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 
@@ -48,11 +49,8 @@ export function useGateLists(opts: {
           imageUrl: (row.image_url as string | null) ?? null,
         }))
       } else {
-        const { data, error: fnError } = await supabase.functions.invoke('gates', {
-          body: { action: 'lists-public', tenantId: id },
-        })
-        if (fnError) throw fnError
-        lists.value = (data as { lists: GateListPublic[] }).lists ?? []
+        const data = await invokeEdgeFunction<{ lists: GateListPublic[] }>(supabase, 'gates', { action: 'lists-public', tenantId: id })
+        lists.value = data.lists ?? []
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load lists'

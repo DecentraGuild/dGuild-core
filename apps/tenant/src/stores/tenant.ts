@@ -7,7 +7,11 @@ import { getBrowserClient } from '@decentraguild/auth'
 export type { MarketplaceSettings } from '@decentraguild/core'
 
 export interface RaffleSettings {
-  defaultGate?: MarketplaceGateSettings | 'use-default' | 'admin-only' | null
+  defaultGate?: MarketplaceGateSettings | 'use-default' | 'admin-only' | 'public' | null
+}
+
+export type FetchTenantContextOptions = {
+  preserveContextOnError?: boolean
 }
 
 export const useTenantStore = defineStore('tenant', () => {
@@ -29,12 +33,15 @@ export const useTenantStore = defineStore('tenant', () => {
     )
   }
 
-  async function fetchTenantContext(slugParam: string) {
+  async function fetchTenantContext(slugParam: string, options?: FetchTenantContextOptions) {
+    const preserve = options?.preserveContextOnError === true
     loading.value = true
     error.value = null
     slug.value = slugParam
-    marketplaceSettings.value = null
-    raffleSettings.value = null
+    if (!preserve) {
+      marketplaceSettings.value = null
+      raffleSettings.value = null
+    }
 
     try {
       const supabase = getSupabase()
@@ -84,9 +91,11 @@ export const useTenantStore = defineStore('tenant', () => {
       })
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load tenant'
-      tenant.value = null
-      marketplaceSettings.value = null
-      raffleSettings.value = null
+      if (!preserve) {
+        tenant.value = null
+        marketplaceSettings.value = null
+        raffleSettings.value = null
+      }
     } finally {
       loading.value = false
     }
@@ -95,7 +104,7 @@ export const useTenantStore = defineStore('tenant', () => {
   async function refetchTenantContext() {
     const currentSlug = slug.value
     if (!currentSlug) return
-    await fetchTenantContext(currentSlug)
+    await fetchTenantContext(currentSlug, { preserveContextOnError: true })
   }
 
   function clearTenant() {
