@@ -1,6 +1,8 @@
 import type { Connection } from '@solana/web3.js'
 import { PublicKey } from '@solana/web3.js'
-import { deriveTicketsPda } from './accounts.js'
+import { derivePrizeVaultPda, deriveTicketsPda } from './accounts.js'
+
+const DEFAULT_PUBKEY_BASE58 = '11111111111111111111111111111111'
 
 export type RaffleState =
   | 'created'
@@ -21,6 +23,7 @@ export interface RaffleChainData {
   ticketPrice: bigint
   ticketDecimals: number
   prizeMint: string
+  prizeVaultCount: number
   prizeAmount: bigint
   prizeDecimals: number
   winner: string | null
@@ -63,6 +66,7 @@ function parseRaffleRaw(data: Buffer): {
   ticketPrice: bigint
   ticketDecimals: number
   prizeMint: string
+  prizeVaultCount: number
   prizeAmount: bigint
   prizeDecimals: number
   winner: string | null
@@ -84,7 +88,7 @@ function parseRaffleRaw(data: Buffer): {
   o += descRes.bytesRead
   const urlRes = readBorshString(data, o)
   o += urlRes.bytesRead
-  if (o + 32 + 8 + 1 + 32 + 8 + 1 + 32 + 32 > data.length) return null
+  if (o + 32 + 8 + 1 + 32 + 4 + 1 + 32 + 32 > data.length) return null
   const ticketMint = new PublicKey(data.subarray(o, o + 32)).toBase58()
   o += 32
   const ticketPrice = data.readBigUInt64LE(o)
@@ -93,8 +97,8 @@ function parseRaffleRaw(data: Buffer): {
   o += 1
   const prizeMint = new PublicKey(data.subarray(o, o + 32)).toBase58()
   o += 32
-  const prizeAmount = data.readBigUInt64LE(o)
-  o += 8
+  const prizeVaultCount = data.readUInt32LE(o)
+  o += 4
   const prizeDecimals = data[o]
   o += 1
   o += 32 // tickets (pubkey)
@@ -111,7 +115,8 @@ function parseRaffleRaw(data: Buffer): {
       ticketPrice,
       ticketDecimals,
       prizeMint,
-      prizeAmount,
+      prizeVaultCount,
+      prizeAmount: 0n,
       prizeDecimals,
       winner,
       useWhitelist: false,
@@ -133,7 +138,8 @@ function parseRaffleRaw(data: Buffer): {
     ticketPrice,
     ticketDecimals,
     prizeMint,
-    prizeAmount,
+    prizeVaultCount,
+    prizeAmount: 0n,
     prizeDecimals,
     winner,
     useWhitelist,
@@ -160,6 +166,24 @@ export async function fetchRaffleChainData(
       ticketsSold = ticketsInfo.data.readUInt32LE(8)
       ticketsTotal = ticketsInfo.data.readUInt32LE(12)
     }
+    let prizeAmount = 0n
+    if (
+      parsed.prizeMint !== DEFAULT_PUBKEY_BASE58 &&
+      parsed.prizeVaultCount > 0
+    ) {
+      try {
+        const vaultPk = derivePrizeVaultPda(pubkey)
+        const vaultInfo = await connection.getParsedAccountInfo(vaultPk)
+        const raw = vaultInfo.value?.data
+        if (raw && typeof raw === 'object' && 'parsed' in raw && raw.parsed && typeof raw.parsed === 'object') {
+          const info = (raw.parsed as { info?: { tokenAmount?: { amount?: string } } }).info
+          const amt = info?.tokenAmount?.amount
+          if (amt) prizeAmount = BigInt(amt)
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     return {
       state: parsed.state,
       stateDisplay: toStateDisplay(parsed.state),
@@ -169,7 +193,8 @@ export async function fetchRaffleChainData(
       ticketPrice: parsed.ticketPrice,
       ticketDecimals: parsed.ticketDecimals,
       prizeMint: parsed.prizeMint,
-      prizeAmount: parsed.prizeAmount,
+      prizeVaultCount: parsed.prizeVaultCount,
+      prizeAmount,
       prizeDecimals: parsed.prizeDecimals,
       winner: parsed.winner,
       useWhitelist: parsed.useWhitelist,

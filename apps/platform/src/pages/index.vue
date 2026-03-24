@@ -176,7 +176,6 @@ const moduleFilterModel = computed({
   flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--theme-space-sm);
-  margin-top: calc(-1 * var(--theme-space-xl));
   margin-bottom: var(--theme-space-md);
 }
 
