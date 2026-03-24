@@ -9,6 +9,7 @@ import type { TieredAddonsPricing } from '@decentraguild/catalog'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
+import { useEnsureCatalogMint } from '~/composables/mint/useEnsureCatalogMint'
 import type { AddressBookEntry, CatalogMintItem } from '~/types/mints'
 import type { CatalogEntry } from '~/composables/watchtower/useTenantCatalog'
 import { reactive, ref, watch, computed, nextTick } from 'vue'
@@ -112,6 +113,7 @@ export function useMarketplaceSettings(opts: {
   const { slug, settings, emit, emitSaving } = opts
   const tenantId = computed(() => useTenantStore().tenantId)
   const tenantCatalog = useTenantCatalog()
+  const { ensureMint } = useEnsureCatalogMint()
 
   const form = reactive<MarketplaceForm>({
     collectionMints: [],
@@ -303,62 +305,41 @@ export function useMarketplaceSettings(opts: {
     addMintError.value = ''
     adding.value = true
     try {
-      if (entry) {
-        const name = entry.name ?? entry.label ?? undefined
-        const image = entry.image ?? undefined
-        if (entry.kind === 'NFT') {
-          form.collectionMints.push({
-            mint: trimmed,
-            name,
-            image,
-            collectionSize: entry.collectionSize ?? 0,
-            uniqueTraitCount: entry.uniqueTraitCount ?? 0,
-            traitTypes: [],
-          })
-        } else {
-          form.splAssetMints.push({ mint: trimmed, name, symbol: entry.symbol ?? undefined, image })
-        }
-        newMint.value = ''
-        newMintKind.value = 'auto'
-        return
-      }
+      const resolved = entry
+        ? {
+            kind: entry.kind,
+            name: entry.name ?? entry.label ?? null,
+            symbol: entry.symbol ?? null,
+            image: entry.image ?? null,
+            decimals: null as number | null,
+            collectionSize: entry.collectionSize,
+            uniqueTraitCount: entry.uniqueTraitCount,
+          }
+        : await ensureMint(trimmed, kind === 'auto' ? undefined : kind)
 
-      let rows: CatalogEntry[]
-      try {
-        rows = await tenantCatalog.list()
-      } catch (e) {
-        addMintError.value = e instanceof Error ? e.message : 'Failed to load Address book'
-        return
-      }
-      const row = rows.find((r) => r.mint === trimmed)
-      if (!row) {
-        addMintError.value = 'Add this mint in Address book first (Admin → Address book).'
-        return
-      }
-      const effectiveKind = kind === 'auto' ? row.kind : kind
-      if (effectiveKind !== row.kind) {
+      if (kind !== 'auto' && kind !== resolved.kind) {
         addMintError.value =
-          row.kind === 'NFT'
-            ? 'This mint is an NFT collection in your Address book. Choose NFT or Auto-detect.'
-            : 'This mint is an SPL token in your Address book. Choose SPL or Auto-detect.'
+          resolved.kind === 'NFT'
+            ? 'This mint is an NFT collection. Choose NFT or Auto-detect.'
+            : 'This mint is an SPL token. Choose SPL or Auto-detect.'
         return
       }
-      if (row.kind === 'NFT') {
+      if (resolved.kind === 'NFT') {
         form.collectionMints.push({
           mint: trimmed,
-          name: row.name ?? row.label ?? undefined,
-          image: row.image ?? undefined,
-          collectionSize: row.collectionSize ?? 0,
-          uniqueTraitCount: row.uniqueTraitCount ?? 0,
+          name: resolved.name ?? undefined,
+          image: resolved.image ?? undefined,
+          collectionSize: resolved.collectionSize ?? 0,
+          uniqueTraitCount: resolved.uniqueTraitCount ?? 0,
           traitTypes: [],
         })
       } else {
         form.splAssetMints.push({
           mint: trimmed,
-          name: row.name ?? row.label ?? undefined,
-          symbol: row.symbol ?? undefined,
-          image: row.image ?? undefined,
-          decimals: row.decimals ?? null,
+          name: resolved.name ?? undefined,
+          symbol: resolved.symbol ?? undefined,
+          image: resolved.image ?? undefined,
+          decimals: resolved.decimals ?? null,
         })
       }
       newMint.value = ''
@@ -521,6 +502,7 @@ export function useMarketplaceSettings(opts: {
         { action: 'spl-preview', mint: trimmed },
       )
       form.currencyMints[idx] = { mint: trimmed, name: d.name ?? '', symbol: d.symbol ?? '', image: d.image ?? undefined, decimals: d.decimals ?? undefined, sellerFeeBasisPoints: d.sellerFeeBasisPoints ?? undefined }
+      void ensureMint(trimmed, 'SPL').catch(() => {})
     } catch (e) {
       form.currencyMints[idx] = { ...item, _loading: false, _error: e instanceof Error ? e.message : 'Failed to load' }
     }

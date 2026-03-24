@@ -24,6 +24,21 @@ export interface CatalogEntry {
   uniqueTraitCount?: number
 }
 
+export interface CatalogAddResolved {
+  kind: 'SPL' | 'NFT'
+  name: string | null
+  symbol: string | null
+  image: string | null
+  decimals: number | null
+  collectionSize?: number
+  uniqueTraitCount?: number
+}
+
+export interface CatalogAddResult {
+  entry: CatalogEntry
+  resolved: CatalogAddResolved
+}
+
 export function useTenantCatalog() {
   const tenantStore = useTenantStore()
   const tenantId = computed(() => tenantStore.tenantId)
@@ -49,30 +64,31 @@ export function useTenantCatalog() {
 
   async function add(params: {
     mint: string
-    kind: 'SPL' | 'NFT'
+    kind?: 'SPL' | 'NFT' | 'auto'
     name?: string | null
     label?: string | null
     image?: string | null
-  }): Promise<CatalogEntry> {
+  }): Promise<CatalogAddResult> {
     const id = tenantId.value
     if (!id) throw new Error('No tenant')
 
     const supabase = useSupabase()
-    const data = await invokeEdgeFunction<{ entry?: CatalogEntry }>(
+    const data = await invokeEdgeFunction<CatalogAddResult>(
       supabase,
       'tenant_catalog',
       {
         action: 'add',
         tenantId: id,
         mint: params.mint,
-        kind: params.kind,
+        kind: params.kind ?? 'auto',
         name: params.name ?? null,
         label: params.label ?? params.name ?? null,
         image: params.image ?? null,
       },
       { errorFallback: 'Failed to add mint' },
     )
-    return data.entry as CatalogEntry
+    if (!data?.entry || !data?.resolved) throw new Error('Invalid catalog add response')
+    return data
   }
 
   async function updateShipmentDisplay(mint: string, params: { image?: string | null }): Promise<void> {

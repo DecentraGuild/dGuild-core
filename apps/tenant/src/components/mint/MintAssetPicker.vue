@@ -165,7 +165,7 @@
 import { truncateAddress } from '@decentraguild/display'
 import { Icon } from '@iconify/vue'
 import { Button } from '~/components/ui/button'
-import { useMintResolution } from '~/composables/mint/useMintResolution'
+import { useEnsureCatalogMint } from '~/composables/mint/useEnsureCatalogMint'
 import AddMintInput from '~/components/mint/AddMintInput.vue'
 import type { MintAssetPickerValue, MintKind, TrackingByMint, AddressBookEntry } from '~/types/mints'
 
@@ -197,7 +197,7 @@ const emit = defineEmits<{
   'error': [message: string]
 }>()
 
-const { resolveMint } = useMintResolution()
+const { ensureMint } = useEnsureCatalogMint()
 
 const newMint = ref('')
 const selectedKind = ref<'auto' | 'SPL' | 'NFT'>('auto')
@@ -258,22 +258,44 @@ async function addMint(mintArg?: string, kindArg?: 'auto' | 'SPL' | 'NFT') {
   adding.value = true
 
   try {
-    const result = await resolveMint(mint, kind === 'auto' ? undefined : kind)
-    if (!result) {
-      addError.value = 'Could not resolve mint'
+    const ensured = await ensureMint(mint, kind === 'auto' ? undefined : kind)
+    if (kind !== 'auto' && kind !== ensured.kind) {
+      addError.value =
+        ensured.kind === 'NFT'
+          ? 'This mint is an NFT collection. Choose NFT or Auto-detect.'
+          : 'This mint is an SPL token. Choose SPL or Auto-detect.'
       return
     }
 
-    if (result.kind === 'SPL' && result.spl) {
+    if (ensured.kind === 'SPL') {
       emit('update:modelValue', {
         ...props.modelValue,
-        spl: [...props.modelValue.spl, result.spl],
+        spl: [
+          ...props.modelValue.spl,
+          {
+            mint,
+            name: ensured.name ?? undefined,
+            symbol: ensured.symbol ?? undefined,
+            image: ensured.image ?? undefined,
+            decimals: ensured.decimals ?? undefined,
+          },
+        ],
       })
       emit('mint-added', mint, 'SPL')
-    } else if (result.kind === 'NFT' && result.collection) {
+    } else {
       emit('update:modelValue', {
         ...props.modelValue,
-        nfts: [...props.modelValue.nfts, result.collection],
+        nfts: [
+          ...props.modelValue.nfts,
+          {
+            mint,
+            name: ensured.name ?? undefined,
+            image: ensured.image ?? undefined,
+            collectionSize: ensured.collectionSize ?? 0,
+            uniqueTraitCount: ensured.uniqueTraitCount ?? 0,
+            traitTypes: [],
+          },
+        ],
       })
       emit('mint-added', mint, 'NFT')
     }
