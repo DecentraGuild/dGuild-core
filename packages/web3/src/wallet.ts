@@ -15,6 +15,7 @@ export {
   getEscrowWalletFromConnector,
   getSupabaseWalletAdapter,
   getMwaRawWallet,
+  mwaSingleSessionSignIn,
   setConnectorWebOptions,
   subscribeWalletConnectUri,
   getWalletConnectDisplayUri,
