@@ -434,11 +434,6 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
   const client = getClient()
   const pair = getWalletAndAccount(client)
   if (!pair) return null
-  const walletStatus = client.getSnapshot().wallet
-  const connectorId =
-    isConnected(walletStatus) && walletStatus.session
-      ? (walletStatus.session.connectorId as string | null)
-      : null
   const signer = createTransactionSigner({
     wallet: pair.wallet,
     account: pair.account,
@@ -462,11 +457,7 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
     return signed as T[]
   }
   const canSend = signer.getCapabilities().canSend
-  // Backpack (desktop extension and MWA) often shows correct simulation but fails on send
-  // when using Wallet Standard sign-and-send (generic "Failed to send transaction"). Other
-  // wallets handle that path; broadcast via the app's RPC after signTransaction is reliable.
-  const useWalletBroadcast = canSend && !isBackpackConnector(connectorId)
-  const signAndSendTransaction = useWalletBroadcast
+  const signAndSendTransaction = canSend
     ? async (tx: Transaction | VersionedTransaction): Promise<string> => {
         return signer.signAndSendTransaction(tx)
       }
