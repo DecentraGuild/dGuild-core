@@ -27,3 +27,4 @@ export {
   runMobileWalletStandardWarmup,
   runConnectModalWalletWarmup,
 } from './wallet-standard-ready.js'
+export { registerSolanaMobileWalletAdapter } from './register-solana-mobile-wallet.js'

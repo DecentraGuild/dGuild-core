@@ -10,18 +10,28 @@
  * Supabase fires spurious SIGNED_OUT/null on tab switch and token refresh; we ignore them.
  * Session persists until the user explicitly signs out or closes the browser.
  */
-import { setConnectorWebOptions, runMobileWalletStandardWarmup } from '@decentraguild/web3/wallet'
+import {
+  setConnectorWebOptions,
+  runMobileWalletStandardWarmup,
+  registerSolanaMobileWalletAdapter,
+} from '@decentraguild/web3/wallet'
 import { useAuth } from './useAuth'
 import { getBrowserClient } from './supabase-client'
 
-export default defineNuxtPlugin(() => {
+export default defineNuxtPlugin(async () => {
   if (import.meta.server) return
 
   const config = useRuntimeConfig()
+  const appUrl = (config.public.appUrl as string | undefined) || undefined
   setConnectorWebOptions({
-    appUrl: (config.public.appUrl as string | undefined) || undefined,
+    appUrl,
     walletConnectProjectId:
       (config.public.walletConnectProjectId as string | undefined) || undefined,
+  })
+
+  await registerSolanaMobileWalletAdapter({
+    appName: 'DecentraGuild',
+    appUrl,
   })
 
   const auth = useAuth()
