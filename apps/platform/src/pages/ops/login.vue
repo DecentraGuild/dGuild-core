@@ -20,6 +20,8 @@
           :connectors="auth.connectorState.value.connectors"
           :loading="auth.loading.value"
           :error="auth.error.value"
+          :wallet-connect-uri="walletConnectUri"
+          :wallet-scan-pending="walletScanPending"
           @close="showConnectModal = false"
           @select="handleConnectAndSignIn"
         />
@@ -46,7 +48,7 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Platform admin login' })
 
-import { useAuth } from '@decentraguild/auth'
+import { useAuth, useConnectWalletModalExtras } from '@decentraguild/auth'
 import { ConnectWalletModal } from '@decentraguild/ui/components'
 import { Button } from '~/components/ui/button'
 import { Card } from '~/components/ui/card'
@@ -56,6 +58,10 @@ import type { WalletConnectorId } from '@solana/connector/headless'
 const auth = useAuth()
 
 const showConnectModal = ref(false)
+const { walletConnectUri, walletScanPending } = useConnectWalletModalExtras({
+  showModal: showConnectModal,
+  refreshConnectorState: () => auth.refreshConnectorState(),
+})
 const opsAccessError = ref<string | null>(null)
 const opsChecking = ref(false)
 

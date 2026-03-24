@@ -19,6 +19,7 @@
         :loading="loading"
         :error="error"
         :wallet-connect-uri="walletConnectUri"
+        :wallet-scan-pending="walletScanPending"
         @close="showConnectModal = false"
         @select="handleConnect"
       />
@@ -31,14 +32,18 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { truncateAddress } from '@decentraguild/display'
 import { Button, ConnectWalletModal } from '@decentraguild/ui/components'
 import type { WalletConnectorId } from '@solana/connector/headless'
-import { subscribeToConnectorState, subscribeWalletConnectUri } from '@decentraguild/web3/wallet'
+import { subscribeToConnectorState } from '@decentraguild/web3/wallet'
 import { useAuth, openConnectModalRequested } from './useAuth'
+import { useConnectWalletModalExtras } from './useConnectWalletModalExtras'
 
 const auth = useAuth()
 const { wallet, loading, error, connectorState, fetchMe, refreshConnectorState, connectAndSignIn, signOut } = auth
 
 const showConnectModal = ref(false)
-const walletConnectUri = ref<string | null>(null)
+const { walletConnectUri, walletScanPending } = useConnectWalletModalExtras({
+  showModal: showConnectModal,
+  refreshConnectorState,
+})
 /** Only show wallet/connect state after mount so server and client first paint match (avoids hydration mismatch). */
 const showAuthState = ref(false)
 
@@ -57,21 +62,16 @@ watch(openConnectModalRequested, (v) => {
 const truncatedAddress = computed(() => truncateAddress(wallet.value, 4, 4))
 
 let unsubscribeConnector: (() => void) | null = null
-let unsubscribeWalletConnectUri: (() => void) | null = null
 onMounted(async () => {
   await fetchMe()
   refreshConnectorState()
   unsubscribeConnector = subscribeToConnectorState(() => {
     refreshConnectorState()
   })
-  unsubscribeWalletConnectUri = subscribeWalletConnectUri((uri) => {
-    walletConnectUri.value = uri
-  })
   showAuthState.value = true
 })
 onUnmounted(() => {
   unsubscribeConnector?.()
-  unsubscribeWalletConnectUri?.()
 })
 
 async function handleConnect(connectorId: WalletConnectorId) {

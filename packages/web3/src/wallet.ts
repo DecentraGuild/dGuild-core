@@ -21,3 +21,9 @@ export {
   type ConnectorStateSnapshot,
   type ConnectorWebOptions,
 } from './connector.js'
+export {
+  isMobileUserAgent,
+  waitForWalletStandardInjected,
+  runMobileWalletStandardWarmup,
+  runConnectModalWalletWarmup,
+} from './wallet-standard-ready.js'

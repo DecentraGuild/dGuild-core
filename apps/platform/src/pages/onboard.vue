@@ -16,6 +16,8 @@
           :connectors="auth.connectorState.value.connectors"
           :loading="auth.loading.value"
           :error="auth.error.value"
+          :wallet-connect-uri="walletConnectUri"
+          :wallet-scan-pending="walletScanPending"
           @close="showConnectModal = false"
           @select="handleConnectAndSignIn"
         />
@@ -47,7 +49,7 @@
 
 <script setup lang="ts">
 definePageMeta({ title: 'Create org' })
-import { useAuth } from '@decentraguild/auth'
+import { useAuth, useConnectWalletModalExtras } from '@decentraguild/auth'
 import { ConnectWalletModal } from '@decentraguild/ui/components'
 import { Button } from '~/components/ui/button'
 import { Card } from '~/components/ui/card'
@@ -70,6 +72,10 @@ const auth = useAuth()
 const supabase = useSupabase()
 const { rpcUrl, hasRpc } = useRpc()
 const showConnectModal = ref(false)
+const { walletConnectUri, walletScanPending } = useConnectWalletModalExtras({
+  showModal: showConnectModal,
+  refreshConnectorState: () => auth.refreshConnectorState(),
+})
 
 onMounted(() => {
   auth.fetchMe()
