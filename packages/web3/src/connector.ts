@@ -2,6 +2,7 @@ import { PublicKey } from '@solana/web3.js'
 import type { Transaction, VersionedTransaction } from '@solana/web3.js'
 import {
   ConnectorClient,
+  createSolanaMainnet,
   getDefaultConfig,
   createTransactionSigner,
   isConnected,
@@ -11,6 +12,21 @@ import {
   type WalletAccount,
 } from '@solana/connector/headless'
 import type { Wallet as EscrowWallet } from './escrow/types.js'
+
+/** Wallet Standard SIWS; Supabase `signInWithWeb3` uses this when present (better for MWA / Backpack than raw `signMessage`). */
+const SOLANA_SIGN_IN = 'solana:signIn' as const
+
+type SolanaSignInFeatureHandle = {
+  signIn: (...inputs: readonly unknown[]) => Promise<readonly unknown[]>
+}
+
+function getSolanaSignInHandle(wallet: Wallet): SolanaSignInFeatureHandle | null {
+  const feature = wallet.features[SOLANA_SIGN_IN] as { signIn?: SolanaSignInFeatureHandle['signIn'] } | undefined
+  if (feature && typeof feature.signIn === 'function') {
+    return { signIn: feature.signIn.bind(feature) as SolanaSignInFeatureHandle['signIn'] }
+  }
+  return null
+}
 
 export interface ConnectorStateSnapshot {
   connected: boolean
@@ -108,6 +124,11 @@ function getClient(): ConnectorClient {
   return clientInstance
 }
 
+/** MWA / Wallet Standard signMessage expects a chain id; omitting cluster skips it and breaks some wallets. */
+function clusterForSigner(client: ConnectorClient) {
+  return client.getCluster() ?? createSolanaMainnet()
+}
+
 export function getConnectorClient(): ConnectorClient {
   return getClient()
 }
@@ -179,6 +200,7 @@ export async function signMessageForAuth(message: string): Promise<{ signature: 
   const signer = createTransactionSigner({
     wallet: pair.wallet,
     account: pair.account,
+    cluster: clusterForSigner(client),
   })
   if (!signer?.signMessage) {
     throw new Error('Connected wallet does not support message signing')
@@ -195,6 +217,7 @@ export async function signMessageForAuth(message: string): Promise<{ signature: 
 export function getSupabaseWalletAdapter(): {
   publicKey: { toBase58: () => string }
   signMessage: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
+  signIn?: (...inputs: readonly unknown[]) => Promise<unknown>
 } | null {
   const client = getClient()
   const pair = getWalletAndAccount(client)
@@ -202,16 +225,29 @@ export function getSupabaseWalletAdapter(): {
   const signer = createTransactionSigner({
     wallet: pair.wallet,
     account: pair.account,
+    cluster: clusterForSigner(client),
   })
   if (!signer?.signMessage) return null
   const signMessage = signer.signMessage
-  return {
+  const signInHandle = getSolanaSignInHandle(pair.wallet)
+
+  const adapter: {
+    publicKey: { toBase58: () => string }
+    signMessage: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
+    signIn?: (...inputs: readonly unknown[]) => Promise<unknown>
+  } = {
     publicKey: { toBase58: () => pair.account.address },
     signMessage: async (message: Uint8Array) => {
       const sig = await signMessage(message)
       return sig instanceof Uint8Array ? sig : new Uint8Array(Buffer.from(sig as string, 'base64'))
     },
   }
+
+  if (signInHandle) {
+    adapter.signIn = (...inputs) => signInHandle.signIn(...inputs)
+  }
+
+  return adapter
 }
 
 export async function signMessageWithConnector(
@@ -226,6 +262,7 @@ export async function signMessageWithConnector(
   const signer = createTransactionSigner({
     wallet: pair.wallet,
     account: pair.account,
+    cluster: clusterForSigner(client),
   })
   if (!signer?.signMessage) {
     throw new Error('Connected wallet does not support message signing')
@@ -243,6 +280,7 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
   const signer = createTransactionSigner({
     wallet: pair.wallet,
     account: pair.account,
+    cluster: clusterForSigner(client),
   })
   if (
     !signer ||
