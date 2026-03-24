@@ -15,7 +15,7 @@
     <Card>
       <h3>Mint catalog</h3>
       <p class="marketplace-settings__hint">
-        Add assets in <strong>Admin → Address book</strong> first. Here you only choose which of those are tradable on the marketplace. Paste a mint already in the book, or pick from the book.
+        Paste any mint address or pick from your address book. New mints are added to the address book automatically when you load them here.
       </p>
 
       <AdminMintCatalog

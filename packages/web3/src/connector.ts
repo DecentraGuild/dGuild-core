@@ -434,6 +434,11 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
   const client = getClient()
   const pair = getWalletAndAccount(client)
   if (!pair) return null
+  const walletStatus = client.getSnapshot().wallet
+  const connectorId =
+    isConnected(walletStatus) && walletStatus.session
+      ? (walletStatus.session.connectorId as string | null)
+      : null
   const signer = createTransactionSigner({
     wallet: pair.wallet,
     account: pair.account,
@@ -457,11 +462,15 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
     return signed as T[]
   }
   const canSend = signer.getCapabilities().canSend
-  const signAndSendTransaction = canSend
-    ? async (tx: Transaction | VersionedTransaction): Promise<string> => {
-        return signer.signAndSendTransaction(tx)
-      }
-    : undefined
+  // Backpack: `solana:signAndSendTransaction` + ConnectorKit’s `transactions: [bytes]` shape
+  // tends to look like a nested/batch tx in the UI; sign + dapp `sendRawTransaction` matches
+  // other wallets’ simpler prompt. Simulation is handled in `sendAndConfirmTransaction` (RPC).
+  const signAndSendTransaction =
+    canSend && !isBackpackConnector(connectorId)
+      ? async (tx: Transaction | VersionedTransaction): Promise<string> => {
+          return signer.signAndSendTransaction(tx)
+        }
+      : undefined
   return {
     publicKey,
     signTransaction,

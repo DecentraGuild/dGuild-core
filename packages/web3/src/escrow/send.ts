@@ -24,39 +24,37 @@ type ConnectionWithRpc = Connection & {
   _rpcRequest?: (method: string, args: unknown[]) => Promise<RpcSimulateResponse>
 }
 
-function legacySignedWireToBase64(wire: Uint8Array): string {
+function legacyWireToBase64(wire: Uint8Array): string {
   const u8 = wire instanceof Uint8Array ? wire : new Uint8Array(wire)
   let binary = ''
   for (let i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]!)
   return btoa(binary)
 }
 
+function throwIfSimValueFailed(value: { err?: unknown; logs?: string[] | null } | undefined): void {
+  if (!value?.err) return
+  const logs = (value.logs ?? []).join('\n')
+  const msg = logs
+    ? `Simulation failed:\n${logs}`
+    : `Simulation failed: ${JSON.stringify(value.err)}`
+  throw new Error(msg)
+}
+
 /**
- * Legacy `Transaction` + `Connection.simulateTransaction` does not support
- * `replaceRecentBlockhash` (only the `VersionedTransaction` overload does). After the user
- * spends time in the wallet, the signed message's blockhash can be unknown → "Blockhash not
- * found". This calls the same RPC the wallet would use for simulation, with a fresh blockhash
- * for the sim only (`sigVerify: false` so the stale hash in signatures is acceptable).
+ * RPC `simulateTransaction` with `replaceRecentBlockhash` (legacy `Connection.simulateTransaction`
+ * only passes that for `VersionedTransaction`). Used for unsigned preflight and for signed txs
+ * after a wallet prompt so we do not hit "Blockhash not found" on a slightly stale hash.
  */
-async function simulateSignedLegacyTransaction(
-  connection: Connection,
-  signed: Transaction
-): Promise<void> {
+async function rpcSimulateLegacyWire(connection: Connection, wire: Uint8Array): Promise<void> {
   const rpc = (connection as ConnectionWithRpc)._rpcRequest
   if (!rpc) {
-    const sim = await connection.simulateTransaction(signed)
-    if (sim.value.err) {
-      const logs = sim.value.logs?.join('\n') ?? ''
-      const msg = logs
-        ? `Simulation failed:\n${logs}`
-        : `Simulation failed: ${JSON.stringify(sim.value.err)}`
-      throw new Error(msg)
-    }
+    const tx = Transaction.from(wire)
+    const sim = await connection.simulateTransaction(tx)
+    throwIfSimValueFailed(sim.value)
     return
   }
 
-  const wire = signed.serialize()
-  const encoded = legacySignedWireToBase64(wire)
+  const encoded = legacyWireToBase64(wire)
   const commitment = connection.commitment ?? 'confirmed'
 
   const unsafeRes = await rpc('simulateTransaction', [
@@ -79,14 +77,26 @@ async function simulateSignedLegacyTransaction(
     })
   }
 
-  const value = unsafeRes.result?.value
-  if (value?.err) {
-    const logs = (value.logs ?? []).join('\n')
-    const msg = logs
-      ? `Simulation failed:\n${logs}`
-      : `Simulation failed: ${JSON.stringify(value.err)}`
-    throw new Error(msg)
-  }
+  throwIfSimValueFailed(unsafeRes.result?.value)
+}
+
+async function simulateUnsignedLegacyTransaction(
+  connection: Connection,
+  transaction: Transaction
+): Promise<void> {
+  const wire = transaction.serialize({
+    requireAllSignatures: false,
+    verifySignatures: false,
+  })
+  await rpcSimulateLegacyWire(connection, wire)
+}
+
+async function simulateSignedLegacyTransaction(
+  connection: Connection,
+  signed: Transaction
+): Promise<void> {
+  const wire = signed.serialize()
+  await rpcSimulateLegacyWire(connection, wire)
 }
 
 /**
@@ -94,14 +104,14 @@ async function simulateSignedLegacyTransaction(
  * extra signers, then signs with the wallet, optionally simulates, sends, and confirms.
  * Call this after building a transaction (builders no longer set blockhash/feePayer).
  *
- * **ConnectorKit / Wallet Standard:** When `wallet.signAndSendTransaction` exists (from
- * `createTransactionSigner` → `solana:signAndSendTransaction`) and there are no extra keypair
- * signers, we delegate broadcast to the wallet so it can run preflight and show balance
- * changes before confirmation — same path Phantom/Solflare/Backpack expose when `canSend`.
+ * **Wallet Standard / ConnectorKit:** `createTransactionSigner` serializes your tx and calls
+ * the wallet with `transactions: [bytes]` first (then falls back to singular `transaction`).
+ * Some wallets render that one-element array like a nested or “batch” transaction — that is
+ * upstream behavior, not an extra instruction in your transaction.
  *
- * Otherwise we `signTransaction` and send via this `Connection`; blockhash is refreshed
- * immediately before opening the wallet to limit expiry, and post-sign simulation uses RPC
- * `replaceRecentBlockhash` (see `simulateSignedLegacyTransaction`).
+ * When `wallet.signAndSendTransaction` exists and there are no extra keypair signers, we delegate
+ * broadcast to the wallet (Phantom, Solflare, …). Backpack omits that hook in
+ * `getEscrowWalletFromConnector` and uses sign + `sendRawTransaction` plus RPC simulation here.
  */
 export async function sendAndConfirmTransaction(
   connection: Connection,
@@ -119,8 +129,10 @@ export async function sendAndConfirmTransaction(
       lastValidBlockHeight
   }
 
-  // When wallet can sign-and-send and there are no extra keypair signers, delegate fully to
-  // the wallet so it runs preflight simulation and shows balance changes before confirmation.
+  if (simulate) {
+    await simulateUnsignedLegacyTransaction(connection, transaction)
+  }
+
   if (typeof wallet.signAndSendTransaction === 'function' && signers.length === 0) {
     onStatus?.('signing')
     const sig = await wallet.signAndSendTransaction(transaction)
@@ -129,8 +141,6 @@ export async function sendAndConfirmTransaction(
     return sig
   }
 
-  // Refresh blockhash immediately before the wallet prompt — the signed message will carry
-  // this hash through to send; minimizing time from fetch → sign → submit reduces expiry.
   const { blockhash: signBlockhash, lastValidBlockHeight: signLastValid } =
     await connection.getLatestBlockhash()
   transaction.recentBlockhash = signBlockhash

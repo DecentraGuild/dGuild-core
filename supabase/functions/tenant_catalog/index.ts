@@ -232,7 +232,8 @@ Deno.serve(async (req: Request) => {
     if (isBaseCurrencyMint(mint)) {
       return errorResponse('Base currencies (SOL, USDC, USDT, WBTC) are platform-level and cannot be added to the tenant catalog.', req, 400)
     }
-    let kind = (body.kind as 'SPL' | 'NFT') ?? 'SPL'
+    const kindInput = body.kind as string | undefined
+    const kindHint = kindInput === 'auto' || kindInput === undefined ? undefined : kindInput as 'SPL' | 'NFT'
     let name = (body.name as string) ?? null
     let label = (body.label as string) ?? name
     let image = (body.image as string) ?? null
@@ -242,11 +243,11 @@ Deno.serve(async (req: Request) => {
     if (!mint) return errorResponse('mint required', req)
 
     const { fetchMintMetadata } = await import('../_shared/mint-metadata.ts')
-    const meta = await fetchMintMetadata(mint, kind)
+    const meta = await fetchMintMetadata(mint, kindHint)
     if (!meta) {
       return errorResponse('Not a valid SPL token or NFT mint address.', req, 400)
     }
-    kind = meta.kind
+    const kind = meta.kind
     if (!name && !label && !image) {
       name = meta.name ?? null
       label = meta.label ?? meta.name ?? null
@@ -361,7 +362,20 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return jsonResponse({ entry }, req)
+    const traitKeys = meta.traitIndex && typeof meta.traitIndex === 'object' && 'trait_keys' in meta.traitIndex
+      ? (meta.traitIndex.trait_keys as string[])
+      : undefined
+    const resolved = {
+      kind: meta.kind,
+      name: meta.name ?? null,
+      symbol: (meta as { symbol?: string }).symbol ?? null,
+      image: meta.image ?? null,
+      decimals: meta.decimals ?? null,
+      collectionSize: meta.collectionSize ?? undefined,
+      uniqueTraitCount: traitKeys?.length ?? undefined,
+    }
+
+    return jsonResponse({ entry, resolved }, req)
   }
 
   if (action === 'remove') {

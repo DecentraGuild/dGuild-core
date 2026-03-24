@@ -21,7 +21,6 @@
           @update:model-value="onPickerUpdate"
           @mint-added="onMintAdded"
           @mint-removed="onMintRemoved"
-          @address-book-select="onAddressBookSelect"
           @inspect-collection="onInspectCollection"
           @inspect-spl="onInspectSpl"
           @error="onError"
@@ -131,16 +130,6 @@ onMounted(() => {
 
 watch(addressBook, fetchDiscordMintSet)
 
-async function apiAdd(mint: string, kind: MintKind, name?: string | null, image?: string | null) {
-  saveError.value = null
-  try {
-    await catalog.add({ mint, kind, name, label: name, image })
-    await fetchAddressBook()
-  } catch (e) {
-    saveError.value = e instanceof Error ? e.message : 'Failed to add mint'
-  }
-}
-
 async function apiRemove(mint: string) {
   try {
     await catalog.remove(mint)
@@ -154,15 +143,8 @@ function onPickerUpdate(value: MintAssetPickerValue) {
   pickerValue.value = value
 }
 
-function onMintAdded(mint: string, kind: MintKind) {
-  const item = kind === 'SPL'
-    ? pickerValue.value.spl.find((s) => s.mint === mint)
-    : pickerValue.value.nfts.find((n) => n.mint === mint)
-  apiAdd(mint, kind, item?.name ?? null, (item as { image?: string | null })?.image ?? null)
-}
-
-async function onAddressBookSelect(mint: string, entry: AddressBookEntry) {
-  await apiAdd(mint, entry.kind, entry.name ?? entry.label ?? null, entry.image ?? null)
+async function onMintAdded() {
+  saveError.value = null
   await fetchAddressBook()
 }
 

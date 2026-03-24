@@ -6,6 +6,7 @@ import type { EffectiveGateResult, TransactionGateOverride } from '@decentraguil
 import type { BillingSameTxPrepare } from '~/composables/admin/useAdminBilling'
 import { resolveGateForTransaction } from '@decentraguild/core'
 import { useMintMetadataForInput } from '~/composables/mint/useMintMetadataForInput'
+import { useEnsureCatalogMint } from '~/composables/mint/useEnsureCatalogMint'
 import {
   getEscrowWalletFromConnector,
   sendAndConfirmTransaction,
@@ -79,6 +80,8 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
     { fieldLabel: 'Ticket price' },
   )
 
+  const { ensureMint } = useEnsureCatalogMint()
+
   function openCreateModal(_slotIndex: number) {
     createForm.name = ''
     createForm.description = ''
@@ -112,6 +115,11 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
     if (dec == null) {
       createError.value = 'Enter a valid ticket mint to load decimals first'
       return
+    }
+    try {
+      await ensureMint(ticketMint, 'SPL')
+    } catch {
+      /* best-effort address book upsert */
     }
     const ticketPriceRaw = ticketMintMeta.toRawAmount()
     if (!ticketPriceRaw || ticketPriceRaw === '0') {
