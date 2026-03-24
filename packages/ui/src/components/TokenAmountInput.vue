@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { useId } from 'vue'
 
 withDefaults(
   defineProps<{
@@ -45,7 +45,7 @@ defineEmits<{
   setPercent: [pct: number]
 }>()
 
-const id = computed(() => `token-amount-${Math.random().toString(36).slice(2)}`)
+const id = useId()
 </script>
 
 <style scoped>

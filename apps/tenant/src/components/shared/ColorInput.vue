@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, useId } from 'vue'
 import Input from '~/components/ui/input/Input.vue'
 import Label from '~/components/ui/label/Label.vue'
 
@@ -42,8 +42,8 @@ const emit = defineEmits<{
 
 const swatchRef = ref<HTMLInputElement | null>(null)
 
-const hexInputId = computed(() => `color-hex-${Math.random().toString(36).slice(2)}`)
-const swatchId = computed(() => `color-swatch-${Math.random().toString(36).slice(2)}`)
+const hexInputId = useId()
+const swatchId = useId()
 
 function normalizeHex(raw: string): string {
   const s = String(raw).trim().replace(/^#/, '')

@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, useId } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -43,8 +43,8 @@ const emit = defineEmits<{
 const swatchRef = ref<HTMLInputElement | null>(null)
 const hexRef = ref<HTMLInputElement | null>(null)
 
-const hexInputId = computed(() => `color-hex-${Math.random().toString(36).slice(2)}`)
-const swatchId = computed(() => `color-swatch-${Math.random().toString(36).slice(2)}`)
+const hexInputId = useId()
+const swatchId = useId()
 
 /** Normalize to #RRGGBB or empty. Accepts #RGB, #RRGGBB, RGB, RRGGBB. */
 function normalizeHex(raw: string): string {

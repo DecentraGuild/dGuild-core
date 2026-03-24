@@ -52,9 +52,12 @@ defineProps<{
 }
 
 .app-header__logo {
-  height: 2rem;
+  max-height: 2rem;
   width: auto;
-  border-radius: var(--theme-radius-md);
+  max-width: 9rem;
+  object-fit: contain;
+  object-position: left center;
+  border-radius: 0;
   flex-shrink: 0;
 }
 

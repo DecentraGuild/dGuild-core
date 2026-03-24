@@ -62,8 +62,8 @@
       </details>
 
       <details class="theme-settings__section">
-        <summary class="theme-settings__heading">Spacing and rounding</summary>
-        <p class="theme-settings__hint">Corner radius, spacing scale, and border width.</p>
+        <summary class="theme-settings__heading">Rounding and border</summary>
+        <p class="theme-settings__hint">Corner radius and border width.</p>
 
         <h4 class="theme-settings__sub">Corner radius</h4>
         <div class="theme-settings__slider-row">
@@ -80,23 +80,6 @@
           />
           <label class="theme-settings__slider-label">Round</label>
           <span class="theme-settings__slider-value">{{ radiusLabels[inputs.radiusLevel ?? 3] }}</span>
-        </div>
-
-        <h4 class="theme-settings__sub">Spacing</h4>
-        <div class="theme-settings__slider-row">
-          <label :for="spacingSliderId" class="theme-settings__slider-label">Tight</label>
-          <input
-            :id="spacingSliderId"
-            v-model.number="inputs.spacingLevel"
-            type="range"
-            min="0"
-            max="10"
-            step="1"
-            class="theme-settings__slider"
-            @input="apply"
-          />
-          <label class="theme-settings__slider-label">Loose</label>
-          <span class="theme-settings__slider-value">{{ spacingBaseLabel }} base</span>
         </div>
 
         <h4 class="theme-settings__sub">Border width (px)</h4>
@@ -155,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { ref, reactive, watch, nextTick, useId } from 'vue'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import OptionsSelect from '~/components/ui/options-select/OptionsSelect.vue'
 import { deriveTheme, themeToInputs, parseRem } from '@decentraguild/ui'
@@ -168,10 +151,9 @@ const props = defineProps<{
   }
 }>()
 
-const sliderId = `radius-slider-${Math.random().toString(36).slice(2)}`
-const spacingSliderId = `spacing-slider-${Math.random().toString(36).slice(2)}`
-const borderSliderId = `border-slider-${Math.random().toString(36).slice(2)}`
-const patternSizeId = `pattern-size-slider-${Math.random().toString(36).slice(2)}`
+const sliderId = useId()
+const borderSliderId = useId()
+const patternSizeId = useId()
 
 const radiusLabels = ['None', 'Slight', 'Medium', 'Rounded', 'Full']
 
@@ -225,7 +207,6 @@ const inputs = reactive({
   elevatedSurface: '',
   border: '',
   radiusLevel: 3,
-  spacingLevel: 5,
   borderWidthPx: 1,
 })
 
@@ -243,11 +224,6 @@ const effectPattern = ref<'none' | 'dots' | 'grid'>('none')
 const effectPatternSize = ref(24)
 const effectGlow = ref<'none' | 'subtle' | 'medium' | 'strong'>('subtle')
 
-const spacingBaseLabel = computed(() => {
-  const base = 0.5 + ((inputs.spacingLevel ?? 5) / 10) * 1.5
-  return `${base.toFixed(2)}rem`
-})
-
 function syncFromTheme() {
   const extracted = themeToInputs(props.branding.theme)
   inputs.primary = extracted.primary
@@ -259,7 +235,6 @@ function syncFromTheme() {
   inputs.elevatedSurface = extracted.elevatedSurface ?? ''
   inputs.border = extracted.border ?? ''
   inputs.radiusLevel = extracted.radiusLevel ?? 3
-  inputs.spacingLevel = extracted.spacingLevel ?? 5
   inputs.borderWidthPx = extracted.borderWidthPx ?? 1
 
   const c = props.branding.theme.colors ?? {}
@@ -298,7 +273,6 @@ function buildTheme(): TenantTheme {
     },
     destructive: statusDestructive.value || undefined,
     radiusLevel: inputs.radiusLevel,
-    spacingLevel: inputs.spacingLevel,
     borderWidthPx: inputs.borderWidthPx,
     glowIntensity: effectGlow.value,
     fontPrimary: FONT_STACKS[fontFamilyId.value] ?? FONT_STACKS.inter,
@@ -334,6 +308,7 @@ function apply() {
   const theme = buildTheme()
   // eslint-disable-next-line vue/no-mutating-props -- parent passes mutable branding for theme edits
   Object.assign(props.branding.theme, theme)
+  delete props.branding.theme.spacing
 }
 
 function applyStatus() {
