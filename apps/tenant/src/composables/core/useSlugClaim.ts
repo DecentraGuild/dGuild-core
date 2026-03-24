@@ -15,6 +15,7 @@ import { useSupabase } from '~/composables/core/useSupabase'
 import type { Ref } from 'vue'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 import type { TenantConfig } from '@decentraguild/core'
+import { validateSlug, sanitizeSlug } from '~/lib/validateSocialLinks'
 
 export function useSlugClaim(opts: {
   slug: Ref<string | null>
@@ -43,10 +44,24 @@ export function useSlugClaim(opts: {
   const slugCheckStatus = ref<'idle' | 'checking' | 'available' | 'taken'>('idle')
   const slugChecking = ref(false)
   const slugClaiming = ref(false)
+  const slugError = ref<string | null>(null)
+
+  function setDesiredSlug(value: string) {
+    const sanitized = sanitizeSlug(value)
+    desiredSlug.value = sanitized
+    slugError.value = null
+    slugCheckStatus.value = 'idle'
+  }
 
   async function checkSlugAvailability() {
     const s = desiredSlug.value.trim().toLowerCase()
     if (!s) return
+    const validation = validateSlug(s)
+    if (!validation.valid) {
+      slugError.value = validation.error ?? null
+      return
+    }
+    slugError.value = null
     slugChecking.value = true
     slugCheckStatus.value = 'checking'
     try {
@@ -69,7 +84,13 @@ export function useSlugClaim(opts: {
 
   async function claimSlug() {
     const s = desiredSlug.value.trim().toLowerCase()
-    if (!s || slugCheckStatus.value !== 'available' || !tenantId.value) return
+    if (!s || !tenantId.value) return
+    const validation = validateSlug(s)
+    if (!validation.valid) {
+      slugError.value = validation.error ?? null
+      return
+    }
+    if (slugCheckStatus.value !== 'available') return
     slugClaiming.value = true
     saveError.value = null
     try {
@@ -185,6 +206,8 @@ export function useSlugClaim(opts: {
     slugCheckStatus,
     slugChecking,
     slugClaiming,
+    slugError,
+    setDesiredSlug,
     checkSlugAvailability,
     onSlugCheckBlur,
     claimSlug,

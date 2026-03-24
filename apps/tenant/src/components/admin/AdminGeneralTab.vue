@@ -32,6 +32,7 @@
                 :model-value="desiredSlug"
                 label=""
                 placeholder="e.g. my-community"
+                :error="slugError ?? undefined"
                 @update:model-value="$emit('update:desiredSlug', $event)"
                 @blur="$emit('slug-check-blur')"
               />
@@ -135,6 +136,7 @@ defineProps<{
   slugCheckStatus: 'idle' | 'checking' | 'available' | 'taken'
   slugChecking: boolean
   slugClaiming: boolean
+  slugError: string | null
 }>()
 
 defineEmits<{
