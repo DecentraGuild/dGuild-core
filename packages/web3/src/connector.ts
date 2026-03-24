@@ -13,21 +13,6 @@ import {
 } from '@solana/connector/headless'
 import type { Wallet as EscrowWallet } from './escrow/types.js'
 
-/** Wallet Standard SIWS; Supabase `signInWithWeb3` uses this when present (better for MWA / Backpack than raw `signMessage`). */
-const SOLANA_SIGN_IN = 'solana:signIn' as const
-
-type SolanaSignInFeatureHandle = {
-  signIn: (...inputs: readonly unknown[]) => Promise<readonly unknown[]>
-}
-
-function getSolanaSignInHandle(wallet: Wallet): SolanaSignInFeatureHandle | null {
-  const feature = wallet.features[SOLANA_SIGN_IN] as { signIn?: SolanaSignInFeatureHandle['signIn'] } | undefined
-  if (feature && typeof feature.signIn === 'function') {
-    return { signIn: feature.signIn.bind(feature) as SolanaSignInFeatureHandle['signIn'] }
-  }
-  return null
-}
-
 export interface ConnectorStateSnapshot {
   connected: boolean
   account: string | null
@@ -214,10 +199,19 @@ export async function signMessageForAuth(message: string): Promise<{ signature: 
   return { signature, message }
 }
 
+/**
+ * Adapter for `supabase.auth.signInWithWeb3({ chain: 'solana', wallet })`.
+ *
+ * Do **not** expose `wallet.signIn` here for MWA: `@solana-mobile/wallet-standard-mobile`
+ * `solana:signIn` calls `authorize({ sign_in_payload })`, but `performAuthorization` returns
+ * the **cached** session from the prior `connect()` (which used `authorize` without
+ * `sign_in_payload`). That cached object has no `sign_in_result` →
+ * "Sign in failed, no sign in result returned by wallet". Supabase must use the
+ * `signMessage` branch instead (`signMessages` after reauthorization).
+ */
 export function getSupabaseWalletAdapter(): {
   publicKey: { toBase58: () => string }
   signMessage: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
-  signIn?: (...inputs: readonly unknown[]) => Promise<unknown>
 } | null {
   const client = getClient()
   const pair = getWalletAndAccount(client)
@@ -229,25 +223,13 @@ export function getSupabaseWalletAdapter(): {
   })
   if (!signer?.signMessage) return null
   const signMessage = signer.signMessage
-  const signInHandle = getSolanaSignInHandle(pair.wallet)
-
-  const adapter: {
-    publicKey: { toBase58: () => string }
-    signMessage: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
-    signIn?: (...inputs: readonly unknown[]) => Promise<unknown>
-  } = {
+  return {
     publicKey: { toBase58: () => pair.account.address },
     signMessage: async (message: Uint8Array) => {
       const sig = await signMessage(message)
       return sig instanceof Uint8Array ? sig : new Uint8Array(Buffer.from(sig as string, 'base64'))
     },
   }
-
-  if (signInHandle) {
-    adapter.signIn = (...inputs) => signInHandle.signIn(...inputs)
-  }
-
-  return adapter
 }
 
 export async function signMessageWithConnector(
