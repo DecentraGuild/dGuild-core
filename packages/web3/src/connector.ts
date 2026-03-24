@@ -36,6 +36,8 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
  * return without opening a second transact() (no second app-switch).
  */
 const MWA_CACHE_KEY = 'SolanaMobileWalletAdapterDefaultAuthorizationCache'
+/** Persists the wallet_uri_base from MWA authorize so we can identify the wallet on subsequent loads. */
+const MWA_WALLET_URI_KEY = 'SolanaMobileWalletAdapterWalletUriBase'
 
 function signatureBytesFromSignerResult(sig: Uint8Array | string): Uint8Array {
   return sig instanceof Uint8Array ? sig : base64ToUint8Array(sig)
@@ -203,7 +205,16 @@ export function getMwaRawWallet(connectorId: WalletConnectorId): Wallet | null {
 
 export function isBackpackConnector(connectorId: string | null): boolean {
   if (!connectorId) return false
-  return connectorId.toLowerCase().includes('backpack')
+  if (connectorId.toLowerCase().includes('backpack')) return true
+  // Mobile MWA: connectorId is always 'mobile-wallet-adapter'; check saved wallet URI instead
+  try {
+    const mobileUri =
+      typeof localStorage !== 'undefined' ? localStorage.getItem(MWA_WALLET_URI_KEY) : null
+    if (mobileUri && mobileUri.toLowerCase().includes('backpack')) return true
+  } catch {
+    // localStorage may be unavailable
+  }
+  return false
 }
 
 export function getWalletAndAccount(client: ConnectorClient): { wallet: Wallet; account: WalletAccount } | null {
@@ -385,6 +396,15 @@ export async function mwaSingleSessionSignIn({
       const signedPayload = base64ToUint8Array(signed_payloads[0])
       const signature = new Uint8Array(signedPayload.slice(-64))
 
+      // Persist the wallet URI so isBackpackConnector() can identify the wallet on mobile
+      if (authResult.wallet_uri_base) {
+        try {
+          localStorage.setItem(MWA_WALLET_URI_KEY, authResult.wallet_uri_base)
+        } catch {
+          // localStorage may be unavailable
+        }
+      }
+
       // Pre-populate the MWA auth cache so connectWallet() hits it without transact()
       const cacheEntry = {
         ...authResult,
@@ -442,9 +462,16 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
     const signed = await signer.signAllTransactions(txs)
     return signed as T[]
   }
+  const canSend = signer.getCapabilities().canSend
+  const signAndSendTransaction = canSend
+    ? async (tx: Transaction | VersionedTransaction): Promise<string> => {
+        return signer.signAndSendTransaction(tx)
+      }
+    : undefined
   return {
     publicKey,
     signTransaction,
     signAllTransactions,
+    signAndSendTransaction,
   }
 }
