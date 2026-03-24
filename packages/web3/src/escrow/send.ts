@@ -19,6 +19,10 @@ export interface SendAndConfirmOptions {
  * Sets recent blockhash and fee payer on the transaction, optionally partialSigns with
  * extra signers, then signs with the wallet, optionally simulates, sends, and confirms.
  * Call this after building a transaction (builders no longer set blockhash/feePayer).
+ *
+ * When the wallet exposes signAndSendTransaction and there are no extra keypair signers,
+ * that path is used instead so the wallet runs preflight simulation internally and can
+ * display balance changes to the user (especially on mobile via MWA).
  */
 export async function sendAndConfirmTransaction(
   connection: Connection,
@@ -34,6 +38,16 @@ export async function sendAndConfirmTransaction(
   if (lastValidBlockHeight != null) {
     ;(transaction as Transaction & { lastValidBlockHeight?: number }).lastValidBlockHeight =
       lastValidBlockHeight
+  }
+
+  // When wallet can sign-and-send and there are no extra keypair signers, delegate fully to
+  // the wallet so it runs preflight simulation and shows balance changes before confirmation.
+  if (typeof wallet.signAndSendTransaction === 'function' && signers.length === 0) {
+    onStatus?.('signing')
+    const sig = await wallet.signAndSendTransaction(transaction)
+    onStatus?.('confirming')
+    await connection.confirmTransaction(sig)
+    return sig
   }
 
   onStatus?.('signing')
