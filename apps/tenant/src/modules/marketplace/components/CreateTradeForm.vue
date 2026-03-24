@@ -110,6 +110,7 @@ import { storeToRefs } from 'pinia'
 import { useAuth } from '@decentraguild/auth'
 import { useTenantStore } from '~/stores/tenant'
 import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
+import { resolveGateForTransaction } from '@decentraguild/core'
 import {
   buildInitializeTransaction,
   sendAndConfirmTransaction,
@@ -439,11 +440,8 @@ async function create() {
       return
     }
 
-    const resolvedWhitelist = resolveWhitelistForEscrow(
-      effectiveModuleWhitelist.value,
-      settingsWhitelist.value
-    )
-    const _hasWhitelist = Boolean(resolvedWhitelist?.account?.trim())
+    const resolvedGate = resolveGateForTransaction(effectiveModuleGate.value, settingsGate.value)
+    const hasGate = Boolean(resolvedGate?.account?.trim())
 
     let recipientAddr: string | null = null
     if (settingsDirect.value && settingsDirectAddress.value.trim()) {

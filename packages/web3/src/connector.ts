@@ -24,6 +24,19 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return out
 }
 
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary)
+}
+
+/**
+ * localStorage key used by @solana-mobile/wallet-standard-mobile's
+ * createDefaultAuthorizationCache(). Pre-populating it lets connectWallet()
+ * return without opening a second transact() (no second app-switch).
+ */
+const MWA_CACHE_KEY = 'SolanaMobileWalletAdapterDefaultAuthorizationCache'
+
 function signatureBytesFromSignerResult(sig: Uint8Array | string): Uint8Array {
   return sig instanceof Uint8Array ? sig : base64ToUint8Array(sig)
 }
@@ -285,6 +298,122 @@ export async function signMessageWithConnector(
   }
   const signatureBytes = await signer.signMessage(message)
   return signatureBytesFromSignerResult(signatureBytes as Uint8Array | string)
+}
+
+/**
+ * Single-session MWA sign-in for Backpack and all MWA wallets.
+ *
+ * Opens ONE `transact()` session and performs:
+ *   1. `wallet.authorize({ chain, identity })` — no `sign_in_payload`
+ *      (Backpack hangs when it receives `sign_in_payload` in authorize, never responding)
+ *   2. `wallet.signMessages(...)` — SIWS text signed in the **same** session
+ *
+ * This is a single app-switch. After returning, the MWA authorization cache is
+ * pre-populated so that `connectWallet()` finds it and updates ConnectorKit state
+ * without opening another transact().
+ *
+ * The returned `message` + `signature` are passed directly to
+ * `supabase.auth.signInWithWeb3({ chain: 'solana', message, signature })`.
+ */
+export async function mwaSingleSessionSignIn({
+  siwsUrl,
+  statement,
+  chain = 'solana:mainnet',
+}: {
+  siwsUrl: string
+  statement: string
+  chain?: string
+}): Promise<{ message: string; signature: Uint8Array; address: string }> {
+  const { transact } = await import(
+    /* webpackChunkName: "mwa-protocol" */
+    '@solana-mobile/mobile-wallet-adapter-protocol'
+  )
+  const parsedUrl = new URL(siwsUrl)
+  const appIdentity = {
+    name: 'DecentraGuild',
+    uri: parsedUrl.origin,
+    icon: '/favicon.ico',
+  }
+
+  return (transact as (cb: (w: unknown) => Promise<unknown>) => Promise<unknown>)(
+    async (mobileWallet: unknown) => {
+      const wallet = mobileWallet as {
+        getCapabilities: () => Promise<unknown>
+        authorize: (p: { chain: string; identity: { name: string; uri: string; icon: string } }) => Promise<{
+          accounts: Array<{ address: string; label?: string; icon?: string }>
+          auth_token: string
+          wallet_uri_base?: string
+        }>
+        signMessages: (p: { addresses: string[]; payloads: string[] }) => Promise<{
+          signed_payloads: string[]
+        }>
+      }
+
+      const [capabilities, authResult] = await Promise.all([
+        wallet.getCapabilities(),
+        wallet.authorize({ chain, identity: appIdentity }),
+      ])
+
+      if (!authResult.accounts?.length) throw new Error('No accounts returned from wallet')
+
+      // MWA gives base64-encoded public key bytes; SIWS needs base58 address
+      const pubkeyBytes = base64ToUint8Array(authResult.accounts[0].address)
+      const addressBase58 = new PublicKey(pubkeyBytes).toBase58()
+      const issuedAt = new Date().toISOString()
+
+      // Build SIWS text matching Supabase's signMessage path format exactly
+      const message = [
+        `${parsedUrl.host} wants you to sign in with your Solana account:`,
+        addressBase58,
+        '',
+        statement,
+        '',
+        'Version: 1',
+        `URI: ${parsedUrl.href}`,
+        `Issued At: ${issuedAt}`,
+        `Chain ID: ${chain}`,
+      ].join('\n')
+
+      // Sign within the SAME session — no second app-switch
+      const messageBytes = new TextEncoder().encode(message)
+      const { signed_payloads } = await wallet.signMessages({
+        addresses: [authResult.accounts[0].address], // base64 as MWA expects
+        payloads: [uint8ArrayToBase64(messageBytes)], // base64 of UTF-8 message
+      })
+
+      // Ed25519 signature = last 64 bytes of signed_payload
+      const signedPayload = base64ToUint8Array(signed_payloads[0])
+      const signature = new Uint8Array(signedPayload.slice(-64))
+
+      // Pre-populate the MWA auth cache so connectWallet() hits it without transact()
+      const cacheEntry = {
+        ...authResult,
+        accounts: [
+          {
+            address: addressBase58, // base58 — cache.get() rebuilds publicKey from this
+            chains: [chain, 'solana:mainnet', 'solana:devnet', 'solana:testnet'],
+            features: [
+              'solana:signAndSendTransaction',
+              'solana:signTransaction',
+              'solana:signMessage',
+              'solana:signIn',
+            ],
+            label: authResult.accounts[0].label,
+            icon: authResult.accounts[0].icon,
+          },
+        ],
+        chain,
+        capabilities,
+      }
+      try {
+        localStorage.setItem(MWA_CACHE_KEY, JSON.stringify(cacheEntry))
+      } catch {
+        // localStorage may be unavailable (private browsing etc.); not fatal
+      }
+
+      return { message, signature, address: addressBase58 }
+    },
+  ) as Promise<{ message: string; signature: Uint8Array; address: string }>
 }
 
 export function getEscrowWalletFromConnector(): EscrowWallet | null {
