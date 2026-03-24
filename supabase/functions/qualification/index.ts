@@ -159,9 +159,8 @@ Deno.serve(async (req: Request) => {
       const snapshotRange = snapshotMints.get(m)
       if (shipmentRange) {
         const { data: snaps } = await db
-          .from('tracker_holder_snapshots')
+          .from('holder_snapshots')
           .select('holder_wallets')
-          .eq('tenant_id', tenantId)
           .eq('mint', m)
           .gte('snapshot_date', shipmentRange.begin_date)
           .lte('snapshot_date', shipmentRange.end_date)
@@ -178,9 +177,8 @@ Deno.serve(async (req: Request) => {
         const end_date = end.toISOString().slice(0, 10)
 
         const { data: snaps } = await db
-          .from('tracker_holder_snapshots')
+          .from('holder_snapshots')
           .select('holder_wallets')
-          .eq('tenant_id', tenantId)
           .eq('mint', m)
           .gte('snapshot_date', begin_date)
           .lte('snapshot_date', end_date)

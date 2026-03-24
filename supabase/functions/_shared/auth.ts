@@ -47,14 +47,43 @@ function getWalletFromToken(token: string): string | null {
  * When JWT has no wallet, calls Auth API (getUser) to read user_metadata.
  */
 /**
- * True when the request uses the project's service role JWT (same value as pg_cron → invoke_edge_function).
- * Use to gate cron-only Edge paths; never accept the anon key here.
+ * True when the request uses the project's service role credential.
+ * Accepts two formats to handle Supabase legacy JWT keys and new sb_secret_* keys:
+ *   1. Exact match against SUPABASE_SERVICE_ROLE_KEY (new sb_secret_* format or any injected value).
+ *   2. Legacy JWT fallback: decodes the Bearer token and checks role === "service_role" +
+ *      iss === "supabase" + ref matches this project. Used when the Vault holds the legacy
+ *      JWT-format key but SUPABASE_SERVICE_ROLE_KEY is the new-format secret key.
+ *      The JWT is HS256-signed with the project JWT secret, so a forged token without
+ *      that secret would fail Supabase's own gateway before reaching here, making
+ *      the unsigned decode safe for this additional check.
  */
 export function isServiceRoleAuthorization(req: Request): boolean {
-  const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '').trim()
-  if (!key) return false
   const auth = (req.headers.get('Authorization') ?? '').trim()
-  return auth === `Bearer ${key}`
+  if (!auth.startsWith('Bearer ')) return false
+  const token = auth.slice(7).trim()
+  if (!token) return false
+
+  // Primary: exact match against injected service role key (works for both key formats).
+  const envKey = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '').trim()
+  if (envKey && token === envKey) return true
+
+  // Fallback: accept legacy JWT-format service role key by decoding claims.
+  // Covers the case where SUPABASE_SERVICE_ROLE_KEY is the new sb_secret_* format
+  // but the Vault still holds the legacy HS256 JWT.
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return false
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = b64 + '==='.slice((b64.length + 3) % 4 === 0 ? 4 : (b64.length + 3) % 4)
+    const payload = JSON.parse(atob(padded)) as Record<string, unknown>
+    if (payload?.role !== 'service_role' || payload?.iss !== 'supabase') return false
+    // Verify the project ref so a service_role JWT from another project is rejected.
+    const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').trim()
+    const ref = supabaseUrl.match(/https?:\/\/([^.]+)/)?.[1] ?? ''
+    return !ref || payload?.ref === ref
+  } catch {
+    return false
+  }
 }
 
 /** Case-insensitive wallet membership in tenant_config.admins (normalized trim). */

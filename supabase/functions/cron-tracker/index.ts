@@ -1,9 +1,19 @@
 /**
- * Tracker sync Edge Function.
- * pg_cron: tracker-holders (every 5 min) with body { mode: "holders" }; tracker-snapshots (every minute) { mode: "snapshot" } — bucket width from interval_timers (timer_key = watchtower_snapshot_bucket).
- * Missing JSON body (legacy tracker-sync): runs **holders batch only**; snapshots must use tracker-snapshots (avoids OOM from dual work in one Edge invocation).
- * Tier intervals and snapshot bucket size: interval_timers + platform_watchtower_holder_tier.
- * Body: { mode?, offset?, syncMint?, tenantId? } — syncMint + tenantId only = immediate sync for that mint (admin save).
+ * Tracker sync Edge Function — unified mode.
+ *
+ * pg_cron: tracker-unified (every 5 min) with body { mode: "unified" }.
+ * Each tick advances a DB-backed rolodex cursor over the deduplicated set of
+ * watched mints (all tenants, track_holders OR track_snapshot).
+ * A single RPC fetch per mint feeds two adopters:
+ *   • holder_current  — written when the holder-count tier says a refresh is due.
+ *   • holder_snapshots — written once per snapshot bucket (cycle_minutes × N)
+ *                        when at least one in-limit tenant has track_snapshot.
+ * Snapshot data is global (no per-tenant mirror). Billing / access is gated by
+ * watchtower_watches + tenant_meter_limits; no duplicate JSON is stored.
+ *
+ * Body: { mode?, syncMint?, tenantId? }
+ *   mode "unified"  — batch rolodex advance (pg_cron, service role required).
+ *   syncMint + tenantId — immediate single-mint sync (admin JWT, ignores mode).
  */
 
 import { jsonResponse, errorResponse } from '../_shared/cors.ts'
@@ -20,6 +30,10 @@ import { fetchSplHolders } from '../_shared/fetch-spl-holders.ts'
 
 const METADATA_REFRESH_AGE_DAYS = 7
 const CHUNK_SIZE = 8
+
+// ---------------------------------------------------------------------------
+// RPC helpers
+// ---------------------------------------------------------------------------
 
 async function fetchMintMetadata(
   rpcEndpoint: string,
@@ -95,6 +109,48 @@ async function fetchNftHolders(
   return [...countByWallet.entries()].map(([wallet, amount]) => ({ wallet, amount: String(amount) }))
 }
 
+async function refreshMintMetadataIfStale(
+  db: ReturnType<typeof getAdminClient>,
+  rpcEndpoint: string,
+  mint: string,
+  now: Date,
+): Promise<void> {
+  const { data: meta } = await db
+    .from('mint_metadata')
+    .select('updated_at')
+    .eq('mint', mint)
+    .maybeSingle()
+
+  const metaAge = meta
+    ? (now.getTime() - new Date(meta.updated_at as string).getTime()) / (1000 * 60 * 60 * 24)
+    : Infinity
+
+  if (metaAge <= METADATA_REFRESH_AGE_DAYS) return
+
+  const fetched = await fetchMintMetadata(rpcEndpoint, mint)
+  if (!fetched) return
+
+  await db.from('mint_metadata').upsert({
+    mint,
+    name: fetched.name,
+    symbol: fetched.symbol,
+    image: fetched.image,
+    decimals: fetched.decimals,
+    update_authority: fetched.updateAuthority ?? null,
+    uri: fetched.uri ?? null,
+    seller_fee_basis_points: fetched.sellerFeeBasisPoints ?? null,
+    primary_sale_happened: fetched.primarySaleHappened ?? null,
+    is_mutable: fetched.isMutable ?? null,
+    edition_nonce: fetched.editionNonce ?? null,
+    token_standard: fetched.tokenStandard ?? null,
+    updated_at: now.toISOString(),
+  }, { onConflict: 'mint' })
+}
+
+// ---------------------------------------------------------------------------
+// Main handler
+// ---------------------------------------------------------------------------
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204 })
@@ -104,18 +160,19 @@ Deno.serve(async (req: Request) => {
   const rpcEndpoint = getRpcUrl()
   const now = new Date()
 
-  let offset = 0
   let syncMint: string | null = null
   let syncTenantId: string | null = null
   let mode: string | null = null
   try {
     const body = await req.json() as Record<string, unknown>
-    offset = (body.offset as number) ?? 0
     syncMint = (body.syncMint as string)?.trim() || null
     syncTenantId = (body.tenantId as string)?.trim() || null
     mode = typeof body.mode === 'string' ? body.mode.trim() : null
   } catch { /* no body */ }
 
+  // -------------------------------------------------------------------------
+  // Immediate single-mint sync — admin JWT path (triggered from admin save)
+  // -------------------------------------------------------------------------
   if (syncMint && syncTenantId) {
     const authHeader = req.headers.get('Authorization')
     const wallet = await getWalletFromAuthHeader(authHeader)
@@ -134,6 +191,7 @@ Deno.serve(async (req: Request) => {
 
     const config = await loadWatchtowerSyncConfig(db)
     const { snapshotAt, snapshotDate } = alignSnapshotBucket(now, config.snapshot_interval_minutes)
+
     const { data: watch } = await db
       .from('watchtower_watches')
       .select('track_holders, track_snapshot')
@@ -143,15 +201,17 @@ Deno.serve(async (req: Request) => {
     if (!watch || (!watch.track_holders && !watch.track_snapshot)) {
       return jsonResponse({ processed: 0, synced: 0, message: 'Mint not watched' }, req)
     }
-    const [discordWithin, snapshotWithin] = await Promise.all([
+
+    const [currentWithin, snapshotWithin] = await Promise.all([
       watch.track_holders ? getWithinLimitMints(db, syncTenantId, 'mints_current') : Promise.resolve(new Set<string>()),
       watch.track_snapshot ? getWithinLimitMints(db, syncTenantId, 'mintsSnapshot') : Promise.resolve(new Set<string>()),
     ])
-    const syncDiscord = watch.track_holders && discordWithin.has(syncMint)
+    const syncCurrent = watch.track_holders && currentWithin.has(syncMint)
     const syncSnapshot = watch.track_snapshot && snapshotWithin.has(syncMint)
-    if (!syncDiscord && !syncSnapshot) {
+    if (!syncCurrent && !syncSnapshot) {
       return jsonResponse({ processed: 0, synced: 0, message: 'Mint over paid limit' }, req)
     }
+
     const { data: catalog } = await db
       .from('tenant_mint_catalog')
       .select('kind')
@@ -160,47 +220,17 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
     const kind = (catalog?.kind as 'SPL' | 'NFT') ?? 'NFT'
 
-    if (syncSnapshot && !syncDiscord) {
+    if (syncSnapshot) {
       const { data: snapDup } = await db
         .from('holder_snapshots')
         .select('mint')
         .eq('mint', syncMint)
         .eq('snapshot_at', snapshotAt)
         .maybeSingle()
-      if (snapDup) {
+      if (snapDup && !syncCurrent) {
         return jsonResponse({ processed: 0, synced: 0, message: 'Snapshot already exists for bucket' }, req)
       }
-    }
-
-    if (syncSnapshot) {
-      const { data: meta } = await db
-        .from('mint_metadata')
-        .select('updated_at')
-        .eq('mint', syncMint)
-        .maybeSingle()
-      const metaAge = meta
-        ? (now.getTime() - new Date(meta.updated_at as string).getTime()) / (1000 * 60 * 60 * 24)
-        : Infinity
-      if (metaAge > METADATA_REFRESH_AGE_DAYS) {
-        const fetched = await fetchMintMetadata(rpcEndpoint, syncMint)
-        if (fetched) {
-          await db.from('mint_metadata').upsert({
-            mint: syncMint,
-            name: fetched.name,
-            symbol: fetched.symbol,
-            image: fetched.image,
-            decimals: fetched.decimals,
-            update_authority: fetched.updateAuthority ?? null,
-            uri: fetched.uri ?? null,
-            seller_fee_basis_points: fetched.sellerFeeBasisPoints ?? null,
-            primary_sale_happened: fetched.primarySaleHappened ?? null,
-            is_mutable: fetched.isMutable ?? null,
-            edition_nonce: fetched.editionNonce ?? null,
-            token_standard: fetched.tokenStandard ?? null,
-            updated_at: now.toISOString(),
-          }, { onConflict: 'mint' })
-        }
-      }
+      await refreshMintMetadataIfStale(db, rpcEndpoint, syncMint, now)
     }
 
     let holders: Array<{ wallet: string; amount: string }>
@@ -209,13 +239,15 @@ Deno.serve(async (req: Request) => {
     } else {
       holders = await fetchNftHolders(rpcEndpoint, syncMint)
     }
-    if (syncDiscord) {
+
+    if (syncCurrent) {
       await db.from('holder_current').upsert({
         mint: syncMint,
         holder_wallets: holders,
         last_updated: now.toISOString(),
       }, { onConflict: 'mint' })
     }
+
     if (syncSnapshot) {
       const { data: existing } = await db
         .from('holder_snapshots')
@@ -231,243 +263,175 @@ Deno.serve(async (req: Request) => {
           snapshot_date: snapshotDate,
           created_at: now.toISOString(),
         }, { onConflict: 'mint,snapshot_at' })
-        await db.from('tracker_holder_snapshots').upsert({
-          tenant_id: syncTenantId,
-          mint: syncMint,
-          holder_wallets: holders,
-          snapshot_date: snapshotDate,
-          snapshot_at: snapshotAt,
-          created_at: now.toISOString(),
-        }, { onConflict: 'tenant_id,mint,snapshot_at' })
       }
     }
+
     return jsonResponse({ processed: 1, synced: 1 }, req)
   }
 
+  // -------------------------------------------------------------------------
+  // Batch unified mode — service role only (pg_cron)
+  // -------------------------------------------------------------------------
   if (!isServiceRoleAuthorization(req)) {
     return errorResponse('Unauthorized', req, 401)
   }
 
-  let legacyBare = false
-  if (mode === null || mode === '') {
-    legacyBare = true
-    mode = 'holders'
-  }
-  if (mode !== 'holders' && mode !== 'snapshot') {
-    return errorResponse('Batch requests require mode "holders" or "snapshot"', req, 400)
+  if (mode !== 'unified') {
+    return errorResponse('Batch requests require mode "unified"', req, 400)
   }
 
   const config = await loadWatchtowerSyncConfig(db)
-
-  if (mode === 'holders') {
-    const { data: allWatches, error: watchErr } = await db
-      .from('watchtower_watches')
-      .select('tenant_id, mint, track_holders')
-      .eq('track_holders', true)
-      .order('tenant_id')
-      .order('mint')
-      .range(offset, offset + CHUNK_SIZE - 1)
-
-    if (watchErr) return errorResponse(watchErr.message, req, 500)
-    const mints = allWatches ?? []
-    if (!mints.length) {
-      if (!legacyBare) {
-        return jsonResponse({ processed: 0, synced: 0, offset, hasMore: false, mode }, req)
-      }
-      return jsonResponse(
-        { processed: 0, synced: 0, offset, hasMore: false, mode: 'holders', legacyBare: true },
-        req,
-      )
-    }
-
-    const tenantIds = [...new Set(mints.map((m) => String(m.tenant_id ?? '')))].filter(Boolean) as string[]
-    const withinByTenant = new Map<string, Set<string>>()
-    for (const tid of tenantIds) {
-      const mints_current = await getWithinLimitMints(db, tid, 'mints_current')
-      withinByTenant.set(tid, mints_current)
-    }
-
-    const mintKeys = mints.map((m) => String(m.mint ?? ''))
-    const { data: syncMeta, error: syncMetaErr } = await db.rpc('holder_current_sync_meta', {
-      p_mints: mintKeys,
-    })
-    if (syncMetaErr) {
-      return errorResponse(syncMetaErr.message, req, 500)
-    }
-    const currentByMint = new Map<string, { holderCount: number; last_updated: string }>()
-    for (const r of (syncMeta ?? []) as Array<{ mint: string; last_updated: string; holder_count: number }>) {
-      currentByMint.set(r.mint, {
-        holderCount: Number(r.holder_count) || 0,
-        last_updated: r.last_updated,
-      })
-    }
-
-    const { data: catalogRows } = await db
-      .from('tenant_mint_catalog')
-      .select('mint, kind')
-      .in('mint', mintKeys)
-    const catalog = (catalogRows ?? []) as Array<{ mint: string; kind: string }>
-    const kindByMint = new Map<string, 'SPL' | 'NFT'>(catalog.map((r) => [r.mint, r.kind as 'SPL' | 'NFT']))
-
-    let processed = 0
-    let synced = 0
-
-    for (const row of mints) {
-      const mint = row.mint as string
-      const tenantId = row.tenant_id as string
-      const within = withinByTenant.get(tenantId)
-      if (!within?.has(mint)) continue
-
-      const cur = currentByMint.get(mint)
-      const holderCount = cur?.holderCount ?? 0
-      const lastUp = cur?.last_updated ?? null
-      if (!isHolderSyncDue(lastUp, holderCount, config.tiers, now)) continue
-
-      const kind = kindByMint.get(mint) ?? 'NFT'
-      try {
-        let holders: Array<{ wallet: string; amount: string }>
-        if (kind === 'SPL') {
-          holders = await fetchSplHolders(rpcEndpoint, mint)
-        } else {
-          holders = await fetchNftHolders(rpcEndpoint, mint)
-        }
-        await db.from('holder_current').upsert({
-          mint,
-          holder_wallets: holders,
-          last_updated: now.toISOString(),
-        }, { onConflict: 'mint' })
-        synced++
-        processed++
-      } catch {
-        void 0
-      }
-    }
-
-    const hasMore = mints.length === CHUNK_SIZE
-    if (!legacyBare) {
-      return jsonResponse({ processed, synced, offset, hasMore, mode }, req)
-    }
-    return jsonResponse(
-      {
-        processed,
-        synced,
-        offset,
-        hasMore,
-        mode: 'holders',
-        legacyBare: true,
-      },
-      req,
-    )
-  }
-
   const { snapshotAt, snapshotDate } = alignSnapshotBucket(now, config.snapshot_interval_minutes)
 
-  const { data: snapWatches, error: snapErr } = await db
-    .from('watchtower_watches')
-    .select('tenant_id, mint, track_snapshot')
-    .eq('track_snapshot', true)
-    .order('tenant_id')
-    .order('mint')
-    .range(offset, offset + CHUNK_SIZE - 1)
+  // Load cursor (last processed mint from previous tick)
+  const { data: stateRow } = await db
+    .from('cron_tracker_state')
+    .select('last_mint')
+    .eq('id', 1)
+    .maybeSingle()
+  const cursor = (stateRow as { last_mint: string | null } | null)?.last_mint ?? null
 
-  if (snapErr) return errorResponse(snapErr.message, req, 500)
-  const mints = snapWatches ?? []
+  // Advance cursor: load next CHUNK_SIZE distinct mints after the cursor
+  const { data: mintRows, error: mintErr } = await db.rpc('cron_tracker_next_mints', {
+    p_after_mint: cursor,
+    p_limit: CHUNK_SIZE,
+  })
+  if (mintErr) return errorResponse(mintErr.message, req, 500)
+
+  const mints = (mintRows ?? []) as Array<{
+    mint: string
+    needs_current: boolean
+    needs_snapshot: boolean
+    kind: string
+  }>
+
+  // Empty slice: we hit the end of the list — wrap cursor back to NULL so next tick starts over
   if (!mints.length) {
-    return jsonResponse(
-      { processed: 0, synced: 0, offset, hasMore: false, mode: legacyBare ? 'legacy-sync' : mode },
-      req,
-    )
+    if (cursor !== null) {
+      await db.from('cron_tracker_state')
+        .update({ last_mint: null, updated_at: now.toISOString() })
+        .eq('id', 1)
+    }
+    return jsonResponse({ processed: 0, synced: 0, cursor: null, wrapped: true, mode }, req)
   }
 
-  const tenantIds = [...new Set(mints.map((m) => String(m.tenant_id ?? '')))].filter(Boolean) as string[]
-  const withinSnap = new Map<string, Set<string>>()
-  for (const tid of tenantIds) {
-    const set = await getWithinLimitMints(db, tid, 'mintsSnapshot')
-    withinSnap.set(tid, set)
-  }
+  const mintKeys = mints.map((m) => m.mint)
 
-  const mintKeys = mints.map((m) => String(m.mint ?? ''))
-  const { data: catalogRows } = await db
-    .from('tenant_mint_catalog')
-    .select('mint, kind')
+  // Collect all tenants watching these mints to check billing limits in bulk
+  const { data: allWatches } = await db
+    .from('watchtower_watches')
+    .select('tenant_id, mint, track_holders, track_snapshot')
     .in('mint', mintKeys)
-  const catalog = (catalogRows ?? []) as Array<{ mint: string; kind: string }>
-  const kindByMint = new Map<string, 'SPL' | 'NFT'>(catalog.map((r) => [r.mint, r.kind as 'SPL' | 'NFT']))
+
+  const tenantIds = [...new Set((allWatches ?? []).map((w) => String(w.tenant_id ?? '')))]
+    .filter(Boolean)
+
+  // Billing limits — one getWithinLimitMints call per tenant (current + snapshot)
+  const withinCurrentByTenant = new Map<string, Set<string>>()
+  const withinSnapshotByTenant = new Map<string, Set<string>>()
+  await Promise.all(tenantIds.map(async (tid) => {
+    const [cur, snap] = await Promise.all([
+      getWithinLimitMints(db, tid, 'mints_current'),
+      getWithinLimitMints(db, tid, 'mintsSnapshot'),
+    ])
+    withinCurrentByTenant.set(tid, cur)
+    withinSnapshotByTenant.set(tid, snap)
+  }))
+
+  // Index watches by mint
+  const watchesByMint = new Map<string, Array<{ tenant_id: string; track_holders: boolean; track_snapshot: boolean }>>()
+  for (const w of allWatches ?? []) {
+    const m = w.mint as string
+    const list = watchesByMint.get(m) ?? []
+    list.push({
+      tenant_id: String(w.tenant_id ?? ''),
+      track_holders: Boolean(w.track_holders),
+      track_snapshot: Boolean(w.track_snapshot),
+    })
+    watchesByMint.set(m, list)
+  }
+
+  // Holder-current freshness meta (avoids loading full JSONB)
+  const { data: syncMeta, error: syncMetaErr } = await db.rpc('holder_current_sync_meta', { p_mints: mintKeys })
+  if (syncMetaErr) return errorResponse(syncMetaErr.message, req, 500)
+
+  const currentByMint = new Map<string, { holderCount: number; last_updated: string }>()
+  for (const r of (syncMeta ?? []) as Array<{ mint: string; last_updated: string; holder_count: number }>) {
+    currentByMint.set(r.mint, { holderCount: Number(r.holder_count) || 0, last_updated: r.last_updated })
+  }
+
+  // Which snapshot buckets already exist (avoid re-fetching)
+  const { data: existingSnaps } = await db
+    .from('holder_snapshots')
+    .select('mint')
+    .in('mint', mintKeys)
+    .eq('snapshot_at', snapshotAt)
+  const existingSnapMints = new Set((existingSnaps ?? []).map((s) => s.mint as string))
 
   let processed = 0
   let synced = 0
 
-  for (const row of mints) {
-    const mint = row.mint as string
-    const tenantId = row.tenant_id as string
-    if (!withinSnap.get(tenantId)?.has(mint)) continue
+  for (const mintRow of mints) {
+    const mint = mintRow.mint
+    const kind = (mintRow.kind as 'SPL' | 'NFT') ?? 'NFT'
+    const watches = watchesByMint.get(mint) ?? []
 
-    const kind = kindByMint.get(mint) ?? 'NFT'
+    // Does any in-limit tenant need current?
+    const anyCurrent = watches.some(
+      (w) => w.track_holders && withinCurrentByTenant.get(w.tenant_id)?.has(mint),
+    )
+    // Does any in-limit tenant need snapshot?
+    const anySnapshot = watches.some(
+      (w) => w.track_snapshot && withinSnapshotByTenant.get(w.tenant_id)?.has(mint),
+    )
+
+    const meta = currentByMint.get(mint)
+    const currentDue = anyCurrent && isHolderSyncDue(
+      meta?.last_updated ?? null,
+      meta?.holderCount ?? 0,
+      config.tiers,
+      now,
+    )
+    const snapshotDue = anySnapshot && !existingSnapMints.has(mint)
+
+    if (!currentDue && !snapshotDue) {
+      processed++
+      continue
+    }
+
     try {
-      const { data: existingSnap } = await db
-        .from('holder_snapshots')
-        .select('mint')
-        .eq('mint', mint)
-        .eq('snapshot_at', snapshotAt)
-        .maybeSingle()
-
-      if (existingSnap) {
-        processed++
-        continue
+      if (snapshotDue) {
+        await refreshMintMetadataIfStale(db, rpcEndpoint, mint, now)
       }
 
-      const { data: meta } = await db
-        .from('mint_metadata')
-        .select('updated_at')
-        .eq('mint', mint)
-        .maybeSingle()
-
-      const metaAge = meta
-        ? (now.getTime() - new Date(meta.updated_at as string).getTime()) / (1000 * 60 * 60 * 24)
-        : Infinity
-
-      if (metaAge > METADATA_REFRESH_AGE_DAYS) {
-        const fetched = await fetchMintMetadata(rpcEndpoint, mint)
-        if (fetched) {
-          await db.from('mint_metadata').upsert({
-            mint,
-            name: fetched.name,
-            symbol: fetched.symbol,
-            image: fetched.image,
-            decimals: fetched.decimals,
-            update_authority: fetched.updateAuthority ?? null,
-            uri: fetched.uri ?? null,
-            seller_fee_basis_points: fetched.sellerFeeBasisPoints ?? null,
-            primary_sale_happened: fetched.primarySaleHappened ?? null,
-            is_mutable: fetched.isMutable ?? null,
-            edition_nonce: fetched.editionNonce ?? null,
-            token_standard: fetched.tokenStandard ?? null,
-            updated_at: now.toISOString(),
-          }, { onConflict: 'mint' })
-        }
-      }
-
+      // Single RPC fetch — shared by both adopters
       let holders: Array<{ wallet: string; amount: string }>
       if (kind === 'SPL') {
         holders = await fetchSplHolders(rpcEndpoint, mint)
       } else {
         holders = await fetchNftHolders(rpcEndpoint, mint)
       }
-      await db.from('holder_snapshots').upsert({
-        mint,
-        snapshot_at: snapshotAt,
-        holder_wallets: holders,
-        snapshot_date: snapshotDate,
-        created_at: now.toISOString(),
-      }, { onConflict: 'mint,snapshot_at' })
-      await db.from('tracker_holder_snapshots').upsert({
-        tenant_id: tenantId,
-        mint,
-        holder_wallets: holders,
-        snapshot_date: snapshotDate,
-        snapshot_at: snapshotAt,
-        created_at: now.toISOString(),
-      }, { onConflict: 'tenant_id,mint,snapshot_at' })
+
+      // Adopter A: global current holders
+      if (currentDue) {
+        await db.from('holder_current').upsert({
+          mint,
+          holder_wallets: holders,
+          last_updated: now.toISOString(),
+        }, { onConflict: 'mint' })
+      }
+
+      // Adopter B: global snapshot bucket
+      if (snapshotDue) {
+        await db.from('holder_snapshots').upsert({
+          mint,
+          snapshot_at: snapshotAt,
+          holder_wallets: holders,
+          snapshot_date: snapshotDate,
+          created_at: now.toISOString(),
+        }, { onConflict: 'mint,snapshot_at' })
+      }
+
       synced++
       processed++
     } catch {
@@ -475,7 +439,13 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const hasMore = mints.length === CHUNK_SIZE
-  const outMode = legacyBare ? 'legacy-sync' : mode
-  return jsonResponse({ processed, synced, offset, hasMore, mode: outMode }, req)
+  // Advance cursor: if slice was smaller than CHUNK_SIZE we hit the end → wrap
+  const wrapped = mints.length < CHUNK_SIZE
+  const nextCursor = wrapped ? null : (mints[mints.length - 1]?.mint ?? null)
+
+  await db.from('cron_tracker_state')
+    .update({ last_mint: nextCursor, updated_at: now.toISOString() })
+    .eq('id', 1)
+
+  return jsonResponse({ processed, synced, cursor: nextCursor, wrapped, mode }, req)
 })

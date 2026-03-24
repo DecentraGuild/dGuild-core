@@ -6,10 +6,11 @@ export type HolderTierRow = {
   interval_minutes: number
 }
 
-const DEFAULT_SNAPSHOT_INTERVAL_MINUTES = 720
+const DEFAULT_CYCLE_MINUTES = 5
+const DEFAULT_SNAPSHOT_EVERY_N_CYCLES = 12  // 5 × 12 = 60 min default snapshot bucket
 
-/** Row in public.interval_timers — snapshot bucket width for tracker-snapshots / holder_snapshots. */
-export const INTERVAL_TIMER_WATCHTOWER_SNAPSHOT_BUCKET = 'watchtower_snapshot_bucket'
+export const TIMER_KEY_CYCLE = 'watchtower_cycle_minutes'
+export const TIMER_KEY_SNAPSHOT_N = 'watchtower_snapshot_every_n_cycles'
 
 const DEFAULT_TIERS: HolderTierRow[] = [
   { sort_order: 1, max_holders: 500, interval_minutes: 5 },
@@ -18,6 +19,11 @@ const DEFAULT_TIERS: HolderTierRow[] = [
 ]
 
 export type WatchtowerSyncConfig = {
+  /** Cron tick / rolodex chunk cadence in minutes. */
+  cycle_minutes: number
+  /** Take a new snapshot every N cycles (snapshot bucket = cycle_minutes × N). */
+  snapshot_every_n_cycles: number
+  /** Derived: cycle_minutes × snapshot_every_n_cycles — width of one snapshot bucket. */
   snapshot_interval_minutes: number
   tiers: HolderTierRow[]
 }
@@ -25,26 +31,34 @@ export type WatchtowerSyncConfig = {
 export async function loadWatchtowerSyncConfig(
   db: SupabaseClient,
 ): Promise<WatchtowerSyncConfig> {
-  const [{ data: settingsRow }, { data: tierRows, error: tierErr }] = await Promise.all([
-    db
-      .from('interval_timers')
-      .select('interval_minutes')
-      .eq('timer_key', INTERVAL_TIMER_WATCHTOWER_SNAPSHOT_BUCKET)
-      .maybeSingle(),
+  const [{ data: cycleRow }, { data: nRow }, { data: tierRows, error: tierErr }] = await Promise.all([
+    db.from('interval_timers').select('interval_minutes').eq('timer_key', TIMER_KEY_CYCLE).maybeSingle(),
+    db.from('interval_timers').select('interval_minutes').eq('timer_key', TIMER_KEY_SNAPSHOT_N).maybeSingle(),
     db.from('platform_watchtower_holder_tier').select('sort_order, max_holders, interval_minutes').order('sort_order'),
   ])
+
   if (tierErr) {
     console.warn('[watchtower-sync-config] tier load failed', tierErr.message)
   }
-  const snapshot_interval_minutes =
-    typeof settingsRow?.interval_minutes === 'number' && settingsRow.interval_minutes > 0
-      ? settingsRow.interval_minutes
-      : DEFAULT_SNAPSHOT_INTERVAL_MINUTES
+
+  const cycle_minutes =
+    typeof cycleRow?.interval_minutes === 'number' && cycleRow.interval_minutes > 0
+      ? cycleRow.interval_minutes
+      : DEFAULT_CYCLE_MINUTES
+
+  const snapshot_every_n_cycles =
+    typeof nRow?.interval_minutes === 'number' && nRow.interval_minutes >= 1
+      ? nRow.interval_minutes
+      : DEFAULT_SNAPSHOT_EVERY_N_CYCLES
+
+  const snapshot_interval_minutes = cycle_minutes * snapshot_every_n_cycles
+
   const tiers =
     tierRows && tierRows.length > 0
       ? (tierRows as HolderTierRow[])
       : DEFAULT_TIERS
-  return { snapshot_interval_minutes, tiers }
+
+  return { cycle_minutes, snapshot_every_n_cycles, snapshot_interval_minutes, tiers }
 }
 
 export function intervalMinutesForHolderCount(tiers: HolderTierRow[], holderCount: number): number {
