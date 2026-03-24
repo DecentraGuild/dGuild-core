@@ -13,6 +13,21 @@ import {
 } from '@solana/connector/headless'
 import type { Wallet as EscrowWallet } from './escrow/types.js'
 
+/** Avoid `Buffer` in the browser bundle; some mobile WebViews lack it. */
+function base64ToUint8Array(base64: string): Uint8Array {
+  const normalized = base64.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = normalized.length % 4
+  const padded = pad ? normalized + '='.repeat(4 - pad) : normalized
+  const binary = atob(padded)
+  const out = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i)
+  return out
+}
+
+function signatureBytesFromSignerResult(sig: Uint8Array | string): Uint8Array {
+  return sig instanceof Uint8Array ? sig : base64ToUint8Array(sig)
+}
+
 export interface ConnectorStateSnapshot {
   connected: boolean
   account: string | null
@@ -156,6 +171,23 @@ export async function disconnectWallet(): Promise<void> {
   setWalletConnectDisplayUri(null)
 }
 
+/**
+ * Return the raw Wallet Standard wallet for `connectorId` WITHOUT connecting.
+ *
+ * This is used by the one-shot MWA sign-in path: obtain the wallet before connecting,
+ * then pass its `solana:signIn` feature directly to `supabase.auth.signInWithWeb3`.
+ * That performs auth + SIWS sign in a **single** MWA `transact()` call (one app switch).
+ * After `signIn` the wallet's authorization cache is populated; a subsequent
+ * `connectWallet()` call hits the cache and sets ConnectorKit state without a
+ * second `transact()`.
+ */
+export function getMwaRawWallet(connectorId: WalletConnectorId): Wallet | null {
+  const client = getClient() as ConnectorClient & {
+    getConnector?: (id: WalletConnectorId) => Wallet | null
+  }
+  return client.getConnector?.(connectorId) ?? null
+}
+
 export function isBackpackConnector(connectorId: string | null): boolean {
   if (!connectorId) return false
   return connectorId.toLowerCase().includes('backpack')
@@ -202,12 +234,14 @@ export async function signMessageForAuth(message: string): Promise<{ signature: 
 /**
  * Adapter for `supabase.auth.signInWithWeb3({ chain: 'solana', wallet })`.
  *
- * Do **not** expose `wallet.signIn` here for MWA: `@solana-mobile/wallet-standard-mobile`
- * `solana:signIn` calls `authorize({ sign_in_payload })`, but `performAuthorization` returns
- * the **cached** session from the prior `connect()` (which used `authorize` without
- * `sign_in_payload`). That cached object has no `sign_in_result` →
- * "Sign in failed, no sign in result returned by wallet". Supabase must use the
- * `signMessage` branch instead (`signMessages` after reauthorization).
+ * Used by the desktop (two-step) sign-in path: `connectWallet` first, then pass this
+ * adapter to Supabase so it signs with the already-connected wallet via `signMessage`.
+ *
+ * Do **not** expose `wallet.signIn` here for MWA: if `connectWallet` already ran,
+ * `performAuthorization` returns the **cached** session (no `sign_in_payload`) which
+ * has no `sign_in_result` → "Sign in failed, no sign in result returned by wallet".
+ *
+ * For MWA mobile, use `getMwaRawWallet` + one-shot sign-in instead (see `useAuth.ts`).
  */
 export function getSupabaseWalletAdapter(): {
   publicKey: { toBase58: () => string }
@@ -227,7 +261,7 @@ export function getSupabaseWalletAdapter(): {
     publicKey: { toBase58: () => pair.account.address },
     signMessage: async (message: Uint8Array) => {
       const sig = await signMessage(message)
-      return sig instanceof Uint8Array ? sig : new Uint8Array(Buffer.from(sig as string, 'base64'))
+      return signatureBytesFromSignerResult(sig as Uint8Array | string)
     },
   }
 }
@@ -250,9 +284,7 @@ export async function signMessageWithConnector(
     throw new Error('Connected wallet does not support message signing')
   }
   const signatureBytes = await signer.signMessage(message)
-  return signatureBytes instanceof Uint8Array
-    ? signatureBytes
-    : new Uint8Array(Buffer.from(signatureBytes as string, 'base64'))
+  return signatureBytesFromSignerResult(signatureBytes as Uint8Array | string)
 }
 
 export function getEscrowWalletFromConnector(): EscrowWallet | null {

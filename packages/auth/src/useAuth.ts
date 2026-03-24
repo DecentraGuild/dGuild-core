@@ -19,6 +19,7 @@ import {
   connectWallet as web3ConnectWallet,
   disconnectWallet as web3DisconnectWallet,
   clearWalletConnectDisplayUri,
+  isMobileUserAgent,
   type ConnectorStateSnapshot,
 } from '@decentraguild/web3/wallet'
 import type { WalletConnectorId } from '@solana/connector/headless'
@@ -37,6 +38,14 @@ const connectorState = ref<ConnectorStateSnapshot>({
 
 /** When set true, AuthWidget should open the connect modal. Reset by AuthWidget after opening. */
 export const openConnectModalRequested = ref(false)
+
+/** SIWS `URI` / domain for GoTrue; prefer canonical deploy URL so it matches Supabase redirect allow-list. */
+function resolveSolanaWeb3SignInPageUrl(appUrlConfig: string | undefined): string {
+  const base = appUrlConfig?.trim().replace(/\/$/, '')
+  if (base && /^https?:\/\//i.test(base)) return base
+  if (typeof window !== 'undefined') return window.location.href
+  return 'http://localhost:3000'
+}
 
 export function useAuth() {
   const config = useRuntimeConfig()
@@ -74,17 +83,77 @@ export function useAuth() {
 
   /**
    * Connect wallet and sign in with Supabase Web3 (Solana).
-   * Supabase generates a SIWS message, the connector signs it, and Supabase
-   * verifies the signature and returns a session.
+   *
+   * Mobile (MWA) path — one-shot via `solana:signIn`:
+   *   Gets the raw wallet BEFORE connecting, clears the MWA auth cache via disconnect,
+   *   then lets Supabase call `wallet.signIn(...)` which internally calls
+   *   `performAuthorization({ sign_in_payload })` in a SINGLE `transact()` session
+   *   (one app switch: auth + SIWS sign combined). After that, `connectWallet` hits the
+   *   now-populated authorization cache and returns immediately — no second app switch.
+   *
+   * Desktop path — two-step via `signMessage`:
+   *   Connect first, then Supabase signs a SIWS message via the connected wallet's
+   *   `signMessage` feature (works fine on desktop; wallets don't require app-switching).
    */
   async function connectAndSignIn(connectorId: WalletConnectorId): Promise<boolean> {
     error.value = null
     loading.value = true
     try {
-      // Clear any stale or pending connection (e.g. after Backpack auto-disconnect) so
-      // the first click starts a clean connect instead of surfacing "Connection cancelled".
+      // Disconnect first: clears any stale ConnectorKit session AND the MWA localStorage
+      // authorization cache. The empty cache is required so performAuthorization calls
+      // transact() rather than returning a cached entry without sign_in_result.
       await web3DisconnectWallet()
       refreshConnectorState()
+
+      const supabase = getClient()
+      const siwsUrl = resolveSolanaWeb3SignInPageUrl(config.public.appUrl as string | undefined)
+
+      if (isMobileUserAgent()) {
+        // ONE-SHOT: use the raw wallet's solana:signIn feature BEFORE connecting so that
+        // auth + SIWS sign happen in a single MWA transact() — one app switch only.
+        const { getMwaRawWallet } = await import('@decentraguild/web3/wallet')
+        const rawWallet = getMwaRawWallet(connectorId)
+        const signInFeature = (
+          rawWallet?.features as Record<string, unknown> | undefined
+        )?.['solana:signIn'] as
+          | { signIn?: (...inputs: readonly unknown[]) => Promise<readonly unknown[]> }
+          | undefined
+
+        if (rawWallet && signInFeature?.signIn) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const walletForSupabase = { signIn: signInFeature.signIn.bind(signInFeature) } as any
+
+          const { data, error: authError } = await supabase.auth.signInWithWeb3({
+            chain: 'solana',
+            wallet: walletForSupabase,
+            statement: 'Sign in to DecentraGuild.',
+            options: {
+              url: siwsUrl,
+              signInWithSolana: { chainId: 'solana:mainnet' },
+            },
+          })
+
+          if (authError) {
+            error.value = authError.message
+            return false
+          }
+
+          // Sync ConnectorKit: wallet is already authorized (cache populated by signIn),
+          // so connectWallet hits the cache and updates state without a second transact().
+          await web3ConnectWallet(connectorId)
+          refreshConnectorState()
+
+          const state = getConnectorState()
+          wallet.value =
+            (data.session?.user?.user_metadata?.wallet_address as string) ??
+            state.account ??
+            null
+          clearWalletConnectDisplayUri()
+          return true
+        }
+      }
+
+      // Desktop (or mobile wallet without solana:signIn): two-step connect then sign.
       await web3ConnectWallet(connectorId)
       refreshConnectorState()
 
@@ -94,18 +163,24 @@ export function useAuth() {
         return false
       }
 
-      const { getSupabaseWalletAdapter } = await import('@decentraguild/web3/wallet')
+      const { getSupabaseWalletAdapter, getConnectorClient } = await import('@decentraguild/web3/wallet')
       const walletAdapter = getSupabaseWalletAdapter()
       if (!walletAdapter) {
         error.value = 'Wallet does not support message signing'
         return false
       }
 
-      const supabase = getClient()
+      const cluster = getConnectorClient().getCluster() as { id?: string } | null | undefined
+      const siwsChainId = typeof cluster?.id === 'string' ? cluster.id : 'solana:mainnet'
+
       const { data, error: authError } = await supabase.auth.signInWithWeb3({
         chain: 'solana',
         wallet: walletAdapter,
         statement: 'Sign in to DecentraGuild.',
+        options: {
+          url: siwsUrl,
+          signInWithSolana: { chainId: siwsChainId },
+        },
       })
 
       if (authError) {

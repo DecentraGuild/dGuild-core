@@ -14,6 +14,7 @@ export {
   getWalletAndAccount,
   getEscrowWalletFromConnector,
   getSupabaseWalletAdapter,
+  getMwaRawWallet,
   setConnectorWebOptions,
   subscribeWalletConnectUri,
   getWalletConnectDisplayUri,
@@ -26,5 +27,6 @@ export {
   waitForWalletStandardInjected,
   runMobileWalletStandardWarmup,
   runConnectModalWalletWarmup,
+  settleWebViewAfterWalletReturn,
 } from './wallet-standard-ready.js'
 export { registerSolanaMobileWalletAdapter } from './register-solana-mobile-wallet.js'
