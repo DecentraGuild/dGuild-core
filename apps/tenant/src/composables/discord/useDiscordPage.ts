@@ -9,7 +9,7 @@ import {
   subscribeToConnectorState,
 } from '@decentraguild/web3/wallet'
 import { truncateAddress } from '@decentraguild/display'
-import { useAuth } from '@decentraguild/auth'
+import { useAuth, useConnectWalletModalExtras } from '@decentraguild/auth'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
@@ -34,6 +34,13 @@ export function useDiscordPage() {
   const revoking = ref<string | null>(null)
   const roleCards = ref<RoleCard[]>([])
   const connectorState = ref(getConnectorState())
+
+  const { walletConnectUri, walletScanPending } = useConnectWalletModalExtras({
+    showModal: showConnectModal,
+    refreshConnectorState: () => {
+      connectorState.value = getConnectorState()
+    },
+  })
 
   const truncate = (addr: string) => truncateAddress(addr, 6, 4)
 
@@ -163,6 +170,8 @@ export function useDiscordPage() {
     revoking,
     roleCards,
     connectorState,
+    walletConnectUri,
+    walletScanPending,
     truncate,
     fetchMe,
     fetchRoleCards,

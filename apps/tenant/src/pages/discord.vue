@@ -84,6 +84,8 @@
             :connectors="connectorState.connectors"
             :loading="addingWallet"
             :error="addError"
+            :wallet-connect-uri="walletConnectUri"
+            :wallet-scan-pending="walletScanPending"
             @close="showConnectModal = false; addError = null"
             @select="handleAddWallet"
           />
@@ -126,6 +128,8 @@ const {
   revoking,
   roleCards,
   connectorState,
+  walletConnectUri,
+  walletScanPending,
   truncate,
   fetchRoleCards,
   handleAddWallet,

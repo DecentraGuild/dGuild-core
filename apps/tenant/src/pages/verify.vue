@@ -36,6 +36,8 @@
           :connectors="connectorState.connectors"
           :loading="loading"
           :error="linkError"
+          :wallet-connect-uri="walletConnectUri"
+          :wallet-scan-pending="walletScanPending"
           @close="showConnectModal = false"
           @select="handleConnect"
         />
@@ -54,7 +56,7 @@ import {
   subscribeToConnectorState,
 } from '@decentraguild/web3/wallet'
 import type { WalletConnectorId } from '@solana/connector/headless'
-import { useAuth } from '@decentraguild/auth'
+import { useAuth, useConnectWalletModalExtras } from '@decentraguild/auth'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 
@@ -71,6 +73,13 @@ const success = ref(false)
 
 const connectorState = ref(getConnectorState())
 const connectedWallet = computed(() => connectorState.value.account)
+
+const { walletConnectUri, walletScanPending } = useConnectWalletModalExtras({
+  showModal: showConnectModal,
+  refreshConnectorState: () => {
+    connectorState.value = getConnectorState()
+  },
+})
 
 let unsubscribe: (() => void) | null = null
 onMounted(() => {
