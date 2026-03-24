@@ -3,6 +3,25 @@ export interface ValidationResult {
   error?: string
 }
 
+const SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/
+
+export function sanitizeSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+export function validateSlug(value: string): ValidationResult {
+  if (!value.trim()) return { valid: true }
+  if (!SLUG_PATTERN.test(value.trim())) {
+    return { valid: false, error: 'Slug must be 1–63 characters, only lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen.' }
+  }
+  return { valid: true }
+}
+
 const DISCORD_PATTERN = /^https?:\/\/(discord\.gg|discord\.com\/invite)\/[a-zA-Z0-9]+$/
 const X_PATTERN = /^https?:\/\/(x\.com|twitter\.com)\/[a-zA-Z0-9_]+(\/?)$/
 const TELEGRAM_PATTERN = /^https?:\/\/(t\.me|telegram\.me)\/[a-zA-Z0-9_]+(\/?)$/

@@ -305,6 +305,9 @@ Deno.serve(async (req: Request) => {
       const txSignature = (body.txSignature as string)?.trim()
       const slugToClaim = (body.slugToClaim as string)?.trim()?.toLowerCase()
       if (!paymentId || !txSignature) return errorResponse('paymentId and txSignature required', req)
+      if (slugToClaim && !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(slugToClaim)) {
+        return errorResponse('Invalid slug: must be 1–63 characters, only lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen.', req, 400)
+      }
 
       const { data: payment } = await db
         .from('billing_payments')

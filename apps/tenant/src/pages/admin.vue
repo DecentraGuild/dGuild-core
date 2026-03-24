@@ -9,7 +9,8 @@
         :slug-check-status="slugCheckStatus"
         :slug-checking="slugChecking"
         :slug-claiming="slugClaiming"
-        @update:desired-slug="(v: string) => { slugClaim.desiredSlug.value = v }"
+        :slug-error="slugClaim.slugError.value"
+        @update:desired-slug="(v: string) => slugClaim.setDesiredSlug(v)"
         @slug-check-blur="slugClaim.onSlugCheckBlur()"
         @check-slug="slugClaim.checkSlugAvailability()"
       >
