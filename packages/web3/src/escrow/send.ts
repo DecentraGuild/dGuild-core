@@ -22,7 +22,9 @@ export interface SendAndConfirmOptions {
  *
  * When the wallet exposes signAndSendTransaction and there are no extra keypair signers,
  * that path is used instead so the wallet runs preflight simulation internally and can
- * display balance changes to the user (especially on mobile via MWA).
+ * display balance changes to the user (especially on mobile via MWA). Backpack omits that
+ * hook in getEscrowWalletFromConnector because its sign-and-send broadcast often fails
+ * while sign + sendRawTransaction via the app Connection succeeds.
  */
 export async function sendAndConfirmTransaction(
   connection: Connection,

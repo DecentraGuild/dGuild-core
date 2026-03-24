@@ -7,6 +7,8 @@ export const USAGE_DISPLAY_SKIP_METERS = new Set<string>(['base_currencies_count
 
 /** Short labels for usage rows keyed by billing meter (or condition key when identical). */
 export const USAGE_METER_LABELS: Record<string, string> = {
+  registration: 'Guild registration',
+  slug: 'Custom slug',
   mints_count: 'Tradable mints in scope',
   base_currencies_count: 'Base pay currencies',
   custom_currencies: 'Custom pay currencies',

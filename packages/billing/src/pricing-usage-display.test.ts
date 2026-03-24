@@ -3,6 +3,8 @@ import { usageMeterLabel, USAGE_DISPLAY_SKIP_METERS } from './pricing-usage-disp
 
 describe('usageMeterLabel', () => {
   it('returns known label for meter keys', () => {
+    expect(usageMeterLabel('registration')).toBe('Guild registration')
+    expect(usageMeterLabel('slug')).toBe('Custom slug')
     expect(usageMeterLabel('raffle_slots')).toBe('Raffle slots')
     expect(usageMeterLabel('mints_count')).toBe('Tradable mints in scope')
   })

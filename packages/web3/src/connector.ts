@@ -36,8 +36,6 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
  * return without opening a second transact() (no second app-switch).
  */
 const MWA_CACHE_KEY = 'SolanaMobileWalletAdapterDefaultAuthorizationCache'
-/** Persists the wallet_uri_base from MWA authorize so we can identify the wallet on subsequent loads. */
-const MWA_WALLET_URI_KEY = 'SolanaMobileWalletAdapterWalletUriBase'
 
 function signatureBytesFromSignerResult(sig: Uint8Array | string): Uint8Array {
   return sig instanceof Uint8Array ? sig : base64ToUint8Array(sig)
@@ -206,13 +204,18 @@ export function getMwaRawWallet(connectorId: WalletConnectorId): Wallet | null {
 export function isBackpackConnector(connectorId: string | null): boolean {
   if (!connectorId) return false
   if (connectorId.toLowerCase().includes('backpack')) return true
-  // Mobile MWA: connectorId is always 'mobile-wallet-adapter'; check saved wallet URI instead
+  // Mobile MWA: connectorId is always 'mobile-wallet-adapter'.
+  // Read wallet_uri_base from the MWA auth cache (already written by mwaSingleSessionSignIn)
+  // to detect which wallet was actually used.
   try {
-    const mobileUri =
-      typeof localStorage !== 'undefined' ? localStorage.getItem(MWA_WALLET_URI_KEY) : null
-    if (mobileUri && mobileUri.toLowerCase().includes('backpack')) return true
+    const raw =
+      typeof localStorage !== 'undefined' ? localStorage.getItem(MWA_CACHE_KEY) : null
+    if (raw) {
+      const cache = JSON.parse(raw) as { wallet_uri_base?: string }
+      if (cache.wallet_uri_base?.toLowerCase().includes('backpack')) return true
+    }
   } catch {
-    // localStorage may be unavailable
+    // localStorage unavailable or cache malformed
   }
   return false
 }
@@ -396,15 +399,6 @@ export async function mwaSingleSessionSignIn({
       const signedPayload = base64ToUint8Array(signed_payloads[0])
       const signature = new Uint8Array(signedPayload.slice(-64))
 
-      // Persist the wallet URI so isBackpackConnector() can identify the wallet on mobile
-      if (authResult.wallet_uri_base) {
-        try {
-          localStorage.setItem(MWA_WALLET_URI_KEY, authResult.wallet_uri_base)
-        } catch {
-          // localStorage may be unavailable
-        }
-      }
-
       // Pre-populate the MWA auth cache so connectWallet() hits it without transact()
       const cacheEntry = {
         ...authResult,
@@ -440,6 +434,11 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
   const client = getClient()
   const pair = getWalletAndAccount(client)
   if (!pair) return null
+  const walletStatus = client.getSnapshot().wallet
+  const connectorId =
+    isConnected(walletStatus) && walletStatus.session
+      ? (walletStatus.session.connectorId as string | null)
+      : null
   const signer = createTransactionSigner({
     wallet: pair.wallet,
     account: pair.account,
@@ -463,7 +462,11 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
     return signed as T[]
   }
   const canSend = signer.getCapabilities().canSend
-  const signAndSendTransaction = canSend
+  // Backpack (desktop extension and MWA) often shows correct simulation but fails on send
+  // when using Wallet Standard sign-and-send (generic "Failed to send transaction"). Other
+  // wallets handle that path; broadcast via the app's RPC after signTransaction is reliable.
+  const useWalletBroadcast = canSend && !isBackpackConnector(connectorId)
+  const signAndSendTransaction = useWalletBroadcast
     ? async (tx: Transaction | VersionedTransaction): Promise<string> => {
         return signer.signAndSendTransaction(tx)
       }
