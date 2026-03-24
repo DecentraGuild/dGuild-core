@@ -332,26 +332,24 @@ Deno.serve(async (req: Request) => {
             }
           }
         }
-      } else if (shipmentRange && tenantId) {
+      } else if (shipmentRange) {
         const { data: snaps } = await db
-          .from('tracker_holder_snapshots')
+          .from('holder_snapshots')
           .select('holder_wallets')
-          .eq('tenant_id', tenantId)
           .eq('mint', m)
           .gte('snapshot_date', shipmentRange.begin_date)
           .lte('snapshot_date', shipmentRange.end_date)
           .order('snapshot_date', { ascending: true })
         if (snaps?.length) snapshotByAsset.set(m, intersectSnapshots(snaps))
-      } else if (snapshotRange && tenantId) {
+      } else if (snapshotRange) {
         const end = new Date()
         const begin = new Date(end)
         begin.setDate(begin.getDate() - snapshotRange.days + 1)
         const begin_date = begin.toISOString().slice(0, 10)
         const end_date = end.toISOString().slice(0, 10)
         const { data: snaps } = await db
-          .from('tracker_holder_snapshots')
+          .from('holder_snapshots')
           .select('holder_wallets')
-          .eq('tenant_id', tenantId)
           .eq('mint', m)
           .gte('snapshot_date', begin_date)
           .lte('snapshot_date', end_date)

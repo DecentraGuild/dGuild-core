@@ -310,9 +310,8 @@ async function fetchSnapshotDates() {
   const mints = [...new Set(props.catalogMints.filter((m) => m.track_snapshot).map((m) => m.asset_id))]
   if (mints.length === 0) return
   const { data } = await supabase
-    .from('tracker_holder_snapshots')
+    .from('holder_snapshots')
     .select('mint, snapshot_date')
-    .eq('tenant_id', id)
     .in('mint', mints)
     .order('snapshot_date')
   const byMint = new Map<string, Set<string>>()
