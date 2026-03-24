@@ -42,15 +42,10 @@ export interface ThemeInputs {
     trade?: string
   }
   radiusLevel?: number
-  spacingLevel?: number
   borderWidthPx?: number
   glowIntensity?: GlowIntensity
   fontPrimary?: string[]
   fontMono?: string[]
-}
-
-function fontMd(spacingLevel: number): number {
-  return 0.5 + (spacingLevel / 10) * 1.5
 }
 
 export function deriveTheme(inputs: ThemeInputs): TenantTheme {
@@ -67,7 +62,6 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
     status = {},
     trade = {},
     radiusLevel = 3,
-    spacingLevel = 5,
     borderWidthPx = 1,
     glowIntensity,
     fontPrimary = ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
@@ -108,9 +102,6 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
 
   const primaryDarkForGradient = primaryDark
   const gradientPrimary = `linear-gradient(135deg, ${primary} 0%, ${brandSec} 50%, ${primaryDarkForGradient} 100%)`
-
-  const base = fontMd(spacingLevel)
-  const r = (m: number) => `${(base * m).toFixed(3).replace(/\.?0+$/, '')}rem`
 
   const radiusPreset = BORDER_RADIUS_PRESETS[Math.max(0, Math.min(4, radiusLevel))]
 
@@ -157,14 +148,6 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
       '4xl': '2.25rem',
       '5xl': '3rem',
     },
-    spacing: {
-      xs: r(0.5),
-      sm: r(0.75),
-      md: r(1),
-      lg: r(1.5),
-      xl: r(2),
-      '2xl': r(3),
-    },
     borderRadius: {
       sm: radiusPreset.sm,
       md: radiusPreset.md,
@@ -190,11 +173,7 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
 
 export function themeToInputs(theme: TenantTheme): ThemeInputs {
   const c = theme.colors ?? {}
-  const spacing = theme.spacing ?? {}
   const borderWidth = theme.borderWidth ?? {}
-
-  const mdRem = parseFloat(spacing.md ?? '1')
-  const spacingLevel = Math.round(Math.max(0, Math.min(10, ((mdRem - 0.5) / 1.5) * 10)))
 
   const bwMatch = (borderWidth.thin ?? '1px').match(/^(\d+)px$/)
   const borderWidthPx = bwMatch ? Math.min(10, Math.max(1, parseInt(bwMatch[1], 10))) : 1
@@ -217,7 +196,6 @@ export function themeToInputs(theme: TenantTheme): ThemeInputs {
     status: c.status,
     trade: c.trade,
     radiusLevel,
-    spacingLevel,
     borderWidthPx,
     glowIntensity: theme.effects?.glowIntensity,
     fontPrimary: theme.fonts?.primary,

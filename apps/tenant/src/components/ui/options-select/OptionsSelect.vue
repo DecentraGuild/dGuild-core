@@ -33,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 
 /** Reka-ui SelectItem rejects value="". Use sentinel for empty-string options. */
 const EMPTY_SENTINEL = '__empty__'
@@ -74,7 +74,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-const id = computed(() => `options-select-${Math.random().toString(36).slice(2)}`)
+const id = useId()
 
 const selectValue = computed(() => toSafeValue(props.modelValue ?? ''))
 

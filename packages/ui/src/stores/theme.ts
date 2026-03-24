@@ -25,7 +25,6 @@ export function mergeTheme(base: TenantTheme, override: Partial<TenantTheme>): T
     ...override,
     colors,
     fontSize: { ...base.fontSize, ...override.fontSize },
-    spacing: { ...base.spacing, ...override.spacing },
     borderRadius: { ...base.borderRadius, ...override.borderRadius },
     borderWidth: { ...base.borderWidth, ...override.borderWidth },
     shadows: { ...base.shadows, ...override.shadows },
@@ -43,7 +42,6 @@ function fontStackCss(stack: string[] | undefined): string {
 export function themeToCssVars(theme: TenantTheme): Record<string, string> {
   const colors = theme.colors ?? {}
   const fontSize = theme.fontSize ?? {}
-  const spacing = theme.spacing ?? {}
   const borderRadius = theme.borderRadius ?? {}
   const borderWidth = theme.borderWidth ?? {}
   const shadows = theme.shadows ?? {}
@@ -106,12 +104,6 @@ export function themeToCssVars(theme: TenantTheme): Record<string, string> {
     '--theme-font-3xl': fontSize['3xl'] ?? '',
     '--theme-font-4xl': fontSize['4xl'] ?? '',
     '--theme-font-5xl': fontSize['5xl'] ?? '',
-    '--theme-space-xs': spacing.xs ?? '',
-    '--theme-space-sm': spacing.sm ?? '',
-    '--theme-space-md': spacing.md ?? '',
-    '--theme-space-lg': spacing.lg ?? '',
-    '--theme-space-xl': spacing.xl ?? '',
-    '--theme-space-2xl': spacing['2xl'] ?? '',
     '--theme-radius-sm': borderRadius.sm ?? '',
     '--theme-radius-md': borderRadius.md ?? '',
     '--theme-radius-lg': borderRadius.lg ?? '',
@@ -165,6 +157,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   function loadTheme(theme: Partial<TenantTheme>, brandingOverride?: Partial<TenantBranding>) {
     const merged = mergeTheme(DEFAULT_TENANT_THEME, theme ?? {})
+    delete merged.spacing
 
     // Always recompute glow/gradient from the resolved primary so they stay
     // in sync with the tenant's brand color rather than the hardcoded default.

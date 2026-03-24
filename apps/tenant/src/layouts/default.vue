@@ -358,6 +358,9 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
 }
 
 .layout-subnav__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   min-height: 44px;
   padding: var(--theme-space-sm) var(--theme-space-md);
@@ -367,8 +370,19 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   text-decoration: none;
   border-radius: var(--theme-radius-md);
   font-size: var(--theme-font-sm);
+  line-height: 1.25;
   transition: color 0.15s, background-color 0.15s;
   border: var(--theme-border-thin) solid transparent;
+}
+
+button.layout-subnav__tab {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: center;
 }
 
 .layout-subnav__tab:hover {
@@ -397,15 +411,17 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
 
 .layout-subnav__more-wrap {
   position: relative;
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
+  align-self: stretch;
 }
 
 .layout-subnav__tab--more {
-  display: inline-flex;
-  align-items: center;
   gap: 4px;
   cursor: pointer;
-  font: inherit;
+  height: 100%;
+  min-height: 44px;
 }
 
 .layout-subnav__more-icon {

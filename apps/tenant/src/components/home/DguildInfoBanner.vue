@@ -106,12 +106,13 @@ const hasLinks = computed(
   min-width: 0;
 }
 
-.dguild-info-banner__logo,
-.dguild-info-banner__logo-placeholder {
-  width: 3rem;
-  height: 3rem;
-  border-radius: var(--theme-radius-md);
-  object-fit: cover;
+.dguild-info-banner__logo {
+  max-height: 4rem;
+  width: auto;
+  max-width: min(100%, 14rem);
+  object-fit: contain;
+  object-position: left center;
+  border-radius: 0;
   flex-shrink: 0;
 }
 
@@ -119,6 +120,10 @@ const hasLinks = computed(
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--theme-radius-md);
+  flex-shrink: 0;
   background: var(--theme-bg-secondary);
   color: var(--theme-text-secondary);
   font-size: var(--theme-font-xl);

@@ -33,7 +33,7 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { computed } from 'vue'
+import { useId } from 'vue'
 
 withDefaults(
   defineProps<{
@@ -49,7 +49,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const titleId = computed(() => 'modal-title-' + Math.random().toString(36).slice(2, 9))
+const titleId = useId()
 
 function onClose() {
   emit('update:modelValue', false)

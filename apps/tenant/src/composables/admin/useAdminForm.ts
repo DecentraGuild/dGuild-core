@@ -39,6 +39,7 @@ function buildBrandingForm(
     DEFAULT_TENANT_THEME,
     (tenant?.branding?.theme ?? {}) as Parameters<typeof mergeTheme>[1],
   )
+  delete theme.spacing
   return {
     logo: tenant?.branding?.logo ?? '',
     theme,

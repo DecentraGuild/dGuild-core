@@ -1,6 +1,6 @@
 <template>
   <div class="admin__split">
-    <div class="admin__panel">
+    <div class="admin__panel admin-billing__stack">
       <Card>
         <h3>Billing History</h3>
         <div v-if="loading" class="admin__billing-loading">
@@ -18,7 +18,7 @@
                 <th>Product</th>
                 <th>Amount</th>
                 <th>Tx</th>
-                <th>Invoice</th>
+                <th v-if="invoiceDownloadEnabled">Invoice</th>
               </tr>
             </thead>
             <tbody>
@@ -38,7 +38,7 @@
                   </a>
                   <span v-else class="admin__billing-tx-muted">--</span>
                 </td>
-                <td>
+                <td v-if="invoiceDownloadEnabled">
                   <button class="admin__billing-invoice-btn" title="Download invoice" @click="downloadInvoice(p.id)">
                     <Icon icon="lucide:download" />
                   </button>
@@ -143,6 +143,9 @@ defineEmits<{
   'cancel-extend': []
   'update:extendPeriod': [value: BillingPeriod]
 }>()
+
+/** JSON invoice export; enable after business registration. */
+const invoiceDownloadEnabled = false
 
 function isModuleBillable(moduleId: string): boolean {
   return getModuleCatalogEntry(moduleId)?.pricing != null
@@ -363,6 +366,12 @@ defineExpose({ load })
 </script>
 
 <style scoped>
+.admin-billing__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-sm);
+}
+
 .admin__billing-loading {
   display: flex;
   align-items: center;

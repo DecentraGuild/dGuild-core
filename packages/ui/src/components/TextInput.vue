@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { useId } from 'vue'
 
 withDefaults(
   defineProps<{
@@ -33,7 +33,7 @@ defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-const id = computed(() => `input-${Math.random().toString(36).slice(2)}`)
+const id = useId()
 </script>
 
 <style scoped>
