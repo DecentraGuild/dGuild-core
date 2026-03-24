@@ -1,4 +1,5 @@
 import { formatRawTokenAmount, truncateAddress } from '@decentraguild/display'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useCollectionMembers } from '~/composables/mint/useCollectionMembers'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
 import { useSupabase } from '~/composables/core/useSupabase'

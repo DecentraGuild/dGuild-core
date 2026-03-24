@@ -10,6 +10,13 @@ const TX_STATUS_LABELS: Record<string, string> = {
   confirming: 'Confirming...',
 }
 
+function humanizeRaffleChainError(message: string): string {
+  if (/StateMismatch|6024|0x1788/i.test(message)) {
+    return 'The raffle is not in a state that allows closing on-chain. You can close after the raffle reaches Done, or cancel while it is still Created and you have not added rewards yet.'
+  }
+  return message
+}
+
 export interface AdminRaffleActionsOptions {
   connection: Ref<Connection | null>
   onSuccess?: () => Promise<void>
@@ -67,13 +74,14 @@ export function useAdminRaffleActions(options: AdminRaffleActionsOptions) {
 
       return sig
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Transaction failed'
+      const raw = e instanceof Error ? e.message : 'Transaction failed'
+      const msg = humanizeRaffleChainError(raw)
       txNotifications.update(notificationId, {
         status: 'error',
         message: msg,
         signature: null,
       })
-      throw e
+      throw new Error(msg)
     }
   }
 
@@ -95,7 +103,8 @@ export function useAdminRaffleActions(options: AdminRaffleActionsOptions) {
       clearActionError(rafflePubkey)
       await (afterSuccess ?? onSuccess)?.()
     } catch (e) {
-      actionError.value = e instanceof Error ? e.message : errMsg
+      const raw = e instanceof Error ? e.message : errMsg
+      actionError.value = humanizeRaffleChainError(raw)
       actionErrorRaffle.value = rafflePubkey
     } finally {
       actionSubmitting.value = null

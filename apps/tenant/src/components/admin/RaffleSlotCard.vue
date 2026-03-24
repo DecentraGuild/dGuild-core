@@ -118,10 +118,19 @@ const canDistributeReward = computed(
 )
 const canClaimProceeds = computed(() => props.slotCard.chainData?.state === 'claimtickets')
 
-/** Close / tear down: after full lifecycle (`done`), or before start (`created` / `ready`) if setup was wrong. */
+const DEFAULT_PUBKEY_BASE58 = '11111111111111111111111111111111'
+
+/** On-chain close: `done` only for teardown, or `created` with no rewards and no tickets sold. Never after Add rewards (`ready`+ or prize vault / prize mint set). */
 const canCloseRaffle = computed(() => {
-  const s = props.slotCard.chainData?.state
-  return s === 'done' || s === 'created' || s === 'ready'
+  const d = props.slotCard.chainData
+  if (!d) return false
+  if (d.state === 'done') return true
+  if (d.state === 'ready') return false
+  if (d.state !== 'created') return false
+  if (d.ticketsSold !== 0) return false
+  if (d.prizeVaultCount !== 0) return false
+  if (d.prizeMint !== DEFAULT_PUBKEY_BASE58) return false
+  return true
 })
 
 function truncateDesc(text: string, maxLen = 60): string {

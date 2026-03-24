@@ -5,7 +5,7 @@
         {{ description }}
       </p>
 
-      <div v-if="showMobileAppLinks" class="connect-wallet-modal__mobile-links">
+      <div v-if="showMobileDeepLinks" class="connect-wallet-modal__mobile-links">
         <p class="connect-wallet-modal__mobile-links-title">Open in wallet app</p>
         <div class="connect-wallet-modal__mobile-links-row">
           <a
@@ -96,9 +96,21 @@ defineEmits<{
   select: [connectorId: string]
 }>()
 
-const showMobileAppLinks = computed(() => {
+function isWalletInAppBrowser(): boolean {
+  if (typeof window === 'undefined') return false
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  if (/Phantom/i.test(ua)) return true
+  if (/Solflare/i.test(ua)) return true
+  const w = window as Window & { solana?: { isPhantom?: boolean }; solflare?: unknown }
+  if (w.solana?.isPhantom) return true
+  if (w.solflare) return true
+  return false
+}
+
+const showMobileDeepLinks = computed(() => {
   if (typeof navigator === 'undefined') return false
-  return MOBILE_UA_RE.test(navigator.userAgent)
+  if (!MOBILE_UA_RE.test(navigator.userAgent)) return false
+  return !isWalletInAppBrowser()
 })
 
 const pageHref = computed(() => {
@@ -106,14 +118,30 @@ const pageHref = computed(() => {
   return window.location.href
 })
 
+const pageRef = computed(() => {
+  if (typeof window === 'undefined') return ''
+  return window.location.origin || ''
+})
+
+function deepLinkRef(href: string, origin: string): string {
+  if (origin) return origin
+  try {
+    return new URL(href).origin
+  } catch {
+    return 'https://'
+  }
+}
+
 const phantomBrowseUrl = computed(() => {
-  const u = encodeURIComponent(pageHref.value || 'https://')
-  return `https://phantom.app/ul/v1/browse?url=${u}`
+  const href = pageHref.value || 'https://'
+  const ref = deepLinkRef(href, pageRef.value)
+  return `https://phantom.app/ul/browse/${encodeURIComponent(href)}?ref=${encodeURIComponent(ref)}`
 })
 
 const solflareBrowseUrl = computed(() => {
-  const u = encodeURIComponent(pageHref.value || 'https://')
-  return `https://solflare.com/ul/v1/browse/?url=${u}`
+  const href = pageHref.value || 'https://'
+  const ref = deepLinkRef(href, pageRef.value)
+  return `https://solflare.com/ul/v1/browse/${encodeURIComponent(href)}?ref=${encodeURIComponent(ref)}`
 })
 </script>
 
