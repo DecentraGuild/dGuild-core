@@ -213,7 +213,7 @@ defineExpose({ saveWatches })
   font-size: var(--theme-font-sm);
   font-weight: 600;
   margin: 0 0 var(--theme-space-sm);
-  color: var(--theme-text-secondary);
+  color: var(--theme-secondary);
 }
 
 .watchtower-tab__list {

@@ -25,16 +25,14 @@ const entry = computed(() => getModuleCatalogEntry(props.moduleId))
 const pricingSummary = computed(() => {
   const p = entry.value?.pricing
   if (!p) return null
-  if (p.modelType === 'flat_one_time') {
-    return `One-time: ${formatUsdc(p.amount)} USDC`
-  }
-  if (p.modelType === 'flat_recurring') {
-    return `Recurring: ${formatUsdc(p.recurringYearly)} USDC/yr`
-  }
   if (p.modelType === 'tiered_addons' && p.tiers?.length) {
     const tierNames = p.tiers.map((t) => t.name).join(', ')
     const prices = p.tiers.map((t) => `${t.name}: ${formatUsdc(t.recurringPrice)} USDC/mo`).join('; ')
     return `${tierNames}. ${prices}${p.yearlyDiscountPercent ? ` (${p.yearlyDiscountPercent}% off yearly)` : ''}`
+  }
+  if (p.modelType === 'tiered_with_one_time_per_unit' && p.tiers?.length) {
+    const minPrice = Math.min(...p.tiers.map((t) => t.recurringPrice))
+    return `From ${formatUsdc(minPrice)} USDC/mo (plus optional one-time per unit)`
   }
   return null
 })

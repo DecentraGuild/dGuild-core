@@ -19,10 +19,13 @@ export function parseHex(hex: string): Rgb | null {
     }
   }
   if (s.length === 3 && /^[0-9a-fA-F]{3}$/.test(s)) {
+    const rCh = s.slice(0, 1)
+    const gCh = s.slice(1, 2)
+    const bCh = s.slice(2, 3)
     return {
-      r: parseInt(s[0] + s[0], 16),
-      g: parseInt(s[1] + s[1], 16),
-      b: parseInt(s[2] + s[2], 16),
+      r: parseInt(rCh + rCh, 16),
+      g: parseInt(gCh + gCh, 16),
+      b: parseInt(bCh + bCh, 16),
     }
   }
   return null
@@ -143,7 +146,8 @@ export const BORDER_RADIUS_PRESETS: Array<Record<string, string>> = [
 export function getRadiusLevelFromTheme(theme: { borderRadius?: Record<string, string> }): number {
   const md = theme.borderRadius?.md ?? ''
   for (let i = 0; i < BORDER_RADIUS_PRESETS.length; i++) {
-    if (BORDER_RADIUS_PRESETS[i].md === md) return i
+    const preset = BORDER_RADIUS_PRESETS[i]
+    if (preset?.md === md) return i
   }
   return 2
 }

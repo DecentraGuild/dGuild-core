@@ -394,7 +394,7 @@ watch(tab, (t) => {
 .admin__panel h3 {
   font-size: var(--theme-font-lg);
   font-weight: 600;
-  color: var(--theme-text-primary);
+  color: var(--theme-secondary);
   margin-bottom: var(--theme-space-md);
 }
 .admin__panel .form-input,

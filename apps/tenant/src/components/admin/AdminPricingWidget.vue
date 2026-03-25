@@ -492,7 +492,11 @@ const pricingModel = computed((): TieredAddonsPricing | TieredWithOneTimePerUnit
   if (!q?.meters) return null
   const conditionKeys = Object.keys(q.meters)
   const included = Object.fromEntries(
-    (Object.entries(q.meters) as [string, { used: number; limit: number }][]).map(([k, v]) => [k, v.limit]),
+    (Object.entries(q.meters) as [string, { used: number; limit: number }][]).map(([k, v]) => {
+      const tierInfo = q.quotedMeterTiers?.[k]
+      const cap = tierInfo?.maxQuantity != null ? tierInfo.maxQuantity : v.limit
+      return [k, cap]
+    }),
   )
   return {
     modelType: 'tiered_addons',

@@ -327,12 +327,13 @@ function buildTheme(): TenantTheme {
   return derived
 }
 
+/* eslint-disable vue/no-mutating-props -- parent passes mutable branding draft for theme edits */
 function apply() {
   const theme = buildTheme()
-  // eslint-disable-next-line vue/no-mutating-props -- parent passes mutable branding for theme edits
   Object.assign(props.branding.theme, theme)
   delete props.branding.theme.spacing
 }
+/* eslint-enable vue/no-mutating-props */
 
 function applyStatus() {
   apply()
@@ -389,7 +390,7 @@ watch(
 .theme-settings__heading {
   font-size: var(--theme-font-lg);
   margin: 0 0 var(--theme-space-sm);
-  color: var(--theme-text-primary);
+  color: var(--theme-secondary);
 }
 
 .theme-settings__section[open] .theme-settings__heading {

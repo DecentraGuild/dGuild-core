@@ -109,3 +109,49 @@ export const NAVIGABLE_STATUSES: ReadonlySet<ModuleCatalogStatus> = new Set([
 export function isModuleNavigable(status: ModuleCatalogStatus): boolean {
   return NAVIGABLE_STATUSES.has(status)
 }
+
+/** Tenant id reserved for internal development and testing. Only this tenant may enable/use development-status modules. */
+export const INTERNAL_DEV_TENANT_ID = '0000000'
+
+export function isInternalDevTenant(tenantId: string): boolean {
+  return tenantId === INTERNAL_DEV_TENANT_ID
+}
+
+/**
+ * Whether a tenant may activate (enable) a module based on catalog status.
+ *
+ * Rules:
+ * - available    → always allowed
+ * - coming_soon  → never (flip to available when ready to ship)
+ * - development  → only the internal dev tenant (0000000)
+ * - deprecated   → block fresh activation; existing active/deactivating tenants are grandfathered
+ * - off          → never
+ */
+export function canActivateModule(
+  status: ModuleCatalogStatus,
+  tenantId: string,
+): boolean {
+  switch (status) {
+    case 'available': return true
+    case 'coming_soon': return false
+    case 'development': return isInternalDevTenant(tenantId)
+    case 'deprecated': return false
+    case 'off': return false
+  }
+}
+
+/**
+ * Whether a module should appear in the public platform module catalog (marketing page + discovery).
+ * development and off are never shown publicly.
+ */
+export function isModulePubliclyVisible(status: ModuleCatalogStatus): boolean {
+  return status !== 'development' && status !== 'off'
+}
+
+/**
+ * Whether a module should appear in the public docs IA (sidebar + routes).
+ * development and off are excluded; all other statuses keep docs available.
+ */
+export function isModuleInPublicDocs(status: ModuleCatalogStatus): boolean {
+  return status !== 'development' && status !== 'off'
+}

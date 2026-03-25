@@ -12,13 +12,16 @@
 </template>
 
 <script setup lang="ts">
-import { getDocContentFromCatalog } from '~/composables/useDocFromCatalog'
+import { getDocContentFromCatalog, type DocFromCatalogResult } from '~/composables/useDocFromCatalog'
 
 definePageMeta({ layout: 'docs' })
 
 const route = useRoute()
 const path = `/docs/modules/${(route.params.slug as string) ?? ''}`
-const { data: doc } = await useAsyncData(`docs-${route.path}`, () => getDocContentFromCatalog(path))
+const { data: doc } = await useAsyncData<DocFromCatalogResult | null>(
+  `docs-${route.path}`,
+  () => Promise.resolve(getDocContentFromCatalog(path)),
+)
 const nav = useDocsNav(route.path)
 
 useSeoMeta({

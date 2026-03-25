@@ -44,7 +44,7 @@ defineProps<{
 }
 
 .nav-link:hover {
-  color: var(--theme-text-primary);
+  color: var(--theme-secondary);
   background-color: var(--theme-bg-card);
 }
 

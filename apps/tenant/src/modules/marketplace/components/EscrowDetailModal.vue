@@ -306,6 +306,8 @@ const cannotFillReason = computed(() => {
 
 .escrow-modal__section-title {
   margin-top: 0;
+  font-weight: 600;
+  color: var(--theme-secondary);
 }
 
 .escrow-modal__owner .escrow-modal__section-title {

@@ -70,9 +70,9 @@ onMounted(() => {
   auth.refreshConnectorState()
 })
 
-async function handleConnectAndSignIn(connectorId: WalletConnectorId) {
+async function handleConnectAndSignIn(connectorId: string) {
   opsAccessError.value = null
-  const ok = await auth.connectAndSignIn(connectorId)
+  const ok = await auth.connectAndSignIn(connectorId as WalletConnectorId)
   if (ok) {
     showConnectModal.value = false
     await goToOps()

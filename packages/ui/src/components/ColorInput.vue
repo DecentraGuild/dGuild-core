@@ -51,10 +51,10 @@ function normalizeHex(raw: string): string {
   const s = String(raw).trim().replace(/^#/, '')
   if (s.length === 0) return ''
   if (/^[0-9a-fA-F]{3}$/.test(s)) {
-    const r = s[0] + s[0]
-    const g = s[1] + s[1]
-    const b = s[2] + s[2]
-    return `#${r}${g}${b}`
+    const r = s.slice(0, 1)
+    const g = s.slice(1, 2)
+    const b = s.slice(2, 3)
+    return `#${r}${r}${g}${g}${b}${b}`
   }
   if (/^[0-9a-fA-F]{6}$/.test(s)) return `#${s}`
   return ''

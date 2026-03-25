@@ -303,6 +303,8 @@ watch([wallet, rpcUrl], () => fetchAssets(), { immediate: true })
 }
 .shipment-page__heading {
   font-size: var(--theme-font-lg);
+  font-weight: 600;
+  color: var(--theme-secondary);
   margin: 0 0 var(--theme-space-sm);
 }
 .shipment-page__intro {

@@ -41,67 +41,69 @@
 
     <Card>
       <h3>Currencies</h3>
-      <p class="marketplace-settings__hint">Base: SOL, WBTC, USDC, USDT. Add custom by mint.</p>
-      <div class="marketplace-settings__base-toggles">
-        <label v-for="b in BASE_CURRENCY_MINTS" :key="b.symbol" class="marketplace-settings__checkbox">
-          <input
-            :checked="form.currencyMints.some((c) => c.mint === b.mint)"
-            type="checkbox"
-            @change="onBaseToggle(b.symbol, ($event.target as HTMLInputElement).checked)"
-          />
-          <span>{{ b.symbol }}</span>
-        </label>
-      </div>
-      <div class="marketplace-settings__custom">
-        <h4 class="marketplace-settings__add-title">Custom currencies</h4>
-        <div class="marketplace-settings__add-mint">
-          <AddMintInput
-            v-model="newCurrencyMint"
-            v-model:kind="newCurrencyKind"
-            book-kind="SPL"
-            hide-book-base-mints
-            :error="addCurrencyError"
-            :disabled="saving"
-            @submit="addCurrencyFromInput"
-          />
+      <p class="marketplace-settings__hint">Select which trades Royalty and Shop fee bps counts. Base: SOL, WBTC, USDC, USDT. Add custom by mint. Not yet active in the smart contract.</p>
+      <fieldset disabled class="marketplace-settings__disabled-fieldset">
+        <div class="marketplace-settings__base-toggles">
+          <label v-for="b in BASE_CURRENCY_MINTS" :key="b.symbol" class="marketplace-settings__checkbox">
+            <input
+              :checked="form.currencyMints.some((c) => c.mint === b.mint)"
+              type="checkbox"
+              @change="onBaseToggle(b.symbol, ($event.target as HTMLInputElement).checked)"
+            />
+            <span>{{ b.symbol }}</span>
+          </label>
         </div>
-        <ul v-if="customCurrencies.length" class="marketplace-settings__mint-list">
-          <li
-            v-for="(c, idx) in customCurrencies"
-            :key="c.mint"
-            class="marketplace-settings__mint-item"
-          >
-            <div class="marketplace-settings__mint-row marketplace-settings__mint-row--plain">
-              <div class="marketplace-settings__mint-thumb">
-                <img v-if="c.image" :src="c.image" :alt="c.name ?? c.symbol ?? c.mint" />
-                <span v-else class="marketplace-settings__mint-thumb-placeholder"><Icon icon="lucide:banknote" /></span>
+        <div class="marketplace-settings__custom">
+          <h4 class="marketplace-settings__add-title">Custom currencies</h4>
+          <div class="marketplace-settings__add-mint">
+            <AddMintInput
+              v-model="newCurrencyMint"
+              v-model:kind="newCurrencyKind"
+              book-kind="SPL"
+              hide-book-base-mints
+              :error="addCurrencyError"
+              :disabled="saving"
+              @submit="addCurrencyFromInput"
+            />
+          </div>
+          <ul v-if="customCurrencies.length" class="marketplace-settings__mint-list">
+            <li
+              v-for="(c, idx) in customCurrencies"
+              :key="c.mint"
+              class="marketplace-settings__mint-item"
+            >
+              <div class="marketplace-settings__mint-row marketplace-settings__mint-row--plain">
+                <div class="marketplace-settings__mint-thumb">
+                  <img v-if="c.image" :src="c.image" :alt="c.name ?? c.symbol ?? c.mint" />
+                  <span v-else class="marketplace-settings__mint-thumb-placeholder"><Icon icon="lucide:banknote" /></span>
+                </div>
+                <div class="marketplace-settings__mint-detail">
+                  <template v-if="c._loading">
+                    <Icon icon="lucide:loader-2" class="marketplace-settings__spinner" />
+                    <span class="marketplace-settings__mint-name">{{ truncateAddress(c.mint, 8, 4) }}</span>
+                    <span class="marketplace-settings__mint-status">Loading...</span>
+                  </template>
+                  <template v-else-if="c._error">
+                    <span class="marketplace-settings__mint-name">{{ truncateAddress(c.mint, 8, 4) }}</span>
+                    <span class="marketplace-settings__mint-error">{{ c._error }}</span>
+                  </template>
+                  <template v-else>
+                    <span class="marketplace-settings__mint-name">{{ (c.symbol || c.name) || truncateAddress(c.mint, 8, 4) }}</span>
+                    <code class="marketplace-settings__mint-address">{{ truncateAddress(c.mint, 8, 6) }}</code>
+                    <span class="marketplace-settings__mint-meta">
+                      {{ c.name || '' }} {{ c.decimals != null ? `· ${c.decimals} dec` : '' }}
+                      {{ c.sellerFeeBasisPoints != null ? `· ${c.sellerFeeBasisPoints} bps` : '' }}
+                    </span>
+                  </template>
+                </div>
               </div>
-              <div class="marketplace-settings__mint-detail">
-                <template v-if="c._loading">
-                  <Icon icon="lucide:loader-2" class="marketplace-settings__spinner" />
-                  <span class="marketplace-settings__mint-name">{{ truncateAddress(c.mint, 8, 4) }}</span>
-                  <span class="marketplace-settings__mint-status">Loading...</span>
-                </template>
-                <template v-else-if="c._error">
-                  <span class="marketplace-settings__mint-name">{{ truncateAddress(c.mint, 8, 4) }}</span>
-                  <span class="marketplace-settings__mint-error">{{ c._error }}</span>
-                </template>
-                <template v-else>
-                  <span class="marketplace-settings__mint-name">{{ (c.symbol || c.name) || truncateAddress(c.mint, 8, 4) }}</span>
-                  <code class="marketplace-settings__mint-address">{{ truncateAddress(c.mint, 8, 6) }}</code>
-                  <span class="marketplace-settings__mint-meta">
-                    {{ c.name || '' }} {{ c.decimals != null ? `· ${c.decimals} dec` : '' }}
-                    {{ c.sellerFeeBasisPoints != null ? `· ${c.sellerFeeBasisPoints} bps` : '' }}
-                  </span>
-                </template>
-              </div>
-            </div>
-            <Button variant="ghost" :disabled="!!c._loading" @click="removeCustomCurrency(idx)">
-              <Icon icon="lucide:x" />
-            </Button>
-          </li>
-        </ul>
-      </div>
+              <Button variant="ghost" :disabled="!!c._loading" @click="removeCustomCurrency(idx)">
+                <Icon icon="lucide:x" />
+              </Button>
+            </li>
+          </ul>
+        </div>
+      </fieldset>
     </Card>
 
     <Card>
@@ -358,6 +360,14 @@ defineExpose({ save, form })
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+.marketplace-settings__disabled-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .marketplace-settings__fees {

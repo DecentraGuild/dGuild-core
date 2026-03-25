@@ -93,8 +93,8 @@ const form = reactive({
 const saving = ref(false)
 const error = ref<string | null>(null)
 
-async function handleConnectAndSignIn(connectorId: WalletConnectorId) {
-  const ok = await auth.connectAndSignIn(connectorId)
+async function handleConnectAndSignIn(connectorId: string) {
+  const ok = await auth.connectAndSignIn(connectorId as WalletConnectorId)
   if (ok) showConnectModal.value = false
 }
 

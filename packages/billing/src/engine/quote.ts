@@ -164,7 +164,7 @@ export async function resolveQuote(
           quantity: target,
           duration_days: durationDays,
           price_usdc: itemPrice,
-          label: quotedMeterTiers[meterKey]?.label,
+          label: quotedMeterTiers[meterKey]?.label ?? undefined,
           price_multiplier: durationRule.price_multiplier,
         })
         priceUsdc += itemPrice

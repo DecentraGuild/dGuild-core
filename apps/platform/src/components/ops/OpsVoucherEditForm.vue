@@ -31,7 +31,7 @@
         :src="metadataForm.imageUrl"
         alt="Preview"
         class="mt-2 h-16 w-16 rounded-md border border-border object-cover"
-        @error="(e) => (e.currentTarget!.style.display = 'none')"
+        @error="onImagePreviewError"
       />
     </div>
     <div class="space-y-2">
@@ -162,7 +162,7 @@ const individualForm = ref({
   label: props.initialLabel ?? '',
   entitlements: (props.initialEntitlements ?? []).map((e) => ({ ...e })),
 })
-const localMaxRedemptions = ref<number | null>(props.initialMaxRedemptions ?? null)
+const localMaxRedemptions = ref<number | undefined>(props.initialMaxRedemptions ?? undefined)
 
 watch(
   () => [
@@ -188,11 +188,16 @@ watch(
       if (individualForm.value.entitlements.length === 0) {
         individualForm.value.entitlements.push({ meter_key: '', quantity: 1, duration_days: 30 })
       }
-      localMaxRedemptions.value = max ?? null
+      localMaxRedemptions.value = max ?? undefined
     }
   },
   { immediate: true }
 )
+
+function onImagePreviewError(e: Event) {
+  const el = e.currentTarget
+  if (el instanceof HTMLElement) el.style.display = 'none'
+}
 
 function onSubmit() {
   const base = {

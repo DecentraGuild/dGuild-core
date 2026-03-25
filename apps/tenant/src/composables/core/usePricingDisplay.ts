@@ -72,9 +72,7 @@ export function usePricingDisplay(
         const valueText =
           stored != null
             ? `${current} / ${stored}`
-            : included === 0
-              ? String(current)
-              : `${current} / ${included}`
+            : `${current} / ${included}`
 
         return { key, label, valueText }
       })

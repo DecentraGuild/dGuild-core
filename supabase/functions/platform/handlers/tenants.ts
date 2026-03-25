@@ -2,6 +2,7 @@ import { generateRandomNumericTenantId } from '../../../../packages/core/src/ten
 import { jsonResponse, errorResponse } from '../../_shared/cors.ts'
 import { requirePlatformAdmin } from '../../_shared/auth.ts'
 import type { getAdminClient } from '../../_shared/supabase-admin.ts'
+import { getModuleCatalogEntry, canActivateModule } from '@decentraguild/catalog'
 
 type Db = ReturnType<typeof getAdminClient>
 
@@ -294,6 +295,16 @@ export async function handleTenantModule(
 
   const currentModules = (tenant.modules as Record<string, unknown>) ?? {}
   const existing = (currentModules[moduleId] as Record<string, unknown>) ?? {}
+  const currentState = (existing.state as string | undefined) ?? 'off'
+
+  const isNewActivation = currentState === 'off' && (state === 'active' || state === 'staging')
+  if (isNewActivation) {
+    const catalogEntry = getModuleCatalogEntry(moduleId)
+    if (catalogEntry && !canActivateModule(catalogEntry.status, tenantId)) {
+      return errorResponse(`Module "${moduleId}" cannot be activated: status is "${catalogEntry.status}"`, req, 403)
+    }
+  }
+
   const updatedModules = {
     ...currentModules,
     [moduleId]: {

@@ -236,6 +236,8 @@ watch(wallet, () => {
 }
 .gates-page__heading {
   font-size: var(--theme-font-lg);
+  font-weight: 600;
+  color: var(--theme-secondary);
   margin: 0 0 var(--theme-space-sm);
 }
 .gates-page__intro {

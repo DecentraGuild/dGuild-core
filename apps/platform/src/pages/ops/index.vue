@@ -250,7 +250,9 @@ async function logout() {
   await navigateTo('/ops/login')
 }
 
-function goToTenant(t: TenantSummary) { navigateTo(`/ops/tenants/${encodeURIComponent(t.id)}`) }
+function goToTenant(t: { id: string }) {
+  navigateTo(`/ops/tenants/${encodeURIComponent(t.id)}`)
+}
 function goToVoucher(v: { mint: string }) { navigateTo(`/ops/vouchers/${encodeURIComponent(v.mint)}`) }
 </script>
 

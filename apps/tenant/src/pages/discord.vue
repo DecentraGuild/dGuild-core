@@ -209,6 +209,8 @@ onUnmounted(teardown)
 
 .discord-page__heading {
   font-size: var(--theme-font-md);
+  font-weight: 600;
+  color: var(--theme-secondary);
   margin-bottom: var(--theme-space-xs);
 }
 

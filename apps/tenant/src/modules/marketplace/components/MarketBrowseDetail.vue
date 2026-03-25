@@ -207,8 +207,9 @@ defineEmits<{
 
 .market-browse-detail__name {
   font-size: var(--theme-font-xl);
-  font-weight: 600;
+  font-weight: 700;
   margin: 0;
+  color: var(--theme-primary);
 }
 
 .market-browse-detail__ticker-row {

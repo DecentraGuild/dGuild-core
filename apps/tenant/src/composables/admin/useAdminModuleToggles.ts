@@ -1,8 +1,9 @@
 import type { BillingPeriod } from '@decentraguild/billing'
-import { getModuleCatalogEntry } from '@decentraguild/catalog'
+import { getModuleCatalogEntry, canActivateModule } from '@decentraguild/catalog'
 import type { useAdminSubscriptions, SubscriptionInfo, WatchtowerSubscriptionByScope } from './useAdminSubscriptions'
 import type { useAdminForm } from './useAdminForm'
 import type { useAdminBilling } from './useAdminBilling'
+import { useAdminTenant } from './useAdminTenant'
 
 type SubscriptionsMap = ReturnType<typeof useAdminSubscriptions>['subscriptions']
 type FormRef = ReturnType<typeof useAdminForm>
@@ -27,6 +28,7 @@ export function useAdminModuleToggles(opts: Options) {
     subscriptions, save, form, handleBillingPayment, fetchSubscription,
     extendModule, reactivateModule, deploying, extending, saving, saveError,
   } = opts
+  const { tenantId } = useAdminTenant()
 
   const showActivationModal = ref(false)
   const activationModalModuleId = ref<string | null>(null)
@@ -62,6 +64,7 @@ export function useAdminModuleToggles(opts: Options) {
   function onModuleToggle(id: string, on: boolean) {
     if (on) {
       const entry = getModuleCatalogEntry(id)
+      if (entry && !canActivateModule(entry.status, tenantId.value ?? '')) return
       if (entry?.pricing && isWithinPaidPeriod(id)) {
         form.modulesById[id] = 'active'
         save()
