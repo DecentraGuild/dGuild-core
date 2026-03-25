@@ -1,7 +1,7 @@
 <template>
-  <div class="role-cards-carousel">
-    <h3 class="role-cards-carousel__title">Role requirements</h3>
-    <div ref="scrollRef" class="role-cards-carousel__scroll">
+  <div class="role-cards">
+    <h3 class="role-cards__title">Role requirements</h3>
+    <div class="role-cards__grid">
       <article
         v-for="card in roleCards"
         :key="card.role_id"
@@ -108,8 +108,6 @@ const emit = defineEmits<{
   create: []
 }>()
 
-const scrollRef = ref<HTMLElement | null>(null)
-
 const DISCORD_CDN = 'https://cdn.discordapp.com'
 const DISCORD_BLURPLE = 0x5865f2
 
@@ -127,33 +125,26 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
 </script>
 
 <style scoped>
-.role-cards-carousel {
+.role-cards {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
 
-.role-cards-carousel__title {
+.role-cards__title {
   font-size: var(--theme-font-md);
-  margin-bottom: var(--theme-space-sm);
+  font-weight: 600;
+  margin-bottom: var(--theme-space-md);
   color: var(--theme-text-primary);
 }
 
-.role-cards-carousel__scroll {
-  display: flex;
+.role-cards__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
   gap: var(--theme-space-md);
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: var(--theme-space-sm);
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
 }
 
 .role-card {
-  flex-shrink: 0;
-  scroll-snap-align: start;
-  width: 22rem;
-  min-height: 20rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -163,6 +154,7 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
   border-radius: var(--theme-radius-lg);
   padding: var(--theme-space-xl);
   border-left: 4px solid var(--role-card-accent, var(--theme-primary));
+  min-height: 16rem;
 }
 
 .role-card--not-eligible {
@@ -192,8 +184,8 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 80%;
-  aspect-ratio: 1;
+  width: 60px;
+  height: 60px;
   margin-bottom: var(--theme-space-md);
   border-radius: var(--theme-radius-md);
   background-color: color-mix(in srgb, var(--role-card-accent, var(--theme-primary)) 20%, transparent);
@@ -211,7 +203,7 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
 }
 
 .role-card__emoji {
-  font-size: 4.5rem;
+  font-size: 2.5rem;
   line-height: 1;
 }
 
@@ -231,6 +223,7 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 100%;
 }
 
 .role-card__req-item {
@@ -255,7 +248,6 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
   font-weight: 600;
   color: var(--theme-text-muted);
   margin: var(--theme-space-xs) 0;
-  padding-left: 0;
   text-align: center;
 }
 
@@ -278,7 +270,7 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
   border: var(--theme-border-medium) dashed var(--theme-border);
   background: var(--theme-bg-muted);
   justify-content: center;
-  min-height: 20rem;
+  min-height: 16rem;
 }
 
 .role-card--create:hover {
@@ -287,7 +279,7 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
 }
 
 .role-card__create-icon {
-  font-size: 3rem;
+  font-size: 2.5rem;
   color: var(--theme-text-muted);
   margin-bottom: var(--theme-space-sm);
 }

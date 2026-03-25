@@ -91,7 +91,7 @@
   --theme-shadow-glow-hover: 0 0 40px rgba(220, 38, 38, 0.55);
   --theme-shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
 
-  --theme-gradient-primary: linear-gradient(135deg, #dc2626 0%, #ea580c 50%, #991b1b 100%);
+  --theme-gradient-primary: linear-gradient(to right, #dc2626 0%, #ea580c 100%);
 
   --theme-effect-pattern: none;
   --theme-effect-pattern-size: 24px;

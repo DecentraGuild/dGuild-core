@@ -57,7 +57,7 @@
   --theme-shadow-glow-hover: 0 0 40px rgba(153, 153, 255, 0.45);
   --theme-shadow-card: 0 8px 32px rgba(0, 0, 0, 0.45);
 
-  --theme-gradient-primary: linear-gradient(135deg, #6666e6 0%, #9999ff 45%, #4c4cbf 100%);
+  --theme-gradient-primary: linear-gradient(to right, #4c4cbf 0%, #9999ff 100%);
 
   --theme-scrollbar-thumb: var(--theme-border);
   --theme-scrollbar-thumb-hover: var(--theme-border-light);
