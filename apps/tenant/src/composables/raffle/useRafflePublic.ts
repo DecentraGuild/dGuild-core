@@ -9,6 +9,7 @@ import {
 } from '@decentraguild/web3'
 import { PublicKey } from '@solana/web3.js'
 import { useMintLabels } from '~/composables/mint/useMintLabels'
+import { useMintMetadata } from '~/composables/mint/useMintMetadata'
 import { useSupabase } from '~/composables/core/useSupabase'
 import type { Connection } from '@solana/web3.js'
 
@@ -65,6 +66,23 @@ export function useRafflePublic(
   })
 
   const { labelByMint } = useMintLabels(mintsForCatalogLabels)
+  const { fetchMetadata } = useMintMetadata()
+  const decimalsByMint = ref<Map<string, number>>(new Map())
+
+  watch(
+    mintsForCatalogLabels,
+    async (mintSet: Set<string>) => {
+      if (!mintSet?.size) return
+      const map = new Map(decimalsByMint.value)
+      for (const mint of mintSet) {
+        if (map.has(mint)) continue
+        const meta = await fetchMetadata(mint)
+        if (meta != null) map.set(mint, meta.decimals)
+      }
+      decimalsByMint.value = map
+    },
+    { immediate: true },
+  )
 
   function mintCatalogLabel(mint: string): string {
     const l = labelByMint.value.get(mint)?.trim()
@@ -78,7 +96,8 @@ export function useRafflePublic(
 
   function formatPrizeLine(d: RaffleChainData): string {
     const label = mintCatalogLabelLong(d.prizeMint)
-    const amt = formatRawTokenAmount(d.prizeAmount, d.prizeDecimals, 'SPL')
+    const decimals = decimalsByMint.value.get(d.prizeMint) ?? d.prizeDecimals
+    const amt = formatRawTokenAmount(d.prizeAmount, decimals, 'SPL')
     if (amt === '0' || amt === '?') return label
     return `${amt} ${label}`
   }

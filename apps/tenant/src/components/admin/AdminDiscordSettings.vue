@@ -37,7 +37,7 @@
     </div>
 
     <div v-if="server.connected && !loading" class="discord-settings__cards">
-      <DiscordRoleCardsCarousel
+      <DiscordRoleCards
         :role-cards="roleCards"
         admin
         @edit="onEditCard"
@@ -110,8 +110,8 @@ import OptionsSelect from '~/components/ui/options-select/OptionsSelect.vue'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import AdminDiscordServerCard from '~/components/AdminDiscordServerCard.vue'
 import ConditionSetCatalog from '~/components/gates/ConditionSetCatalog.vue'
-import DiscordRoleCardsCarousel from '~/components/DiscordRoleCardsCarousel.vue'
-import type { RoleCard } from '~/components/DiscordRoleCardsCarousel.vue'
+import DiscordRoleCards from '~/components/DiscordRoleCards.vue'
+import type { RoleCard } from '~/components/DiscordRoleCards.vue'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useConditionSet } from '~/composables/conditions/useConditionSet'

@@ -13,7 +13,7 @@ import { useAuth, useConnectWalletModalExtras } from '@decentraguild/auth'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
-import type { RoleCard } from '~/components/DiscordRoleCardsCarousel.vue'
+import type { RoleCard } from '~/components/DiscordRoleCards.vue'
 
 export interface DiscordMe {
   discord_user_id: string | null
