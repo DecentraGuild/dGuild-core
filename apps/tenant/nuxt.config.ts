@@ -2,7 +2,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
-import { resolveInternalDevTenantIdsFromEnv } from '@decentraguild/catalog'
+import { resolveInternalDevTenantIdsFromEnv } from '../../catalog/src/internal-dev-tenant-env'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 const uiVarsCss = path.resolve(dirname, '../../packages/ui/src/theme/vars.css')
