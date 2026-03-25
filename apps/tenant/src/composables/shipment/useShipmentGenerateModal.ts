@@ -27,6 +27,7 @@ export function useShipmentGenerateModal(
   const generateTotalAmountStr = ref('10000')
   const generateMint = ref('')
   const generating = ref(false)
+  let generationEpoch = 0
 
   const rulesCatalogItems = computed(() => rulesCatalogFilteredItems.value)
 
@@ -69,6 +70,8 @@ export function useShipmentGenerateModal(
   }
 
   function closeModal() {
+    generationEpoch++
+    generating.value = false
     open.value = false
   }
 
@@ -79,6 +82,7 @@ export function useShipmentGenerateModal(
   async function generateJson() {
     const id = tenantId.value
     if (!id || !canGenerate.value) return
+    const epoch = generationEpoch
     generating.value = true
     try {
       const generated = await generateShipmentJson({
@@ -89,14 +93,16 @@ export function useShipmentGenerateModal(
         totalAmount: generateTotalAmount.value,
         isWeighted: isWeightedRule.value,
       })
+      if (epoch !== generationEpoch) return
       if (generated) {
         onGenerated(generated)
         open.value = false
       }
     } catch (e) {
+      if (epoch !== generationEpoch) return
       alert(e instanceof Error ? e.message : 'Failed to generate JSON')
     } finally {
-      generating.value = false
+      if (epoch === generationEpoch) generating.value = false
     }
   }
 
