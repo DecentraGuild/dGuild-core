@@ -190,7 +190,7 @@
       v-if="generateModalOpen"
       :model-value="generateModalOpen"
       title="Generate from conditions"
-      @update:model-value="(v: boolean) => (generateModalOpen.value = v)"
+      @update:model-value="updateGenerateModalOpen"
     >
       <div class="plan-shipment-tab__generate-modal">
         <ConditionSetCatalog
@@ -227,14 +227,23 @@
               </Button>
             </div>
           </div>
-          <Button
-            variant="default"
-            :disabled="!canGenerate || generating"
-            @click="generateJson"
-          >
-            <Icon v-if="generating" icon="lucide:loader-2" class="plan-shipment-tab__spinner" />
-            Generate
-          </Button>
+          <div class="plan-shipment-tab__generate-actions">
+            <Button
+              variant="secondary"
+              type="button"
+              @click="closeGenerateModal"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              :disabled="!canGenerate || generating"
+              @click="generateJson"
+            >
+              <Icon v-if="generating" icon="lucide:loader-2" class="plan-shipment-tab__spinner" />
+              Generate
+            </Button>
+          </div>
         </div>
         <p class="plan-shipment-tab__generate-link">
           <NuxtLink :to="{ path: route.path, query: { ...route.query, tab: 'conditions' } }" @click="generateModalOpen = false">
@@ -345,6 +354,11 @@ const {
   setGenerateMint,
   generateJson,
 } = useShipmentGenerateModal(tenantId, (json) => setJson(json as Parameters<typeof setJson>[0]))
+
+function updateGenerateModalOpen(v: boolean) {
+  if (!v) closeGenerateModal()
+  else generateModalOpen.value = v
+}
 
 function goToConditions() {
   closeGenerateModal()
@@ -531,6 +545,12 @@ onMounted(() => void fetchHistory())
 .plan-shipment-tab__generate-mint-input {
   flex: 1;
   min-width: 0;
+}
+.plan-shipment-tab__generate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-space-sm);
+  align-items: center;
 }
 .plan-shipment-tab__generate-link {
   font-size: var(--theme-font-sm);
