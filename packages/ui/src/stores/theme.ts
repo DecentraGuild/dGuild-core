@@ -165,7 +165,6 @@ export const useThemeStore = defineStore('theme', () => {
     const brandSecondary = merged.colors?.secondary?.main
     const intensity = merged.effects?.glowIntensity
     if (primary) {
-      const primaryDark = merged.colors?.primary?.dark ?? darkenHex(primary, 0.15)
       const brandMid = brandSecondary ?? '#ea580c'
       const { glow, glowHover } = buildGlowShadows(primary, intensity)
 
@@ -176,7 +175,7 @@ export const useThemeStore = defineStore('theme', () => {
         card: merged.shadows?.card ?? '0 8px 32px rgba(0, 0, 0, 0.4)',
       }
       merged.gradients = {
-        primary: `linear-gradient(135deg, ${primary} 0%, ${brandMid} 50%, ${primaryDark} 100%)`,
+        primary: `linear-gradient(135deg, ${primary} 0%, ${brandMid} 100%)`,
       }
     }
 
