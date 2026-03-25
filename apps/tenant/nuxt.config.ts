@@ -2,6 +2,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import { resolveInternalDevTenantIdsFromEnv } from '@decentraguild/catalog'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 const uiVarsCss = path.resolve(dirname, '../../packages/ui/src/theme/vars.css')
@@ -30,7 +31,16 @@ export default defineNuxtConfig({
     componentDir: './src/components/ui',
   },
   css: [uiVarsCss, '~/assets/global.css'],
-  plugins: ['~/plugins/buffer.server', '~/plugins/tenant.server', '~/plugins/theme-inject.server', '~/plugins/buffer.client', '~/plugins/tenant.client', '@decentraguild/auth/plugin.server', '@decentraguild/auth/plugin.client'],
+  plugins: [
+    '~/plugins/catalog-internal-dev',
+    '~/plugins/buffer.server',
+    '~/plugins/tenant.server',
+    '~/plugins/theme-inject.server',
+    '~/plugins/buffer.client',
+    '~/plugins/tenant.client',
+    '@decentraguild/auth/plugin.server',
+    '@decentraguild/auth/plugin.client',
+  ],
   routeRules: {},
   nitro: {
     preset: 'static',
@@ -99,6 +109,9 @@ export default defineNuxtConfig({
       walletConnectProjectId: process.env.NUXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? '',
       // Single host for ?tenant= entry (e.g. dapp.dguild.org). When on this host and URL has no ?tenant=, we use cached last tenant so refresh keeps the same org.
       tenantSingleHost: process.env.NUXT_PUBLIC_TENANT_SINGLE_HOST ?? 'dapp.dguild.org',
+      internalDevTenantIds: resolveInternalDevTenantIdsFromEnv(
+        process.env.NUXT_PUBLIC_INTERNAL_DEV_TENANT_IDS,
+      ),
     },
   },
 })
