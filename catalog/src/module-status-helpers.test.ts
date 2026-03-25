@@ -3,6 +3,7 @@ import {
   INTERNAL_DEV_TENANT_ID,
   isInternalDevTenant,
   canActivateModule,
+  isModuleNavigable,
   isModulePubliclyVisible,
   isModuleInPublicDocs,
   parseInternalDevTenantIds,
@@ -43,6 +44,13 @@ describe('parseInternalDevTenantIds / resolveInternalDevTenantIdsFromEnv', () =>
   it('merges env list with default ids', () => {
     expect(resolveInternalDevTenantIdsFromEnv('x,y')).toEqual(['0000000', 'x', 'y'])
     expect(resolveInternalDevTenantIdsFromEnv(undefined)).toEqual(['0000000'])
+  })
+})
+
+describe('isModuleNavigable', () => {
+  it('includes coming_soon so tenant nav can list modules before GA', () => {
+    expect(isModuleNavigable('coming_soon')).toBe(true)
+    expect(isModuleNavigable('off')).toBe(false)
   })
 })
 

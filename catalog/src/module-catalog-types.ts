@@ -104,6 +104,7 @@ export interface ModuleCatalogEntry {
 /** Statuses where the module code exists and can appear in tenant nav. */
 export const NAVIGABLE_STATUSES: ReadonlySet<ModuleCatalogStatus> = new Set([
   'available',
+  'coming_soon',
   'development',
   'deprecated',
 ])
