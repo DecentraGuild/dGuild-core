@@ -2,6 +2,7 @@
  * Platform Edge Function — thin action router.
  * Each action is handled in handlers/<domain>.ts.
  */
+import '../_shared/catalog-internal-dev.ts'
 import { handlePreflight, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 

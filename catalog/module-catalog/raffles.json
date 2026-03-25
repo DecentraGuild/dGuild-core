@@ -1,7 +1,7 @@
 {
   "module": {
     "id": "raffles",
-    "status": "available",
+    "status": "coming_soon",
     "name": "Raffle",
     "icon": "mdi:ticket-percent",
     "image": null,

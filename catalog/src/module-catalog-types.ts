@@ -110,11 +110,35 @@ export function isModuleNavigable(status: ModuleCatalogStatus): boolean {
   return NAVIGABLE_STATUSES.has(status)
 }
 
-/** Tenant id reserved for internal development and testing. Only this tenant may enable/use development-status modules. */
-export const INTERNAL_DEV_TENANT_ID = '0000000'
+const DEFAULT_INTERNAL_DEV_TENANT_IDS: readonly string[] = ['0000000']
+
+let internalDevTenantIdsOverride: readonly string[] | null = null
+
+export function parseInternalDevTenantIds(raw: string | undefined | null): string[] {
+  if (raw == null || typeof raw !== 'string') return []
+  return [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))]
+}
+
+export function resolveInternalDevTenantIdsFromEnv(
+  envValue: string | undefined | null,
+): readonly string[] {
+  const extra = parseInternalDevTenantIds(envValue)
+  return [...new Set([...DEFAULT_INTERNAL_DEV_TENANT_IDS, ...extra])]
+}
+
+export function setInternalDevTenantIds(ids: readonly string[] | null): void {
+  internalDevTenantIdsOverride = ids === null ? null : [...ids]
+}
+
+export function getInternalDevTenantIds(): readonly string[] {
+  if (internalDevTenantIdsOverride !== null) return internalDevTenantIdsOverride
+  return DEFAULT_INTERNAL_DEV_TENANT_IDS
+}
+
+export const INTERNAL_DEV_TENANT_ID = DEFAULT_INTERNAL_DEV_TENANT_IDS[0]
 
 export function isInternalDevTenant(tenantId: string): boolean {
-  return tenantId === INTERNAL_DEV_TENANT_ID
+  return getInternalDevTenantIds().includes(tenantId)
 }
 
 /**
@@ -122,8 +146,8 @@ export function isInternalDevTenant(tenantId: string): boolean {
  *
  * Rules:
  * - available    → always allowed
- * - coming_soon  → never (flip to available when ready to ship)
- * - development  → only the internal dev tenant (0000000)
+ * - coming_soon  → only internal dev tenants (public teaser; flip to available to ship broadly)
+ * - development  → only internal dev tenants (hidden from public catalog/docs)
  * - deprecated   → block fresh activation; existing active/deactivating tenants are grandfathered
  * - off          → never
  */
@@ -133,7 +157,7 @@ export function canActivateModule(
 ): boolean {
   switch (status) {
     case 'available': return true
-    case 'coming_soon': return false
+    case 'coming_soon': return isInternalDevTenant(tenantId)
     case 'development': return isInternalDevTenant(tenantId)
     case 'deprecated': return false
     case 'off': return false

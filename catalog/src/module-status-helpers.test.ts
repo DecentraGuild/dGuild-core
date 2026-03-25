@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   INTERNAL_DEV_TENANT_ID,
   isInternalDevTenant,
   canActivateModule,
   isModulePubliclyVisible,
   isModuleInPublicDocs,
+  parseInternalDevTenantIds,
+  resolveInternalDevTenantIdsFromEnv,
+  setInternalDevTenantIds,
 } from './module-catalog-types.js'
 
 describe('INTERNAL_DEV_TENANT_ID', () => {
@@ -14,10 +17,32 @@ describe('INTERNAL_DEV_TENANT_ID', () => {
 })
 
 describe('isInternalDevTenant', () => {
-  it('returns true only for the internal id', () => {
+  afterEach(() => {
+    setInternalDevTenantIds(null)
+  })
+
+  it('returns true only for the internal id by default', () => {
     expect(isInternalDevTenant('0000000')).toBe(true)
     expect(isInternalDevTenant('some-other-tenant')).toBe(false)
     expect(isInternalDevTenant('')).toBe(false)
+  })
+
+  it('includes ids from setInternalDevTenantIds', () => {
+    setInternalDevTenantIds(['alpha', 'beta'])
+    expect(isInternalDevTenant('alpha')).toBe(true)
+    expect(isInternalDevTenant('beta')).toBe(true)
+    expect(isInternalDevTenant('0000000')).toBe(false)
+  })
+})
+
+describe('parseInternalDevTenantIds / resolveInternalDevTenantIdsFromEnv', () => {
+  it('parses comma-separated ids', () => {
+    expect(parseInternalDevTenantIds('a, b ,c')).toEqual(['a', 'b', 'c'])
+  })
+
+  it('merges env list with default ids', () => {
+    expect(resolveInternalDevTenantIdsFromEnv('x,y')).toEqual(['0000000', 'x', 'y'])
+    expect(resolveInternalDevTenantIdsFromEnv(undefined)).toEqual(['0000000'])
   })
 })
 
@@ -30,9 +55,9 @@ describe('canActivateModule', () => {
     expect(canActivateModule('available', internal)).toBe(true)
   })
 
-  it('coming_soon: nobody may activate (flip to available to ship)', () => {
+  it('coming_soon: only internal dev tenants may activate', () => {
     expect(canActivateModule('coming_soon', external)).toBe(false)
-    expect(canActivateModule('coming_soon', internal)).toBe(false)
+    expect(canActivateModule('coming_soon', internal)).toBe(true)
   })
 
   it('development: only internal tenant may activate', () => {
