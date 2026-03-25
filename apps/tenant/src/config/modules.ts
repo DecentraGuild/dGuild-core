@@ -21,7 +21,7 @@ export const MODULE_NAV: Record<string, ModuleNavEntry> = Object.fromEntries(
     ]),
 )
 
-/** Modules whose code exists and can appear in tenant nav (status: available, development, deprecated). */
+/** Modules whose code exists and can appear in tenant nav (catalog navigable statuses, excluding off). */
 export const IMPLEMENTED_MODULES = new Set(
   catalog.filter((m: ModuleCatalogEntry) => isModuleNavigable(m.status)).map((m) => m.id),
 )
