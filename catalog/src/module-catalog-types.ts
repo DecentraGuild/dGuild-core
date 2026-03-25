@@ -5,6 +5,8 @@
 
 import type { PricingModel } from '@decentraguild/billing'
 
+import { DEFAULT_INTERNAL_DEV_TENANT_IDS } from './internal-dev-tenant-env.js'
+
 export type ModuleCatalogStatus =
   | 'available'
   | 'coming_soon'
@@ -110,21 +112,12 @@ export function isModuleNavigable(status: ModuleCatalogStatus): boolean {
   return NAVIGABLE_STATUSES.has(status)
 }
 
-const DEFAULT_INTERNAL_DEV_TENANT_IDS: readonly string[] = ['0000000']
+export {
+  parseInternalDevTenantIds,
+  resolveInternalDevTenantIdsFromEnv,
+} from './internal-dev-tenant-env.js'
 
 let internalDevTenantIdsOverride: readonly string[] | null = null
-
-export function parseInternalDevTenantIds(raw: string | undefined | null): string[] {
-  if (raw == null || typeof raw !== 'string') return []
-  return [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))]
-}
-
-export function resolveInternalDevTenantIdsFromEnv(
-  envValue: string | undefined | null,
-): readonly string[] {
-  const extra = parseInternalDevTenantIds(envValue)
-  return [...new Set([...DEFAULT_INTERNAL_DEV_TENANT_IDS, ...extra])]
-}
 
 export function setInternalDevTenantIds(ids: readonly string[] | null): void {
   internalDevTenantIdsOverride = ids === null ? null : [...ids]
