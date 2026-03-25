@@ -207,8 +207,9 @@ defineEmits<{
 
 .market-browse-detail__name {
   font-size: var(--theme-font-xl);
-  font-weight: 600;
+  font-weight: 700;
   margin: 0;
+  color: var(--theme-primary);
 }
 
 .market-browse-detail__ticker-row {
@@ -340,7 +341,7 @@ defineEmits<{
 .market-browse-detail__btn--create:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  background: var(--theme-bg-tertiary);
+  background: var(--theme-bg-muted);
   color: var(--theme-text-muted);
   border-color: var(--theme-border);
 }

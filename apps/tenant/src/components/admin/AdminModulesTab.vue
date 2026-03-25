@@ -8,14 +8,17 @@
             v-for="id in moduleIds"
             :key="id"
             class="admin__module-row"
-            :class="{ 'admin__module-row--staging': form.modulesById[id] === 'staging' }"
+            :class="{
+              'admin__module-row--staging': form.modulesById[id] === 'staging',
+              'admin__module-row--locked': moduleStatus(id) === 'off',
+            }"
           >
             <div class="admin__module-cell admin__module-cell--action">
               <Button
-                v-if="id !== 'admin'"
+                v-if="id !== 'admin' && moduleStatus(id) !== 'off'"
                 :variant="moduleActionVariant(id)"
                 size="sm"
-                :disabled="isDeactivating(id)"
+                :disabled="isDeactivating(id) || (getModuleState(id) === 'off' && !moduleCanActivate(id))"
                 @click="onModuleAction(id)"
               >
                 {{ moduleActionLabel(id) }}
@@ -23,6 +26,8 @@
             </div>
             <div class="admin__module-cell admin__module-cell--name">
               <span class="admin__module-name">{{ MODULE_NAV[id]?.label ?? id }}</span>
+              <Badge v-if="moduleStatus(id) === 'coming_soon'" variant="outline" class="admin__module-badge">Coming soon</Badge>
+              <Badge v-else-if="moduleStatus(id) === 'deprecated'" variant="outline" class="admin__module-badge">Deprecated</Badge>
             </div>
             <div class="admin__module-cell admin__module-cell--actions">
               <button
@@ -70,15 +75,20 @@
 import type { ModuleState } from '@decentraguild/core'
 import { Card } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
+import { Badge } from '~/components/ui/badge'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import { Icon } from '@iconify/vue'
-import { getModuleCatalogEntry } from '@decentraguild/catalog'
+import { getModuleCatalogEntry, canActivateModule } from '@decentraguild/catalog'
 import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 import { MODULE_NAV } from '~/config/modules'
 import type { AdminForm } from '~/composables/admin/useAdminForm'
+import { useTenantStore } from '~/stores/tenant'
 
 const config = useRuntimeConfig()
 const platformDocsBase = config.public.platformDocsUrl as string ?? 'https://dguild.org/docs'
+
+const tenantStore = useTenantStore()
+const tenantId = computed(() => tenantStore.tenantId ?? '')
 
 const infoModuleId = ref<string | null>(null)
 const infoModule = computed<ModuleCatalogEntry | null>(() =>
@@ -117,12 +127,24 @@ function getModuleState(moduleId: string): ModuleState {
   return (props.form.modulesById[moduleId] ?? 'off') as ModuleState
 }
 
+function moduleCanActivate(moduleId: string): boolean {
+  const entry = getModuleCatalogEntry(moduleId)
+  if (!entry) return false
+  return canActivateModule(entry.status, tenantId.value)
+}
+
+function moduleStatus(moduleId: string) {
+  return getModuleCatalogEntry(moduleId)?.status
+}
+
 function moduleActionLabel(moduleId: string): string {
   const s = getModuleState(moduleId)
-  if (s === 'off') return 'Enable'
   if (s === 'staging') return 'Staging'
   if (s === 'active') return 'Active'
   if (s === 'deactivating') return 'Deactivating'
+  const status = moduleStatus(moduleId)
+  if (status === 'coming_soon') return 'Coming soon'
+  if (status === 'deprecated') return 'Unavailable'
   return 'Enable'
 }
 

@@ -55,7 +55,7 @@
                   <span v-else-if="opsSlugCheckStatus === 'taken'" class="text-xs text-destructive">Taken</span>
                   <span v-else-if="opsSlugCheckStatus === 'checking'" class="text-xs text-muted-foreground">Checking…</span>
                   <Button size="xs" variant="ghost" :disabled="!opsSlugInput.trim() || slugSetLoading" @click="checkOpsSlug()">Check</Button>
-                  <Button size="xs" variant="primary" :disabled="opsSlugCheckStatus !== 'available' || slugSetLoading" @click="setOpsSlug()">{{ slugSetLoading ? 'Saving…' : 'Set slug' }}</Button>
+                  <Button size="xs" variant="default" :disabled="opsSlugCheckStatus !== 'available' || slugSetLoading" @click="setOpsSlug()">{{ slugSetLoading ? 'Saving…' : 'Set slug' }}</Button>
                   <span v-if="opsSlugError" class="text-xs text-destructive w-full">{{ opsSlugError }}</span>
                 </dd>
               </div>
@@ -84,7 +84,7 @@
                   <div class="mt-2 flex flex-col gap-2">
                     <div class="flex items-center gap-2 min-w-0">
                       <Input v-model="addAdminWallet" type="text" placeholder="Wallet address" class="flex-1 min-w-0" :disabled="addAdminLoading" @keydown.enter.prevent="addAdmin()" />
-                      <Button size="xs" variant="primary" :disabled="!addAdminWallet.trim() || addAdminLoading" @click="addAdmin()">{{ addAdminLoading ? 'Adding…' : 'Add admin' }}</Button>
+                      <Button size="xs" variant="default" :disabled="!addAdminWallet.trim() || addAdminLoading" @click="addAdmin()">{{ addAdminLoading ? 'Adding…' : 'Add admin' }}</Button>
                     </div>
                     <span v-if="addAdminError" class="text-xs text-destructive">{{ addAdminError }}</span>
                   </div>
@@ -159,7 +159,7 @@
                     <option value="">{{ unboundWhitelists.length ? 'Select list…' : 'No unbound lists' }}</option>
                     <option v-for="u in unboundWhitelists" :key="u.address" :value="u.address">{{ u.name }} ({{ truncateAddress(u.address) }})</option>
                   </select>
-                  <Button size="xs" variant="primary" :disabled="!selectedUnboundWhitelist || whitelistBindLoading" @click="bindWhitelist">{{ whitelistBindLoading ? 'Binding…' : 'Bind' }}</Button>
+                  <Button size="xs" variant="default" :disabled="!selectedUnboundWhitelist || whitelistBindLoading" @click="bindWhitelist">{{ whitelistBindLoading ? 'Binding…' : 'Bind' }}</Button>
                 </div>
                 <p v-if="whitelistError" class="mt-2 text-xs text-destructive">{{ whitelistError }}</p>
               </div>
@@ -193,7 +193,7 @@
                     <option value="">{{ unboundRaffles.length ? 'Select raffle…' : 'No unbound raffles' }}</option>
                     <option v-for="u in unboundRaffles" :key="u.rafflePubkey" :value="u.rafflePubkey">{{ u.name }} ({{ truncateAddress(u.rafflePubkey) }})</option>
                   </select>
-                  <Button size="xs" variant="primary" :disabled="!selectedUnboundRaffle || raffleBindLoading" @click="bindRaffle">{{ raffleBindLoading ? 'Binding…' : 'Bind' }}</Button>
+                  <Button size="xs" variant="default" :disabled="!selectedUnboundRaffle || raffleBindLoading" @click="bindRaffle">{{ raffleBindLoading ? 'Binding…' : 'Bind' }}</Button>
                 </div>
                 <p v-if="raffleError" class="mt-2 text-xs text-destructive">{{ raffleError }}</p>
               </div>
@@ -226,7 +226,7 @@
                   <Input v-model="crafterImportMint" type="text" placeholder="Mint address" :disabled="crafterImportLoading" class="min-w-[12rem]" />
                   <Input v-model="crafterImportName" type="text" placeholder="Name (optional)" :disabled="crafterImportLoading" class="w-28 min-w-0" />
                   <Input v-model="crafterImportSymbol" type="text" placeholder="Symbol (optional)" :disabled="crafterImportLoading" class="w-28 min-w-0" />
-                  <Button size="xs" variant="primary" :disabled="!crafterImportMint.trim() || crafterImportLoading" @click="importCrafterToken">{{ crafterImportLoading ? 'Importing…' : 'Import' }}</Button>
+                  <Button size="xs" variant="default" :disabled="!crafterImportMint.trim() || crafterImportLoading" @click="importCrafterToken">{{ crafterImportLoading ? 'Importing…' : 'Import' }}</Button>
                 </div>
                 <p v-if="crafterImportError" class="mt-2 text-xs text-destructive">{{ crafterImportError }}</p>
               </div>
@@ -245,7 +245,7 @@
                   <label :for="`track-${t.scopeKey}`" class="text-sm text-muted-foreground">{{ t.label }}</label>
                   <Input :id="`track-${t.scopeKey}`" v-model.number="watchtowerTrackInputs[t.scopeKey]" type="number" min="0" class="w-16" />
                 </div>
-                <Button size="xs" variant="primary" :disabled="watchtowerTracksSaving" @click="saveWatchtowerTracks">{{ watchtowerTracksSaving ? 'Saving…' : 'Save tracks' }}</Button>
+                <Button size="xs" variant="default" :disabled="watchtowerTracksSaving" @click="saveWatchtowerTracks">{{ watchtowerTracksSaving ? 'Saving…' : 'Save tracks' }}</Button>
               </div>
               <p v-if="watchtowerTracksError" class="mt-2 text-xs text-destructive">{{ watchtowerTracksError }}</p>
             </div>
@@ -309,7 +309,7 @@
           <p v-if="setPeriodEndError" class="text-xs text-destructive m-0">{{ setPeriodEndError }}</p>
           <DialogFooter class="gap-2 sm:gap-0">
             <Button type="button" variant="secondary" @click="setPeriodEndModuleId = null">Cancel</Button>
-            <Button type="submit" variant="primary" :disabled="setPeriodEndSaving">{{ setPeriodEndSaving ? 'Saving…' : 'Set end date' }}</Button>
+            <Button type="submit" variant="default" :disabled="setPeriodEndSaving">{{ setPeriodEndSaving ? 'Saving…' : 'Set end date' }}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

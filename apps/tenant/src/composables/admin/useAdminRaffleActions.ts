@@ -81,7 +81,7 @@ export function useAdminRaffleActions(options: AdminRaffleActionsOptions) {
         message: msg,
         signature: null,
       })
-      throw new Error(msg)
+      throw new Error(msg, { cause: e })
     }
   }
 

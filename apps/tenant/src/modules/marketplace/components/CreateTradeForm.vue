@@ -496,13 +496,17 @@ async function create() {
 
 <style scoped>
 .create-trade-form__error {
-  background: var(--theme-status-error, #fcc);
-  color: var(--theme-status-error, #111);
+  background: var(--theme-surface-error);
+  color: var(--theme-text-error);
+  padding: var(--theme-space-sm) var(--theme-space-md);
+  border: var(--theme-border-thin) solid var(--theme-error);
+  border-radius: var(--theme-radius-sm);
+  font-size: var(--theme-font-sm);
 }
 
 .create-trade-form__hint {
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-secondary, #c8c8d1);
+  color: var(--theme-text-secondary);
   margin-bottom: var(--theme-space-md);
 }
 
@@ -513,13 +517,13 @@ async function create() {
 .create-trade-form__label {
   display: block;
   font-size: var(--theme-font-sm);
-  color: var(--theme-text-primary, #ffffff);
+  color: var(--theme-text-primary);
   margin-bottom: var(--theme-space-xs);
 }
 
 .create-trade-form__field-hint {
   font-size: var(--theme-font-xs);
-  color: var(--theme-text-secondary, #c8c8d1);
+  color: var(--theme-text-secondary);
   margin-top: var(--theme-space-xs);
 }
 

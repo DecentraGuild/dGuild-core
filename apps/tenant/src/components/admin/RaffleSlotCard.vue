@@ -160,7 +160,7 @@ function ticketMintShort(chainData: RaffleChainData): string {
   justify-content: flex-start;
   min-height: 180px;
   padding: var(--theme-space-lg);
-  border: 2px solid var(--theme-border);
+  border: var(--theme-border-medium) solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
   background: var(--theme-bg-card);
   text-align: left;

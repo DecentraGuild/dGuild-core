@@ -388,9 +388,13 @@ watch(tab, (t) => {
   border-color: var(--theme-border, hsl(var(--border)));
   background-color: var(--theme-bg-card);
   color: var(--theme-text-primary);
+  box-shadow: var(--theme-shadow-card);
+  gap: var(--theme-space-md);
 }
 .admin__panel h3 {
   font-size: var(--theme-font-lg);
+  font-weight: 600;
+  color: var(--theme-secondary);
   margin-bottom: var(--theme-space-md);
 }
 .admin__panel .form-input,
@@ -593,7 +597,7 @@ watch(tab, (t) => {
 }
 .admin__extend-inline .pricing-widget__period-btn--active {
   background: var(--theme-primary);
-  color: var(--theme-text-on-primary, #fff);
+  color: var(--theme-primary-inverse, #fff);
 }
 .admin__extend-cancel {
   background: none;

@@ -86,7 +86,7 @@
 definePageMeta({ title: 'Modules' })
 import { Icon } from '@iconify/vue'
 import { formatUsdc } from '@decentraguild/display'
-import { getModuleCatalogList } from '@decentraguild/catalog'
+import { getModuleCatalogList, isModulePubliclyVisible } from '@decentraguild/catalog'
 import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 import DguildCenter from '~/components/DguildCenter.vue'
 import { Badge } from '~/components/ui/badge'
@@ -105,19 +105,13 @@ function docsUrl(entry: ModuleCatalogEntry) {
 function getFromPrice(entry: ModuleCatalogEntry): string | null {
   const p = entry.pricing
   if (!p) return null
-  if (p.modelType === 'flat_one_time') {
-    return `${formatUsdc(p.amount)} USDC one-time`
-  }
-  if (p.modelType === 'flat_recurring') {
-    const yearly = p.recurringYearly ?? (p.recurringPrice ?? 0) * 12
-    return `${formatUsdc(yearly)} USDC/yr`
-  }
   if (p.modelType === 'tiered_addons' && p.tiers?.length) {
     const minPrice = Math.min(...p.tiers.map((t) => t.recurringPrice))
     return `${formatUsdc(minPrice)} USDC/mo`
   }
   if (p.modelType === 'tiered_with_one_time_per_unit' && p.tiers?.length) {
     const baseTier = p.tiers[0]
+    if (!baseTier) return null
     const unitLabel = (p.oneTimeUnitName ?? 'unit').toLowerCase()
     if (baseTier.oneTimePerUnit) {
       return `${formatUsdc(baseTier.oneTimePerUnit)} USDC ${unitLabel}`
@@ -127,22 +121,12 @@ function getFromPrice(entry: ModuleCatalogEntry): string | null {
     }
     return null
   }
-  if (p.modelType === 'add_unit') {
-    const isWhitelist = p.conditionKey === 'listsCount'
-    const unitLabel = isWhitelist ? 'per list' : 'per unit'
-    if (p.pricePerUnit) {
-      return `${formatUsdc(p.pricePerUnit)} USDC ${unitLabel}`
-    }
-    return null
-  }
   return null
 }
 
-const DISPLAY_STATUSES = new Set<'available' | 'coming_soon'>(['available', 'coming_soon'])
-
 const displayModules = computed(() =>
   getModuleCatalogList()
-    .filter((m) => !m.docsOnly && DISPLAY_STATUSES.has(m.status as 'available' | 'coming_soon'))
+    .filter((m) => !m.docsOnly && isModulePubliclyVisible(m.status))
 )
 </script>
 

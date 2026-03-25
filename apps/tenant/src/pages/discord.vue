@@ -77,6 +77,10 @@
             <p v-if="addError" class="discord-page__error">{{ addError }}</p>
           </div>
 
+          <div v-if="roleCards.length > 0" class="discord-page__role-cards">
+            <DiscordRoleCardsCarousel :role-cards="roleCards" />
+          </div>
+
           <ConnectWalletModal
             :open="showConnectModal"
             title="Link another wallet"
@@ -91,10 +95,6 @@
           />
         </template>
       </Card>
-
-      <aside v-if="discordVisible && roleCards.length > 0" class="discord-page__carousel">
-        <DiscordRoleCardsCarousel :role-cards="roleCards" />
-      </aside>
     </div>
   </PageSection>
 </template>
@@ -158,7 +158,9 @@ onUnmounted(teardown)
 .discord-page__banner {
   padding: var(--theme-space-md);
   margin-bottom: var(--theme-space-md);
-  background: var(--theme-status-warning, #ecc94b);
+  background: var(--theme-surface-warning);
+  border: var(--theme-border-thin) solid var(--theme-warning);
+  border-radius: var(--theme-radius-sm);
   color: var(--theme-text-primary);
   font-size: var(--theme-font-sm);
 }
@@ -169,20 +171,12 @@ onUnmounted(teardown)
   gap: var(--theme-space-xl);
 }
 
-@media (min-width: 768px) {
-  .discord-page__layout {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-}
-
 .discord-page__card {
   max-width: 36rem;
-  flex-shrink: 0;
 }
 
-.discord-page__carousel {
-  flex: 1;
+.discord-page__role-cards {
+  margin-top: var(--theme-space-md);
   min-width: 0;
 }
 
@@ -215,6 +209,8 @@ onUnmounted(teardown)
 
 .discord-page__heading {
   font-size: var(--theme-font-md);
+  font-weight: 600;
+  color: var(--theme-secondary);
   margin-bottom: var(--theme-space-xs);
 }
 

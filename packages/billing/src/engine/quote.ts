@@ -5,17 +5,15 @@ import type { DbClient } from '../types.js'
 import type { QuoteLineItem, QuoteParams, QuoteResult, QuotedMeterTierInfo } from '../types.js'
 import { getAdapter } from '../adapters/registry.js'
 import { getProductDisplayType } from '../product-display.js'
+import {
+  findTier,
+  marketplaceMintsRecurringUsd,
+  quotedMeterTiersForMarketplaceMints,
+  type TierRow,
+} from './marketplace-mints-pricing.js'
 
 const QUOTE_TTL_MINUTES = 60
 const DURATION_WHITELIST = [0, 30, 90, 365] as const
-
-interface TierRow {
-  min_quantity: number
-  max_quantity: number | null
-  unit_price: number
-  tier_price: number | null
-  label: string | null
-}
 
 interface DurationRow {
   duration_days: number
@@ -38,16 +36,6 @@ function mapTierRow(r: Record<string, unknown>): TierRow {
     tier_price: r.tier_price == null || r.tier_price === '' ? null : Number(r.tier_price),
     label: (r.label as string | null) ?? null,
   }
-}
-
-function findTier(tiers: TierRow[], quantity: number): TierRow | null {
-  let best: TierRow | null = null
-  for (const t of tiers) {
-    if (t.min_quantity <= quantity && (t.max_quantity == null || quantity <= t.max_quantity)) {
-      if (!best || t.min_quantity > best.min_quantity) best = t
-    }
-  }
-  return best
 }
 
 function displayPriceAtTarget(
@@ -155,6 +143,33 @@ export async function resolveQuote(
         .eq('product_key', params.productKey)
         .eq('meter_key', meterKey)
       const tiers = ((tierRows ?? []) as Record<string, unknown>[]).map((row) => mapTierRow(row))
+
+      if (params.productKey === 'marketplace' && meterKey === 'mints_count') {
+        if (target > 0 && tiers.length === 0) {
+          throw new Error(`No pricing tiers configured for ${params.productKey} / ${meterKey}`)
+        }
+        if (target > 0 && tiers.length > 0) {
+          quotedMeterTiers[meterKey] = quotedMeterTiersForMarketplaceMints(
+            tiers,
+            target,
+            durationRule.price_multiplier,
+          )
+          recurringDisplayUsdc += marketplaceMintsRecurringUsd(tiers, target, durationRule.price_multiplier)
+        }
+        if (gap <= 0) continue
+        const itemPrice = marketplaceMintsRecurringUsd(tiers, target, durationRule.price_multiplier)
+        lineItems.push({
+          source: 'tier',
+          meter_key: meterKey,
+          quantity: target,
+          duration_days: durationDays,
+          price_usdc: itemPrice,
+          label: quotedMeterTiers[meterKey]?.label ?? undefined,
+          price_multiplier: durationRule.price_multiplier,
+        })
+        priceUsdc += itemPrice
+        continue
+      }
 
       if (target > 0 && tiers.length > 0) {
         const displayTier = findTier(tiers, target)

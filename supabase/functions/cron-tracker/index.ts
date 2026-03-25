@@ -276,6 +276,12 @@ Deno.serve(async (req: Request) => {
     return errorResponse('Unauthorized', req, 401)
   }
 
+  // Bare `invoke_edge_function('cron-tracker')` sends `{}` (default jsonb). A ghost pg_cron
+  // row can keep firing that after migration to tracker-unified; treat as unified batch work.
+  if (!mode) {
+    mode = 'unified'
+  }
+
   if (mode !== 'unified') {
     return errorResponse('Batch requests require mode "unified"', req, 400)
   }

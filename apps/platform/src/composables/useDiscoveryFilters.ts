@@ -1,12 +1,12 @@
 import type { Ref } from 'vue'
-import type { TenantConfig, ModuleGateModuleId } from '@decentraguild/core'
+import type { TenantConfig, ModuleGateModuleId, StoredGateValue, MarketplaceGateSettings } from '@decentraguild/core'
 import {
   getModuleState,
   isModuleVisibleToMembers,
   getEffectiveGate,
   getModuleGateFromTenant,
 } from '@decentraguild/core'
-import { getModuleCatalogList, getModuleDisplayName, isModuleNavigable } from '@decentraguild/catalog'
+import { getModuleCatalogList, getModuleDisplayName, isModuleNavigable, isModulePubliclyVisible } from '@decentraguild/catalog'
 
 export interface ActiveModuleWithGate {
   name: string
@@ -31,8 +31,11 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
   }, { immediate: true })
 
   function hasGates(tenant: TenantConfig): boolean {
-    const account = tenant.defaultGate?.account?.trim()
-    return Boolean(account)
+    const dg = tenant.defaultGate
+    if (dg && typeof dg === 'object' && 'account' in dg) {
+      return Boolean(dg.account?.trim())
+    }
+    return false
   }
 
   function activeModuleIds(tenant: TenantConfig): string[] {
@@ -43,22 +46,22 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
   }
 
   /** Gate for a module: from getModuleGateFromTenant (marketplace/raffles) or module.settingsjson.gate. */
-  function getModuleGate(
-    tenant: TenantConfig,
-    moduleId: string
-  ): { programId: string; account: string } | null | undefined {
+  function getModuleGate(tenant: TenantConfig, moduleId: string): StoredGateValue | undefined {
     if (moduleId === 'marketplace' || moduleId === 'raffles') {
-      const fromCore = getModuleGateFromTenant(tenant, moduleId as ModuleGateModuleId)
-      return fromCore
+      return getModuleGateFromTenant(tenant, moduleId as ModuleGateModuleId)
     }
     const entry = tenant.modules?.[moduleId]
     const sj = entry?.settingsjson as Record<string, unknown> | undefined
     if (!sj) return undefined
-    const direct = sj.gate as { programId?: string; account?: string } | null | undefined
+    const direct = sj.gate as MarketplaceGateSettings | null | undefined
     if (!direct) return direct
     const defaultGate = tenant.defaultGate
+    const defaultProgramId =
+      defaultGate && typeof defaultGate === 'object' && 'programId' in defaultGate
+        ? defaultGate.programId
+        : undefined
     return {
-      programId: direct.programId ?? defaultGate?.programId ?? '',
+      programId: direct.programId ?? defaultProgramId ?? '',
       account: direct.account ?? '',
     }
   }
@@ -78,7 +81,7 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
 
   const moduleFilterOptions = computed(() => {
     const list = getModuleCatalogList()
-      .filter((m) => !m.docsOnly && isModuleNavigable(m.status))
+      .filter((m) => !m.docsOnly && isModuleNavigable(m.status) && isModulePubliclyVisible(m.status))
     return list.map((m) => ({ value: m.id, label: m.name }))
   })
 

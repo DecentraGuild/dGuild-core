@@ -26,3 +26,4 @@ export {
   isBaseCurrencyMint,
 } from './currencies.js'
 export { ADDRESS_BOOK_DEFAULT_MINTS } from './address-book-defaults.js'
+export { generateRandomNumericTenantId } from './tenant-id.js'

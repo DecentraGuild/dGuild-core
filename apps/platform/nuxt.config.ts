@@ -44,18 +44,14 @@ export default defineNuxtConfig({
   build: {
     transpile: ['@decentraguild/ui', '@decentraguild/auth', '@decentraguild/web3', '@decentraguild/contracts', '@decentraguild/catalog'],
   },
-  hooks: {
-    'vite:extendConfig'(config) {
-      config.plugins = config.plugins || []
-      config.plugins.push(
-        nodePolyfills({
-          include: ['buffer'],
-          globals: { Buffer: true },
-        })
-      )
-    },
-  },
   vite: {
+    plugins: [
+      // vite-plugin-node-polyfills vs Nuxt's bundled Vite: duplicate Plugin typings in pnpm.
+      nodePolyfills({
+        include: ['buffer'],
+        globals: { Buffer: true },
+      }) as never,
+    ],
     server: {
       hmr: { port: 3000, clientPort: 3000 },
     },

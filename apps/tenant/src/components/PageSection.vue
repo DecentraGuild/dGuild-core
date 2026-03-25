@@ -35,9 +35,13 @@ defineProps<{
 
 .page-section__title {
   font-size: var(--theme-font-xl);
-  font-weight: 600;
-  color: var(--theme-text-primary);
+  font-weight: 700;
   margin: 0;
+  background: var(--theme-gradient-primary, var(--theme-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--theme-primary);
 }
 
 .page-section__costs-info {

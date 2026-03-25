@@ -492,7 +492,11 @@ const pricingModel = computed((): TieredAddonsPricing | TieredWithOneTimePerUnit
   if (!q?.meters) return null
   const conditionKeys = Object.keys(q.meters)
   const included = Object.fromEntries(
-    (Object.entries(q.meters) as [string, { used: number; limit: number }][]).map(([k, v]) => [k, v.limit]),
+    (Object.entries(q.meters) as [string, { used: number; limit: number }][]).map(([k, v]) => {
+      const tierInfo = q.quotedMeterTiers?.[k]
+      const cap = tierInfo?.maxQuantity != null ? tierInfo.maxQuantity : v.limit
+      return [k, cap]
+    }),
   )
   return {
     modelType: 'tiered_addons',
@@ -608,11 +612,13 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 .pricing-widget {
   background: var(--theme-bg-card);
   border: var(--theme-border-thin) solid var(--theme-border);
+  border-top: var(--theme-border-medium) solid var(--theme-primary);
   border-radius: var(--theme-radius-md);
   padding: var(--theme-space-md);
   display: flex;
   flex-direction: column;
   gap: var(--theme-space-sm);
+  box-shadow: var(--theme-shadow-card);
 }
 
 .pricing-widget__loading {
@@ -817,7 +823,7 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 
 .pricing-widget__period-btn--active {
   background: var(--theme-primary);
-  color: var(--theme-text-on-primary, #fff);
+  color: var(--theme-primary-inverse, #fff);
 }
 
 .pricing-widget__period-btn--active:hover {

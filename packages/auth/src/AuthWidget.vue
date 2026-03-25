@@ -74,8 +74,8 @@ onUnmounted(() => {
   unsubscribeConnector?.()
 })
 
-async function handleConnect(connectorId: WalletConnectorId) {
-  const ok = await connectAndSignIn(connectorId)
+async function handleConnect(connectorId: string) {
+  const ok = await connectAndSignIn(connectorId as WalletConnectorId)
   if (ok) showConnectModal.value = false
 }
 

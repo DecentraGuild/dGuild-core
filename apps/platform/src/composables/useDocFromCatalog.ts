@@ -1,5 +1,5 @@
 import { marked } from 'marked'
-import { getModuleCatalogList, getModuleCatalogEntry } from '@decentraguild/catalog'
+import { getModuleCatalogList, getModuleCatalogEntry, isModuleInPublicDocs } from '@decentraguild/catalog'
 
 const GENERAL_SLUG_TO_KEY: Record<string, string> = {
   'getting-started': 'gettingStarted',
@@ -41,7 +41,8 @@ export function getDocContentFromCatalog(path: string): DocFromCatalogResult | n
   if (normalized.startsWith('/docs/modules/')) {
     const rest = normalized.slice('/docs/modules/'.length)
     const parts = rest.split('/')
-    const id = parts[0]
+    const id = parts[0] ?? ''
+    if (!id) return null
     const chapter = (parts[1] ?? 'overview') as string
     const entry = getModuleCatalogEntry(id)
     if (!entry?.docs) return null
@@ -76,6 +77,7 @@ export function getDocsSidebarSections(): DocsSidebarSection[] {
   }
   for (const m of list) {
     if (m.id === 'dguild' || !m.docs) continue
+    if (!isModuleInPublicDocs(m.status)) continue
     const items: { path: string; label: string }[] = [
       { path: `/docs/modules/${m.id}`, label: 'Overview' },
     ]
@@ -89,7 +91,7 @@ export function getDocsSidebarSections(): DocsSidebarSection[] {
 
 export function getDocsOrder(): { path: string; label: string }[] {
   const list = getModuleCatalogList()
-  const order: DocsNavItem[] = []
+  const order: { path: string; label: string }[] = []
   const dguild = list.find((m) => m.id === 'dguild')
   if (dguild?.docs) {
     order.push({ path: '/docs', label: 'Overview' })
@@ -100,6 +102,7 @@ export function getDocsOrder(): { path: string; label: string }[] {
   }
   for (const m of list) {
     if (m.id === 'dguild' || !m.docs) continue
+    if (!isModuleInPublicDocs(m.status)) continue
     order.push({ path: `/docs/modules/${m.id}`, label: `${m.name}` })
     if (m.docs.mechanics) order.push({ path: `/docs/modules/${m.id}/mechanics`, label: 'Mechanics' })
     if (m.docs.setup) order.push({ path: `/docs/modules/${m.id}/setup`, label: 'Setup' })

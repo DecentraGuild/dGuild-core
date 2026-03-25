@@ -312,7 +312,7 @@ function openMint(entry: CatalogEntry) {
 }
 
 .watchtower-page__card--clickable:hover {
-  background-color: var(--theme-bg-muted, #f3f4f6);
+  background-color: var(--theme-bg-muted);
 }
 
 .watchtower-page__card-thumb {

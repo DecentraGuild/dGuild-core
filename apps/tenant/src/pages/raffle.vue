@@ -314,8 +314,9 @@ const {
 
 .raffle-panel__title {
   font-size: var(--theme-font-lg);
-  font-weight: 600;
+  font-weight: 700;
   margin: 0 2rem var(--theme-space-sm) 0;
+  color: var(--theme-primary);
 }
 
 .raffle-panel__desc {
@@ -380,7 +381,7 @@ const {
   font-size: var(--theme-font-md);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
-  background: var(--theme-bg);
+  background: var(--theme-bg-primary);
 }
 
 .raffle-panel__total {

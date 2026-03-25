@@ -11,12 +11,14 @@ export interface ModuleNavEntry {
 
 const catalog = getModuleCatalogList().filter((m) => !m.docsOnly)
 
-/** Module id to route, label, and nav icon. Derived from the module catalog. */
+/** Module id to route, label, and nav icon. Excludes off-status modules (fully hidden). */
 export const MODULE_NAV: Record<string, ModuleNavEntry> = Object.fromEntries(
-  catalog.map((m: ModuleCatalogEntry) => [
-    m.id,
-    { path: m.routePath, label: m.name, icon: m.icon },
-  ]),
+  catalog
+    .filter((m: ModuleCatalogEntry) => m.status !== 'off')
+    .map((m: ModuleCatalogEntry) => [
+      m.id,
+      { path: m.routePath, label: m.name, icon: m.icon },
+    ]),
 )
 
 /** Modules whose code exists and can appear in tenant nav (status: available, development, deprecated). */

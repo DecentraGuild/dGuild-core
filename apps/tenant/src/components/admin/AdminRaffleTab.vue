@@ -557,7 +557,7 @@ defineExpose({
   justify-content: center;
   min-height: 180px;
   padding: var(--theme-space-lg);
-  border: 2px dashed var(--theme-border);
+  border: var(--theme-border-medium) dashed var(--theme-border);
   border-radius: var(--theme-radius-lg);
   background: var(--theme-bg-card);
   cursor: pointer;
@@ -640,7 +640,7 @@ defineExpose({
   align-items: center;
   gap: var(--theme-space-xs);
   padding: var(--theme-space-lg);
-  border: 2px solid var(--theme-border);
+  border: var(--theme-border-medium) solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
   background: var(--theme-bg-card);
   cursor: pointer;

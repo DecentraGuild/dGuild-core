@@ -236,6 +236,8 @@ watch(wallet, () => {
 }
 .gates-page__heading {
   font-size: var(--theme-font-lg);
+  font-weight: 600;
+  color: var(--theme-secondary);
   margin: 0 0 var(--theme-space-sm);
 }
 .gates-page__intro {
@@ -249,7 +251,7 @@ watch(wallet, () => {
   position: relative;
   overflow: hidden;
   border-radius: var(--theme-radius-md);
-  border: 1px solid var(--theme-border);
+  border: var(--theme-border-thin) solid var(--theme-border);
   background-color: var(--theme-bg-secondary);
   background-size: cover;
   background-position: center;
@@ -258,8 +260,13 @@ watch(wallet, () => {
   min-height: 140px;
 }
 
+.gates-page__card-item:hover {
+  border-color: var(--theme-primary);
+}
+
 .gates-page__card-item--active {
   border-color: var(--theme-primary);
+  box-shadow: var(--theme-shadow-glow);
 }
 
 .gates-page__card-overlay {
@@ -280,7 +287,7 @@ watch(wallet, () => {
 .gates-page__card-name {
   font-size: var(--theme-font-sm);
   font-weight: 600;
-  color: #fff;
+  color: var(--theme-text-primary);
 }
 
 .gates-page__detail {

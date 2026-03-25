@@ -306,6 +306,8 @@ const cannotFillReason = computed(() => {
 
 .escrow-modal__section-title {
   margin-top: 0;
+  font-weight: 600;
+  color: var(--theme-secondary);
 }
 
 .escrow-modal__owner .escrow-modal__section-title {
@@ -462,7 +464,9 @@ const cannotFillReason = computed(() => {
 
 .escrow-modal__fill-winding-down {
   padding: var(--theme-space-sm);
-  background: var(--theme-status-warning, #ecc94b);
+  background: var(--theme-surface-warning);
+  border: var(--theme-border-thin) solid var(--theme-warning);
+  border-radius: var(--theme-radius-sm);
   color: var(--theme-text-primary);
 }
 

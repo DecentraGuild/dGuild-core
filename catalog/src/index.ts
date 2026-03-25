@@ -6,6 +6,11 @@ export type {
 export {
   NAVIGABLE_STATUSES,
   isModuleNavigable,
+  INTERNAL_DEV_TENANT_ID,
+  isInternalDevTenant,
+  canActivateModule,
+  isModulePubliclyVisible,
+  isModuleInPublicDocs,
 } from './module-catalog-types.js'
 
 export {

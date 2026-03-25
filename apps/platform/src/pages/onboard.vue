@@ -66,6 +66,7 @@ import {
   sendAndConfirmTransaction,
 } from '@decentraguild/web3'
 import { useSupabase, invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { generateRandomNumericTenantId } from '@decentraguild/core'
 import { useRpc } from '~/composables/useRpc'
 
 const auth = useAuth()
@@ -92,8 +93,8 @@ const form = reactive({
 const saving = ref(false)
 const error = ref<string | null>(null)
 
-async function handleConnectAndSignIn(connectorId: WalletConnectorId) {
-  const ok = await auth.connectAndSignIn(connectorId)
+async function handleConnectAndSignIn(connectorId: string) {
+  const ok = await auth.connectAndSignIn(connectorId as WalletConnectorId)
   if (ok) showConnectModal.value = false
 }
 
@@ -121,7 +122,7 @@ async function submit() {
   saving.value = true
   error.value = null
   try {
-    const tenantId = crypto.randomUUID().replace(/-/g, '').slice(0, 7)
+    const tenantId = generateRandomNumericTenantId()
 
     const quoteData = await invokeEdgeFunction<{ quoteId?: string; priceUsdc?: number }>(supabase, 'billing', {
       action: 'quote',

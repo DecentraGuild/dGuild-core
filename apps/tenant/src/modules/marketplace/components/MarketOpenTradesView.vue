@@ -406,7 +406,7 @@ async function handleQuickCancel(escrow: EscrowWithAddress) {
 .market-open-trades__create-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  background: var(--theme-bg-tertiary);
+  background: var(--theme-bg-muted);
   color: var(--theme-text-muted);
 }
 

@@ -1,7 +1,7 @@
 <template>
   <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
     <DialogContent
-      :class="['mint-modal__panel p-0 gap-0 max-h-[90vh]', display?.kind === 'NFT' ? 'mint-modal__panel--wide' : '']"
+      :class="['mint-modal__panel p-0 gap-0 max-h-[90vh]', display?.kind === 'NFT' || display?.kind === 'SPL' ? 'mint-modal__panel--wide' : '']"
       :show-close-button="false"
     >
       <VisuallyHidden>
@@ -62,6 +62,8 @@
               :combined-holders="combinedHolders"
               :holders-updated-at="display.track_holders ? display.holdersUpdatedAt : null"
               :loading="memberNftsLoading"
+              :spl-mode="holdersSectionSplMode"
+              :format-token-amount="formatHolderAmount"
               :nft-link="nftLink"
               :copied-wallet="copiedWallet"
               :copied-mint="copiedMint"
@@ -147,7 +149,7 @@ const emit = defineEmits<{ 'update:modelValue': [v: boolean]; saved: [] }>()
 const {
   display, loading, error, isWatchtower, isCatalog, mintAddress, mintExplorerUrl,
   showJson, copied, expandedSnapshotDate, memberNftView, copiedMint, copiedWallet,
-  combinedHolders, showHoldersAndNftsSection, memberNftsLoading, nftLink,
+  combinedHolders, showHoldersAndNftsSection, holdersSectionSplMode, memberNftsLoading, nftLink,
   snapshotsForDisplay, snapshotsLoading, holdersForSnapshot, walletsLoading, showSnapshotsSection,
   shipmentBannerImage, shipmentBannerSaving, jsonPreview,
   close, copyMint, copyToClipboard, onHoldersCopy, formatHolderAmount, toggleSnapshot, saveShipmentBanner,

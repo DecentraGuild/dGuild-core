@@ -462,12 +462,12 @@ button.layout-subnav__tab {
 }
 
 .layout-subnav__dropdown-tab:hover {
-  color: var(--theme-text-primary);
+  color: var(--theme-secondary);
   background: var(--theme-bg-secondary);
 }
 
 .layout-subnav__dropdown-tab--active {
-  color: var(--theme-secondary);
+  color: var(--theme-primary);
   background: var(--theme-bg-secondary);
 }
 
@@ -521,7 +521,7 @@ button.layout-subnav__tab {
 }
 
 .layout-nav__discover:hover {
-  color: var(--theme-primary);
+  color: var(--theme-secondary);
   background-color: var(--theme-bg-card);
 }
 

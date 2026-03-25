@@ -1,6 +1,8 @@
+import { generateRandomNumericTenantId } from '../../../../packages/core/src/tenant-id.ts'
 import { jsonResponse, errorResponse } from '../../_shared/cors.ts'
 import { requirePlatformAdmin } from '../../_shared/auth.ts'
 import type { getAdminClient } from '../../_shared/supabase-admin.ts'
+import { getModuleCatalogEntry, canActivateModule } from '@decentraguild/catalog'
 
 type Db = ReturnType<typeof getAdminClient>
 
@@ -211,15 +213,27 @@ export async function handleTenantCreate(
   const creatorWallet = body.creatorWallet as string
   if (!tenantName?.trim() || !creatorWallet?.trim()) return errorResponse('tenantName and creatorWallet required', req)
 
-  const tenantId = crypto.randomUUID().replace(/-/g, '').slice(0, 7)
   const walletTrimmed = creatorWallet.trim()
-  await db.from('tenant_config').insert({
-    id: tenantId,
-    slug: null,
-    name: tenantName.trim(),
-    admins: [walletTrimmed],
-    modules: { admin: { state: 'active', deactivatedate: null, deactivatingUntil: null, settingsjson: {} } },
-  })
+  const maxAttempts = 12
+  let tenantId = ''
+  let insertErr: { code?: string; message: string } | null = null
+  for (let i = 0; i < maxAttempts; i++) {
+    tenantId = generateRandomNumericTenantId()
+    const { error } = await db.from('tenant_config').insert({
+      id: tenantId,
+      slug: null,
+      name: tenantName.trim(),
+      admins: [walletTrimmed],
+      modules: { admin: { state: 'active', deactivatedate: null, deactivatingUntil: null, settingsjson: {} } },
+    })
+    if (!error) {
+      insertErr = null
+      break
+    }
+    insertErr = error
+    if (error.code !== '23505') break
+  }
+  if (insertErr) return errorResponse(insertErr.message, req, 500)
 
   await db.from('platform_audit_log').insert({
     actor_wallet: check.wallet,
@@ -281,6 +295,16 @@ export async function handleTenantModule(
 
   const currentModules = (tenant.modules as Record<string, unknown>) ?? {}
   const existing = (currentModules[moduleId] as Record<string, unknown>) ?? {}
+  const currentState = (existing.state as string | undefined) ?? 'off'
+
+  const isNewActivation = currentState === 'off' && (state === 'active' || state === 'staging')
+  if (isNewActivation) {
+    const catalogEntry = getModuleCatalogEntry(moduleId)
+    if (catalogEntry && !canActivateModule(catalogEntry.status, tenantId)) {
+      return errorResponse(`Module "${moduleId}" cannot be activated: status is "${catalogEntry.status}"`, req, 403)
+    }
+  }
+
   const updatedModules = {
     ...currentModules,
     [moduleId]: {

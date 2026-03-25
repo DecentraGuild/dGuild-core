@@ -1,5 +1,36 @@
 import type { Config } from 'tailwindcss'
 import tailwindcssAnimate from 'tailwindcss-animate'
+import plugin from 'tailwindcss/plugin'
+
+const themeTokens = plugin(({ addUtilities }) => {
+  addUtilities({
+    '.bg-theme-primary': { 'background-color': 'var(--theme-bg-primary)' },
+    '.bg-theme-secondary': { 'background-color': 'var(--theme-bg-secondary)' },
+    '.bg-theme-card': { 'background-color': 'var(--theme-bg-card)' },
+    '.bg-theme-muted': { 'background-color': 'var(--theme-bg-muted)' },
+    '.text-theme-primary': { 'color': 'var(--theme-text-primary)' },
+    '.text-theme-secondary': { 'color': 'var(--theme-text-secondary)' },
+    '.text-theme-muted': { 'color': 'var(--theme-text-muted)' },
+    '.text-theme-brand': { 'color': 'var(--theme-primary)' },
+    '.text-theme-brand-secondary': { 'color': 'var(--theme-secondary)' },
+    '.border-theme': { 'border-color': 'var(--theme-border)' },
+    '.border-theme-light': { 'border-color': 'var(--theme-border-light)' },
+    '.border-theme-brand': { 'border-color': 'var(--theme-primary)' },
+    '.rounded-theme-sm': { 'border-radius': 'var(--theme-radius-sm)' },
+    '.rounded-theme-md': { 'border-radius': 'var(--theme-radius-md)' },
+    '.rounded-theme-lg': { 'border-radius': 'var(--theme-radius-lg)' },
+    '.shadow-theme-glow': { 'box-shadow': 'var(--theme-shadow-glow)' },
+    '.shadow-theme-card': { 'box-shadow': 'var(--theme-shadow-card)' },
+    '.gradient-brand': { 'background': 'var(--theme-gradient-primary)' },
+    '.text-gradient-brand': {
+      'background': 'var(--theme-gradient-primary)',
+      '-webkit-background-clip': 'text',
+      'background-clip': 'text',
+      '-webkit-text-fill-color': 'transparent',
+      'color': 'var(--theme-primary)',
+    },
+  })
+})
 
 export default {
   content: [
@@ -34,5 +65,5 @@ export default {
       },
     },
   },
-  plugins: [tailwindcssAnimate],
+  plugins: [tailwindcssAnimate, themeTokens],
 } satisfies Config

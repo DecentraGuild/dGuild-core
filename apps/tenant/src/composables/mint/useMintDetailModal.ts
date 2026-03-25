@@ -114,7 +114,19 @@ export function useMintDetailModal(
   })
 
   const combinedHolders = computed(() => {
-    if (display.value?.kind !== 'NFT') return []
+    const d = display.value
+    if (!d) return []
+    if (d.kind === 'SPL') {
+      const holders = displayHolders.value
+      if (!holders.length) return []
+      return holders.map((h) => ({
+        wallet: h.wallet,
+        count: 0,
+        nfts: [],
+        splAmount: h.amount,
+      }))
+    }
+    if (d.kind !== 'NFT') return []
     const holders = displayHolders.value
     const nfts = memberNfts.value
     const byWallet = new Map<string, { count: number; nfts: typeof nfts }>()
@@ -135,9 +147,15 @@ export function useMintDetailModal(
       .sort((a, b) => b.count - a.count)
   })
 
-  const showHoldersAndNftsSection = computed(
-    () => display.value?.kind === 'NFT' && (memberNfts.value.length > 0 || (display.value?.track_holders && displayHolders.value.length > 0))
-  )
+  const showHoldersAndNftsSection = computed(() => {
+    const d = display.value
+    if (!d) return false
+    if (d.kind === 'SPL') return !!(d.track_holders && displayHolders.value.length > 0)
+    if (d.kind === 'NFT') {
+      return memberNfts.value.length > 0 || !!(d.track_holders && displayHolders.value.length > 0)
+    }
+    return false
+  })
 
   const mintExplorerUrl = computed(() => {
     const m = mintAddress.value ?? display.value?.mint
@@ -366,10 +384,12 @@ export function useMintDetailModal(
     () => { if (props.modelValue.value && isCatalog.value) fetchCatalogSnapshots() },
   )
 
+  const holdersSectionSplMode = computed(() => display.value?.kind === 'SPL')
+
   return {
     display, loading, error, isWatchtower, isCatalog, mintAddress, mintExplorerUrl,
     showJson, copied, expandedSnapshotDate, memberNftView, copiedMint, copiedWallet,
-    combinedHolders, showHoldersAndNftsSection, memberNftsLoading, nftLink,
+    combinedHolders, showHoldersAndNftsSection, holdersSectionSplMode, memberNftsLoading, nftLink,
     snapshotsForDisplay, snapshotsLoading, holdersForSnapshot, walletsLoading, showSnapshotsSection,
     shipmentBannerImage, shipmentBannerSaving, jsonPreview,
     close, copyMint, copyToClipboard, onHoldersCopy, formatHolderAmount, toggleSnapshot, saveShipmentBanner,

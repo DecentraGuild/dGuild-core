@@ -42,7 +42,7 @@
                 :src="editMetadata.image"
                 alt="Voucher"
                 class="h-20 w-20 rounded-lg border border-border object-cover"
-                @error="(e) => (e.currentTarget!.style.display = 'none')"
+                @error="onVoucherImageError"
               />
             </div>
             <dl class="grid gap-4">
@@ -179,7 +179,12 @@
           <CardContent>
             <OpsVoucherEditForm
               v-if="detail"
-              :voucher="{ mint: detail.voucher?.mint ?? mint, type: detail.type, bundleId: detail.voucher?.bundle_id, label: detail.voucher?.label }"
+              :voucher="{
+                mint: detail.voucher?.mint ?? mint,
+                type: detail.type,
+                bundleId: detail.voucher?.bundle_id ?? undefined,
+                label: detail.voucher?.label ?? undefined,
+              }"
               :bundle-label="detail.type === 'bundle' ? (detail.bundle?.label ?? '') : ''"
               :initial-name="editMetadata?.name ?? ''"
               :initial-symbol="editMetadata?.symbol ?? ''"
@@ -319,6 +324,11 @@ const {
   mintLoading, burnLoading, mintDialogOpen, burnDialogOpen, mintAmount, burnAmount,
   meters, confirmMint, confirmBurn, saveEdit,
 } = useOpsVoucherDetail(mint)
+
+function onVoucherImageError(e: Event) {
+  const el = e.currentTarget
+  if (el instanceof HTMLElement) el.style.display = 'none'
+}
 
 function back() {
   if (history.length > 1) router.back()

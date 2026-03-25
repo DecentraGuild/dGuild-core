@@ -57,6 +57,7 @@ function getFromPrice(p: PricingModel): string | null {
   }
   if (p.modelType === 'tiered_with_one_time_per_unit' && p.tiers?.length) {
     const baseTier = p.tiers[0]
+    if (!baseTier) return null
     const unitLabel = (p.oneTimeUnitName ?? 'unit').toLowerCase()
     if (baseTier.oneTimePerUnit) {
       return `${formatUsdc(baseTier.oneTimePerUnit)} USDC ${unitLabel}`

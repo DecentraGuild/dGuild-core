@@ -131,7 +131,7 @@ function moduleLink(entry: ModuleCatalogEntry) {
   height: 100px;
   background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 55%),
     var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
+  border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
@@ -147,8 +147,9 @@ function moduleLink(entry: ModuleCatalogEntry) {
 }
 
 .home__card-link:hover .home__card {
+  border-color: var(--theme-primary);
   transform: translateY(-2px);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--theme-shadow-glow), 0 16px 40px rgba(0, 0, 0, 0.3);
 }
 
 .home__card-bg-icon {
