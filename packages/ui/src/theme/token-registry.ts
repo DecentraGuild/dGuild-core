@@ -48,6 +48,6 @@ export const THEME_CSS_TOKENS: ThemeTokenMeta[] = [
   { name: '--theme-radius-sm', group: 'layout', description: 'Radius scale' },
   { name: '--theme-border-thin', group: 'layout', description: 'Border width scale' },
   { name: '--theme-shadow-glow', group: 'effect', description: 'Primary-coloured glow (intensity from theme.effects)' },
-  { name: '--theme-gradient-primary', group: 'effect', description: 'Brand gradient: primary → secondary → primary dark' },
+  { name: '--theme-gradient-primary', group: 'effect', description: 'Brand gradient: primary → secondary' },
   { name: '--theme-effect-pattern-size', group: 'effect', description: 'Background pattern tile size' },
 ]

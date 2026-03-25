@@ -82,7 +82,7 @@ export const DEFAULT_TENANT_THEME: TenantTheme = {
     card: '0 8px 32px rgba(0, 0, 0, 0.4)',
   },
   gradients: {
-    primary: 'linear-gradient(135deg, #dc2626 0%, #ea580c 50%, #991b1b 100%)',
+    primary: 'linear-gradient(135deg, #dc2626 0%, #ea580c 100%)',
   },
   fonts: {
     primary: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],

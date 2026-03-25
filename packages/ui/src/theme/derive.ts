@@ -100,8 +100,7 @@ export function deriveTheme(inputs: ThemeInputs): TenantTheme {
 
   const { glow, glowHover } = buildGlowShadows(primary, glowIntensity)
 
-  const primaryDarkForGradient = primaryDark
-  const gradientPrimary = `linear-gradient(135deg, ${primary} 0%, ${brandSec} 50%, ${primaryDarkForGradient} 100%)`
+  const gradientPrimary = `linear-gradient(135deg, ${primary} 0%, ${brandSec} 100%)`
 
   const radiusPreset = BORDER_RADIUS_PRESETS[Math.max(0, Math.min(4, radiusLevel))]
 
