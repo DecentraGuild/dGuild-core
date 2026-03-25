@@ -49,9 +49,9 @@ defineProps<{
 }
 
 .nav-link--active {
-  color: var(--theme-secondary);
+  color: var(--theme-primary);
   background-color: var(--theme-bg-card);
-  box-shadow: var(--theme-shadow-glow);
+  box-shadow: inset 3px 0 0 var(--theme-primary);
 }
 
 .nav-link:focus-visible {

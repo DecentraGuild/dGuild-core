@@ -224,7 +224,9 @@ function onEscrowModalClose() {
 .market-shell__banner {
   grid-column: 1 / -1;
   padding: var(--theme-space-md);
-  background: var(--theme-status-warning, #ecc94b);
+  background: var(--theme-surface-warning);
+  border: var(--theme-border-thin) solid var(--theme-warning);
+  border-radius: var(--theme-radius-sm);
   color: var(--theme-text-primary);
   font-size: var(--theme-font-sm);
 }
@@ -277,8 +279,8 @@ function onEscrowModalClose() {
 }
 
 .create-trade-modal {
-  background: var(--theme-bg-primary, #16121c);
-  color: var(--theme-text-primary, #ffffff);
+  background: var(--theme-bg-card);
+  color: var(--theme-text-primary);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
   max-width: min(90vw, 36rem);
@@ -299,20 +301,21 @@ function onEscrowModalClose() {
 .create-trade-modal__header h3 {
   margin: 0;
   font-size: var(--theme-font-lg);
-  color: var(--theme-text-primary, #ffffff);
+  font-weight: 600;
+  color: var(--theme-text-primary);
 }
 
 .create-trade-modal__close {
   padding: var(--theme-space-xs);
   background: none;
   border: none;
-  color: var(--theme-text-secondary, #c8c8d1);
+  color: var(--theme-text-muted);
   cursor: pointer;
   font-size: 1.25rem;
 }
 
 .create-trade-modal__close:hover {
-  color: var(--theme-text-primary, #ffffff);
+  color: var(--theme-text-primary);
 }
 
 .create-trade-modal__choice-hint {

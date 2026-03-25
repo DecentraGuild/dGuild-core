@@ -259,8 +259,8 @@ function applyPreset(minutes: number) {
   font-size: var(--theme-font-sm);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
-  background: var(--theme-bg-secondary, #1a1721);
-  color: var(--theme-text-primary, #ffffff);
+  background: var(--theme-bg-secondary);
+  color: var(--theme-text-primary);
 }
 
 .create-trade-settings__slippage {
@@ -270,7 +270,7 @@ function applyPreset(minutes: number) {
   font-size: var(--theme-font-sm);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
-  background: var(--theme-bg-secondary, #1a1721);
-  color: var(--theme-text-primary, #ffffff);
+  background: var(--theme-bg-secondary);
+  color: var(--theme-text-primary);
 }
 </style>

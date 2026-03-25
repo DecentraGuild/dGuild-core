@@ -608,11 +608,13 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 .pricing-widget {
   background: var(--theme-bg-card);
   border: var(--theme-border-thin) solid var(--theme-border);
+  border-top: var(--theme-border-medium) solid var(--theme-primary);
   border-radius: var(--theme-radius-md);
   padding: var(--theme-space-md);
   display: flex;
   flex-direction: column;
   gap: var(--theme-space-sm);
+  box-shadow: var(--theme-shadow-card);
 }
 
 .pricing-widget__loading {
@@ -817,7 +819,7 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
 
 .pricing-widget__period-btn--active {
   background: var(--theme-primary);
-  color: var(--theme-text-on-primary, #fff);
+  color: var(--theme-primary-inverse, #fff);
 }
 
 .pricing-widget__period-btn--active:hover {

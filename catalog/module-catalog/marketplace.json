@@ -24,7 +24,7 @@
     "overview": "Marketplace enables secure trading inside your guild.",
     "mechanics": "Escrow smart contracts\n\nCollection whitelisting\n\nToken-based payments\n\nOptional gating",
     "setup": "Add collections\n\nAdd tokens\n\nConfigure currencies\n\nDeploy",
-    "pricing": "Starter → 19 USDC/month (up to 25 mints)\n\nGrowth → 29 USDC/month (up to 100 mints, 1 custom currency)\n\nPro → 39 USDC/month (up to 250 mints, 2 custom currency)\n\nAdd-ons: +50 mints → 5 USDC/month, Custom currency → 5 USDC/month"
+    "pricing": "BASE → 0 USDC/month (1–10 tradable mints in scope)\n\nGROW → 19 USDC/month (11–100 mints)\n\nPRO → 29 USDC/month (101–250 mints)\n\nAbove 250 mints: 0.10 USDC/month per mint over 250\n\nCustom currency: 5 USDC/month per custom currency\n\nMonetize storefront: 10 USDC/month when enabled"
   },
   "activationInstructions": {
     "intro": "Raise your merchant banners. Open your gates to trade.",

@@ -275,7 +275,7 @@ function roleCardStyle(card: RoleCard): Record<string, string> {
 
 .role-card--create {
   cursor: pointer;
-  border: 2px dashed var(--theme-border);
+  border: var(--theme-border-medium) dashed var(--theme-border);
   background: var(--theme-bg-muted);
   justify-content: center;
   min-height: 20rem;

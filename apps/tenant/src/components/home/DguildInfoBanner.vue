@@ -93,10 +93,24 @@ const hasLinks = computed(
   padding: var(--theme-space-lg);
   background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 55%),
     var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
+  border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--theme-shadow-card, 0 10px 30px rgba(0, 0, 0, 0.25));
   margin-bottom: var(--theme-space-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+.dguild-info-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--theme-gradient-primary, var(--theme-primary));
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 .dguild-info-banner__brand {
@@ -136,8 +150,13 @@ const hasLinks = computed(
 
 .dguild-info-banner__name {
   font-size: var(--theme-font-2xl);
-  font-weight: 600;
+  font-weight: 700;
   margin: 0;
+  background: var(--theme-gradient-primary, var(--theme-text-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--theme-primary);
 }
 
 .dguild-info-banner__desc {

@@ -112,6 +112,18 @@ const patternClass = computed(() => {
   border-bottom: var(--theme-border-thin) solid var(--theme-border);
 }
 
+.app-shell__header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--theme-gradient-primary, var(--theme-primary));
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .app-shell__body {
   position: relative;
   z-index: 1;

@@ -1,5 +1,28 @@
 <template>
   <div class="theme-settings">
+    <div class="theme-settings__preview">
+      <p class="theme-settings__preview-label">Live preview</p>
+      <div class="theme-settings__preview-card">
+        <div class="theme-settings__preview-header">
+          <span class="theme-settings__preview-name">Community name</span>
+          <span class="theme-settings__preview-badge">Active</span>
+        </div>
+        <p class="theme-settings__preview-body">
+          Body text and <span class="theme-settings__preview-link">a primary link</span>. Below are the key UI states.
+        </p>
+        <p class="theme-settings__preview-muted">Muted caption text — for hints and secondary info.</p>
+        <div class="theme-settings__preview-actions">
+          <button type="button" class="theme-settings__preview-btn theme-settings__preview-btn--primary">Primary</button>
+          <button type="button" class="theme-settings__preview-btn theme-settings__preview-btn--brand">Secondary</button>
+          <button type="button" class="theme-settings__preview-btn theme-settings__preview-btn--outline">Outline</button>
+        </div>
+        <div class="theme-settings__preview-error">
+          <span class="theme-settings__preview-error-dot" />
+          Error state — e.g. invalid wallet or failed action.
+        </div>
+      </div>
+    </div>
+
     <div class="theme-settings__form">
       <details class="theme-settings__section" open>
         <summary class="theme-settings__heading">Brand colours</summary>
@@ -428,5 +451,129 @@ watch(
   margin: 0;
   min-width: 3rem;
   text-align: right;
+}
+
+/* Preview section */
+.theme-settings__preview {
+  margin-bottom: var(--theme-space-md);
+}
+
+.theme-settings__preview-label {
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 var(--theme-space-sm);
+}
+
+.theme-settings__preview-card {
+  padding: var(--theme-space-md);
+  background: var(--theme-bg-card);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-top: var(--theme-border-medium) solid var(--theme-primary);
+  border-radius: var(--theme-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-sm);
+  box-shadow: var(--theme-shadow-card);
+}
+
+.theme-settings__preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.theme-settings__preview-name {
+  font-size: var(--theme-font-base);
+  font-weight: 700;
+  background: var(--theme-gradient-primary, var(--theme-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--theme-primary);
+}
+
+.theme-settings__preview-badge {
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  padding: 2px var(--theme-space-sm);
+  border-radius: var(--theme-radius-full);
+  background: var(--theme-surface-success);
+  color: var(--theme-success);
+}
+
+.theme-settings__preview-body {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-primary);
+  margin: 0;
+}
+
+.theme-settings__preview-link {
+  color: var(--theme-primary);
+}
+
+.theme-settings__preview-muted {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+  margin: 0;
+}
+
+.theme-settings__preview-actions {
+  display: flex;
+  gap: var(--theme-space-sm);
+  flex-wrap: wrap;
+}
+
+.theme-settings__preview-btn {
+  padding: var(--theme-space-xs) var(--theme-space-md);
+  font-size: var(--theme-font-sm);
+  font-weight: 500;
+  border-radius: var(--theme-radius-md);
+  cursor: default;
+  border: var(--theme-border-thin) solid transparent;
+  transition: none;
+}
+
+.theme-settings__preview-btn--primary {
+  background: var(--theme-primary);
+  color: var(--theme-primary-inverse, #fff);
+}
+
+.theme-settings__preview-btn--brand {
+  background: var(--theme-secondary);
+  color: var(--theme-secondary-inverse, #fff);
+}
+
+.theme-settings__preview-btn--outline {
+  background: transparent;
+  border-color: var(--theme-border);
+  color: var(--theme-text-primary);
+}
+
+.theme-settings__preview-error {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-error);
+  padding: var(--theme-space-xs) var(--theme-space-sm);
+  background: var(--theme-surface-error);
+  border: var(--theme-border-thin) solid var(--theme-error);
+  border-radius: var(--theme-radius-sm);
+}
+
+.theme-settings__preview-error-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--theme-error);
+  flex-shrink: 0;
+}
+
+.theme-settings__typography-row {
+  margin-bottom: var(--theme-space-md);
 }
 </style>

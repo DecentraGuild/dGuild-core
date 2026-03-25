@@ -225,3 +225,116 @@ button,
 [role='button'] {
   touch-action: manipulation;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Panel / card / inset vocabulary — 3 reusable surface patterns               */
+/* -------------------------------------------------------------------------- */
+
+/* Panel: elevated container for settings blocks and list shells */
+.panel {
+  background: var(--theme-bg-secondary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  padding: var(--theme-space-md);
+}
+
+/* Panel inset: nested form or table inside a panel */
+.panel__inset {
+  background: var(--theme-bg-primary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  padding: var(--theme-space-sm) var(--theme-space-md);
+}
+
+/* Interactive card: clickable module tile, list item */
+.card-interactive {
+  background: var(--theme-bg-card);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  padding: var(--theme-space-md);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: pointer;
+}
+
+.card-interactive:hover {
+  border-color: var(--theme-primary);
+  box-shadow: var(--theme-shadow-glow);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Typography utilities — map to the theme font-scale tokens                  */
+/* -------------------------------------------------------------------------- */
+
+.text-page-title {
+  font-size: var(--theme-font-3xl);
+  font-weight: 700;
+  color: var(--theme-text-primary);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.text-section-title {
+  font-size: var(--theme-font-xl);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  line-height: 1.3;
+}
+
+.text-card-heading {
+  font-size: var(--theme-font-base);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  line-height: 1.4;
+}
+
+.text-caption {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+  line-height: 1.5;
+}
+
+.text-body-secondary {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+  line-height: 1.6;
+}
+
+.text-mono {
+  font-family: var(--theme-font-mono);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Card-level headings — h3/h4 directly inside shadcn Card or admin panels    */
+/* -------------------------------------------------------------------------- */
+
+[data-slot='card'] > h3,
+.admin__panel > h3 {
+  font-size: var(--theme-font-base);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  margin: 0 0 var(--theme-space-md);
+}
+
+[data-slot='card'] > h4,
+.admin__panel > h4 {
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+  margin: 0 0 var(--theme-space-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Gradient text helper — brand name, section highlight                        */
+/* -------------------------------------------------------------------------- */
+
+.text-gradient {
+  background: var(--theme-gradient-primary, var(--theme-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--theme-primary);
+}

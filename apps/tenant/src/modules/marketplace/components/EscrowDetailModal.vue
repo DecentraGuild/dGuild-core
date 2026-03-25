@@ -462,7 +462,9 @@ const cannotFillReason = computed(() => {
 
 .escrow-modal__fill-winding-down {
   padding: var(--theme-space-sm);
-  background: var(--theme-status-warning, #ecc94b);
+  background: var(--theme-surface-warning);
+  border: var(--theme-border-thin) solid var(--theme-warning);
+  border-radius: var(--theme-radius-sm);
   color: var(--theme-text-primary);
 }
 

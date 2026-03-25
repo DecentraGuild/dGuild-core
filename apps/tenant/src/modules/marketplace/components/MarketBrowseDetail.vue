@@ -340,7 +340,7 @@ defineEmits<{
 .market-browse-detail__btn--create:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  background: var(--theme-bg-tertiary);
+  background: var(--theme-bg-muted);
   color: var(--theme-text-muted);
   border-color: var(--theme-border);
 }

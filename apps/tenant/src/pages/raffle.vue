@@ -380,7 +380,7 @@ const {
   font-size: var(--theme-font-md);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
-  background: var(--theme-bg);
+  background: var(--theme-bg-primary);
 }
 
 .raffle-panel__total {

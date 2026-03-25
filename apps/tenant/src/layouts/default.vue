@@ -467,7 +467,7 @@ button.layout-subnav__tab {
 }
 
 .layout-subnav__dropdown-tab--active {
-  color: var(--theme-secondary);
+  color: var(--theme-primary);
   background: var(--theme-bg-secondary);
 }
 

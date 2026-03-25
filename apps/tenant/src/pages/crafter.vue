@@ -346,7 +346,7 @@ watch(
 
 .crafter-card--create {
   cursor: pointer;
-  border: 2px dashed var(--theme-border);
+  border: var(--theme-border-medium) dashed var(--theme-border);
   background: var(--theme-bg-muted);
   display: flex;
   flex-direction: column;
@@ -406,7 +406,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--theme-bg-muted, #f0f0f0);
+  background: var(--theme-bg-muted);
 }
 
 .crafter-card__placeholder-icon {

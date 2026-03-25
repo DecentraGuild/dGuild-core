@@ -122,7 +122,7 @@ function clearFilters() {
   padding: 0 4px;
   font-size: var(--theme-font-xs);
   background: var(--theme-primary);
-  color: white;
+  color: var(--theme-primary-inverse, #fff);
   border-radius: 999px;
 }
 
@@ -134,10 +134,11 @@ function clearFilters() {
   min-width: 14rem;
   max-height: 20rem;
   overflow-y: auto;
-  background: var(--theme-bg-primary);
+  background: var(--theme-bg-card);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
   padding: var(--theme-space-sm);
+  box-shadow: var(--theme-shadow-card);
   z-index: 10;
 }
 

@@ -63,9 +63,13 @@ defineProps<{
 
 .app-header__name {
   font-size: var(--theme-font-lg);
-  font-weight: 600;
-  color: var(--theme-text-primary);
+  font-weight: 700;
   flex-shrink: 0;
+  background: var(--theme-gradient-primary, var(--theme-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--theme-primary);
 }
 
 .app-header__nav {
