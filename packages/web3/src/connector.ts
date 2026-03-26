@@ -235,7 +235,7 @@ export async function ensureSigningWalletForSession(
     autoConnector?: { attemptAutoConnect(): Promise<boolean> }
   }
   await withAuto.autoConnector?.attemptAutoConnect()
-  let cur = getEscrowWalletFromConnector()
+  const cur = getEscrowWalletFromConnector()
   if (!cur?.publicKey || cur.publicKey.toBase58() !== expected) {
     const { connectorId } = getConnectorState()
     if (connectorId) {
