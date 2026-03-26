@@ -9,6 +9,7 @@ export {
   subscribeToConnectorState,
   connectWallet,
   disconnectWallet,
+  ensureSigningWalletForSession,
   signMessageForAuth,
   signMessageWithConnector,
   getWalletAndAccount,

@@ -64,6 +64,7 @@ import {
   isBackpackConnector,
   buildBillingTransfer,
   sendAndConfirmTransaction,
+  ensureSigningWalletForSession,
 } from '@decentraguild/web3'
 import { useSupabase, invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { generateRandomNumericTenantId } from '@decentraguild/core'
@@ -78,9 +79,17 @@ const { walletConnectUri, walletScanPending } = useConnectWalletModalExtras({
   refreshConnectorState: () => auth.refreshConnectorState(),
 })
 
-onMounted(() => {
-  auth.fetchMe()
+onMounted(async () => {
+  await auth.fetchMe()
   auth.refreshConnectorState()
+  if (auth.wallet.value) {
+    try {
+      await ensureSigningWalletForSession(auth.wallet.value)
+      auth.refreshConnectorState()
+    } catch {
+      /* Pay flow will call ensure again or surface Connect wallet */
+    }
+  }
 })
 
 const form = reactive({
@@ -110,6 +119,13 @@ async function submit() {
   }
   if (!hasRpc.value || !rpcUrl.value) {
     error.value = 'RPC not configured. Set NUXT_PUBLIC_HELIUS_RPC.'
+    return
+  }
+
+  try {
+    await ensureSigningWalletForSession(auth.wallet.value ?? undefined)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Connect your wallet'
     return
   }
 
