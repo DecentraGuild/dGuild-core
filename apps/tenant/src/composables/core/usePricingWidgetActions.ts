@@ -13,6 +13,7 @@ export interface UsePricingWidgetActionsOptions {
   deploying: Ref<boolean>
   saving: Ref<boolean>
   chargeAmount: Ref<number>
+  recurringDisplayTotal: Ref<number>
   selectedTier: Ref<{ name: string } | null>
   yearlyOnly?: boolean
   hasActiveSubscription: Ref<boolean>
@@ -31,6 +32,7 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
     deploying,
     saving,
     chargeAmount,
+    recurringDisplayTotal,
     selectedTier: _selectedTier,
     yearlyOnly = false,
     hasActiveSubscription,
@@ -43,13 +45,13 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
 
   const periodLocked = computed(() => hasActiveSubscription.value)
 
-  const showPeriodToggle = computed(() =>
-    chargeAmount.value > 0 &&
-    !periodLocked.value &&
-    !yearlyOnly &&
-    !isAddUnit.value &&
-    !isTieredWithOneTime.value,
-  )
+  const showPeriodToggle = computed(() => {
+    if (periodLocked.value || yearlyOnly || isAddUnit.value) return false
+    if (isTieredWithOneTime.value) {
+      return upgradeRecurringAmount.value > 0 || chargeAmount.value > 0
+    }
+    return chargeAmount.value > 0 || recurringDisplayTotal.value > 0
+  })
 
   const deployLabel = computed(() => {
     if (deploying.value) return moduleId === 'slug' ? 'Claiming...' : 'Deploying...'
