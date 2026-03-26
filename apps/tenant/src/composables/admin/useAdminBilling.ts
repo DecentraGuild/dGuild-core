@@ -8,12 +8,14 @@ import {
   buildBillingTransfer,
   buildBillingTransferInstructions,
   sendAndConfirmTransaction,
+  ensureSigningWalletForSession,
   getEscrowWalletFromConnector,
   getConnectorState,
   isBackpackConnector,
 } from '@decentraguild/web3'
 import { PublicKey, type TransactionInstruction } from '@solana/web3.js'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { useAuth } from '@decentraguild/auth'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -41,6 +43,7 @@ export function useAdminBilling(opts: {
 }) {
   const { saveError, saving, deploying, extending } = opts
   const { tenantId, slug, tenantStore } = useAdminTenant()
+  const auth = useAuth()
   const supabase = useSupabase()
   const { connection } = useSolanaConnection()
   const txNotifications = useTransactionNotificationsStore()
@@ -87,6 +90,7 @@ export function useAdminBilling(opts: {
 
     if (quote.priceUsdc <= 0) return { kind: 'free' }
 
+    await ensureSigningWalletForSession(auth.wallet.value)
     const wallet = getEscrowWalletFromConnector()
     if (!wallet?.publicKey) throw new Error('Wallet not connected')
     const payerWallet = wallet.publicKey.toBase58()

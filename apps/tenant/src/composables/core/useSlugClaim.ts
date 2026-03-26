@@ -5,8 +5,10 @@ import type { BillingPeriod } from '@decentraguild/billing'
 import {
   buildBillingTransfer,
   sendAndConfirmTransaction,
+  ensureSigningWalletForSession,
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
+import { useAuth } from '@decentraguild/auth'
 import { PublicKey } from '@solana/web3.js'
 import { useTenantStore } from '~/stores/tenant'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -39,6 +41,7 @@ export function useSlugClaim(opts: {
   const { connection } = useSolanaConnection()
   const supabase = useSupabase()
   const txNotifications = useTransactionNotificationsStore()
+  const auth = useAuth()
 
   const desiredSlug = ref('')
   const slugCheckStatus = ref<'idle' | 'checking' | 'available' | 'taken'>('idle')
@@ -132,6 +135,7 @@ export function useSlugClaim(opts: {
         return
       }
 
+      await ensureSigningWalletForSession(auth.wallet.value)
       const wallet = getEscrowWalletFromConnector()
       if (!wallet?.publicKey) throw new Error('Wallet not connected')
       const payerWallet = wallet.publicKey.toBase58()

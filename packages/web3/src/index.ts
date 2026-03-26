@@ -4,6 +4,7 @@ export {
   subscribeToConnectorState,
   connectWallet,
   disconnectWallet,
+  ensureSigningWalletForSession,
   isBackpackConnector,
   isMobileWalletAdapterConnector,
   signMessageForAuth,

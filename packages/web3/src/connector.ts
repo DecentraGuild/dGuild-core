@@ -6,11 +6,13 @@ import {
   getDefaultConfig,
   createTransactionSigner,
   isConnected,
+  type ConnectOptions,
   type ConnectorState,
   type WalletConnectorId,
   type Wallet,
   type WalletAccount,
 } from '@solana/connector/headless'
+import { isMobileUserAgent } from './wallet-standard-ready.js'
 import type { Wallet as EscrowWallet } from './escrow/types.js'
 
 /** Avoid `Buffer` in the browser bundle; some mobile WebViews lack it. */
@@ -172,10 +174,64 @@ export function subscribeToConnectorState(listener: (state: ConnectorState) => v
   return client.subscribe(listener)
 }
 
-export async function connectWallet(connectorId: WalletConnectorId): Promise<void> {
+/** Stable ConnectorKit id for `@solana-mobile/wallet-standard-mobile`. */
+const MOBILE_WALLET_CONNECTOR_ID = 'mobile-wallet-adapter' as WalletConnectorId
+
+export async function connectWallet(
+  connectorId: WalletConnectorId,
+  options?: ConnectOptions,
+): Promise<void> {
   setWalletConnectDisplayUri(null)
   const client = getClient()
-  await client.connectWallet(connectorId)
+  await client.connectWallet(connectorId, options)
+}
+
+/**
+ * Restores ConnectorKit + signing wallet when the user is already signed in (Supabase session)
+ * but the headless connector lost in-memory state — common on mobile after navigation or refresh
+ * because `ConnectorClient` does not persist `walletStateStorage` for vNext silent auto-connect.
+ *
+ * Prefer **silent** MWA reconnect (reads `SolanaMobileWalletAdapterDefaultAuthorizationCache`) so Pay
+ * does not open a second interactive session that often hits the MWA protocol blur timeout.
+ */
+export async function ensureSigningWalletForSession(
+  sessionWalletAddress: string | null | undefined,
+): Promise<void> {
+  if (typeof sessionWalletAddress !== 'string' || !sessionWalletAddress.trim()) {
+    throw new Error('Sign in required')
+  }
+  const expected = sessionWalletAddress.trim()
+  const existing = getEscrowWalletFromConnector()
+  if (existing?.publicKey.toBase58() === expected) return
+
+  const client = getClient()
+
+  const silentSessionOpts = {
+    silent: true,
+    preferredAccount: expected,
+    allowInteractiveFallback: true,
+  } as ConnectOptions
+
+  if (isMobileUserAgent()) {
+    await client.connectWallet(MOBILE_WALLET_CONNECTOR_ID, silentSessionOpts)
+  } else {
+    const withAuto = client as unknown as {
+      autoConnector?: { attemptAutoConnect(): Promise<boolean> }
+    }
+    await withAuto.autoConnector?.attemptAutoConnect()
+    let cur = getEscrowWalletFromConnector()
+    if (!cur?.publicKey || cur.publicKey.toBase58() !== expected) {
+      const { connectorId } = getConnectorState()
+      if (connectorId) {
+        await client.connectWallet(connectorId as WalletConnectorId, silentSessionOpts)
+      }
+    }
+  }
+
+  const ready = getEscrowWalletFromConnector()
+  if (!ready?.publicKey || ready.publicKey.toBase58() !== expected) {
+    throw new Error('Wallet session expired. Use Connect wallet in the header, then try again.')
+  }
 }
 
 export async function disconnectWallet(): Promise<void> {
@@ -203,7 +259,7 @@ export function getMwaRawWallet(connectorId: WalletConnectorId): Wallet | null {
 
 /** ConnectorKit session id for `@solana-mobile/wallet-standard-mobile`. */
 export function isMobileWalletAdapterConnector(connectorId: string | null): boolean {
-  return connectorId === 'mobile-wallet-adapter'
+  return connectorId === MOBILE_WALLET_CONNECTOR_ID
 }
 
 export function isBackpackConnector(connectorId: string | null): boolean {
