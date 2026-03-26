@@ -320,6 +320,12 @@ async function claim(a: CompressedAsset) {
     if (!/^\d+$/.test(amountStr) || amountStr === '0') throw new Error('Invalid amount')
     const decimals = a.decimals ?? a.token_info?.decimals ?? null
     if (decimals == null || !Number.isFinite(decimals)) throw new Error('Token decimals not available')
+    const hash = a.accountHash?.trim()
+    if (!hash) {
+      throw new Error(
+        'Compressed account hash missing for this shipment. Refresh the page (Helius ZK / compression RPC required), then try again.',
+      )
+    }
     const sig = await doDecompress({
       connection: conn,
       wallet: walletAdapter,
@@ -327,7 +333,7 @@ async function claim(a: CompressedAsset) {
       amount: amountStr,
       decimals,
       rpcUrl: rpcUrl.value || undefined,
-      ...(a.accountHash ? { compressedAccountHash: a.accountHash } : {}),
+      compressedAccountHash: hash,
     })
     if (sig) {
       fetchAssets()
