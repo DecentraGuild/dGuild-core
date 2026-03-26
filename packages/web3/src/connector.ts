@@ -58,6 +58,15 @@ let webOptions: ConnectorWebOptions = {}
 
 let clientInstance: ConnectorClient | null = null
 
+/**
+ * On mobile, ensureSigningWalletForSession builds a signing wallet directly from the
+ * Supabase session address without going through ConnectorKit. ConnectorKit's connectWallet
+ * for MWA calls transact() even in silent mode when it can't restore state, which triggers
+ * ERROR_WALLET_NOT_FOUND before the user can approve the actual transaction. This variable
+ * is the fallback returned by getEscrowWalletFromConnector() on mobile.
+ */
+let mobileSigningWallet: EscrowWallet | null = null
+
 let walletConnectDisplayUri: string | null = null
 const walletConnectUriListeners = new Set<(uri: string | null) => void>()
 
@@ -186,12 +195,14 @@ export async function connectWallet(
 }
 
 /**
- * Restores ConnectorKit + signing wallet when the user is already signed in (Supabase session)
- * but the headless connector lost in-memory state — common on mobile after navigation or refresh
- * because `ConnectorClient` does not persist `walletStateStorage` for vNext silent auto-connect.
+ * Ensures a signing wallet is ready for the given session address.
  *
- * Prefer **silent** MWA reconnect (reads `SolanaMobileWalletAdapterDefaultAuthorizationCache`) so Pay
- * does not open a second interactive session that often hits the MWA protocol blur timeout.
+ * Mobile: builds a wallet directly from the session address without calling connectWallet.
+ * ConnectorKit's connectWallet for MWA triggers transact() even in silent mode when it
+ * cannot restore state, which fires ERROR_WALLET_NOT_FOUND before the user sees the tx.
+ * mwaSingleSessionSignTransactions handles auth+signing in one transact() — no pre-connect needed.
+ *
+ * Desktop: attempts silent auto-connect via ConnectorKit as before.
  */
 export async function ensureSigningWalletForSession(
   sessionWalletAddress: string | null | undefined,
@@ -200,29 +211,37 @@ export async function ensureSigningWalletForSession(
     throw new Error('Sign in required')
   }
   const expected = sessionWalletAddress.trim()
+
+  if (isMobileUserAgent()) {
+    mobileSigningWallet = {
+      publicKey: new PublicKey(expected),
+      signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+        const [signed] = await mwaSingleSessionSignTransactions([tx])
+        return signed as T
+      },
+      signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+        const signed = await mwaSingleSessionSignTransactions(txs)
+        return signed as T[]
+      },
+    }
+    return
+  }
+
   const existing = getEscrowWalletFromConnector()
   if (existing?.publicKey.toBase58() === expected) return
 
   const client = getClient()
+  const silentSessionOpts = { silent: true, preferredAccount: expected } as ConnectOptions
 
-  const silentSessionOpts = {
-    silent: true,
-    preferredAccount: expected,
-  } as ConnectOptions
-
-  if (isMobileUserAgent()) {
-    await client.connectWallet(MOBILE_WALLET_CONNECTOR_ID, silentSessionOpts)
-  } else {
-    const withAuto = client as unknown as {
-      autoConnector?: { attemptAutoConnect(): Promise<boolean> }
-    }
-    await withAuto.autoConnector?.attemptAutoConnect()
-    let cur = getEscrowWalletFromConnector()
-    if (!cur?.publicKey || cur.publicKey.toBase58() !== expected) {
-      const { connectorId } = getConnectorState()
-      if (connectorId) {
-        await client.connectWallet(connectorId as WalletConnectorId, silentSessionOpts)
-      }
+  const withAuto = client as unknown as {
+    autoConnector?: { attemptAutoConnect(): Promise<boolean> }
+  }
+  await withAuto.autoConnector?.attemptAutoConnect()
+  let cur = getEscrowWalletFromConnector()
+  if (!cur?.publicKey || cur.publicKey.toBase58() !== expected) {
+    const { connectorId } = getConnectorState()
+    if (connectorId) {
+      await client.connectWallet(connectorId as WalletConnectorId, silentSessionOpts)
     }
   }
 
@@ -233,6 +252,7 @@ export async function ensureSigningWalletForSession(
 }
 
 export async function disconnectWallet(): Promise<void> {
+  mobileSigningWallet = null
   const client = getClient()
   await client.disconnectWallet()
   setWalletConnectDisplayUri(null)
@@ -593,7 +613,7 @@ async function mwaSingleSessionSignTransactions(
 export function getEscrowWalletFromConnector(): EscrowWallet | null {
   const client = getClient()
   const pair = getWalletAndAccount(client)
-  if (!pair) return null
+  if (!pair) return mobileSigningWallet
   const walletStatus = client.getSnapshot().wallet
   const connectorId =
     isConnected(walletStatus) && walletStatus.session
