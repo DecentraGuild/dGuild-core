@@ -201,12 +201,17 @@ export function getMwaRawWallet(connectorId: WalletConnectorId): Wallet | null {
   return client.getConnector?.(connectorId) ?? null
 }
 
+/** ConnectorKit session id for `@solana-mobile/wallet-standard-mobile`. */
+export function isMobileWalletAdapterConnector(connectorId: string | null): boolean {
+  return connectorId === 'mobile-wallet-adapter'
+}
+
 export function isBackpackConnector(connectorId: string | null): boolean {
   if (!connectorId) return false
   if (connectorId.toLowerCase().includes('backpack')) return true
   // Mobile MWA: connectorId is always 'mobile-wallet-adapter'.
   // Read wallet_uri_base from the MWA auth cache (already written by mwaSingleSessionSignIn)
-  // to detect which wallet was actually used.
+  // to detect which wallet was actually used (billing ix order only).
   try {
     const raw =
       typeof localStorage !== 'undefined' ? localStorage.getItem(MWA_CACHE_KEY) : null
@@ -462,11 +467,11 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
     return signed as T[]
   }
   const canSend = signer.getCapabilities().canSend
-  // Backpack: `solana:signAndSendTransaction` + ConnectorKit’s `transactions: [bytes]` shape
-  // tends to look like a nested/batch tx in the UI; sign + dapp `sendRawTransaction` matches
-  // other wallets’ simpler prompt. Simulation is handled in `sendAndConfirmTransaction` (RPC).
+  // Backpack extension: signAndSend + ConnectorKit’s `transactions: [bytes]` looks like a batch in the UI.
+  // Mobile Wallet Adapter: same wire + wallet-broadcast path often returns to the browser without a clear
+  // approval screen or fails spuriously; sign + dapp `sendRawTransaction` matches the Backpack workaround.
   const signAndSendTransaction =
-    canSend && !isBackpackConnector(connectorId)
+    canSend && !isBackpackConnector(connectorId) && !isMobileWalletAdapterConnector(connectorId)
       ? async (tx: Transaction | VersionedTransaction): Promise<string> => {
           return signer.signAndSendTransaction(tx)
         }
