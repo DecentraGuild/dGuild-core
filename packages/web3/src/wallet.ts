@@ -10,12 +10,9 @@ export {
   connectWallet,
   disconnectWallet,
   ensureSigningWalletForSession,
-  signMessageForAuth,
-  signMessageWithConnector,
   getWalletAndAccount,
   getEscrowWalletFromConnector,
   getSupabaseWalletAdapter,
-  getMwaRawWallet,
   mwaSingleSessionSignIn,
   setConnectorWebOptions,
   subscribeWalletConnectUri,
@@ -29,6 +26,5 @@ export {
   waitForWalletStandardInjected,
   runMobileWalletStandardWarmup,
   runConnectModalWalletWarmup,
-  settleWebViewAfterWalletReturn,
 } from './wallet-standard-ready.js'
 export { registerSolanaMobileWalletAdapter } from './register-solana-mobile-wallet.js'

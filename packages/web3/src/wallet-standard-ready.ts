@@ -56,23 +56,3 @@ export async function runConnectModalWalletWarmup(): Promise<void> {
   getConnectorClient()
 }
 
-/**
- * After returning from a native wallet (MWA), Chrome may report `visible` before the JS bridge is
- * ready for a second request (`signMessages`). Wait for visibility, then yield briefly.
- */
-export async function settleWebViewAfterWalletReturn(options?: { settleMs?: number }): Promise<void> {
-  if (typeof document === 'undefined') return
-  const settleMs = options?.settleMs ?? 320
-  if (document.visibilityState !== 'visible') {
-    await new Promise<void>((resolve) => {
-      const done = () => {
-        if (document.visibilityState === 'visible') {
-          document.removeEventListener('visibilitychange', done)
-          resolve()
-        }
-      }
-      document.addEventListener('visibilitychange', done)
-    })
-  }
-  await new Promise((r) => setTimeout(r, settleMs))
-}
