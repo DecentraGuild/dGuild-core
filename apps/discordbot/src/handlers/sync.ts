@@ -20,12 +20,30 @@ function discordRoleActionHint(err: unknown): string {
   return ''
 }
 
+const MEMBER_FETCH_TIMEOUT_MS = 180_000
+const MEMBER_FETCH_RETRIES = 2
+
 /** Fetch all members and return member_roles (user id -> role ids, excluding @everyone) and a member map for reuse. */
 async function fetchMemberRolesAndMap(guild: Guild): Promise<{
   memberRoles: Record<string, string[]>
   memberMap: Map<string, GuildMember>
 }> {
-  const members = await guild.members.fetch()
+  let members: Awaited<ReturnType<Guild['members']['fetch']>> | null = null
+  for (let attempt = 0; attempt <= MEMBER_FETCH_RETRIES; attempt++) {
+    try {
+      members = await guild.members.fetch({ time: MEMBER_FETCH_TIMEOUT_MS })
+      break
+    } catch (err) {
+      const isTimeout = err instanceof Error && err.message.includes('didn\'t arrive in time')
+      if (isTimeout && attempt < MEMBER_FETCH_RETRIES) {
+        console.warn(`[roles] ${guild.name}: member fetch timeout, retry ${attempt + 1}/${MEMBER_FETCH_RETRIES}`)
+        continue
+      }
+      throw err
+    }
+  }
+  if (!members) throw new Error('member fetch returned null after retries')
+
   const memberRoles: Record<string, string[]> = {}
   const memberMap = new Map<string, GuildMember>()
   const everyoneId = guild.id

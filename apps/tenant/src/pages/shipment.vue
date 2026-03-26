@@ -18,50 +18,58 @@
             You have no shipments.
           </p>
           <div v-else>
-            <h3 class="shipment-page__heading">Your shipments</h3>
-            <p class="shipment-page__intro">Claim shipment to receive tokens in your wallet.</p>
+            <template v-if="primaryAssets.length > 0">
+              <h3 class="shipment-page__heading">From this dGuild</h3>
+              <p class="shipment-page__intro">Claim to receive tokens in your wallet.</p>
+            </template>
+            <p v-else class="shipment-page__minimal">
+              No balances from this dGuild's listed tokens.
+            </p>
           </div>
         </div>
 
-        <div v-if="wallet && !loading && assets.length > 0" class="shipment-page__list">
-          <div
-            v-for="a in assets"
+        <div v-if="wallet && !loading && primaryAssets.length > 0" class="shipment-page__list">
+          <ShipmentClaimCard
+            v-for="a in primaryAssets"
             :key="a.id"
-            class="shipment-page__card"
-          >
-            <a
-              v-if="a.mint"
-              :href="explorerLinks.tokenUrl(a.mint)"
-              target="_blank"
-              rel="noopener"
-              class="shipment-page__card-link"
-              @click.stop
-            >
-              <Icon icon="lucide:external-link" />
-            </a>
-            <div class="shipment-page__card-left">
-              <div class="shipment-page__card-content">
-                <h4 class="shipment-page__card-name">{{ displayName(a) }}</h4>
-                <span class="shipment-page__card-amount">{{ formatAmount(a) }}</span>
-                <Button
-                  variant="default"
-                  size="sm"
-                  class="shipment-page__card-btn"
-                  :disabled="claiming === a.id"
-                  @click="claim(a)"
-                >
-                  <Icon v-if="claiming === a.id" icon="lucide:loader-2" class="shipment-page__spinner" />
-                  Claim
-                </Button>
-              </div>
-            </div>
-            <div
-              class="shipment-page__card-right"
-              :class="{ 'shipment-page__card-right--fade': !hasBanner(a) && hasImage(a) }"
-              :style="cardRightStyle(a)"
+            :title="displayName(a)"
+            :amount="formatAmount(a)"
+            :claiming="claiming === a.id"
+            :explorer-url="a.mint ? explorerLinks.tokenUrl(a.mint) : undefined"
+            :has-banner="hasBanner(a)"
+            :has-image="hasImage(a)"
+            :card-right-style="cardRightStyle(a)"
+            @claim="claim(a)"
+          />
+        </div>
+
+        <details
+          v-if="wallet && !loading && secondaryAssets.length > 0"
+          class="shipment-page__other"
+          :open="secondaryDetailsOpen"
+        >
+          <summary class="shipment-page__other-summary">
+            <span class="shipment-page__other-title">Other compressed balances</span>
+            <Icon icon="lucide:chevron-down" class="shipment-page__other-chevron" />
+          </summary>
+          <p class="shipment-page__other-hint">
+            Tokens not listed in this dGuild's catalog. You can still claim them to your wallet.
+          </p>
+          <div class="shipment-page__list shipment-page__list--nested">
+            <ShipmentClaimCard
+              v-for="a in secondaryAssets"
+              :key="a.id"
+              :title="displayName(a)"
+              :amount="formatAmount(a)"
+              :claiming="claiming === a.id"
+              :explorer-url="a.mint ? explorerLinks.tokenUrl(a.mint) : undefined"
+              :has-banner="hasBanner(a)"
+              :has-image="hasImage(a)"
+              :card-right-style="cardRightStyle(a)"
+              @claim="claim(a)"
             />
           </div>
-        </div>
+        </details>
       </div>
     </div>
   </PageSection>
@@ -72,7 +80,7 @@ import { ref, computed, watch } from 'vue'
 import { formatRawTokenAmount, truncateAddress } from '@decentraguild/display'
 import { getModuleState, isModuleVisibleToMembers } from '@decentraguild/core'
 import { Icon } from '@iconify/vue'
-import { Button } from '~/components/ui/button'
+import ShipmentClaimCard from '~/components/shipment/ShipmentClaimCard.vue'
 import { useAuth } from '@decentraguild/auth'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
@@ -105,12 +113,27 @@ interface DisplayInfo {
   name: string | null
   image: string | null
   isBanner: boolean
+  inTenantCatalog: boolean
 }
 
 const assets = ref<CompressedAsset[]>([])
 const displayByMint = ref<Map<string, DisplayInfo>>(new Map())
 const loading = ref(true)
 const claiming = ref<string | null>(null)
+
+function mintKey(a: CompressedAsset): string {
+  return a.mint ?? a.id
+}
+
+const primaryAssets = computed(() =>
+  assets.value.filter((a) => displayByMint.value.get(mintKey(a))?.inTenantCatalog === true),
+)
+
+const secondaryAssets = computed(() =>
+  assets.value.filter((a) => displayByMint.value.get(mintKey(a))?.inTenantCatalog !== true),
+)
+
+const secondaryDetailsOpen = computed(() => primaryAssets.value.length === 0)
 
 function displayName(a: CompressedAsset): string {
   const mint = a.mint ?? a.id
@@ -178,7 +201,8 @@ async function fetchDisplay(mints: string[]) {
     const metaImg = meta?.image ?? null
     const image = bannerImg ?? metaImg
     const isBanner = !!bannerImg
-    map.set(mint, { name, image, isBanner })
+    const inTenantCatalog = catalogByMint.has(mint)
+    map.set(mint, { name, image, isBanner, inTenantCatalog })
   }
   displayByMint.value = map
 }
@@ -280,7 +304,8 @@ watch([wallet, rpcUrl], () => fetchAssets(), { immediate: true })
 <style scoped>
 .shipment-page__inactive,
 .shipment-page__hint,
-.shipment-page__empty {
+.shipment-page__empty,
+.shipment-page__minimal {
   margin: 0;
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
@@ -320,65 +345,47 @@ watch([wallet, rpcUrl], () => fetchAssets(), { immediate: true })
   flex-direction: column;
   gap: var(--theme-space-md);
 }
-.shipment-page__card {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr;
-  min-height: 100px;
-  border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-lg);
-  overflow: hidden;
-  text-align: left;
+.shipment-page__list--nested {
+  margin-top: var(--theme-space-md);
 }
-.shipment-page__card-link {
-  position: absolute;
-  top: var(--theme-space-sm);
-  right: var(--theme-space-sm);
-  color: var(--theme-text-secondary);
-  display: inline-flex;
-  z-index: 1;
+.shipment-page__other {
+  margin-top: var(--theme-space-xl);
+  border: none;
+  padding: 0;
 }
-.shipment-page__card-link:hover {
-  color: var(--theme-text);
-}
-.shipment-page__card-left {
+.shipment-page__other-summary {
+  list-style: none;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: var(--theme-space-lg);
-  background: var(--theme-bg-card);
-}
-.shipment-page__card-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  justify-content: space-between;
   gap: var(--theme-space-sm);
-  color: var(--theme-text);
-  text-align: center;
+  cursor: pointer;
+  padding: var(--theme-space-xs) 0;
+  font: inherit;
+  color: var(--theme-text-primary);
 }
-.shipment-page__card-name {
-  font-size: var(--theme-font-lg);
+.shipment-page__other-summary::-webkit-details-marker {
+  display: none;
+}
+.shipment-page__other-title {
+  font-size: var(--theme-font-base);
   font-weight: 600;
   margin: 0;
-  line-height: 1.2;
 }
-.shipment-page__card-amount {
-  font-size: var(--theme-font-md);
-  font-weight: 500;
-  color: var(--theme-text-secondary);
+.shipment-page__other-chevron {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--theme-text-muted);
+  transition: transform 0.15s ease;
 }
-.shipment-page__card-right {
-  min-height: 120px;
-  background: var(--theme-bg-card);
+.shipment-page__other[open] .shipment-page__other-chevron {
+  transform: rotate(180deg);
 }
-.shipment-page__card-right--fade {
-  mask-image: linear-gradient(to right, transparent 0%, black 50%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 50%);
-}
-
-@media (min-width: 640px) {
-  .shipment-page__card {
-    grid-template-columns: 1fr 1fr;
-  }
+.shipment-page__other-hint {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-muted);
+  margin: 0 0 var(--theme-space-md);
+  line-height: 1.5;
 }
 </style>
