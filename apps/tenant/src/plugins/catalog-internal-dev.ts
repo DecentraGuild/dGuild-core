@@ -1,6 +1,6 @@
-import { setInternalDevTenantIds } from '@decentraguild/catalog'
+import { setInternalDevTenantIds, resolveInternalDevTenantIdsFromEnv } from '@decentraguild/catalog'
 
 export default defineNuxtPlugin(() => {
-  const ids = useRuntimeConfig().public.internalDevTenantIds as string[] | undefined
-  if (Array.isArray(ids) && ids.length > 0) setInternalDevTenantIds(ids)
+  const raw = useRuntimeConfig().public.internalDevTenantIds as string | undefined
+  setInternalDevTenantIds(resolveInternalDevTenantIdsFromEnv(raw))
 })
