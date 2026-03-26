@@ -148,11 +148,14 @@ export function isInternalDevTenant(tenantId: string): boolean {
 export function canActivateModule(
   status: ModuleCatalogStatus,
   tenantId: string,
+  /** When set (e.g. from Nuxt runtimeConfig), avoids relying on setInternalDevTenantIds singleton — use in the tenant app so Vite chunk splits cannot desync allowlists. */
+  resolvedInternalDevTenantIds?: readonly string[],
 ): boolean {
+  const internal = resolvedInternalDevTenantIds ?? getInternalDevTenantIds()
   switch (status) {
     case 'available': return true
-    case 'coming_soon': return isInternalDevTenant(tenantId)
-    case 'development': return isInternalDevTenant(tenantId)
+    case 'coming_soon': return internal.includes(tenantId)
+    case 'development': return internal.includes(tenantId)
     case 'deprecated': return false
     case 'off': return false
   }

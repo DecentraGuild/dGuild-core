@@ -58,6 +58,11 @@ describe('canActivateModule', () => {
   const internal = INTERNAL_DEV_TENANT_ID
   const external = 'some-tenant'
 
+  it('uses explicit allowlist when passed (avoids singleton / duplicate bundle issues)', () => {
+    expect(canActivateModule('coming_soon', '7777777', ['0000000', '7777777'])).toBe(true)
+    expect(canActivateModule('coming_soon', '8888888', ['0000000', '7777777'])).toBe(false)
+  })
+
   it('available: anyone may activate', () => {
     expect(canActivateModule('available', external)).toBe(true)
     expect(canActivateModule('available', internal)).toBe(true)
