@@ -43,6 +43,10 @@ async function main(): Promise<void> {
     await registerCommands(client)
     if (!hasBotSecret()) return
 
+    console.log(
+      `[discord-bot] ready as ${client.user?.tag ?? '?'}; guilds=${client.guilds.cache.size}`,
+    )
+
     if (apiReadinessMaxWait > 0) {
       try {
         await waitForSupabaseReady({
@@ -51,17 +55,6 @@ async function main(): Promise<void> {
         })
       } catch (err) {
         console.error('Supabase did not become ready in time:', err)
-      }
-    }
-
-    const guilds = [...client.guilds.cache.values()]
-    for (let i = 0; i < guilds.length; i++) {
-      if (i > 0) await new Promise((r) => setTimeout(r, GUILD_SYNC_STAGGER_MS))
-      const guild = guilds[i]
-      try {
-        await syncLinkedGuild(guild)
-      } catch (err) {
-        console.error(`Sync failed for guild ${guild.name}:`, err)
       }
     }
 
@@ -79,9 +72,11 @@ async function main(): Promise<void> {
       }
     }
 
+    // Register interval BEFORE initial sync: if member fetch or a guild hangs, periodic sync still runs.
     syncIntervalId = setInterval(() => {
       if (!hasBotSecret()) return
       const guilds = [...client.guilds.cache.values()]
+      console.log(`[discord-bot] interval tick (${Math.round(roleSyncMs / 1000)}s), ${guilds.length} guild(s)`)
       guilds.forEach((guild, i) => {
         const delayMs = i * GUILD_SYNC_STAGGER_MS
         const run = () => syncLinkedGuild(guild).catch((err) => console.error(`Sync interval error ${guild.name}:`, err))
@@ -89,6 +84,27 @@ async function main(): Promise<void> {
         else setTimeout(run, delayMs)
       })
     }, roleSyncMs)
+
+    const guilds = [...client.guilds.cache.values()]
+    console.log(`[discord-bot] initial sync starting (${guilds.length} guild(s))`)
+    for (let i = 0; i < guilds.length; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, GUILD_SYNC_STAGGER_MS))
+      const guild = guilds[i]
+      try {
+        await syncLinkedGuild(guild)
+      } catch (err) {
+        console.error(`Sync failed for guild ${guild.name}:`, err)
+      }
+    }
+    console.log('[discord-bot] initial sync finished')
+  })
+
+  client.on('error', (err) => {
+    console.error('[discord-bot] client error:', err)
+  })
+
+  client.on('warn', (msg) => {
+    console.warn('[discord-bot]', msg)
   })
 
   client.on('guildCreate', async (guild) => {
@@ -116,6 +132,10 @@ async function main(): Promise<void> {
     clearSyncInterval()
     client.destroy()
     process.exit(0)
+  })
+
+  process.on('unhandledRejection', (reason) => {
+    console.error('[discord-bot] unhandledRejection:', reason)
   })
 
   await client.login(discordToken)
