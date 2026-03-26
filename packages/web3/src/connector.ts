@@ -197,10 +197,18 @@ export async function connectWallet(
 /**
  * Ensures a signing wallet is ready for the given session address.
  *
- * Mobile: builds a wallet directly from the session address without calling connectWallet.
- * ConnectorKit's connectWallet for MWA triggers transact() even in silent mode when it
- * cannot restore state, which fires ERROR_WALLET_NOT_FOUND before the user sees the tx.
- * mwaSingleSessionSignTransactions handles auth+signing in one transact() — no pre-connect needed.
+ * Mobile (MWA):
+ *   Attempts a silent connectWallet so wallet-standard-mobile populates its in-memory
+ *   _authorization from the MWA auth cache. That lets its own _transact() read
+ *   wallet_uri_base and open the wallet via App Link (no Android picker) for subsequent
+ *   signTransaction calls.
+ *
+ *   No allowInteractiveFallback — that flag was causing a first transact() for interactive
+ *   auth which raced with the signing transact(), resulting in "wallet closes before showing tx".
+ *
+ *   If silent connect finds no valid cache (page cold-load, cache cleared): falls back to
+ *   mobileSigningWallet which uses mwaSingleSessionSignTransactions directly. The picker may
+ *   appear once, after which the wallet returns wallet_uri_base which is stored for next time.
  *
  * Desktop: attempts silent auto-connect via ConnectorKit as before.
  */
@@ -213,6 +221,25 @@ export async function ensureSigningWalletForSession(
   const expected = sessionWalletAddress.trim()
 
   if (isMobileUserAgent()) {
+    const existing = getWalletAndAccount(getClient())
+    if (existing?.account.address === expected) return
+
+    const client = getClient()
+    try {
+      // Silent only — never interactive. Interactive would open a transact() before signing,
+      // creating a second competing session that causes ERROR_WALLET_NOT_FOUND on the sign transact().
+      await client.connectWallet(MOBILE_WALLET_CONNECTOR_ID, {
+        silent: true,
+        preferredAccount: expected,
+      } as ConnectOptions)
+    } catch {
+      // Silent connect failure is non-fatal; fall through to mobileSigningWallet path.
+    }
+
+    if (getWalletAndAccount(client)?.account.address === expected) return
+
+    // Cache miss or stale: build a minimal wallet so getEscrowWalletFromConnector() returns
+    // something usable. mwaSingleSessionSignTransactions handles auth inline via its own transact().
     mobileSigningWallet = {
       publicKey: new PublicKey(expected),
       signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
@@ -582,8 +609,13 @@ async function mwaSingleSessionSignTransactions(
       }
 
       try {
+        // Only update auth_token and wallet_uri_base; preserve the original accounts array
+        // (base58 addresses) written by mwaSingleSessionSignIn. Spreading authResult.accounts
+        // would overwrite with the MWA protocol's base64-encoded addresses, which would break
+        // createDefaultAuthorizationCache().get() on the next connectWallet(silent:true) call.
         const base = cachedEntry ?? {}
-        localStorage.setItem(MWA_CACHE_KEY, JSON.stringify({ ...base, ...authResult }))
+        const { accounts: _drop, ...authUpdate } = authResult as MwaAuthResult & { accounts?: unknown }
+        localStorage.setItem(MWA_CACHE_KEY, JSON.stringify({ ...base, ...authUpdate }))
       } catch {
         // localStorage unavailable
       }
@@ -634,24 +666,18 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
   const address = pair.account.address
   const publicKey = typeof address === 'string' ? new PublicKey(address) : address
   const isMwa = isMobileWalletAdapterConnector(connectorId)
-  const signTransaction = isMwa
-    ? async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
-        const [signed] = await mwaSingleSessionSignTransactions([tx])
-        return signed as T
-      }
-    : async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
-        const signed = await signer.signTransaction(tx)
-        return signed as T
-      }
-  const signAllTransactions = isMwa
-    ? async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-        const signed = await mwaSingleSessionSignTransactions(txs)
-        return signed as T[]
-      }
-    : async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-        const signed = await signer.signAllTransactions(txs)
-        return signed as T[]
-      }
+  // When ConnectorKit has a valid MWA session, let wallet-standard-mobile's own signer handle
+  // signing. Its internal _transact() reads wallet_uri_base from the in-memory _authorization
+  // (set by connectWallet(silent:true) in ensureSigningWalletForSession), so Backpack is opened
+  // directly via App Link without showing the Android app picker.
+  const signTransaction = async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+    const signed = await signer.signTransaction(tx)
+    return signed as T
+  }
+  const signAllTransactions = async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+    const signed = await signer.signAllTransactions(txs)
+    return signed as T[]
+  }
   const canSend = signer.getCapabilities().canSend
   // Backpack extension: signAndSend + ConnectorKit's `transactions: [bytes]` looks like a batch in the UI.
   // Mobile Wallet Adapter: same wire + wallet-broadcast path often returns to the browser without a clear
