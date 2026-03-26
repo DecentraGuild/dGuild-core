@@ -1,7 +1,6 @@
 import type { Connection } from '@solana/web3.js'
 import { SendTransactionError, Transaction, type PublicKey } from '@solana/web3.js'
 import type { Keypair } from '@solana/web3.js'
-import { isMobileUserAgent, settleWebViewAfterWalletReturn } from '../wallet-standard-ready.js'
 import type { Wallet } from './types.js'
 
 export interface SendAndConfirmOptions {
@@ -134,10 +133,6 @@ export async function sendAndConfirmTransaction(
     await simulateUnsignedLegacyTransaction(connection, transaction)
   }
 
-  if (typeof window !== 'undefined' && isMobileUserAgent()) {
-    await settleWebViewAfterWalletReturn({ settleMs: 400 })
-  }
-
   if (typeof wallet.signAndSendTransaction === 'function' && signers.length === 0) {
     onStatus?.('signing')
     const sig = await wallet.signAndSendTransaction(transaction)
@@ -152,10 +147,6 @@ export async function sendAndConfirmTransaction(
   if (signLastValid != null) {
     ;(transaction as Transaction & { lastValidBlockHeight?: number }).lastValidBlockHeight =
       signLastValid
-  }
-
-  if (typeof window !== 'undefined' && isMobileUserAgent()) {
-    await settleWebViewAfterWalletReturn({ settleMs: 400 })
   }
 
   onStatus?.('signing')
