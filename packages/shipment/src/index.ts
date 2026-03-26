@@ -7,7 +7,7 @@
 import {
   PublicKey,
   SendTransactionError,
-  TransactionMessage,
+  Transaction,
   VersionedTransaction,
 } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
@@ -360,8 +360,9 @@ function amountToBn(amount: bigint | number | string) {
 
 /**
  * Decompress a compressed token to the owner's SPL ATA.
- * Mirrors `@lightprotocol/compressed-token` high-level `decompress` (same account selection,
- * amount semantics, proof, and v0 message shape). Legacy `Transaction` breaks this flow.
+ * Mirrors `@lightprotocol/compressed-token` account selection, amount semantics, and proof fetch.
+ * Uses legacy `Transaction` (not v0) so Solana Connector / embedded wallets can sign; v0 hits
+ * "Versioned messages must be deserialized with VersionedMessage.deserialize()".
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
   const {
@@ -493,14 +494,14 @@ export async function decompressToken(params: DecompressParams): Promise<string>
 
   const { value: blockhashCtx } = await rpc.getLatestBlockhashAndContext()
 
-  const messageV0 = new TransactionMessage({
-    payerKey: owner,
-    recentBlockhash: blockhashCtx.blockhash,
-    instructions,
-  }).compileToV0Message()
+  const tx = new Transaction()
+  for (const ix of instructions) {
+    tx.add(ix)
+  }
+  tx.recentBlockhash = blockhashCtx.blockhash
+  tx.feePayer = owner
 
-  const vtx = new VersionedTransaction(messageV0)
-  const signedTx = await wallet.signTransaction(vtx)
+  const signedTx = await wallet.signTransaction(tx)
   try {
     const sig = await rpc.sendRawTransaction(signedTx.serialize(), {
       skipPreflight: false,
