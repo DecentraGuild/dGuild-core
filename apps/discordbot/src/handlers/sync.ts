@@ -10,6 +10,16 @@ import {
 import { hasBotSecret } from '../config.js'
 import { GUILD_NOT_LINKED_CODE } from '../discord-errors.js'
 
+/** Discord REST: 50001 Missing Access / 50013 Missing Permissions — usually role hierarchy or Manage Roles. */
+function discordRoleActionHint(err: unknown): string {
+  const code =
+    err && typeof err === 'object' && 'code' in err ? (err as { code?: number }).code : undefined
+  if (code === 50001 || code === 50013) {
+    return ' → Bot must be above the role it assigns, and above the member’s top role (Discord blocks changes to users who outrank the bot). Check Manage Roles.'
+  }
+  return ''
+}
+
 /** Fetch all members and return member_roles (user id -> role ids, excluding @everyone) and a member map for reuse. */
 async function fetchMemberRolesAndMap(guild: Guild): Promise<{
   memberRoles: Record<string, string[]>
@@ -55,7 +65,10 @@ export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
           await member.roles.add(role)
         }
       } catch (err) {
-        console.warn(`[roles] ${guild.name}: add role ${discord_role_id} for ${userId} failed:`, err)
+        console.warn(
+          `[roles] ${guild.name}: add role ${discord_role_id} for ${userId} failed${discordRoleActionHint(err)}:`,
+          err,
+        )
       }
     }
 
@@ -75,7 +88,10 @@ export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
         memberMap.get(discord_user_id) ?? (await guild.members.fetch(discord_user_id).catch(() => null))
       if (member) await member.roles.remove(discord_role_id)
     } catch (err) {
-      console.warn(`[roles] ${guild.name}: remove role ${discord_role_id} for ${discord_user_id} failed:`, err)
+      console.warn(
+        `[roles] ${guild.name}: remove role ${discord_role_id} for ${discord_user_id} failed${discordRoleActionHint(err)}:`,
+        err,
+      )
     }
   }
 

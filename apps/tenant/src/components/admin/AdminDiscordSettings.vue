@@ -17,7 +17,9 @@
       <div class="discord-settings__role-col">
         <h4 class="discord-settings__role-heading">Roles the bot can assign</h4>
         <p class="discord-settings__role-hint">
-          Roles below the bot’s highest role. Used when you assign a rule to a role.
+          Roles below the bot’s highest role (by position). Used when you assign a rule to a role. Discord also
+          refuses to change a member if their highest role is above the bot — test with an account that has no
+          staff roles above the bot.
         </p>
         <ul v-if="guildRoles.length" class="discord-settings__role-ul">
           <li v-for="r in guildRoles" :key="r.role_id">{{ r.name || r.role_id }}</li>
