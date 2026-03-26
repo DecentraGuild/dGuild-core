@@ -121,6 +121,7 @@ Deno.serve(async (req: Request) => {
       .from('condition_set_conditions')
       .select('condition_set_id, type, payload, logic_to_next')
       .in('condition_set_id', setIds)
+      .order('id', { ascending: true })
 
     const conditionsBySetId = new Map<number, ConditionRow[]>()
     for (const c of allConditions ?? []) {

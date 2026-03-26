@@ -316,7 +316,8 @@ export interface DecompressParams {
   /** Wallet adapter. Use getEscrowWalletFromConnector from @decentraguild/web3. */
   wallet: import('@decentraguild/web3').EscrowWallet
   mint: string
-  amount: bigint | number
+  /** Raw token amount (same units as on-chain parsed.amount). Prefer string to avoid float loss. */
+  amount: bigint | number | string
   decimals: number
   /** RPC URL. Prefer passing this explicitly (e.g. from useRpc) for decompress. */
   rpcUrl?: string
@@ -324,18 +325,32 @@ export interface DecompressParams {
   tokenProgramId?: typeof TOKEN_PROGRAM_ID | typeof TOKEN_2022_PROGRAM_ID
 }
 
+function amountToBn(amount: bigint | number | string) {
+  const s =
+    typeof amount === 'bigint'
+      ? amount.toString()
+      : typeof amount === 'string'
+        ? amount.trim()
+        : Number.isFinite(amount)
+          ? String(Math.trunc(amount))
+          : ''
+  if (!s || !/^\d+$/.test(s)) throw new Error('Invalid token amount')
+  return bn(s)
+}
+
 /**
  * Decompress a compressed token to the owner's SPL ATA.
- * Uses AirShip flow: getCompressedTokenAccountsByOwner → selectMinCompressedTokenAccountsForTransfer
- * → getValidityProofV0 (per-account merkleTree + nullifierQueue from RPC) → decompress → legacy Transaction.
- * Avoids the high-level decompress() which can hit "slice" errors with Helius proof format.
+ * Uses getCompressedTokenAccountsByOwner → selectMinCompressedTokenAccountsForTransfer
+ * → getValidityProofV0 (per-account tree + queue from the token account) → decompress.
+ * Decompress amount uses the sum of selected accounts' parsed amounts so no remainder
+ * compressed output is left (remainder would need extra new-address proofs and fails with 0x1900).
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
   const { connection, wallet, mint, amount, rpcUrl: rpcUrlParam, tokenProgramId } =
     params
   const owner = wallet.publicKey
   const mintPk = new PublicKey(mint)
-  const amountRaw = typeof amount === 'bigint' ? Number(amount) : amount
+  const requestedBn = amountToBn(amount)
   const programId = tokenProgramId ?? TOKEN_PROGRAM_ID
   const splAta = getAssociatedTokenAddressSync(mintPk, owner, false, programId)
 
@@ -353,12 +368,14 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   const compressedAccounts = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
   const [inputAccounts] = selectMinCompressedTokenAccountsForTransfer(
     compressedAccounts.items,
-    bn(amountRaw)
+    requestedBn
   )
 
-  // Proof must use each leaf's actual state tree + queue (from RPC). Using
-  // pickRandomTreeAndQueue here produces proofs for the wrong tree; on-chain
-  // Light + Lighthouse asserts then fail (e.g. custom 0x1900, "Some(x)==Some(0)").
+  const sumSelected = inputAccounts.reduce(
+    (s, a) => s.add(a.parsed.amount),
+    bn(0)
+  )
+
   const proof = await rpc.getValidityProofV0(
     inputAccounts.map((account) => ({
       hash: bn(account.compressedAccount.hash),
@@ -373,7 +390,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     payer: owner,
     inputCompressedTokenAccounts: inputAccounts,
     toAddress: splAta,
-    amount: bn(amountRaw),
+    amount: sumSelected,
     recentInputStateRootIndices: proof.rootIndices,
     recentValidityProof: proof.compressedProof,
     outputStateTree,

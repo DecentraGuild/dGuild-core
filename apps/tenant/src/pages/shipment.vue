@@ -200,8 +200,11 @@ async function fetchAssets() {
     const accounts = await fetchCompressedTokenAccounts(url, w)
     const withDecimals: CompressedAsset[] = []
     for (const b of accounts) {
-      const amt = Number(b.amount)
-      if (amt <= 0) continue
+      try {
+        if (BigInt(b.amount) <= 0n) continue
+      } catch {
+        continue
+      }
       let decimals: number | null = null
       if (conn) {
         try {
@@ -241,15 +244,15 @@ async function claim(a: CompressedAsset) {
     const walletAdapter = getEscrowWalletFromConnector()
     if (!walletAdapter?.publicKey) throw new Error('Wallet not connected')
     const mint = a.mint ?? a.id
-    const amountRaw = Number(a.amount ?? '0')
+    const amountStr = String(a.amount ?? '0').trim()
+    if (!/^\d+$/.test(amountStr) || amountStr === '0') throw new Error('Invalid amount')
     const decimals = a.decimals ?? a.token_info?.decimals ?? null
-    if (amountRaw <= 0) throw new Error('Invalid amount')
     if (decimals == null || !Number.isFinite(decimals)) throw new Error('Token decimals not available')
     const sig = await doDecompress({
       connection: conn,
       wallet: walletAdapter,
       mint,
-      amount: amountRaw,
+      amount: amountStr,
       decimals,
       rpcUrl: rpcUrl.value || undefined,
     })
