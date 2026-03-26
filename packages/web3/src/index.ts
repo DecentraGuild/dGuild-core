@@ -5,6 +5,7 @@ export {
   connectWallet,
   disconnectWallet,
   isBackpackConnector,
+  isMobileWalletAdapterConnector,
   signMessageForAuth,
   getWalletAndAccount,
   getEscrowWalletFromConnector,
