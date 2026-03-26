@@ -4,7 +4,7 @@
  * Follows Helius AirShip pattern: createTokenPool, CompressedTokenProgram.compress with outputStateTree.
  */
 
-import { PublicKey, Transaction } from '@solana/web3.js'
+import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
 import type { Keypair } from '@solana/web3.js'
 import {
@@ -30,6 +30,7 @@ const LOOKUP_TABLE_MAINNET = new PublicKey(
   '9NYFyEqPkyXUhkerbGHXUXkvb4qpzeEdHuGpgbgpH1NJ'
 )
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
+const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 3
 const COMPUTE_UNIT_LIMIT = 550_000
 
 export interface ShipmentRecipient {
@@ -186,6 +187,10 @@ export async function registerMintForCompression(
  * Compress and send tokens to recipients. Ship wallet must hold the tokens in its ATA.
  * Uses AirShip flow: createTokenPool, getCachedActiveStateTreeInfo, pickRandomTreeAndQueue,
  * CompressedTokenProgram.compress with outputStateTree, buildAndSignTx.
+ * Large recipient lists are split across multiple transactions (v0 message size limit).
+ * The payer keypair signs every partial tx in one batch (same blockhash) before any
+ * send—no per-tx wallet popups; only the RPC submit/confirm steps are sequential.
+ * Returns one base58 signature, or comma-separated signatures when multiple txs were sent.
  */
 export async function compressAndSend(
   params: CompressAndSendParams
@@ -244,14 +249,12 @@ export async function compressAndSend(
     throw new Error('Mainnet lookup table not found')
   }
 
-  const instructions: import('@solana/web3.js').TransactionInstruction[] = [
-    ComputeBudgetProgram.setComputeUnitLimit({ units: COMPUTE_UNIT_LIMIT }),
-  ]
-
   const toAddresses = recipients.map((r) => new PublicKey(r.address))
   const amountsRaw = recipients.map((r) => Math.round(r.amount * multiplier))
   const amountsBN = amountsRaw.map((a) => bn(a))
 
+  const compressInstructions: import('@solana/web3.js').TransactionInstruction[] =
+    []
   for (let i = 0; i < toAddresses.length; i += MAX_ADDRESSES_PER_INSTRUCTION) {
     const batch = toAddresses.slice(i, i + MAX_ADDRESSES_PER_INSTRUCTION)
     const batchAmounts = amountsBN.slice(i, i + MAX_ADDRESSES_PER_INSTRUCTION)
@@ -265,23 +268,46 @@ export async function compressAndSend(
       tokenProgramId: programId,
       outputStateTree: tree,
     })
-    instructions.push(compressIx)
+    compressInstructions.push(compressIx)
   }
 
   const { blockhash } = await rpc.getLatestBlockhash()
-  const signedTx = buildAndSignTx(
-    instructions,
-    payer,
-    blockhash,
-    undefined,
-    [lookupTableAccount]
-  )
 
-  const sig = await rpc.sendRawTransaction(signedTx.serialize(), {
-    skipPreflight: false,
-  })
-  await rpc.confirmTransaction(sig, 'confirmed')
-  return sig
+  const signedTxs: VersionedTransaction[] = []
+  for (
+    let i = 0;
+    i < compressInstructions.length;
+    i += MAX_COMPRESS_INSTRUCTIONS_PER_TX
+  ) {
+    const chunk = compressInstructions.slice(
+      i,
+      i + MAX_COMPRESS_INSTRUCTIONS_PER_TX
+    )
+    const instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: COMPUTE_UNIT_LIMIT }),
+      ...chunk,
+    ]
+    signedTxs.push(
+      buildAndSignTx(
+        instructions,
+        payer,
+        blockhash,
+        undefined,
+        [lookupTableAccount]
+      )
+    )
+  }
+
+  const signatures: string[] = []
+  for (const signedTx of signedTxs) {
+    const sig = await rpc.sendRawTransaction(signedTx.serialize(), {
+      skipPreflight: false,
+    })
+    await rpc.confirmTransaction(sig, 'confirmed')
+    signatures.push(sig)
+  }
+
+  return signatures.join(',')
 }
 
 export interface DecompressParams {

@@ -38,6 +38,12 @@ defineProps<{
   padding: var(--theme-space-md) var(--theme-space-xl);
 }
 
+@media (max-width: 767px) {
+  .app-header {
+    padding-inline: var(--theme-space-md);
+  }
+}
+
 .app-header__left {
   display: flex;
   align-items: center;
@@ -80,6 +86,10 @@ defineProps<{
 }
 
 @media (max-width: 767px) {
+  .app-header__name {
+    display: none;
+  }
+
   .app-header__nav {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;

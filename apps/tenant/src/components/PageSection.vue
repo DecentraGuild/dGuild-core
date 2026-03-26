@@ -21,8 +21,10 @@ defineProps<{
 <style scoped>
 .page-section {
   width: 100%;
-  max-width: none;
+  max-width: 100%;
+  min-width: 0;
   padding: var(--theme-space-xl) 0;
+  box-sizing: border-box;
 }
 
 .page-section__header {
@@ -30,6 +32,7 @@ defineProps<{
   align-items: center;
   gap: var(--theme-space-lg);
   flex-wrap: wrap;
+  min-width: 0;
   margin-bottom: var(--theme-space-md);
 }
 
