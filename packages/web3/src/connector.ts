@@ -1,5 +1,4 @@
-import { PublicKey } from '@solana/web3.js'
-import type { Transaction, VersionedTransaction } from '@solana/web3.js'
+import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js'
 import {
   ConnectorClient,
   createSolanaMainnet,
@@ -209,7 +208,6 @@ export async function ensureSigningWalletForSession(
   const silentSessionOpts = {
     silent: true,
     preferredAccount: expected,
-    allowInteractiveFallback: true,
   } as ConnectOptions
 
   if (isMobileUserAgent()) {
@@ -491,6 +489,107 @@ export async function mwaSingleSessionSignIn({
   ) as Promise<{ message: string; signature: Uint8Array; address: string }>
 }
 
+type MwaAuthResult = {
+  accounts: Array<{ address: string; label?: string; icon?: string }>
+  auth_token: string
+  wallet_uri_base?: string
+}
+
+type MwaSigningWallet = {
+  authorize: (p: {
+    auth_token?: string
+    chain: string
+    identity: { name: string; uri: string; icon: string }
+  }) => Promise<MwaAuthResult>
+  signTransactions: (p: { payloads: string[] }) => Promise<{ signed_payloads: string[] }>
+}
+
+/**
+ * Sign one or more transactions via a single MWA transact() session.
+ *
+ * authorize (with cached auth_token for silent reauth, or fresh on expiry) and
+ * signTransactions run inside the SAME transact() so the wallet never closes between
+ * authorization and the transaction approval screen.
+ *
+ * wallet_uri_base from the auth cache is passed as baseUri so the protocol targets the
+ * wallet's registered App Link (https://...) instead of the generic solana-wallet://
+ * custom scheme — bypassing the Android app picker when multiple wallets are installed.
+ */
+async function mwaSingleSessionSignTransactions(
+  txs: (Transaction | VersionedTransaction)[],
+): Promise<(Transaction | VersionedTransaction)[]> {
+  const { transact } = await import(
+    /* webpackChunkName: "mwa-protocol" */
+    '@solana-mobile/mobile-wallet-adapter-protocol'
+  )
+  const appUrl = resolveAppUrl()
+  const identity = { name: 'DecentraGuild', uri: appUrl, icon: '/favicon.ico' }
+
+  let cachedEntry: { auth_token?: string; wallet_uri_base?: string } | null = null
+  try {
+    const raw =
+      typeof localStorage !== 'undefined' ? localStorage.getItem(MWA_CACHE_KEY) : null
+    if (raw) cachedEntry = JSON.parse(raw) as { auth_token?: string; wallet_uri_base?: string }
+  } catch {
+    // localStorage unavailable
+  }
+
+  const baseUri = cachedEntry?.wallet_uri_base ?? undefined
+
+  return (transact as (
+    cb: (w: unknown) => Promise<unknown>,
+    config?: { baseUri?: string },
+  ) => Promise<unknown>)(
+    async (mobileWallet: unknown) => {
+      const wallet = mobileWallet as MwaSigningWallet
+
+      let authResult: MwaAuthResult
+      if (cachedEntry?.auth_token) {
+        try {
+          // Pass auth_token to authorize — the proxy routes to 'reauthorize' RPC (legacy)
+          // or 'authorize' with auth_token in params (v1), matching wallet-standard-mobile.
+          authResult = await wallet.authorize({
+            auth_token: cachedEntry.auth_token,
+            chain: 'solana:mainnet',
+            identity,
+          })
+        } catch {
+          // Token expired or rejected — fall back to full authorize in the same session
+          authResult = await wallet.authorize({ chain: 'solana:mainnet', identity })
+        }
+      } else {
+        authResult = await wallet.authorize({ chain: 'solana:mainnet', identity })
+      }
+
+      try {
+        const base = cachedEntry ?? {}
+        localStorage.setItem(MWA_CACHE_KEY, JSON.stringify({ ...base, ...authResult }))
+      } catch {
+        // localStorage unavailable
+      }
+
+      // MWA sign_transactions RPC expects `payloads` (base64-encoded serialized txs)
+      const payloads = txs.map((tx) => {
+        const bytes =
+          tx instanceof Transaction
+            ? tx.serialize({ requireAllSignatures: false, verifySignatures: false })
+            : tx.serialize()
+        return uint8ArrayToBase64(bytes)
+      })
+
+      const { signed_payloads } = await wallet.signTransactions({ payloads })
+
+      return txs.map((original, i) => {
+        const bytes = base64ToUint8Array(signed_payloads[i]!)
+        return original instanceof Transaction
+          ? Transaction.from(bytes)
+          : VersionedTransaction.deserialize(bytes)
+      })
+    },
+    { baseUri },
+  ) as Promise<(Transaction | VersionedTransaction)[]>
+}
+
 export function getEscrowWalletFromConnector(): EscrowWallet | null {
   const client = getClient()
   const pair = getWalletAndAccount(client)
@@ -514,20 +613,31 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
   }
   const address = pair.account.address
   const publicKey = typeof address === 'string' ? new PublicKey(address) : address
-  const signTransaction = async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
-    const signed = await signer.signTransaction(tx)
-    return signed as T
-  }
-  const signAllTransactions = async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-    const signed = await signer.signAllTransactions(txs)
-    return signed as T[]
-  }
+  const isMwa = isMobileWalletAdapterConnector(connectorId)
+  const signTransaction = isMwa
+    ? async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+        const [signed] = await mwaSingleSessionSignTransactions([tx])
+        return signed as T
+      }
+    : async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+        const signed = await signer.signTransaction(tx)
+        return signed as T
+      }
+  const signAllTransactions = isMwa
+    ? async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+        const signed = await mwaSingleSessionSignTransactions(txs)
+        return signed as T[]
+      }
+    : async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+        const signed = await signer.signAllTransactions(txs)
+        return signed as T[]
+      }
   const canSend = signer.getCapabilities().canSend
-  // Backpack extension: signAndSend + ConnectorKit’s `transactions: [bytes]` looks like a batch in the UI.
+  // Backpack extension: signAndSend + ConnectorKit's `transactions: [bytes]` looks like a batch in the UI.
   // Mobile Wallet Adapter: same wire + wallet-broadcast path often returns to the browser without a clear
   // approval screen or fails spuriously; sign + dapp `sendRawTransaction` matches the Backpack workaround.
   const signAndSendTransaction =
-    canSend && !isBackpackConnector(connectorId) && !isMobileWalletAdapterConnector(connectorId)
+    canSend && !isBackpackConnector(connectorId) && !isMwa
       ? async (tx: Transaction | VersionedTransaction): Promise<string> => {
           return signer.signAndSendTransaction(tx)
         }
