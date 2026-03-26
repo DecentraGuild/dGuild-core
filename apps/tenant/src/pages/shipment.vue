@@ -125,6 +125,8 @@ interface CompressedAsset {
   mint?: string
   amount?: string
   decimals?: number
+  /** From fetch; pass to decompress when multiple compressed accounts share a mint. */
+  accountHash?: string | null
   token_info?: { symbol?: string; decimals?: number }
   compression?: { compressed?: boolean }
 }
@@ -287,6 +289,7 @@ async function fetchAssets() {
         id: b.id,
         mint: b.mint,
         amount: b.amount,
+        accountHash: b.accountHash,
         decimals: decimals ?? undefined,
         token_info: { decimals: decimals ?? undefined },
         compression: { compressed: true },
@@ -324,6 +327,7 @@ async function claim(a: CompressedAsset) {
       amount: amountStr,
       decimals,
       rpcUrl: rpcUrl.value || undefined,
+      ...(a.accountHash ? { compressedAccountHash: a.accountHash } : {}),
     })
     if (sig) {
       fetchAssets()

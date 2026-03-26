@@ -4,7 +4,12 @@
  * Follows Helius AirShip pattern: createTokenPool, CompressedTokenProgram.compress with outputStateTree.
  */
 
-import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js'
+import {
+  PublicKey,
+  SendTransactionError,
+  Transaction,
+  VersionedTransaction,
+} from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
 import type { Keypair } from '@solana/web3.js'
 import {
@@ -78,6 +83,11 @@ export interface CompressedTokenAccount {
   mint: string
   amount: string
   decimals?: number
+  /**
+   * Merkle leaf hash for this compressed account when available.
+   * Pass to decompress as `compressedAccountHash` so the correct account is chosen when multiple exist for the same mint.
+   */
+  accountHash: string | null
 }
 
 /**
@@ -113,11 +123,15 @@ export async function fetchCompressedTokenAccounts(
   type Item = { parsed: { mint: { toBase58: () => string }; amount: { toString: () => string } }; compressedAccount?: { hash?: { toString: () => string } } }
   const raw = res as { items?: Item[]; value?: { items?: Item[] } }
   const items = raw.items ?? raw.value?.items ?? []
-  return items.map((item, i) => ({
-    id: item.compressedAccount?.hash?.toString() ?? `${item.parsed.mint.toBase58()}-${i}`,
-    mint: item.parsed.mint.toBase58(),
-    amount: item.parsed.amount.toString(),
-  }))
+  return items.map((item, i) => {
+    const hashStr = item.compressedAccount?.hash?.toString() ?? null
+    return {
+      id: hashStr ?? `${item.parsed.mint.toBase58()}-${i}`,
+      mint: item.parsed.mint.toBase58(),
+      amount: item.parsed.amount.toString(),
+      accountHash: hashStr,
+    }
+  })
 }
 
 function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
@@ -323,6 +337,12 @@ export interface DecompressParams {
   rpcUrl?: string
   /** SPL or Token-2022 mint program. Defaults to TOKEN_PROGRAM_ID. */
   tokenProgramId?: typeof TOKEN_PROGRAM_ID | typeof TOKEN_2022_PROGRAM_ID
+  /**
+   * When set, decompress only this compressed token account (from `CompressedTokenAccount.accountHash`).
+   * Required when multiple compressed accounts exist for the same mint; otherwise `selectMinCompressedTokenAccountsForTransfer`
+   * may pick the wrong accounts (largest-first) and fail with custom program error 0x1900.
+   */
+  compressedAccountHash?: string
 }
 
 function amountToBn(amount: bigint | number | string) {
@@ -340,14 +360,21 @@ function amountToBn(amount: bigint | number | string) {
 
 /**
  * Decompress a compressed token to the owner's SPL ATA.
- * Uses getCompressedTokenAccountsByOwner → selectMinCompressedTokenAccountsForTransfer
+ * Uses getCompressedTokenAccountsByOwner → (optional hash match) or selectMinCompressedTokenAccountsForTransfer
  * → getValidityProofV0 (per-account tree + queue from the token account) → decompress.
  * Decompress amount uses the sum of selected accounts' parsed amounts so no remainder
  * compressed output is left (remainder would need extra new-address proofs and fails with 0x1900).
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
-  const { connection, wallet, mint, amount, rpcUrl: rpcUrlParam, tokenProgramId } =
-    params
+  const {
+    connection,
+    wallet,
+    mint,
+    amount,
+    rpcUrl: rpcUrlParam,
+    tokenProgramId,
+    compressedAccountHash,
+  } = params
   const owner = wallet.publicKey
   const mintPk = new PublicKey(mint)
   const requestedBn = amountToBn(amount)
@@ -366,15 +393,37 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   const rpc = getRpc(rpcEndpoint)
 
   const compressedAccounts = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
-  const [inputAccounts] = selectMinCompressedTokenAccountsForTransfer(
-    compressedAccounts.items,
-    requestedBn
-  )
+  const items = compressedAccounts.items
 
-  const sumSelected = inputAccounts.reduce(
-    (s, a) => s.add(a.parsed.amount),
-    bn(0)
-  )
+  let inputAccounts: (typeof items)[number][]
+  let decompressAmountBn: ReturnType<typeof bn>
+
+  const hashNeedle = compressedAccountHash?.trim()
+  if (hashNeedle) {
+    const found = items.find((account) => {
+      const h = account.compressedAccount?.hash
+      if (h == null) return false
+      try {
+        return bn(h).eq(bn(hashNeedle))
+      } catch {
+        return h.toString() === hashNeedle
+      }
+    })
+    if (!found) {
+      throw new Error(
+        'This compressed token account was not found. Refresh the page and try again.'
+      )
+    }
+    inputAccounts = [found]
+    decompressAmountBn = bn(found.parsed.amount)
+  } else {
+    const [selected, totalBn] = selectMinCompressedTokenAccountsForTransfer(
+      items,
+      requestedBn
+    )
+    inputAccounts = selected
+    decompressAmountBn = totalBn
+  }
 
   const proof = await rpc.getValidityProofV0(
     inputAccounts.map((account) => ({
@@ -390,7 +439,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     payer: owner,
     inputCompressedTokenAccounts: inputAccounts,
     toAddress: splAta,
-    amount: sumSelected,
+    amount: decompressAmountBn,
     recentInputStateRootIndices: proof.rootIndices,
     recentValidityProof: proof.compressedProof,
     outputStateTree,
@@ -432,11 +481,33 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   tx.feePayer = owner
 
   const signedTx = await wallet.signTransaction(tx)
-  const sig = await rpc.sendRawTransaction(signedTx.serialize(), {
-    skipPreflight: false,
-  })
-  await rpc.confirmTransaction(sig, 'confirmed')
-  return sig
+  try {
+    const sig = await rpc.sendRawTransaction(signedTx.serialize(), {
+      skipPreflight: false,
+    })
+    await rpc.confirmTransaction(sig, 'confirmed')
+    return sig
+  } catch (e) {
+    if (e instanceof SendTransactionError) {
+      const base = e.message
+      const existing = e.transactionError?.logs
+      let logBlock = ''
+      if (Array.isArray(existing) && existing.length) {
+        logBlock = `\n\nFull logs:\n${existing.join('\n')}`
+      } else {
+        try {
+          const fetched = await e.getLogs(connection)
+          if (Array.isArray(fetched) && fetched.length) {
+            logBlock = `\n\nFull logs:\n${fetched.join('\n')}`
+          }
+        } catch {
+          // no signature / simulation-only — message may already include logs
+        }
+      }
+      throw new Error(`${base}${logBlock}`, { cause: e })
+    }
+    throw e
+  }
 }
 
 /** Alias for decompressToken; used by shipment page. */
