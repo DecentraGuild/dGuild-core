@@ -9,15 +9,12 @@
  *   eligible         – Compute eligible Discord user IDs per role.
  *   schedule-removals – Schedule role removals.
  *   pending-removals  – Claim and return due role removals.
- *   sync-holders     – Sync NFT/SPL holder snapshots for a guild.
+ *   sync-holders     – No-op; holder_current is maintained by cron-tracker (backwards compatible).
  */
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { isBotAuthorized } from '../_shared/bot-auth.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
-import { getSolanaConnection } from '../_shared/solana-connection.ts'
-import { Connection, PublicKey } from 'npm:@solana/web3.js@1'
-import { TOKEN_PROGRAM_ID } from 'npm:@solana/spl-token@0.4'
 import {
   evaluateRule,
   type ConditionRow,
@@ -26,65 +23,6 @@ import {
   type NFTPayload,
   type WHITELISTPayload,
 } from '@decentraguild/condition-engine'
-
-// ---------------------------------------------------------------------------
-// Holder sync helpers
-// ---------------------------------------------------------------------------
-
-const SPL_DATA_SIZE = 165
-
-async function fetchSplHolders(
-  connection: Connection,
-  mint: string,
-): Promise<Array<{ wallet: string; amount: string }>> {
-  const mintPk = new PublicKey(mint)
-  const accounts = await connection.getProgramAccounts(TOKEN_PROGRAM_ID, {
-    commitment: 'confirmed',
-    filters: [
-      { dataSize: SPL_DATA_SIZE },
-      { memcmp: { offset: 0, bytes: mintPk.toBase58() } },
-    ],
-  })
-  const byWallet = new Map<string, bigint>()
-  for (const { account } of accounts) {
-    const data = account.data as Uint8Array
-    if (data.length < 72) continue
-    const owner = new PublicKey(data.slice(32, 64)).toBase58()
-    const view = new DataView(data.buffer, data.byteOffset)
-    const amount = view.getBigUint64(64, true)
-    if (amount > 0n) byWallet.set(owner, (byWallet.get(owner) ?? 0n) + amount)
-  }
-  return [...byWallet.entries()].map(([wallet, amount]) => ({ wallet, amount: String(amount) }))
-}
-
-async function fetchNftHolders(
-  mint: string,
-): Promise<Array<{ wallet: string; amount: string }>> {
-  const rpcUrl = Deno.env.get('HELIUS_RPC_URL') ?? Deno.env.get('SOLANA_RPC_URL')!
-  const countByWallet = new Map<string, number>()
-  let page = 1
-  let hasMore = true
-  while (hasMore) {
-    const res = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0', id: 1,
-        method: 'getAssetsByGroup',
-        params: { groupKey: 'collection', groupValue: mint, limit: 1000, page },
-      }),
-    })
-    const data = await res.json() as { result?: { items?: Array<{ ownership?: { owner?: string } }> } }
-    const items = data.result?.items ?? []
-    for (const item of items) {
-      const owner = item.ownership?.owner
-      if (owner) countByWallet.set(owner, (countByWallet.get(owner) ?? 0) + 1)
-    }
-    hasMore = items.length === 1000
-    page++
-  }
-  return [...countByWallet.entries()].map(([wallet, amount]) => ({ wallet, amount: String(amount) }))
-}
 
 // ---------------------------------------------------------------------------
 // Handler
@@ -369,7 +307,6 @@ Deno.serve(async (req: Request) => {
 
     const whitelistMembersByListAddress = new Map<string, Set<string>>()
     if (allWhitelistListIds.size > 0) {
-      const connection = getSolanaConnection()
       for (const listAddress of allWhitelistListIds) {
         try {
           // Fetch on-chain whitelist entries via whitelist program
@@ -462,66 +399,28 @@ Deno.serve(async (req: Request) => {
   }
 
   // ---------------------------------------------------------------------------
-  // sync-holders – sync NFT/SPL holders for all assets configured in a guild
+  // sync-holders – no-op (holder_current is written by cron-tracker unified batch)
   // ---------------------------------------------------------------------------
   if (action === 'sync-holders') {
     const guildId = body.guildId as string
     if (!guildId) return errorResponse('guildId required', req)
 
-    // Resolve tenant_id from guild, then fetch mints with track_holders from watchtower_watches
     const { data: srvRow } = await db
       .from('discord_servers')
       .select('tenant_id')
       .eq('discord_guild_id', guildId)
       .maybeSingle()
 
-    if (!srvRow) return jsonResponse({ synced: 0 }, req)
+    if (!srvRow) return jsonResponse({ synced: 0, delegated: true }, req)
 
-    const { data: watches } = await db
-      .from('watchtower_watches')
-      .select('mint')
-      .eq('tenant_id', srvRow.tenant_id)
-      .eq('track_holders', true)
-
-    if (!watches?.length) return jsonResponse({ synced: 0 }, req)
-
-    const mintKeys = watches.map((w) => w.mint as string)
-    const { data: catalogRows } = await db
-      .from('tenant_mint_catalog')
-      .select('mint, kind')
-      .eq('tenant_id', srvRow.tenant_id)
-      .in('mint', mintKeys)
-    const assets = catalogRows ?? []
-
-    const connection = getSolanaConnection()
-    let synced = 0
-
-    for (const { mint: asset_id, kind } of assets) {
-      try {
-        let holders: Array<{ wallet: string; amount: string }>
-        if (kind === 'SPL') {
-          holders = await fetchSplHolders(connection, asset_id as string)
-        } else {
-          holders = await fetchNftHolders(asset_id as string)
-        }
-        await db.from('holder_current').upsert({
-          mint: asset_id,
-          holder_wallets: holders,
-          last_updated: new Date().toISOString(),
-        }, { onConflict: 'mint' })
-        synced++
-      } catch {
-        // continue with next asset
-      }
-    }
-
-    await db.from('discord_audit_log').insert({
-      discord_guild_id: guildId,
-      action: 'holder_sync',
-      details: { synced, total: assets.length },
-    })
-
-    return jsonResponse({ synced, total: assets.length }, req)
+    return jsonResponse(
+      {
+        delegated: true,
+        synced: 0,
+        message: 'holder_current is maintained by cron-tracker; Discord bot uses eligible only',
+      },
+      req,
+    )
   }
 
   return errorResponse(`Unknown action: ${action}`, req, 400)

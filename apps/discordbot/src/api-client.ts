@@ -189,10 +189,6 @@ export interface EligibleRoleItem {
   eligible_discord_user_ids: string[]
 }
 
-export async function syncHoldersForGuild(discordGuildId: string): Promise<void> {
-  await invokeEdgeFunction('discord-bot', { action: 'sync-holders', guildId: discordGuildId })
-}
-
 export async function getEligible(
   discordGuildId: string,
   memberRoles?: Record<string, string[]>,
