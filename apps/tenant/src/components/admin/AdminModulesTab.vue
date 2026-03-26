@@ -83,8 +83,10 @@ import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 import { MODULE_NAV } from '~/config/modules'
 import type { AdminForm } from '~/composables/admin/useAdminForm'
 import { useTenantStore } from '~/stores/tenant'
+import { useInternalDevTenantAllowlist } from '~/composables/useInternalDevTenantAllowlist'
 
 const config = useRuntimeConfig()
+const internalDevAllowlist = useInternalDevTenantAllowlist()
 const platformDocsBase = config.public.platformDocsUrl as string ?? 'https://dguild.org/docs'
 
 const tenantStore = useTenantStore()
@@ -130,7 +132,7 @@ function getModuleState(moduleId: string): ModuleState {
 function moduleCanActivate(moduleId: string): boolean {
   const entry = getModuleCatalogEntry(moduleId)
   if (!entry) return false
-  return canActivateModule(entry.status, tenantId.value)
+  return canActivateModule(entry.status, tenantId.value, internalDevAllowlist.value)
 }
 
 function moduleStatus(moduleId: string) {
