@@ -2,8 +2,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
-import { resolveInternalDevTenantIdsFromEnv } from '../../catalog/src/internal-dev-tenant-env'
-
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 const uiVarsCss = path.resolve(dirname, '../../packages/ui/src/theme/vars.css')
 const anchorBrowser = path.resolve(dirname, '../../node_modules/@coral-xyz/anchor/dist/browser/index.js')
@@ -109,9 +107,7 @@ export default defineNuxtConfig({
       walletConnectProjectId: process.env.NUXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? '',
       // Single host for ?tenant= entry (e.g. dapp.dguild.org). When on this host and URL has no ?tenant=, we use cached last tenant so refresh keeps the same org.
       tenantSingleHost: process.env.NUXT_PUBLIC_TENANT_SINGLE_HOST ?? 'dapp.dguild.org',
-      internalDevTenantIds: resolveInternalDevTenantIdsFromEnv(
-        process.env.NUXT_PUBLIC_INTERNAL_DEV_TENANT_IDS,
-      ),
+      internalDevTenantIds: process.env.NUXT_PUBLIC_INTERNAL_DEV_TENANT_IDS ?? '',
     },
   },
 })
