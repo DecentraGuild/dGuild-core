@@ -6,8 +6,6 @@ export {
   disconnectWallet,
   ensureSigningWalletForSession,
   isBackpackConnector,
-  isMobileWalletAdapterConnector,
-  signMessageForAuth,
   getWalletAndAccount,
   getEscrowWalletFromConnector,
   type ConnectorStateSnapshot,

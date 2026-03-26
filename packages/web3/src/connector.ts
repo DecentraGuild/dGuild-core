@@ -58,13 +58,7 @@ let webOptions: ConnectorWebOptions = {}
 
 let clientInstance: ConnectorClient | null = null
 
-/**
- * On mobile, ensureSigningWalletForSession builds a signing wallet directly from the
- * Supabase session address without going through ConnectorKit. ConnectorKit's connectWallet
- * for MWA calls transact() even in silent mode when it can't restore state, which triggers
- * ERROR_WALLET_NOT_FOUND before the user can approve the actual transaction. This variable
- * is the fallback returned by getEscrowWalletFromConnector() on mobile.
- */
+/** Set by ensureSigningWalletForSession on mobile; returned by getEscrowWalletFromConnector(). */
 let mobileSigningWallet: EscrowWallet | null = null
 
 let walletConnectDisplayUri: string | null = null
@@ -197,20 +191,12 @@ export async function connectWallet(
 /**
  * Ensures a signing wallet is ready for the given session address.
  *
- * Mobile (MWA):
- *   Attempts a silent connectWallet so wallet-standard-mobile populates its in-memory
- *   _authorization from the MWA auth cache. That lets its own _transact() read
- *   wallet_uri_base and open the wallet via App Link (no Android picker) for subsequent
- *   signTransaction calls.
+ * Mobile (MWA): always builds mobileSigningWallet so getEscrowWalletFromConnector() uses
+ * mwaSingleSessionSignTransactions (direct raw transact(), same pattern as login). Routing
+ * through wallet-standard-mobile's signer caused it to call _transact() internally for
+ * reauth, which raced with the signing session and resulted in ERROR_WALLET_NOT_FOUND.
  *
- *   No allowInteractiveFallback — that flag was causing a first transact() for interactive
- *   auth which raced with the signing transact(), resulting in "wallet closes before showing tx".
- *
- *   If silent connect finds no valid cache (page cold-load, cache cleared): falls back to
- *   mobileSigningWallet which uses mwaSingleSessionSignTransactions directly. The picker may
- *   appear once, after which the wallet returns wallet_uri_base which is stored for next time.
- *
- * Desktop: attempts silent auto-connect via ConnectorKit as before.
+ * Desktop: attempts silent auto-connect via ConnectorKit.
  */
 export async function ensureSigningWalletForSession(
   sessionWalletAddress: string | null | undefined,
@@ -221,25 +207,10 @@ export async function ensureSigningWalletForSession(
   const expected = sessionWalletAddress.trim()
 
   if (isMobileUserAgent()) {
-    const existing = getWalletAndAccount(getClient())
-    if (existing?.account.address === expected) return
-
-    const client = getClient()
-    try {
-      // Silent only — never interactive. Interactive would open a transact() before signing,
-      // creating a second competing session that causes ERROR_WALLET_NOT_FOUND on the sign transact().
-      await client.connectWallet(MOBILE_WALLET_CONNECTOR_ID, {
-        silent: true,
-        preferredAccount: expected,
-      } as ConnectOptions)
-    } catch {
-      // Silent connect failure is non-fatal; fall through to mobileSigningWallet path.
-    }
-
-    if (getWalletAndAccount(client)?.account.address === expected) return
-
-    // Cache miss or stale: build a minimal wallet so getEscrowWalletFromConnector() returns
-    // something usable. mwaSingleSessionSignTransactions handles auth inline via its own transact().
+    // Always use direct transact() signing on mobile. Routing through wallet-standard-mobile's
+    // signer causes it to call its internal _transact() for reauth, which races with the signing
+    // session and results in ERROR_WALLET_NOT_FOUND. mwaSingleSessionSignTransactions uses the
+    // same raw transact() pattern as login and is reliable.
     mobileSigningWallet = {
       publicKey: new PublicKey(expected),
       signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
@@ -285,23 +256,6 @@ export async function disconnectWallet(): Promise<void> {
   setWalletConnectDisplayUri(null)
 }
 
-/**
- * Return the raw Wallet Standard wallet for `connectorId` WITHOUT connecting.
- *
- * This is used by the one-shot MWA sign-in path: obtain the wallet before connecting,
- * then pass its `solana:signIn` feature directly to `supabase.auth.signInWithWeb3`.
- * That performs auth + SIWS sign in a **single** MWA `transact()` call (one app switch).
- * After `signIn` the wallet's authorization cache is populated; a subsequent
- * `connectWallet()` call hits the cache and sets ConnectorKit state without a
- * second `transact()`.
- */
-export function getMwaRawWallet(connectorId: WalletConnectorId): Wallet | null {
-  const client = getClient() as ConnectorClient & {
-    getConnector?: (id: WalletConnectorId) => Wallet | null
-  }
-  return client.getConnector?.(connectorId) ?? null
-}
-
 /** ConnectorKit session id for `@solana-mobile/wallet-standard-mobile`. */
 export function isMobileWalletAdapterConnector(connectorId: string | null): boolean {
   return connectorId === MOBILE_WALLET_CONNECTOR_ID
@@ -341,40 +295,14 @@ export function getWalletAndAccount(client: ConnectorClient): { wallet: Wallet; 
   return { wallet, account: walletAccount }
 }
 
-export async function signMessageForAuth(message: string): Promise<{ signature: string; message: string }> {
-  const client = getClient()
-  const pair = getWalletAndAccount(client)
-  if (!pair) {
-    throw new Error('Wallet not connected')
-  }
-  const signer = createTransactionSigner({
-    wallet: pair.wallet,
-    account: pair.account,
-    cluster: clusterForSigner(client),
-  })
-  if (!signer?.signMessage) {
-    throw new Error('Connected wallet does not support message signing')
-  }
-  const messageBytes = new TextEncoder().encode(message)
-  const signatureBytes = await signer.signMessage(messageBytes)
-  const signature =
-    signatureBytes instanceof Uint8Array
-      ? btoa(String.fromCharCode(...signatureBytes))
-      : String(signatureBytes)
-  return { signature, message }
-}
-
 /**
  * Adapter for `supabase.auth.signInWithWeb3({ chain: 'solana', wallet })`.
  *
  * Used by the desktop (two-step) sign-in path: `connectWallet` first, then pass this
  * adapter to Supabase so it signs with the already-connected wallet via `signMessage`.
  *
- * Do **not** expose `wallet.signIn` here for MWA: if `connectWallet` already ran,
- * `performAuthorization` returns the **cached** session (no `sign_in_payload`) which
- * has no `sign_in_result` → "Sign in failed, no sign in result returned by wallet".
- *
- * For MWA mobile, use `getMwaRawWallet` + one-shot sign-in instead (see `useAuth.ts`).
+ * For MWA mobile, use `mwaSingleSessionSignIn` (one-shot authorize + signMessages in a
+ * single transact()) instead (see `useAuth.ts`).
  */
 export function getSupabaseWalletAdapter(): {
   publicKey: { toBase58: () => string }
@@ -397,27 +325,6 @@ export function getSupabaseWalletAdapter(): {
       return signatureBytesFromSignerResult(sig as Uint8Array | string)
     },
   }
-}
-
-export async function signMessageWithConnector(
-  _connectorId: WalletConnectorId,
-  message: Uint8Array,
-): Promise<Uint8Array> {
-  const client = getClient()
-  const pair = getWalletAndAccount(client)
-  if (!pair) {
-    throw new Error('Wallet not connected')
-  }
-  const signer = createTransactionSigner({
-    wallet: pair.wallet,
-    account: pair.account,
-    cluster: clusterForSigner(client),
-  })
-  if (!signer?.signMessage) {
-    throw new Error('Connected wallet does not support message signing')
-  }
-  const signatureBytes = await signer.signMessage(message)
-  return signatureBytesFromSignerResult(signatureBytes as Uint8Array | string)
 }
 
 /**
@@ -643,9 +550,12 @@ async function mwaSingleSessionSignTransactions(
 }
 
 export function getEscrowWalletFromConnector(): EscrowWallet | null {
+  // On mobile, ensureSigningWalletForSession always sets mobileSigningWallet so transactions
+  // go through direct transact() rather than wallet-standard-mobile's signer.
+  if (mobileSigningWallet) return mobileSigningWallet
   const client = getClient()
   const pair = getWalletAndAccount(client)
-  if (!pair) return mobileSigningWallet
+  if (!pair) return null
   const walletStatus = client.getSnapshot().wallet
   const connectorId =
     isConnected(walletStatus) && walletStatus.session
