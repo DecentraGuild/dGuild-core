@@ -298,7 +298,7 @@ export interface DecompressParams {
 /**
  * Decompress a compressed token to the owner's SPL ATA.
  * Uses AirShip flow: getCompressedTokenAccountsByOwner → selectMinCompressedTokenAccountsForTransfer
- * → getValidityProofV0 with explicit tree/queue → CompressedTokenProgram.decompress → legacy Transaction → sign → send.
+ * → getValidityProofV0 (per-account merkleTree + nullifierQueue from RPC) → decompress → legacy Transaction.
  * Avoids the high-level decompress() which can hit "slice" errors with Helius proof format.
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
@@ -325,16 +325,18 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     bn(amountRaw)
   )
 
-  const activeStateTrees = await rpc.getCachedActiveStateTreeInfo()
-  const { tree, queue } = pickRandomTreeAndQueue(activeStateTrees)
-
+  // Proof must use each leaf's actual state tree + queue (from RPC). Using
+  // pickRandomTreeAndQueue here produces proofs for the wrong tree; on-chain
+  // Light + Lighthouse asserts then fail (e.g. custom 0x1900, "Some(x)==Some(0)").
   const proof = await rpc.getValidityProofV0(
     inputAccounts.map((account) => ({
       hash: bn(account.compressedAccount.hash),
-      tree,
-      queue,
+      tree: account.compressedAccount.merkleTree,
+      queue: account.compressedAccount.nullifierQueue,
     }))
   )
+
+  const outputStateTree = inputAccounts[0].compressedAccount.merkleTree
 
   const decompressIx = await CompressedTokenProgram.decompress({
     payer: owner,
@@ -343,7 +345,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     amount: bn(amountRaw),
     recentInputStateRootIndices: proof.rootIndices,
     recentValidityProof: proof.compressedProof,
-    outputStateTree: tree,
+    outputStateTree,
   })
 
   const instructions = [
