@@ -2,7 +2,6 @@ import type { Guild, GuildMember } from 'discord.js'
 import {
   getBotContext,
   syncGuildRoles,
-  syncHoldersForGuild,
   getEligible,
   scheduleRemovals,
   getPendingRemovals,
@@ -30,11 +29,10 @@ async function fetchMemberRolesAndMap(guild: Guild): Promise<{
   return { memberRoles, memberMap }
 }
 
-/** Sync holder snapshots (RPC), then compute eligible and apply/remove roles. Requires GuildMembers intent. */
+/** Compute eligible members from DB (holder_current maintained by cron-tracker), then apply/remove roles. Requires GuildMembers intent. */
 export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
   if (!hasBotSecret()) return
 
-  await syncHoldersForGuild(guild.id)
   const { memberRoles, memberMap } = await fetchMemberRolesAndMap(guild)
   const { eligible } = await getEligible(guild.id, memberRoles)
   if (eligible.length === 0) return

@@ -8,6 +8,7 @@ import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
 import type { Keypair } from '@solana/web3.js'
 import {
+  createAssociatedTokenAccountIdempotentInstructionWithDerivation,
   getAssociatedTokenAddressSync,
   getOrCreateAssociatedTokenAccount,
   TOKEN_PROGRAM_ID,
@@ -30,7 +31,7 @@ const LOOKUP_TABLE_MAINNET = new PublicKey(
   '9NYFyEqPkyXUhkerbGHXUXkvb4qpzeEdHuGpgbgpH1NJ'
 )
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
-const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 3
+const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
 const COMPUTE_UNIT_LIMIT = 550_000
 
 export interface ShipmentRecipient {
@@ -319,6 +320,8 @@ export interface DecompressParams {
   decimals: number
   /** RPC URL. Prefer passing this explicitly (e.g. from useRpc) for decompress. */
   rpcUrl?: string
+  /** SPL or Token-2022 mint program. Defaults to TOKEN_PROGRAM_ID. */
+  tokenProgramId?: typeof TOKEN_PROGRAM_ID | typeof TOKEN_2022_PROGRAM_ID
 }
 
 /**
@@ -328,11 +331,13 @@ export interface DecompressParams {
  * Avoids the high-level decompress() which can hit "slice" errors with Helius proof format.
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
-  const { connection, wallet, mint, amount, rpcUrl: rpcUrlParam } = params
+  const { connection, wallet, mint, amount, rpcUrl: rpcUrlParam, tokenProgramId } =
+    params
   const owner = wallet.publicKey
   const mintPk = new PublicKey(mint)
   const amountRaw = typeof amount === 'bigint' ? Number(amount) : amount
-  const splAta = getAssociatedTokenAddressSync(mintPk, owner)
+  const programId = tokenProgramId ?? TOKEN_PROGRAM_ID
+  const splAta = getAssociatedTokenAddressSync(mintPk, owner, false, programId)
 
   const rpcEndpoint =
     rpcUrlParam ??
@@ -372,12 +377,28 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     recentInputStateRootIndices: proof.rootIndices,
     recentValidityProof: proof.compressedProof,
     outputStateTree,
+    tokenProgramId: programId,
   })
 
+  const ataInfo = await rpc.getAccountInfo(splAta)
+  const needsAta = !ataInfo
+  const cuLimit = needsAta ? 500_000 : 300_000
+
   const instructions = [
-    ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }),
-    decompressIx,
+    ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }),
   ]
+  if (needsAta) {
+    instructions.push(
+      createAssociatedTokenAccountIdempotentInstructionWithDerivation(
+        owner,
+        owner,
+        mintPk,
+        false,
+        programId
+      )
+    )
+  }
+  instructions.push(decompressIx)
 
   const { value: blockhashCtx } = await rpc.getLatestBlockhashAndContext()
 
