@@ -393,12 +393,23 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   const rpc = getRpc(rpcEndpoint)
 
   const compressedAccounts = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
-  const items = compressedAccounts.items
+  const items = (compressedAccounts.items ?? []).filter((account) =>
+    bn(account.parsed.amount).gt(bn(0))
+  )
 
-  let inputAccounts: (typeof items)[number][]
-  let decompressAmountBn: ReturnType<typeof bn>
+  if (items.length === 0) {
+    throw new Error('No compressed token balance found for this mint. Refresh and try again.')
+  }
 
   const hashNeedle = compressedAccountHash?.trim()
+  if (items.length > 1 && !hashNeedle) {
+    throw new Error(
+      'More than one compressed balance exists for this mint. Refresh the page so each shipment row includes an account hash, then claim the row you want. Without the hash, the wrong accounts can be selected and the transaction fails with error 0x1900.'
+    )
+  }
+
+  let inputAccounts: (typeof items)[number][]
+
   if (hashNeedle) {
     const found = items.find((account) => {
       const h = account.compressedAccount?.hash
@@ -415,14 +426,23 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       )
     }
     inputAccounts = [found]
-    decompressAmountBn = bn(found.parsed.amount)
   } else {
-    const [selected, totalBn] = selectMinCompressedTokenAccountsForTransfer(
-      items,
-      requestedBn
-    )
+    const [selected] = selectMinCompressedTokenAccountsForTransfer(items, requestedBn)
     inputAccounts = selected
-    decompressAmountBn = totalBn
+  }
+
+  const tree0 = inputAccounts[0].compressedAccount.merkleTree.toBase58()
+  for (let i = 1; i < inputAccounts.length; i++) {
+    if (inputAccounts[i].compressedAccount.merkleTree.toBase58() !== tree0) {
+      throw new Error(
+        'Compressed balances for this mint sit in different state trees. Merge those compressed accounts (Light Protocol) into one, then claim again.'
+      )
+    }
+  }
+
+  let decompressAmountBn = bn(0)
+  for (const a of inputAccounts) {
+    decompressAmountBn = decompressAmountBn.add(bn(a.parsed.amount))
   }
 
   const proof = await rpc.getValidityProofV0(
