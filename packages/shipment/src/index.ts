@@ -7,7 +7,7 @@
 import {
   PublicKey,
   SendTransactionError,
-  Transaction,
+  TransactionMessage,
   VersionedTransaction,
 } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
@@ -30,7 +30,6 @@ import {
   CompressedTokenProgram,
   createTokenPool,
   selectMinCompressedTokenAccountsForTransfer,
-  sumUpTokenAmount,
 } from '@lightprotocol/compressed-token'
 
 const LOOKUP_TABLE_MAINNET = new PublicKey(
@@ -361,10 +360,8 @@ function amountToBn(amount: bigint | number | string) {
 
 /**
  * Decompress a compressed token to the owner's SPL ATA.
- * Uses getCompressedTokenAccountsByOwner → (optional hash match) or selectMinCompressedTokenAccountsForTransfer
- * → getValidityProofV0 (per-account tree + queue from the token account) → decompress.
- * Decompress amount uses the sum of selected accounts' parsed amounts so no remainder
- * compressed output is left (remainder would need extra new-address proofs and fails with 0x1900).
+ * Mirrors `@lightprotocol/compressed-token` high-level `decompress` (same account selection,
+ * amount semantics, proof, and v0 message shape). Legacy `Transaction` breaks this flow.
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
   const {
@@ -441,12 +438,22 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     }
   }
 
-  const decompressAmountBn = sumUpTokenAmount(inputAccounts)
+  // Amount field must match the official SDK `decompress(rpc, payer, mint, amount, owner, toAddress, ...)`:
+  // `W(items, amount)` selects inputs, then the instruction uses that same `amount` (not necessarily sum(inputs)).
+  // Passing sum(inputs) while the program computes remainder vs that amount causes 0x1900 (Some(remainder)==Some(0)).
+  let amountForInstruction: ReturnType<typeof bn>
+  if (hashNeedle) {
+    const hashBn = bn(inputAccounts[0].compressedAccount.hash)
+    try {
+      const bal = await rpc.getCompressedTokenAccountBalance(hashBn)
+      amountForInstruction = bal.amount
+    } catch {
+      amountForInstruction = bn(inputAccounts[0].parsed.amount)
+    }
+  } else {
+    amountForInstruction = requestedBn
+  }
 
-  // Hash-only proof (same as @lightprotocol/compressed-token high-level decompress):
-  // Rpc.getValidityProof resolves tree/queue per hash via getMultipleCompressedAccounts.
-  // Passing tree/queue from getCompressedTokenAccountsByOwner into getValidityProofV0
-  // can disagree with the prover and fail simulation (0x1900, Some(remainder) == Some(0)).
   const proof = await rpc.getValidityProof(
     inputAccounts.map((account) => bn(account.compressedAccount.hash)),
   )
@@ -457,7 +464,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     payer: owner,
     inputCompressedTokenAccounts: inputAccounts,
     toAddress: splAta,
-    amount: decompressAmountBn,
+    amount: amountForInstruction,
     recentInputStateRootIndices: proof.rootIndices,
     recentValidityProof: proof.compressedProof,
     outputStateTree,
@@ -466,7 +473,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
 
   const ataInfo = await rpc.getAccountInfo(splAta)
   const needsAta = !ataInfo
-  const cuLimit = needsAta ? 500_000 : 300_000
+  const cuLimit = 1_000_000
 
   const instructions = [
     ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }),
@@ -486,19 +493,14 @@ export async function decompressToken(params: DecompressParams): Promise<string>
 
   const { value: blockhashCtx } = await rpc.getLatestBlockhashAndContext()
 
-  // Use legacy Transaction instead of VersionedTransaction for connector compatibility.
-  // Some wallets (e.g. via Solana Connector) fail with "Versioned messages must be deserialized
-  // with VersionedMessage.deserialize()" when signing VersionedTransaction.
-  const tx = new Transaction()
+  const messageV0 = new TransactionMessage({
+    payerKey: owner,
+    recentBlockhash: blockhashCtx.blockhash,
+    instructions,
+  }).compileToV0Message()
 
-  // Add instructions
-  for (const ix of instructions) {
-    tx.add(ix)
-  }
-  tx.recentBlockhash = blockhashCtx.blockhash
-  tx.feePayer = owner
-
-  const signedTx = await wallet.signTransaction(tx)
+  const vtx = new VersionedTransaction(messageV0)
+  const signedTx = await wallet.signTransaction(vtx)
   try {
     const sig = await rpc.sendRawTransaction(signedTx.serialize(), {
       skipPreflight: false,
