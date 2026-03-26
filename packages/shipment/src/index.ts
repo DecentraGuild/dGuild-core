@@ -30,6 +30,7 @@ import {
   CompressedTokenProgram,
   createTokenPool,
   selectMinCompressedTokenAccountsForTransfer,
+  sumUpTokenAmount,
 } from '@lightprotocol/compressed-token'
 
 const LOOKUP_TABLE_MAINNET = new PublicKey(
@@ -440,17 +441,14 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     }
   }
 
-  let decompressAmountBn = bn(0)
-  for (const a of inputAccounts) {
-    decompressAmountBn = decompressAmountBn.add(bn(a.parsed.amount))
-  }
+  const decompressAmountBn = sumUpTokenAmount(inputAccounts)
 
-  const proof = await rpc.getValidityProofV0(
-    inputAccounts.map((account) => ({
-      hash: bn(account.compressedAccount.hash),
-      tree: account.compressedAccount.merkleTree,
-      queue: account.compressedAccount.nullifierQueue,
-    }))
+  // Hash-only proof (same as @lightprotocol/compressed-token high-level decompress):
+  // Rpc.getValidityProof resolves tree/queue per hash via getMultipleCompressedAccounts.
+  // Passing tree/queue from getCompressedTokenAccountsByOwner into getValidityProofV0
+  // can disagree with the prover and fail simulation (0x1900, Some(remainder) == Some(0)).
+  const proof = await rpc.getValidityProof(
+    inputAccounts.map((account) => bn(account.compressedAccount.hash)),
   )
 
   const outputStateTree = inputAccounts[0].compressedAccount.merkleTree
