@@ -566,6 +566,7 @@ const { showPeriodToggle, deployLabel, saveButtonLabel, hintText } = usePricingW
   deploying: toRef(props, 'deploying'),
   saving: toRef(props, 'saving'),
   chargeAmount,
+  recurringDisplayTotal,
   selectedTier,
   yearlyOnly: props.yearlyOnly,
   hasActiveSubscription,

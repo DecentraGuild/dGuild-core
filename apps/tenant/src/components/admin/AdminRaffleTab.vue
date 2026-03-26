@@ -233,6 +233,8 @@ const liveConditions = computed(() => upgradeConditionsOverride.value ?? raffleP
 const slotLimit = computed(() => {
   const limit = quote.value?.meters?.raffle_slots?.limit
   if (limit != null && limit >= 1) return limit
+  const snap = props.subscription?.conditionsSnapshot?.raffle_slots
+  if (typeof snap === 'number' && snap >= 1) return snap
   const tierId = props.subscription?.selectedTierId
   return tierId === 'pro' ? 10 : tierId === 'grow' ? 3 : 1
 })
