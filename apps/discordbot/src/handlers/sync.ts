@@ -35,7 +35,10 @@ export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
 
   const { memberRoles, memberMap } = await fetchMemberRolesAndMap(guild)
   const { eligible } = await getEligible(guild.id, memberRoles)
-  if (eligible.length === 0) return
+  if (eligible.length === 0) {
+    console.log(`[roles] ${guild.name}: no role rules (skip)`)
+    return
+  }
 
   const toRemove: Array<{ discord_user_id: string; discord_role_id: string }> = []
 
@@ -51,8 +54,8 @@ export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
         if (member && !member.roles.cache.has(discord_role_id)) {
           await member.roles.add(role)
         }
-      } catch {
-        // Skip on rate limit or missing member
+      } catch (err) {
+        console.warn(`[roles] ${guild.name}: add role ${discord_role_id} for ${userId} failed:`, err)
       }
     }
 
@@ -71,10 +74,12 @@ export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
       const member =
         memberMap.get(discord_user_id) ?? (await guild.members.fetch(discord_user_id).catch(() => null))
       if (member) await member.roles.remove(discord_role_id)
-    } catch {
-      // Skip
+    } catch (err) {
+      console.warn(`[roles] ${guild.name}: remove role ${discord_role_id} for ${discord_user_id} failed:`, err)
     }
   }
+
+  console.log(`[roles] ${guild.name}: cycle complete`)
 }
 
 export async function syncLinkedGuild(guild: Guild): Promise<void> {
@@ -101,9 +106,14 @@ export async function syncLinkedGuild(guild: Guild): Promise<void> {
 
     if (ctx.discordModuleState === 'active') {
       await runRoleSyncForGuild(guild)
+    } else {
+      console.log(`[sync] ${guild.name}: Discord module not active (role rules skipped)`)
     }
   } catch (err) {
-    if (err instanceof ApiError && (err.code === GUILD_NOT_LINKED_CODE || err.status === 404)) return
+    if (err instanceof ApiError && (err.code === GUILD_NOT_LINKED_CODE || err.status === 404)) {
+      console.log(`[sync] ${guild.name}: not linked in platform (skip)`)
+      return
+    }
     throw err
   }
 }
