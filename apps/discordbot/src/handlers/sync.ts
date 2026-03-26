@@ -59,16 +59,28 @@ export async function runRoleSyncForGuild(guild: Guild): Promise<void> {
     const eligibleSet = new Set(eligible_discord_user_ids)
 
     for (const userId of eligible_discord_user_ids) {
+      let member: GuildMember | null = null
       try {
-        const member = memberMap.get(userId) ?? (await guild.members.fetch(userId).catch(() => null))
+        member = memberMap.get(userId) ?? (await guild.members.fetch(userId).catch(() => null))
         if (member && !member.roles.cache.has(discord_role_id)) {
           await member.roles.add(role)
         }
       } catch (err) {
-        console.warn(
-          `[roles] ${guild.name}: add role ${discord_role_id} for ${userId} failed${discordRoleActionHint(err)}:`,
-          err,
-        )
+        const code =
+          err && typeof err === 'object' && 'code' in err ? (err as { code?: number }).code : undefined
+        if (code === 50001 && member) {
+          const me = guild.members.me
+          const mh = member.roles.highest
+          const bh = me?.roles.highest
+          console.warn(
+            `[roles] ${guild.name}: 50001 add blocked — user ${userId} memberTop="${mh?.name}" pos=${mh?.position}; botTop="${bh?.name}" pos=${bh?.position}; adding="${role.name}" pos=${role.position} (Discord: bot must rank above member’s top role to change their roles)`,
+          )
+        } else {
+          console.warn(
+            `[roles] ${guild.name}: add role ${discord_role_id} for ${userId} failed${discordRoleActionHint(err)}:`,
+            err,
+          )
+        }
       }
     }
 
