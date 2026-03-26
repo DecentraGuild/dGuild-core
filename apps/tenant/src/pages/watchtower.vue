@@ -1,5 +1,6 @@
 <template>
   <PageSection title="Watchtower" module-id="watchtower">
+    <div class="watchtower-page">
     <div v-if="!watchtowerVisible" class="watchtower-page__inactive">
       <p>Watchtower is not enabled for this dGuild.</p>
     </div>
@@ -107,6 +108,7 @@
       :mint="selectedMint"
       :tenant-id="tenantStore.tenantId ?? ''"
     />
+    </div>
   </PageSection>
 </template>
 
@@ -196,6 +198,11 @@ function openMint(entry: CatalogEntry) {
 </script>
 
 <style scoped>
+.watchtower-page {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .watchtower-page__inactive {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
@@ -295,6 +302,7 @@ function openMint(entry: CatalogEntry) {
 
 .watchtower-page__grid {
   display: grid;
+  width: 100%;
   grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
   gap: var(--theme-space-md);
 }

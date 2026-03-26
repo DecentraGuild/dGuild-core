@@ -26,42 +26,97 @@
           </button>
         </template>
         <template #nav>
-          <nav v-if="subnavTabs.length" class="layout-subnav">
+          <nav
+            v-if="subnavTabs.length"
+            class="layout-subnav"
+            :class="{ 'layout-subnav--admin': isAdminSubnav }"
+          >
             <template v-if="isAdminSubnav">
-              <NuxtLink
-                v-for="tab in adminPrimaryTabs"
-                :key="tab.id"
-                :to="tab.path ? linkTo(tab.path) : linkToWithTab(route.path, tab.id)"
-                class="layout-subnav__tab"
-                :class="{ 'layout-subnav__tab--active': isSubnavTabActive(tab) }"
-              >
-                {{ tab.label }}
-              </NuxtLink>
+              <div class="layout-subnav__admin-desktop">
+                <NuxtLink
+                  v-for="tab in adminPrimaryTabs"
+                  :key="tab.id"
+                  :to="tab.path ? linkTo(tab.path) : linkToWithTab(route.path, tab.id)"
+                  class="layout-subnav__tab"
+                  :class="{ 'layout-subnav__tab--active': isSubnavTabActive(tab) }"
+                >
+                  {{ tab.label }}
+                </NuxtLink>
+                <div
+                  v-if="adminShowMoreDropdown"
+                  ref="adminMoreWrapRef"
+                  class="layout-subnav__more-wrap"
+                  :aria-expanded="adminMoreOpen"
+                >
+                  <button
+                    type="button"
+                    class="layout-subnav__tab layout-subnav__tab--more"
+                    :class="{ 'layout-subnav__tab--active': adminMoreTabs.some((t) => isSubnavTabActive(t)) }"
+                    aria-haspopup="true"
+                    :aria-expanded="adminMoreOpen"
+                    @click="adminMoreOpen = !adminMoreOpen"
+                  >
+                    More
+                    <Icon icon="lucide:chevron-down" class="layout-subnav__more-icon" />
+                  </button>
+                  <Teleport v-if="adminMoreOpen" to="body">
+                    <div
+                      class="layout-subnav__dropdown layout-subnav__dropdown--fixed"
+                      :style="adminMoreDropdownStyle"
+                      @click="closeAdminMore"
+                    >
+                      <NuxtLink
+                        v-for="tab in adminMoreTabs"
+                        :key="tab.id"
+                        :to="tab.path ? linkTo(tab.path) : linkToWithTab(route.path, tab.id)"
+                        class="layout-subnav__dropdown-tab"
+                        :class="{ 'layout-subnav__dropdown-tab--active': isSubnavTabActive(tab) }"
+                      >
+                        {{ tab.label }}
+                      </NuxtLink>
+                    </div>
+                  </Teleport>
+                </div>
+                <NuxtLink
+                  v-if="adminVouchersTab"
+                  :to="adminVouchersTab.path ? linkTo(adminVouchersTab.path) : linkToWithTab(route.path, adminVouchersTab.id)"
+                  class="layout-subnav__tab"
+                  :class="{ 'layout-subnav__tab--active': isSubnavTabActive(adminVouchersTab) }"
+                >
+                  {{ adminVouchersTab.label }}
+                </NuxtLink>
+                <NuxtLink
+                  v-if="adminBillingTab"
+                  :to="adminBillingTab.path ? linkTo(adminBillingTab.path) : linkToWithTab(route.path, adminBillingTab.id)"
+                  class="layout-subnav__tab"
+                  :class="{ 'layout-subnav__tab--active': isSubnavTabActive(adminBillingTab) }"
+                >
+                  {{ adminBillingTab.label }}
+                </NuxtLink>
+              </div>
               <div
-                v-if="adminShowMoreDropdown"
-                ref="adminMoreWrapRef"
-                class="layout-subnav__more-wrap"
-                :aria-expanded="adminMoreOpen"
+                v-if="adminFlatTabs.length"
+                ref="adminMobileWrapRef"
+                class="layout-subnav__admin-mobile"
               >
                 <button
                   type="button"
-                  class="layout-subnav__tab layout-subnav__tab--more"
-                  :class="{ 'layout-subnav__tab--active': adminMoreTabs.some((t) => isSubnavTabActive(t)) }"
+                  class="layout-subnav__tab layout-subnav__tab--admin-menu"
                   aria-haspopup="true"
-                  :aria-expanded="adminMoreOpen"
-                  @click="adminMoreOpen = !adminMoreOpen"
+                  :aria-expanded="adminMobileMenuOpen"
+                  aria-label="Admin sections"
+                  @click="toggleAdminMobileMenu"
                 >
-                  More
-                  <Icon icon="lucide:chevron-down" class="layout-subnav__more-icon" />
+                  <Icon icon="lucide:menu" class="layout-subnav__admin-menu-icon" />
                 </button>
-                <Teleport v-if="adminMoreOpen" to="body">
+                <Teleport v-if="adminMobileMenuOpen" to="body">
                   <div
                     class="layout-subnav__dropdown layout-subnav__dropdown--fixed"
-                    :style="adminMoreDropdownStyle"
-                    @click="closeAdminMore"
+                    :style="adminMobileDropdownStyle"
+                    @click="closeAdminMobileMenu"
                   >
                     <NuxtLink
-                      v-for="tab in adminMoreTabs"
+                      v-for="tab in adminFlatTabs"
                       :key="tab.id"
                       :to="tab.path ? linkTo(tab.path) : linkToWithTab(route.path, tab.id)"
                       class="layout-subnav__dropdown-tab"
@@ -72,22 +127,6 @@
                   </div>
                 </Teleport>
               </div>
-              <NuxtLink
-                v-if="adminVouchersTab"
-                :to="adminVouchersTab.path ? linkTo(adminVouchersTab.path) : linkToWithTab(route.path, adminVouchersTab.id)"
-                class="layout-subnav__tab"
-                :class="{ 'layout-subnav__tab--active': isSubnavTabActive(adminVouchersTab) }"
-              >
-                {{ adminVouchersTab.label }}
-              </NuxtLink>
-              <NuxtLink
-                v-if="adminBillingTab"
-                :to="adminBillingTab.path ? linkTo(adminBillingTab.path) : linkToWithTab(route.path, adminBillingTab.id)"
-                class="layout-subnav__tab"
-                :class="{ 'layout-subnav__tab--active': isSubnavTabActive(adminBillingTab) }"
-              >
-                {{ adminBillingTab.label }}
-              </NuxtLink>
             </template>
             <template v-else>
               <NuxtLink
@@ -175,6 +214,7 @@ const mobileNavOpen = ref(false)
 watch(() => route.path, () => {
   mobileNavOpen.value = false
   adminMoreOpen.value = false
+  adminMobileMenuOpen.value = false
 })
 
 const tenant = computed(() => tenantStore.tenant)
@@ -256,6 +296,15 @@ const adminBillingTab = computed(() =>
 )
 const adminShowMoreDropdown = computed(() => isAdminSubnav.value && adminMoreTabs.value.length > 0)
 
+const adminFlatTabs = computed(() => {
+  if (!isAdminSubnav.value) return []
+  const out = [...adminPrimaryTabs.value]
+  if (adminShowMoreDropdown.value) for (const t of adminMoreTabs.value) out.push(t)
+  if (adminVouchersTab.value) out.push(adminVouchersTab.value)
+  if (adminBillingTab.value) out.push(adminBillingTab.value)
+  return out
+})
+
 const adminMoreOpen = ref(false)
 const adminMoreWrapRef = ref<HTMLElement | null>(null)
 const adminMoreDropdownPosition = ref({ top: 0, left: 0 })
@@ -289,6 +338,7 @@ const adminMoreDropdownStyle = computed(() => {
 watch(adminMoreOpen, (open) => {
   if (open) {
     updateAdminMoreDropdownPosition()
+    adminMobileMenuOpen.value = false
   }
 })
 
@@ -296,11 +346,65 @@ onClickOutside(adminMoreWrapRef, () => {
   adminMoreOpen.value = false
 })
 
+const adminMobileMenuOpen = ref(false)
+const adminMobileWrapRef = ref<HTMLElement | null>(null)
+const adminMobileDropdownPosition = ref({ top: 0, left: 0 })
+
+function updateAdminMobileDropdownPosition() {
+  const el = adminMobileWrapRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1024
+  const padding = 16
+  const dropdownWidth = 280
+  let left = rect.left
+  if (left + dropdownWidth > vw - padding) {
+    left = Math.max(padding, vw - padding - dropdownWidth)
+  }
+  adminMobileDropdownPosition.value = {
+    top: rect.bottom + 2,
+    left,
+  }
+}
+
+const adminMobileDropdownStyle = computed(() => {
+  const { top, left } = adminMobileDropdownPosition.value
+  return {
+    top: `${top}px`,
+    left: `${left}px`,
+    maxWidth: 'min(18rem, calc(100vw - 2rem))',
+  }
+})
+
+watch(adminMobileMenuOpen, (open) => {
+  if (open) {
+    adminMoreOpen.value = false
+    updateAdminMobileDropdownPosition()
+  }
+})
+
+function toggleAdminMobileMenu() {
+  adminMobileMenuOpen.value = !adminMobileMenuOpen.value
+  if (adminMobileMenuOpen.value) {
+    nextTick(() => updateAdminMobileDropdownPosition())
+  }
+}
+
+function closeAdminMobileMenu() {
+  adminMobileMenuOpen.value = false
+}
+
+onClickOutside(adminMobileWrapRef, () => {
+  adminMobileMenuOpen.value = false
+})
+
 useEventListener('scroll', () => {
   if (adminMoreOpen.value) updateAdminMoreDropdownPosition()
+  if (adminMobileMenuOpen.value) updateAdminMobileDropdownPosition()
 }, true)
 useEventListener('resize', () => {
   if (adminMoreOpen.value) updateAdminMoreDropdownPosition()
+  if (adminMobileMenuOpen.value) updateAdminMobileDropdownPosition()
 })
 
 function closeAdminMore() {
@@ -355,6 +459,41 @@ function isSubnavTabActive(tab: { id: string; path?: string }): boolean {
   align-items: center;
   flex-wrap: nowrap;
   border-bottom: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.layout-subnav__admin-desktop {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  flex-wrap: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.layout-subnav__admin-mobile {
+  display: none;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.layout-subnav__admin-menu-icon {
+  font-size: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .layout-subnav--admin .layout-subnav__admin-mobile {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .layout-subnav--admin .layout-subnav__admin-desktop {
+    display: none;
+  }
+
+  .layout-subnav--admin .layout-subnav__admin-mobile {
+    display: flex;
+  }
 }
 
 .layout-subnav__tab {

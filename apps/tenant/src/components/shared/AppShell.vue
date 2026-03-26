@@ -65,6 +65,8 @@ const patternClass = computed(() => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  width: 100%;
+  overflow-x: clip;
   background-color: var(--theme-bg-primary);
   color: var(--theme-text-primary);
   position: relative;
@@ -174,6 +176,8 @@ const patternClass = computed(() => {
 .app-shell__main {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
   padding: var(--theme-space-xl);
 }
 

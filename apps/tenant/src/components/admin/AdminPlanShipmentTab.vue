@@ -151,9 +151,13 @@
           <div v-if="expandedId === r.id" class="plan-shipment-tab__history-detail">
             <p class="plan-shipment-tab__history-mint-full"><code>{{ r.mint }}</code></p>
             <p class="plan-shipment-tab__history-amount">Total: {{ formatTotalAmount(r.total_amount) }}</p>
-            <p class="plan-shipment-tab__history-tx">
-              <a :href="explorerLinks.txUrl(r.tx_signature)" target="_blank" rel="noopener" class="plan-shipment-tab__link">
-                <Icon icon="lucide:external-link" /> Transaction
+            <p
+              v-for="row in shipmentTxRows(r.tx_signature)"
+              :key="row.sig"
+              class="plan-shipment-tab__history-tx"
+            >
+              <a :href="explorerLinks.txUrl(row.sig)" target="_blank" rel="noopener" class="plan-shipment-tab__link">
+                <Icon icon="lucide:external-link" /> {{ row.label }}
               </a>
             </p>
             <p class="plan-shipment-tab__history-by">By {{ truncateAddress(r.created_by, 8, 6) }}</p>
@@ -293,6 +297,17 @@ const shipWallet = useShipWallet()
 const { connection, rpcUrl } = useSolanaConnection()
 const explorerLinks = useExplorerLinks()
 const supabase = useSupabase()
+
+function shipmentTxRows(txSignature: string): Array<{ sig: string; label: string }> {
+  const sigs = txSignature
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return sigs.map((sig, i) => ({
+    sig,
+    label: sigs.length === 1 ? 'Transaction' : `Transaction ${i + 1}`,
+  }))
+}
 
 const {
   records: historyRecords,
