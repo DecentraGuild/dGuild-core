@@ -72,15 +72,35 @@
         </details>
       </div>
     </div>
+
+    <Dialog v-model:open="claimErrorOpen">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Claim failed</DialogTitle>
+        </DialogHeader>
+        <pre class="shipment-page__claim-error">{{ claimErrorMessage }}</pre>
+        <div class="shipment-page__claim-error-actions">
+          <Button variant="outline" size="sm" type="button" @click="copyClaimError">
+            <Icon icon="lucide:copy" />
+            {{ claimErrorCopied ? 'Copied' : 'Copy error' }}
+          </Button>
+          <Button size="sm" type="button" variant="default" @click="claimErrorOpen = false">
+            Close
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   </PageSection>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { formatRawTokenAmount, truncateAddress } from '@decentraguild/display'
 import { getModuleState, isModuleVisibleToMembers } from '@decentraguild/core'
 import { Icon } from '@iconify/vue'
 import ShipmentClaimCard from '~/components/shipment/ShipmentClaimCard.vue'
+import { Button } from '~/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { useAuth } from '@decentraguild/auth'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
@@ -120,6 +140,31 @@ const assets = ref<CompressedAsset[]>([])
 const displayByMint = ref<Map<string, DisplayInfo>>(new Map())
 const loading = ref(true)
 const claiming = ref<string | null>(null)
+const claimErrorOpen = ref(false)
+const claimErrorMessage = ref('')
+const claimErrorCopied = ref(false)
+let claimErrorCopyReset: ReturnType<typeof setTimeout> | null = null
+
+function openClaimError(msg: string) {
+  claimErrorMessage.value = msg
+  claimErrorCopied.value = false
+  claimErrorOpen.value = true
+}
+
+async function copyClaimError() {
+  const text = claimErrorMessage.value
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    claimErrorCopied.value = true
+    if (claimErrorCopyReset) clearTimeout(claimErrorCopyReset)
+    claimErrorCopyReset = setTimeout(() => {
+      claimErrorCopied.value = false
+      claimErrorCopyReset = null
+    }, 2000)
+  } catch {
+  }
+}
 
 function mintKey(a: CompressedAsset): string {
   return a.mint ?? a.id
@@ -292,13 +337,17 @@ async function claim(a: CompressedAsset) {
       originalMsg && originalMsg !== err.message
         ? `${err.message}: ${originalMsg}`
         : err instanceof Error ? err.message : 'Claim failed'
-    alert(msg)
+    openClaimError(msg)
   } finally {
     claiming.value = null
   }
 }
 
 watch([wallet, rpcUrl], () => fetchAssets(), { immediate: true })
+
+onUnmounted(() => {
+  if (claimErrorCopyReset) clearTimeout(claimErrorCopyReset)
+})
 </script>
 
 <style scoped>
@@ -387,5 +436,30 @@ watch([wallet, rpcUrl], () => fetchAssets(), { immediate: true })
   color: var(--theme-text-muted);
   margin: 0 0 var(--theme-space-md);
   line-height: 1.5;
+}
+.shipment-page__claim-error {
+  margin: 0;
+  padding: var(--theme-space-sm);
+  font-size: var(--theme-font-sm);
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+  color: var(--theme-text-primary);
+  background: var(--theme-bg-elevated, var(--theme-bg-card));
+  border-radius: var(--theme-radius-md);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  max-height: min(40vh, 20rem);
+  overflow-y: auto;
+}
+.shipment-page__claim-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--theme-space-sm);
+  padding-top: var(--theme-space-xs);
 }
 </style>
