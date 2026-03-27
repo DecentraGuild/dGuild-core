@@ -37,10 +37,16 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
       .map(([id]) => id)
   }
 
-  /** Gate for a module: from getModuleGateFromTenant (marketplace/raffles) or module.settingsjson.gate. */
+  /** Gate for a module: from getModuleGateFromTenant when the module stores gate in settingsjson the canonical way. */
   function getModuleGate(tenant: TenantConfig, moduleId: string): StoredGateValue | undefined {
-    if (moduleId === 'marketplace' || moduleId === 'raffles') {
-      return getModuleGateFromTenant(tenant, moduleId as ModuleGateModuleId)
+    const canonical = moduleId === 'whitelist' ? 'gates' : moduleId
+    if (
+      canonical === 'gates' ||
+      canonical === 'marketplace' ||
+      canonical === 'raffles' ||
+      canonical === 'watchtower'
+    ) {
+      return getModuleGateFromTenant(tenant, canonical as ModuleGateModuleId)
     }
     const entry = tenant.modules?.[moduleId]
     const sj = entry?.settingsjson as Record<string, unknown> | undefined

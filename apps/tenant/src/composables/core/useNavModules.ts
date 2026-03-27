@@ -8,6 +8,7 @@ import { useTenantStore } from '~/stores/tenant'
 import { MODULE_NAV, IMPLEMENTED_MODULES, NAV_ORDER } from '~/config/modules'
 import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
 import { useWalletOnList } from '~/composables/gates/useWalletOnList'
+import { useTenantGateAccess } from '~/composables/gates/useTenantGateAccess'
 
 export interface NavModule {
   id: string
@@ -80,7 +81,11 @@ export function useNavModules() {
   const { isListed: isOnRaffleList } = useWalletOnList(raffleListAddress)
   const { isListed: isOnWatchtowerList } = useWalletOnList(watchtowerListAddress)
 
+  const { tenantGateConfigured, tenantAccessOk } = useTenantGateAccess()
+
   const navModules = computed((): NavModule[] => {
+    if (tenantGateConfigured.value && !tenantAccessOk.value) return []
+
     const mods = tenant.value?.modules ?? {}
     const entries = Object.entries(mods)
       .filter(([id, e]) => {
