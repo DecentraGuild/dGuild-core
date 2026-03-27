@@ -7,7 +7,7 @@
     <CardContent>
       <div v-if="loading" class="text-muted-foreground text-sm">Loading audit log…</div>
       <div v-else-if="error" class="text-destructive text-sm">{{ error }}</div>
-      <div v-else class="overflow-x-auto">
+      <div v-else class="max-h-[80vh] overflow-auto">
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b">

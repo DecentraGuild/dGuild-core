@@ -19,7 +19,7 @@
         </div>
         <div>
           <p class="text-muted-foreground mb-2 text-sm font-medium">Recent payments</p>
-          <div class="overflow-x-auto">
+          <div class="max-h-[80vh] overflow-auto">
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b">
