@@ -3,6 +3,7 @@
     <div class="home">
       <DguildInfoBanner
         :name="displayName"
+        :welcome-message="tenant?.welcomeMessage"
         :description="tenant?.description"
         :logo="brandLogo"
         :homepage="tenant?.homepage"

@@ -68,6 +68,10 @@
           label="Description"
         />
         <FormInput
+          v-model="form.welcomeMessage"
+          label="Welcome message"
+        />
+        <FormInput
           v-model="form.branding.logo"
           label="Logo URL"
           placeholder="https://..."

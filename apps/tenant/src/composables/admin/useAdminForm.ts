@@ -20,11 +20,12 @@ import {
 export interface AdminForm {
   name: string
   description: string
+  welcomeMessage: string
   discordServerInviteLink: string
   homepage: string
   xLink: string
   telegramLink: string
-  defaultWhitelist: MarketplaceWhitelistSettings | null
+  defaultGate: TenantConfig['defaultGate']
   branding: {
     logo: string
     theme: ReturnType<typeof mergeTheme>
@@ -55,6 +56,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
   const form = reactive<AdminForm>({
     name: '',
     description: '',
+    welcomeMessage: '',
     discordServerInviteLink: '',
     homepage: '',
     xLink: '',
@@ -74,6 +76,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
       if (!t) {
         form.name = ''
         form.description = ''
+        form.welcomeMessage = ''
         form.discordServerInviteLink = ''
         form.homepage = ''
         form.xLink = ''
@@ -88,6 +91,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
 
       form.name = t.name ?? ''
       form.description = t.description ?? ''
+      form.welcomeMessage = t.welcomeMessage ?? ''
       form.discordServerInviteLink = t.discordServerInviteLink ?? ''
       form.homepage = t.homepage ?? ''
       form.xLink = t.xLink ?? ''
@@ -188,6 +192,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
         .update({
           name: form.name,
           description: form.description || null,
+          welcome_message: form.welcomeMessage || null,
           discord_server_invite_link: form.discordServerInviteLink || null,
           homepage: form.homepage || null,
           x_link: form.xLink || null,
@@ -210,6 +215,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
         slug: updated.slug as string | undefined,
         name: updated.name as string,
         description: updated.description as string | undefined,
+        welcomeMessage: updated.welcome_message as string | undefined,
         discordServerInviteLink: updated.discord_server_invite_link as string | undefined,
         homepage: updated.homepage as string | undefined,
         xLink: updated.x_link as string | undefined,

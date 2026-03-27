@@ -143,6 +143,8 @@ export interface TenantConfig {
   slug?: string | null
   name: string
   description?: string
+  /** Short greeting shown on the tenant home banner. General setting, editable in Admin > General. */
+  welcomeMessage?: string
   /** Discord server invite link (for users to join the community). General setting, editable in Admin > General. */
   discordServerInviteLink?: string
   /** Homepage URL. General setting, editable in Admin > General. */
