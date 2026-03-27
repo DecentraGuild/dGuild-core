@@ -4,6 +4,12 @@ import type { getAdminClient } from '../../_shared/supabase-admin.ts'
 
 type Db = ReturnType<typeof getAdminClient>
 
+function pickStoreBps(m: { store_bps?: number | null; storeBps?: number | null }): number | null {
+  const v = m.store_bps ?? m.storeBps
+  if (typeof v === 'number' && v >= 0 && v <= 10000) return v
+  return null
+}
+
 export async function handleScopeSync(body: Record<string, unknown>, db: Db, authHeader: string | null, req: Request): Promise<Response> {
   const tenantId = body.tenantId as string
   const collectionMints = (body.collectionMints as Array<{ mint: string; name?: string; image?: string }>) ?? []
@@ -21,16 +27,16 @@ export async function handleScopeSync(body: Record<string, unknown>, db: Db, aut
   const now = new Date().toISOString()
   const { fetchMintMetadata } = await import('../../_shared/mint-metadata.ts')
 
-  const catalogRows: Array<{ tenant_id: string; mint: string; kind: 'SPL' | 'NFT'; label: string | null }> = []
+  const catalogRows: Array<{ tenant_id: string; mint: string; kind: 'SPL' | 'NFT'; label: string | null; store_bps: number | null }> = []
   for (const m of collectionMints) {
     let label = m.name ?? null
     if (!label) { const meta = await fetchMintMetadata(m.mint, undefined); if (meta) label = meta.label ?? meta.name ?? null }
-    catalogRows.push({ tenant_id: tenantId, mint: m.mint, kind: 'NFT', label })
+    catalogRows.push({ tenant_id: tenantId, mint: m.mint, kind: 'NFT', label, store_bps: pickStoreBps(m as { store_bps?: number | null; storeBps?: number | null }) })
   }
   for (const m of [...splAssetMints, ...currencyMints]) {
     let label = m.name ?? (m as { symbol?: string }).symbol ?? null
     if (!label) { const meta = await fetchMintMetadata(m.mint, 'SPL'); if (meta) label = meta.label ?? meta.name ?? null }
-    catalogRows.push({ tenant_id: tenantId, mint: m.mint, kind: 'SPL', label })
+    catalogRows.push({ tenant_id: tenantId, mint: m.mint, kind: 'SPL', label, store_bps: pickStoreBps(m as { store_bps?: number | null; storeBps?: number | null }) })
   }
   const catalogUnique = [...new Map(catalogRows.map((r) => [r.mint, r])).values()]
   if (catalogUnique.length > 0) {

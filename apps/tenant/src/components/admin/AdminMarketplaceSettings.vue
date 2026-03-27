@@ -23,6 +23,18 @@
         @inspect="onInspectMint"
         @delete="onDeleteMint"
       >
+        <template #item-extra="{ item }">
+          <div class="marketplace-settings__tree-fields">
+            <input
+              type="text"
+              class="marketplace-settings__tree-input"
+              :value="groupPathDisplay(item)"
+              placeholder="Browse path (A|B|C)"
+              :disabled="saving || !!item._loading"
+              @change="onGroupPathChange(item, ($event.target as HTMLInputElement).value)"
+            />
+          </div>
+        </template>
         <template #add>
           <h4 class="marketplace-settings__add-title">Add tradable mint</h4>
           <div class="marketplace-settings__add-mint">
@@ -37,6 +49,33 @@
           </div>
         </template>
       </AdminMintCatalog>
+    </Card>
+
+    <Card>
+      <h3>Import / export mint list</h3>
+      <p class="marketplace-settings__hint">
+        CSV columns: kind (spl, nft, currency), mint, group_path (pipe-separated). Unknown mints are resolved against your tenant catalog when possible; otherwise metadata is fetched.
+      </p>
+      <div class="marketplace-settings__csv-actions">
+        <Button type="button" variant="outline" :disabled="saving" @click="downloadMintListTemplate">
+          Download template
+        </Button>
+        <Button type="button" variant="outline" :disabled="saving" @click="downloadMintListExport">
+          Export CSV
+        </Button>
+        <Button type="button" variant="outline" :disabled="saving || csvImporting" @click="triggerMintListCsvPick">
+          {{ csvImporting ? 'Importing…' : 'Import CSV' }}
+        </Button>
+        <input
+          ref="mintListCsvInput"
+          type="file"
+          accept=".csv,text/csv"
+          class="marketplace-settings__csv-file"
+          @change="onMintListCsvFile"
+        />
+      </div>
+      <p v-if="csvImportSummary" class="marketplace-settings__success">{{ csvImportSummary }}</p>
+      <pre v-if="csvImportErrors" class="marketplace-settings__csv-errors">{{ csvImportErrors }}</pre>
     </Card>
 
     <Card>
@@ -176,7 +215,10 @@ import { Card } from '~/components/ui/card'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
+import { computed, ref } from 'vue'
 import { useMarketplaceSettings } from '~/composables/marketplace/useMarketplaceSettings'
+import { parsePipeGroupPath, serializeGroupPathForCsv, serializeMarketplaceMintCsv } from '~/utils/marketplaceMintCsv'
+import type { CatalogMintItem } from '~/types/mints'
 import AdminMintCatalog from './AdminMintCatalog.vue'
 import MintDetailModal from '~/components/mint/MintDetailModal/index.vue'
 import AddMintInput from '~/components/mint/AddMintInput.vue'
@@ -218,12 +260,85 @@ const {
   addCurrencyFromInput,
   removeCustomCurrency,
   save,
+  exportMintListCsv,
+  importMintListCsv,
 } = useMarketplaceSettings({
   slug: () => props.slug,
   settings: () => props.settings,
   emit: (_, payload) => emit('saved', payload),
   emitSaving: (value) => emit('saving', value),
 })
+
+const mintListCsvInput = ref<HTMLInputElement | null>(null)
+const csvImporting = ref(false)
+const csvImportSummary = ref<string | null>(null)
+const csvImportErrors = ref<string | null>(null)
+
+function downloadMintListTemplate() {
+  const csv = serializeMarketplaceMintCsv([])
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'marketplace-mints-template.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadMintListExport() {
+  const csv = exportMintListCsv()
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'marketplace-mints.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function triggerMintListCsvPick() {
+  mintListCsvInput.value?.click()
+}
+
+async function onMintListCsvFile(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  csvImporting.value = true
+  csvImportSummary.value = null
+  csvImportErrors.value = null
+  try {
+    const text = await file.text()
+    const r = await importMintListCsv(text)
+    csvImportSummary.value = `Imported ${r.applied} row(s).`
+    csvImportErrors.value = r.errors.length ? r.errors.join('\n') : null
+  } catch (e) {
+    csvImportErrors.value = e instanceof Error ? e.message : 'Import failed'
+  } finally {
+    csvImporting.value = false
+    input.value = ''
+  }
+}
+
+function groupPathDisplay(item: CatalogMintItem): string {
+  if (item.kind === 'NFT') {
+    const m = form.collectionMints.find((x) => x.mint === item.mint)
+    return m?.groupPath?.length ? serializeGroupPathForCsv(m.groupPath) : ''
+  }
+  const m = form.splAssetMints.find((x) => x.mint === item.mint)
+  return m?.groupPath?.length ? serializeGroupPathForCsv(m.groupPath) : ''
+}
+
+function onGroupPathChange(item: CatalogMintItem, raw: string) {
+  const path = parsePipeGroupPath(raw)
+  if (item.kind === 'NFT') {
+    const m = form.collectionMints.find((x) => x.mint === item.mint)
+    if (m) m.groupPath = path.length ? path : undefined
+  } else {
+    const m = form.splAssetMints.find((x) => x.mint === item.mint)
+    if (m) m.groupPath = path.length ? path : undefined
+  }
+}
 
 defineExpose({ save, form })
 </script>
@@ -390,5 +505,49 @@ defineExpose({ save, form })
   font-size: var(--theme-font-sm);
   color: var(--theme-success, #22c55e);
   margin-top: var(--theme-space-sm);
+}
+
+.marketplace-settings__tree-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-space-xs);
+  align-items: center;
+  max-width: min(360px, 100%);
+}
+
+.marketplace-settings__tree-input {
+  font-size: var(--theme-font-xs);
+  padding: var(--theme-space-2xs) var(--theme-space-xs);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  background: var(--theme-bg);
+  color: var(--theme-text-primary);
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.marketplace-settings__csv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-space-sm);
+  align-items: center;
+  margin-bottom: var(--theme-space-sm);
+}
+
+.marketplace-settings__csv-file {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.marketplace-settings__csv-errors {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-error);
+  margin-top: var(--theme-space-sm);
+  white-space: pre-wrap;
+  max-height: 12rem;
+  overflow-y: auto;
 }
 </style>

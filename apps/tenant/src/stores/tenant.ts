@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { TenantConfig, MarketplaceSettings, MarketplaceGateSettings } from '@decentraguild/core'
+import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
+import { parseCurrencyMintsFromView } from '~/utils/parseTenantCurrencyMints'
 import { useThemeStore } from '@decentraguild/ui'
 import { getBrowserClient } from '@decentraguild/auth'
 
@@ -74,13 +76,56 @@ export const useTenantStore = defineStore('tenant', () => {
       }
 
       const rawSettings = data.marketplace_settings as MarketplaceSettings | null
-      const currencyMintsFromTable = (data.currency_mints as string[] | null) ?? []
-      const marketplaceSettings: MarketplaceSettings | null = rawSettings
+      const currencyParsed = parseCurrencyMintsFromView(data.currency_mints)
+      const currencyMintsInitial = currencyParsed.map((c) => {
+        const base = BASE_CURRENCY_MINTS.find((b) => b.mint === c.mint)
+        if (base) return { ...base, groupPath: c.groupPath }
+        return { mint: c.mint, name: '', symbol: '', groupPath: c.groupPath }
+      })
+      let marketplaceSettings: MarketplaceSettings | null = rawSettings
         ? {
             ...rawSettings,
-            currencyMints: currencyMintsFromTable.map((mint) => ({ mint })),
+            currencyMints: currencyMintsInitial,
           }
         : null
+
+      if (marketplaceSettings) {
+        const mints = [
+          ...marketplaceSettings.currencyMints.map((c) => c.mint),
+          ...(marketplaceSettings.splAssetMints ?? []).map((c) => (typeof c === 'string' ? c : c.mint)),
+          ...(marketplaceSettings.collectionMints ?? []).map((c) => (typeof c === 'string' ? c : c.mint)),
+        ].filter(Boolean)
+        const uniqueMints = [...new Set(mints)]
+        if (uniqueMints.length > 0) {
+          const { data: metaRows } = await supabase
+            .from('mint_metadata')
+            .select('mint, name, symbol, image')
+            .in('mint', uniqueMints)
+          const metaByMint = new Map((metaRows ?? []).map((m) => [(m.mint as string), m]))
+          const enrich = (arr: Array<{ mint: string; name?: string | null; symbol?: string | null; image?: string | null; groupPath?: string[] }> | undefined) =>
+            (arr ?? []).map((item) => {
+              const m = typeof item === 'string' ? { mint: item } : item
+              const meta = metaByMint.get(m.mint)
+              return {
+                ...m,
+                name: m.name ?? meta?.name ?? null,
+                symbol: m.symbol ?? meta?.symbol ?? null,
+                image: m.image ?? meta?.image ?? null,
+              }
+            })
+          const enrichedCurrencies = enrich(marketplaceSettings.currencyMints as Array<{ mint: string; name?: string | null; symbol?: string | null; image?: string | null; groupPath?: string[] }>)
+          marketplaceSettings = {
+            ...marketplaceSettings,
+            currencyMints: enrichedCurrencies.map((c) => ({
+              ...c,
+              name: c.name ?? '',
+              symbol: c.symbol ?? '',
+            })),
+            splAssetMints: enrich(marketplaceSettings.splAssetMints as Array<{ mint: string; name?: string; symbol?: string; image?: string }>),
+            collectionMints: enrich(marketplaceSettings.collectionMints as Array<{ mint: string; name?: string; image?: string }>),
+          }
+        }
+      }
 
       applyTenantContext(slugParam, {
         tenant: tenantData,

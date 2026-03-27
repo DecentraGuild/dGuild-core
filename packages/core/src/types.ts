@@ -164,7 +164,7 @@ export interface TenantConfig {
   updatedAt?: string
 }
 
-/** 0..3 group labels for flexible tree levels under Type. Shared by API and tenant app. */
+/** Ordered path segments for marketplace browse tree (unbounded depth). Shared by API and tenant app. */
 export type MarketplaceGroupPath = string[]
 
 export interface MarketplaceCollectionMint {
@@ -173,6 +173,8 @@ export interface MarketplaceCollectionMint {
   image?: string
   sellerFeeBasisPoints?: number
   groupPath?: MarketplaceGroupPath
+  /** Guild storefront fee (basis points). Persisted on tenant_mint_catalog; settlement not yet wired. */
+  storeBps?: number | null
 }
 
 export interface MarketplaceCurrencyMint {
@@ -183,6 +185,7 @@ export interface MarketplaceCurrencyMint {
   decimals?: number
   sellerFeeBasisPoints?: number
   groupPath?: MarketplaceGroupPath
+  storeBps?: number | null
 }
 
 export interface MarketplaceSplAsset {
@@ -193,6 +196,7 @@ export interface MarketplaceSplAsset {
   decimals?: number
   sellerFeeBasisPoints?: number
   groupPath?: MarketplaceGroupPath
+  storeBps?: number | null
 }
 
 /** Gate (access list) settings: programId + account address. Alias: MarketplaceWhitelistSettings for backward compat. */
