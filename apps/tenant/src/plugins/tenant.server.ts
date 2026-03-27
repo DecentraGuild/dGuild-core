@@ -4,6 +4,8 @@
  * Uses Supabase PostgREST (tenant_context_view) instead of the old Fastify API.
  */
 import type { TenantConfig, MarketplaceSettings } from '@decentraguild/core'
+import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
+import { parseCurrencyMintsFromView } from '~/utils/parseTenantCurrencyMints'
 import { getTenantSlugFromHost } from '@decentraguild/core'
 import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr'
 import { useTenantStore } from '~/stores/tenant'
@@ -82,11 +84,16 @@ export default defineNuxtPlugin(async () => {
     }
 
     const rawSettings = data.marketplace_settings as MarketplaceSettings | null
-    const currencyMintsFromTable = (data.currency_mints as string[] | null) ?? []
+    const currencyParsed = parseCurrencyMintsFromView(data.currency_mints)
+    const currencyMintsInitial = currencyParsed.map((c) => {
+      const base = BASE_CURRENCY_MINTS.find((b) => b.mint === c.mint)
+      if (base) return { ...base, groupPath: c.groupPath }
+      return { mint: c.mint, name: '', symbol: '', groupPath: c.groupPath }
+    })
     let marketplaceSettings: MarketplaceSettings | null = rawSettings
       ? {
           ...rawSettings,
-          currencyMints: currencyMintsFromTable.map((mint) => ({ mint })),
+          currencyMints: currencyMintsInitial,
         }
       : null
     if (marketplaceSettings) {
@@ -102,7 +109,7 @@ export default defineNuxtPlugin(async () => {
           .select('mint, name, symbol, image')
           .in('mint', uniqueMints)
         const metaByMint = new Map((metaRows ?? []).map((m) => [(m.mint as string), m]))
-        const enrich = (arr: Array<{ mint: string; name?: string; symbol?: string; image?: string }> | undefined) =>
+        const enrich = (arr: Array<{ mint: string; name?: string | null; symbol?: string | null; image?: string | null; groupPath?: string[] }> | undefined) =>
           (arr ?? []).map((item) => {
             const m = typeof item === 'string' ? { mint: item } : item
             const meta = metaByMint.get(m.mint)
@@ -113,9 +120,14 @@ export default defineNuxtPlugin(async () => {
               image: m.image ?? meta?.image ?? null,
             }
           })
+        const enrichedCurrencies = enrich(marketplaceSettings.currencyMints as Array<{ mint: string; name?: string | null; symbol?: string | null; image?: string | null; groupPath?: string[] }>)
         marketplaceSettings = {
           ...marketplaceSettings,
-          currencyMints: enrich(marketplaceSettings.currencyMints),
+          currencyMints: enrichedCurrencies.map((c) => ({
+            ...c,
+            name: c.name ?? '',
+            symbol: c.symbol ?? '',
+          })),
           splAssetMints: enrich(marketplaceSettings.splAssetMints as Array<{ mint: string; name?: string; symbol?: string; image?: string }>),
           collectionMints: enrich(marketplaceSettings.collectionMints as Array<{ mint: string; name?: string; image?: string }>),
         }

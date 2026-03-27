@@ -1,6 +1,7 @@
 /**
  * Builds a config-driven hierarchical tree for the marketplace left panel.
- * Type (NFT, SPL, Currency) -> optional group levels (0..3 from groupPath) -> asset leaves.
+ * Default: Type (NFT, SPL, Currency) -> optional group levels from groupPath -> asset leaves.
+ * When every in-scope mint in a type has a non-empty groupPath, that type row is omitted so paths start at the first segment.
  * Used by MarketTree and MarketBrowseView.
  * Labels: settings first, then labelByMint (tenant_mint_catalog + mint_metadata), then truncateAddress.
  */
@@ -9,7 +10,6 @@ import type { MarketplaceSettings } from '@decentraguild/core'
 import type { ScopeEntry } from './useMarketplaceScope'
 import { getMintDisplayLabel } from '~/utils/mintFromSettings'
 
-const GROUP_PATH_MAX = 3
 const SOURCE_TO_TYPE = {
   collection: 'NFT',
   spl_asset: 'SPL',
@@ -40,10 +40,73 @@ function getAssetLabel(mint: string, settings: MarketplaceSettings | null, label
   return getMintDisplayLabel(mint, settings)
 }
 
+function normalizePathSegment(seg: string): string {
+  return seg.trim().replace(/\s+/g, ' ')
+}
+
 function getGroupPath(item: { groupPath?: string[] } | { mint: string } | undefined): string[] {
   if (!item || !('groupPath' in item)) return []
   const raw = (item as { groupPath?: string[] }).groupPath ?? []
-  return raw.slice(0, GROUP_PATH_MAX)
+  if (!Array.isArray(raw)) return []
+  return raw.map(normalizePathSegment).filter((s) => s.length > 0)
+}
+
+function sortTreeChildren(nodes: TreeNode[]): void {
+  if (!nodes.length) return
+  nodes.sort((a, b) => a.label.localeCompare(b.label))
+  for (const n of nodes) {
+    if (n.children?.length) sortTreeChildren(n.children)
+  }
+}
+
+function allItemsHaveNonEmptyGroupPath(items: Array<{ groupPath?: string[] }>): boolean {
+  if (items.length === 0) return false
+  return items.every((item) => getGroupPath(item).length > 0)
+}
+
+function stripTypeLabelFromSubtree(nodes: TreeNode[], typeLabel: string): void {
+  for (const n of nodes) {
+    if (n.path.length > 0 && n.path[0] === typeLabel) n.path = n.path.slice(1)
+    if (n.children?.length) stripTypeLabelFromSubtree(n.children, typeLabel)
+  }
+}
+
+/**
+ * After hoisting, NFT / SPL / Currency each build groups with ids scoped by type, so the same
+ * path label (e.g. "Star Atlas") appears as duplicate roots. Merge sibling groups with the same
+ * label at each level and recurse into children.
+ */
+function mergeDuplicateSiblingGroups(nodes: TreeNode[]): TreeNode[] {
+  if (!nodes.length) return nodes
+  const groups = nodes.filter((n) => n.kind === 'group')
+  const rest = nodes.filter((n) => n.kind !== 'group')
+  const labelMap = new Map<string, TreeNode[]>()
+  for (const g of groups) {
+    const key = g.label
+    const arr = labelMap.get(key) ?? []
+    arr.push(g)
+    labelMap.set(key, arr)
+  }
+  const mergedGroups: TreeNode[] = []
+  for (const dup of labelMap.values()) {
+    if (dup.length === 1) {
+      const g = dup[0]
+      if (g.children?.length) g.children = mergeDuplicateSiblingGroups(g.children)
+      mergedGroups.push(g)
+    } else {
+      const primary = dup[0]
+      for (let i = 1; i < dup.length; i++) {
+        primary.children = [...(primary.children ?? []), ...(dup[i].children ?? [])]
+      }
+      if (primary.children?.length) {
+        primary.children = mergeDuplicateSiblingGroups(primary.children)
+      }
+      mergedGroups.push(primary)
+    }
+  }
+  const out = [...mergedGroups, ...rest]
+  out.sort((a, b) => a.label.localeCompare(b.label))
+  return out
 }
 
 function buildTree(input: MarketplaceTreeInput): TreeNode[] {
@@ -140,7 +203,30 @@ function buildTree(input: MarketplaceTreeInput): TreeNode[] {
     addAssetToType('type:spl_asset', mint, label, null, groupPath)
   }
 
-  return typeNodes
+  const roots: TreeNode[] = []
+  const typeOrder = [
+    { id: 'type:collection', items: collectionMintsInScope },
+    { id: 'type:spl_asset', items: splMintsInScope },
+    { id: 'type:currency', items: currencyMintsInScope },
+  ] as const
+
+  for (const { id, items } of typeOrder) {
+    const t = typeById.get(id)
+    if (!t?.children?.length) continue
+
+    sortTreeChildren(t.children)
+
+    if (allItemsHaveNonEmptyGroupPath(items)) {
+      stripTypeLabelFromSubtree(t.children, t.label)
+      roots.push(...t.children)
+    } else {
+      roots.push(t)
+    }
+  }
+
+  const mergedRoots = mergeDuplicateSiblingGroups(roots)
+  sortTreeChildren(mergedRoots)
+  return mergedRoots
 }
 
 function getChildrenOfNode(node: TreeNode): TreeNode[] {

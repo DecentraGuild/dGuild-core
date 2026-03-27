@@ -114,7 +114,7 @@ onMounted(async () => {
     const { data, error: dbError } = await supabase
       .from('tenant_config')
       .select('id, slug, name, description, branding, modules')
-      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
     if (dbError) {
       const msg = dbError.code === 'PGRST301' || dbError.message?.includes('401')
         ? 'Invalid or missing Supabase anon key. Set NUXT_PUBLIC_SUPABASE_ANON_KEY to the anon public key from Supabase Dashboard → Settings → API and redeploy.'

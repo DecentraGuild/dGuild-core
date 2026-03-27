@@ -346,9 +346,9 @@ async function onMarketplaceSaved(settings: Record<string, unknown>) {
   }
   tenantStore.setMarketplaceSettings(
     s ? {
-      collectionMints: s.collectionMints ?? [],
-      splAssetMints: (s.splAssetMints as Array<{ mint: string; name?: string; symbol?: string }>) ?? [],
-      currencyMints: (s.currencyMints as Array<{ mint: string; name: string; symbol: string }>) ?? [],
+      collectionMints: (s.collectionMints as MarketplaceSettings['collectionMints']) ?? [],
+      splAssetMints: (s.splAssetMints as MarketplaceSettings['splAssetMints']) ?? [],
+      currencyMints: (s.currencyMints as MarketplaceSettings['currencyMints']) ?? [],
       gate: s.gate,
       shopFee: (s.shopFee as MarketplaceSettings['shopFee']) ?? { wallet: '', makerFlatFee: 0, takerFlatFee: 0, makerPercentFee: 0, takerPercentFee: 0 },
     } : null,

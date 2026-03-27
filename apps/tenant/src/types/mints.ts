@@ -14,6 +14,8 @@ export interface BaseMintMetadata {
 }
 
 export interface SplAssetMint extends BaseMintMetadata {
+  groupPath?: string[]
+  storeBps?: number | null
   _loading?: boolean
   _error?: string
 }

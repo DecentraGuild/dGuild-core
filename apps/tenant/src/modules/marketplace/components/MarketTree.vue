@@ -53,6 +53,8 @@ function selectNode(id: string | null) {
 .market-tree {
   padding: var(--theme-space-xs) var(--theme-space-md);
   min-width: 0;
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
 }
 
 .market-tree__home-row {

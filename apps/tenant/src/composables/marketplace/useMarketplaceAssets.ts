@@ -48,6 +48,7 @@ export function useMarketplaceAssets() {
         .from('marketplace_mint_scope')
         .select('mint, source, collection_mint')
         .eq('tenant_id', id)
+        .order('mint', { ascending: true })
         .range(from, to)
       if (scopeError) throw scopeError
       const rows = scopeRows ?? []

@@ -12,6 +12,7 @@ import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
 import { useEnsureCatalogMint } from '~/composables/mint/useEnsureCatalogMint'
 import type { AddressBookEntry, CatalogMintItem } from '~/types/mints'
 import type { CatalogEntry } from '~/composables/watchtower/useTenantCatalog'
+import { parseMarketplaceMintCsv, serializeMarketplaceMintCsv, type MarketplaceCsvRow } from '~/utils/marketplaceMintCsv'
 import { reactive, ref, watch, computed, nextTick } from 'vue'
 
 export interface CollectionMint {
@@ -26,6 +27,7 @@ export interface CollectionMint {
   editionNonce?: number
   tokenStandard?: string
   groupPath?: string[]
+  storeBps?: number | null
   collectionSize?: number
   uniqueTraitCount?: number
   traitTypes?: string[]
@@ -46,6 +48,8 @@ export interface SplAssetMint {
   isMutable?: boolean
   editionNonce?: number
   tokenStandard?: string
+  groupPath?: string[]
+  storeBps?: number | null
   _loading?: boolean
   _error?: string
 }
@@ -57,6 +61,8 @@ export interface CurrencyMint {
   image?: string
   decimals?: number | null
   sellerFeeBasisPoints?: number | null
+  groupPath?: string[]
+  storeBps?: number | null
   _loading?: boolean
   _error?: string
 }
@@ -161,6 +167,211 @@ export function useMarketplaceSettings(opts: {
     if (w === null || (typeof w === 'object' && !(w.account?.trim()))) return ''
     return w.account
   })
+
+  async function mergeStoreBpsFromCatalog() {
+    const id = tenantId.value
+    if (!id) return
+    const mints = [...new Set([
+      ...form.collectionMints.map((m) => m.mint),
+      ...form.splAssetMints.map((m) => m.mint),
+      ...form.currencyMints.map((c) => c.mint),
+    ])]
+    if (mints.length === 0) return
+    const supabase = useSupabase()
+    const { data } = await supabase.from('tenant_mint_catalog').select('mint, store_bps').eq('tenant_id', id).in('mint', mints)
+    const byMint = new Map((data ?? []).map((r) => [r.mint as string, r.store_bps as number | null]))
+    for (const m of form.collectionMints) m.storeBps = byMint.get(m.mint) ?? null
+    for (const m of form.splAssetMints) m.storeBps = byMint.get(m.mint) ?? null
+    for (const c of form.currencyMints) c.storeBps = byMint.get(c.mint) ?? null
+  }
+
+  function removeMintFromAllLists(mint: string) {
+    const ic = form.collectionMints.findIndex((m) => m.mint === mint)
+    if (ic >= 0) form.collectionMints.splice(ic, 1)
+    const ispl = form.splAssetMints.findIndex((m) => m.mint === mint)
+    if (ispl >= 0) form.splAssetMints.splice(ispl, 1)
+    const iu = form.currencyMints.findIndex((c) => c.mint === mint)
+    if (iu >= 0) form.currencyMints.splice(iu, 1)
+  }
+
+  function buildMintListCsvRows(): MarketplaceCsvRow[] {
+    const out: MarketplaceCsvRow[] = []
+    for (const m of form.collectionMints) {
+      if (m._error) continue
+      out.push({ kind: 'nft', mint: m.mint, groupPath: m.groupPath ?? [], storeBps: m.storeBps ?? null })
+    }
+    for (const m of form.splAssetMints) {
+      if (m._error) continue
+      out.push({ kind: 'spl', mint: m.mint, groupPath: m.groupPath ?? [], storeBps: m.storeBps ?? null })
+    }
+    for (const c of form.currencyMints) {
+      if ('_error' in c && c._error) continue
+      out.push({ kind: 'currency', mint: c.mint, groupPath: c.groupPath ?? [], storeBps: c.storeBps ?? null })
+    }
+    out.sort((a, b) => a.kind.localeCompare(b.kind) || a.mint.localeCompare(b.mint))
+    return out
+  }
+
+  function exportMintListCsv(): string {
+    return serializeMarketplaceMintCsv(buildMintListCsvRows())
+  }
+
+  async function importMintListCsv(text: string): Promise<{ applied: number; errors: string[] }> {
+    const { rows, errors: parseErrors } = parseMarketplaceMintCsv(text)
+    const errors = [...parseErrors]
+    if (!rows.length) return { applied: 0, errors: errors.length ? errors : ['No valid rows'] }
+    const id = tenantId.value
+    if (!id) return { applied: 0, errors: ['No tenant'] }
+    const supabase = useSupabase()
+    const mints = [...new Set(rows.map((r) => r.mint))]
+    const { data: catRows } = await supabase.from('tenant_mint_catalog').select('mint, kind').eq('tenant_id', id).in('mint', mints)
+    const catalogByMint = new Map((catRows ?? []).map((r) => [r.mint as string, r.kind as 'SPL' | 'NFT']))
+
+    let applied = 0
+    for (const row of rows) {
+      let catKind = catalogByMint.get(row.mint)
+      if (row.kind === 'nft') {
+        if (catKind === 'SPL') {
+          errors.push(`${row.mint}: already SPL in catalog`)
+          continue
+        }
+        if (!catKind) {
+          try {
+            const r = await ensureMint(row.mint, 'NFT')
+            if (r.kind !== 'NFT') {
+              errors.push(`${row.mint}: not an NFT collection`)
+              continue
+            }
+            catalogByMint.set(row.mint, 'NFT')
+          } catch (e) {
+            errors.push(`${row.mint}: ${e instanceof Error ? e.message : 'resolve failed'}`)
+            continue
+          }
+        }
+        removeMintFromAllLists(row.mint)
+        const already = form.collectionMints.some((m) => m.mint === row.mint)
+        if (!already && form.collectionMints.length + form.splAssetMints.length >= MARKETPLACE_UI_MINTS_CAP) {
+          errors.push(`${row.mint}: mint cap reached`)
+          continue
+        }
+        let preview: { collectionSize?: number; uniqueTraitCount?: number; traitTypes?: string[] } | null = null
+        try {
+          preview = await invokeEdgeFunction<{ collectionSize?: number; uniqueTraitCount?: number; traitTypes?: string[] }>(
+            supabase,
+            'marketplace',
+            { action: 'collection-preview', mint: row.mint },
+          )
+        } catch { /* use defaults */ }
+        const idx = form.collectionMints.findIndex((m) => m.mint === row.mint)
+        const next: CollectionMint = {
+          mint: row.mint,
+          groupPath: row.groupPath,
+          storeBps: row.storeBps,
+          collectionSize: preview?.collectionSize ?? 0,
+          uniqueTraitCount: preview?.uniqueTraitCount ?? 0,
+          traitTypes: preview?.traitTypes ?? [],
+        }
+        if (idx >= 0) form.collectionMints[idx] = { ...form.collectionMints[idx], ...next }
+        else form.collectionMints.push(next)
+        applied++
+        continue
+      }
+      if (row.kind === 'spl') {
+        if (catKind === 'NFT') {
+          errors.push(`${row.mint}: already NFT in catalog`)
+          continue
+        }
+        if (!catKind) {
+          try {
+            const r = await ensureMint(row.mint, 'SPL')
+            if (r.kind !== 'SPL') {
+              errors.push(`${row.mint}: not SPL`)
+              continue
+            }
+            catalogByMint.set(row.mint, 'SPL')
+          } catch (e) {
+            errors.push(`${row.mint}: ${e instanceof Error ? e.message : 'resolve failed'}`)
+            continue
+          }
+        }
+        removeMintFromAllLists(row.mint)
+        const alreadySpl = form.splAssetMints.some((m) => m.mint === row.mint)
+        if (!alreadySpl && form.collectionMints.length + form.splAssetMints.length >= MARKETPLACE_UI_MINTS_CAP) {
+          errors.push(`${row.mint}: mint cap reached`)
+          continue
+        }
+        let d: { name?: string; symbol?: string; image?: string; decimals?: number; sellerFeeBasisPoints?: number } = {}
+        try {
+          d = (await invokeEdgeFunction(supabase, 'marketplace', { action: 'spl-preview', mint: row.mint })) ?? {}
+        } catch { /* empty */ }
+        const idx = form.splAssetMints.findIndex((m) => m.mint === row.mint)
+        const next: SplAssetMint = {
+          mint: row.mint,
+          name: d.name,
+          symbol: d.symbol,
+          image: d.image,
+          decimals: d.decimals ?? null,
+          sellerFeeBasisPoints: d.sellerFeeBasisPoints ?? null,
+          groupPath: row.groupPath,
+          storeBps: row.storeBps,
+        }
+        if (idx >= 0) form.splAssetMints[idx] = { ...form.splAssetMints[idx], ...next }
+        else form.splAssetMints.push(next)
+        void ensureMint(row.mint, 'SPL').catch(() => {})
+        applied++
+        continue
+      }
+      if (catKind === 'NFT') {
+        errors.push(`${row.mint}: already NFT in catalog`)
+        continue
+      }
+      if (!catKind) {
+        try {
+          const r = await ensureMint(row.mint, 'SPL')
+          if (r.kind !== 'SPL') {
+            errors.push(`${row.mint}: currency must be SPL`)
+            continue
+          }
+          catalogByMint.set(row.mint, 'SPL')
+        } catch (e) {
+          errors.push(`${row.mint}: ${e instanceof Error ? e.message : 'resolve failed'}`)
+          continue
+        }
+      }
+      removeMintFromAllLists(row.mint)
+      const base = BASE_CURRENCY_MINTS.find((b) => b.mint === row.mint)
+      if (base) {
+        const idx = form.currencyMints.findIndex((c) => c.mint === row.mint)
+        const item: CurrencyMint = { ...base, groupPath: row.groupPath, storeBps: row.storeBps, _loading: false, _error: undefined }
+        if (idx >= 0) form.currencyMints[idx] = item
+        else form.currencyMints.push(item)
+      } else {
+        let d: { name?: string; symbol?: string; image?: string; decimals?: number; sellerFeeBasisPoints?: number } = {}
+        try {
+          d = (await invokeEdgeFunction(supabase, 'marketplace', { action: 'spl-preview', mint: row.mint })) ?? {}
+        } catch { /* empty */ }
+        const idx = form.currencyMints.findIndex((c) => c.mint === row.mint)
+        const item: CurrencyMint = {
+          mint: row.mint,
+          name: d.name ?? '',
+          symbol: d.symbol ?? '',
+          image: d.image,
+          decimals: d.decimals ?? null,
+          sellerFeeBasisPoints: d.sellerFeeBasisPoints ?? null,
+          groupPath: row.groupPath,
+          storeBps: row.storeBps,
+          _loading: false,
+          _error: undefined,
+        }
+        if (idx >= 0) form.currencyMints[idx] = item
+        else form.currencyMints.push(item)
+        void ensureMint(row.mint, 'SPL').catch(() => {})
+      }
+      applied++
+    }
+    await mergeStoreBpsFromCatalog()
+    return { applied, errors }
+  }
 
   function onWhitelistSelectUpdate(value: WhitelistSettings | null | 'use-default' | 'admin-only') {
     if (value === 'use-default') {
@@ -342,6 +553,7 @@ export function useMarketplaceSettings(opts: {
           decimals: resolved.decimals ?? null,
         })
       }
+      void mergeStoreBpsFromCatalog()
       newMint.value = ''
       newMintKind.value = 'auto'
     } catch (e) {
@@ -408,7 +620,7 @@ export function useMarketplaceSettings(opts: {
         uniqueTraitCount: m.uniqueTraitCount,
         traitTypes: m.traitTypes,
       }))
-      const spl = (s.splAssetMints as Array<{ mint: string; name?: string; symbol?: string; image?: string; decimals?: number | null; sellerFeeBasisPoints?: number | null; updateAuthority?: string; uri?: string; primarySaleHappened?: boolean; isMutable?: boolean; editionNonce?: number; tokenStandard?: string }>) ?? []
+      const spl = (s.splAssetMints as Array<{ mint: string; name?: string; symbol?: string; image?: string; decimals?: number | null; sellerFeeBasisPoints?: number | null; updateAuthority?: string; uri?: string; primarySaleHappened?: boolean; isMutable?: boolean; editionNonce?: number; tokenStandard?: string; groupPath?: string[] }>) ?? []
       form.splAssetMints = spl.map((m) => ({
         mint: m.mint ?? '',
         name: m.name,
@@ -422,9 +634,15 @@ export function useMarketplaceSettings(opts: {
         isMutable: m.isMutable,
         editionNonce: m.editionNonce,
         tokenStandard: m.tokenStandard,
+        groupPath: m.groupPath,
       }))
       const cmu = (s.currencyMints as CurrencyMint[]) ?? []
-      form.currencyMints = cmu.map((c) => ({ ...c, _loading: false, _error: undefined }))
+      form.currencyMints = cmu.map((c) => ({
+        ...c,
+        groupPath: c.groupPath,
+        _loading: false,
+        _error: undefined,
+      }))
       const sf = s.shopFee as Partial<ShopFee> | undefined
       if (sf) {
         form.shopFee.wallet = sf.wallet ?? ''
@@ -446,7 +664,10 @@ export function useMarketplaceSettings(opts: {
           account: (wl.account as string) ?? '',
         }
       }
-      nextTick(() => fillMissingCollectionCounts())
+      nextTick(() => {
+        void mergeStoreBpsFromCatalog()
+        void fillMissingCollectionCounts()
+      })
     },
     { immediate: true }
   )
@@ -534,6 +755,7 @@ export function useMarketplaceSettings(opts: {
           editionNonce: m.editionNonce,
           tokenStandard: m.tokenStandard,
           groupPath: m.groupPath,
+          store_bps: m.storeBps ?? null,
           collectionSize: m.collectionSize,
           uniqueTraitCount: m.uniqueTraitCount,
           traitTypes: m.traitTypes,
@@ -553,10 +775,21 @@ export function useMarketplaceSettings(opts: {
           isMutable: m.isMutable,
           editionNonce: m.editionNonce,
           tokenStandard: m.tokenStandard,
+          groupPath: m.groupPath,
+          store_bps: m.storeBps ?? null,
         })),
       currencyMints: form.currencyMints
         .filter((c) => !('_error' in c && c._error))
-        .map((c) => ({ mint: c.mint, name: c.name ?? '', symbol: c.symbol ?? '', decimals: c.decimals, image: c.image, sellerFeeBasisPoints: c.sellerFeeBasisPoints })),
+        .map((c) => ({
+          mint: c.mint,
+          name: c.name ?? '',
+          symbol: c.symbol ?? '',
+          decimals: c.decimals,
+          image: c.image,
+          sellerFeeBasisPoints: c.sellerFeeBasisPoints,
+          groupPath: c.groupPath,
+          store_bps: c.storeBps ?? null,
+        })),
       shopFee: form.shopFee,
       gate: form.whitelist === 'use-default' ? 'use-default' : (form.whitelist === 'admin-only' ? 'admin-only' : (form.whitelist === null ? 'public' : form.whitelist)),
     }
@@ -582,7 +815,13 @@ export function useMarketplaceSettings(opts: {
       const { error: delErr } = await supabase.from('marketplace_currencies').delete().eq('tenant_id', tenantId.value)
       if (delErr) throw new Error(delErr.message)
       if (currencies.length > 0) {
-        const { error: insErr } = await supabase.from('marketplace_currencies').insert(currencies.map((c) => ({ tenant_id: tenantId.value, mint: c.mint })))
+        const { error: insErr } = await supabase.from('marketplace_currencies').insert(
+          (currencies as Array<{ mint: string; groupPath?: string[] }>).map((c) => ({
+            tenant_id: tenantId.value,
+            mint: c.mint,
+            group_path: c.groupPath ?? null,
+          })),
+        )
         if (insErr) throw new Error(insErr.message)
       }
 
@@ -656,5 +895,8 @@ export function useMarketplaceSettings(opts: {
     addCurrencyFromInput,
     removeCustomCurrency,
     save,
+    exportMintListCsv,
+    importMintListCsv,
+    mergeStoreBpsFromCatalog,
   }
 }
