@@ -74,7 +74,12 @@
           @change="onMintListCsvFile"
         />
       </div>
-      <p v-if="csvImportSummary" class="marketplace-settings__success">{{ csvImportSummary }}</p>
+      <p
+        v-if="csvImportSummary"
+        :class="csvImportErrors ? 'marketplace-settings__csv-warning' : 'marketplace-settings__success'"
+      >
+        {{ csvImportSummary }}
+      </p>
       <pre v-if="csvImportErrors" class="marketplace-settings__csv-errors">{{ csvImportErrors }}</pre>
     </Card>
 
@@ -310,8 +315,16 @@ async function onMintListCsvFile(ev: Event) {
   try {
     const text = await file.text()
     const r = await importMintListCsv(text)
-    csvImportSummary.value = `Imported ${r.applied} row(s).`
-    csvImportErrors.value = r.errors.length ? r.errors.join('\n') : null
+    const n = r.errors.length
+    if (n) {
+      csvImportSummary.value =
+        r.applied > 0
+          ? `Imported ${r.applied} row(s). ${n} issue${n === 1 ? '' : 's'} (skipped lines or unresolved mints) — see list below.`
+          : `No rows imported. ${n} issue${n === 1 ? '' : 's'} — see list below.`
+    } else {
+      csvImportSummary.value = `Imported ${r.applied} row(s).`
+    }
+    csvImportErrors.value = n ? r.errors.join('\n') : null
   } catch (e) {
     csvImportErrors.value = e instanceof Error ? e.message : 'Import failed'
   } finally {
@@ -504,6 +517,12 @@ defineExpose({ save, form })
 .marketplace-settings__success {
   font-size: var(--theme-font-sm);
   color: var(--theme-success, #22c55e);
+  margin-top: var(--theme-space-sm);
+}
+
+.marketplace-settings__csv-warning {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-warning);
   margin-top: var(--theme-space-sm);
 }
 
