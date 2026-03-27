@@ -64,6 +64,7 @@ export const useTenantStore = defineStore('tenant', () => {
         slug: data.slug as string | undefined,
         name: data.name as string,
         description: data.description as string | undefined,
+        welcomeMessage: data.welcome_message as string | undefined,
         discordServerInviteLink: data.discord_server_invite_link as string | undefined,
         homepage: data.homepage as string | undefined,
         xLink: data.x_link as string | undefined,

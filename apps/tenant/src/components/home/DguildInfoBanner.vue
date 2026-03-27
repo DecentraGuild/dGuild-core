@@ -10,6 +10,7 @@
       <span v-else class="dguild-info-banner__logo-placeholder">{{ name.charAt(0) }}</span>
       <div class="dguild-info-banner__brand-text">
         <h1 class="dguild-info-banner__name">{{ name }}</h1>
+        <p v-if="welcomeMessage" class="dguild-info-banner__welcome">{{ welcomeMessage }}</p>
         <p v-if="description" class="dguild-info-banner__desc">{{ description }}</p>
       </div>
     </div>
@@ -65,6 +66,7 @@ import { Icon } from '@iconify/vue'
 const props = withDefaults(
   defineProps<{
     name?: string
+    welcomeMessage?: string
     description?: string
     logo?: string
     homepage?: string
@@ -157,6 +159,14 @@ const hasLinks = computed(
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: var(--theme-primary);
+}
+
+.dguild-info-banner__welcome {
+  font-size: var(--theme-font-base);
+  color: var(--theme-text-primary);
+  font-weight: 500;
+  margin: var(--theme-space-xs) 0 0;
+  line-height: 1.4;
 }
 
 .dguild-info-banner__desc {
