@@ -10,7 +10,7 @@
       </div>
       <template #fallback />
     </ClientOnly>
-    <template v-if="!showTenantGatedMessage" #header>
+    <template #header>
       <AppHeader
         :logo="headerLogo"
         :name="headerName"
@@ -146,7 +146,7 @@
         </template>
       </AppHeader>
     </template>
-    <template v-if="!showTenantGatedMessage" #nav>
+    <template v-if="!tenantGateConfigured || tenantAccessOk" #nav>
       <div class="layout-nav">
         <AppNav>
           <NavLink :to="linkTo('/')" icon="lucide:home">Home</NavLink>
@@ -170,8 +170,16 @@
         </a>
       </div>
     </template>
-    <div v-if="showTenantGatedMessage" class="tenant-gated">
-      <p class="tenant-gated__message">This community is gated. You need to be on the whitelist to access it.</p>
+    <div v-if="tenantGateConfigured && !tenantAccessOk" class="tenant-gate-pending">
+      <p v-if="!hasWallet" class="tenant-gate-pending__message">Connect your wallet to verify membership.</p>
+      <p v-else-if="tenantDefaultListLoading" class="tenant-gate-pending__message">Checking access…</p>
+      <p v-else class="tenant-gate-pending__message">
+        {{
+          tenantDefaultIsAdminOnly
+            ? 'This community is admin-only. Connect with a dGuild admin wallet to access it.'
+            : 'This community is gated. You need to be on the whitelist to access it.'
+        }}
+      </p>
     </div>
     <slot v-else />
     <ClientOnly>
@@ -188,7 +196,6 @@ import { AuthWidget, useAuth } from '@decentraguild/auth'
 import { Icon } from '@iconify/vue'
 import { useThemeStore } from '@decentraguild/ui'
 import { useTenantStore } from '~/stores/tenant'
-import { isModuleVisibleToMembers, getModuleState } from '@decentraguild/core'
 import {
   getModuleSubnavForPath,
   ADMIN_PRIMARY_TAB_IDS,
@@ -196,8 +203,7 @@ import {
   compareAdminMoreTabsByCatalogOrder,
 } from '~/config/modules'
 import { onClickOutside, useEventListener } from '@vueuse/core'
-import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
-import { useWalletOnList } from '~/composables/gates/useWalletOnList'
+import { useTenantGateAccess } from '~/composables/gates/useTenantGateAccess'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
 import { useNavModules } from '~/composables/core/useNavModules'
 import { useTenantInLinks } from '~/composables/core/useTenantInLinks'
@@ -226,60 +232,13 @@ const headerName = computed(() =>
   isMarketPath.value ? `Marketplace [${tenantName.value}]` : tenantName.value,
 )
 
-const tenantDefaultListAddress = computed(() => {
-  const g = tenant.value?.defaultGate
-  if (g === 'admin-only') return null
-  const acc = g?.account
-  return (acc && acc.trim()) || null
-})
-
-const tenantDefaultIsAdminOnly = computed(() => tenant.value?.defaultGate === 'admin-only')
-
-const marketplaceSettings = computed(() => tenantStore.marketplaceSettings)
-const raffleSettings = computed(() => tenantStore.raffleSettings)
-
-const effectiveMarketplaceWhitelist = useEffectiveGate(tenant, 'marketplace', {
-  marketplaceSettings,
-  raffleSettings,
-})
-
-const effectiveRaffleWhitelist = useEffectiveGate(tenant, 'raffles', {
-  marketplaceSettings,
-  raffleSettings,
-})
-
-const { isListed: isOnTenantDefaultList, loading: tenantDefaultListLoading } = useWalletOnList(tenantDefaultListAddress)
-
-const auth = useAuth()
-
-const hasAnyPublicModule = computed(() => {
-  if (tenant.value?.modules?.marketplace && isModuleVisibleToMembers(getModuleState(tenant.value.modules.marketplace)) && effectiveMarketplaceWhitelist.value === null) return true
-  if (tenant.value?.modules?.raffles && isModuleVisibleToMembers(getModuleState(tenant.value.modules.raffles)) && effectiveRaffleWhitelist.value === null) return true
-  return false
-})
-
-const isAdmin = computed(() => {
-  const w = auth.wallet.value
-  const admins = tenant.value?.admins ?? []
-  return !!(w && admins.includes(w))
-})
-
-const showTenantGatedMessage = computed(() => {
-  const w = auth.wallet.value?.trim() ?? ''
-  const hasWallet = Boolean(w)
-
-  if (tenantDefaultIsAdminOnly.value) {
-    if (!hasWallet) return false
-    return !isAdmin.value
-  }
-
-  if (!tenantDefaultListAddress.value) return false
-  if (isOnTenantDefaultList.value === true) return false
-  if (hasAnyPublicModule.value) return false
-  if (!hasWallet) return false
-  if (tenantDefaultListLoading.value) return false
-  return true
-})
+const {
+  tenantGateConfigured,
+  tenantAccessOk,
+  tenantDefaultIsAdminOnly,
+  tenantDefaultListLoading,
+  hasWallet,
+} = useTenantGateAccess()
 
 const { navModules } = useNavModules()
 
@@ -678,12 +637,12 @@ button.layout-subnav__tab {
   font-size: 1.25rem;
 }
 
-.tenant-gated {
+.tenant-gate-pending {
   padding: var(--theme-space-xl);
   text-align: center;
 }
 
-.tenant-gated__message {
+.tenant-gate-pending__message {
   margin: 0;
   font-size: var(--theme-font-md);
   color: var(--theme-text-secondary);
