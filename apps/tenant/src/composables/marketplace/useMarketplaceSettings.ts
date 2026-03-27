@@ -248,31 +248,32 @@ export function useMarketplaceSettings(opts: {
             continue
           }
         }
+        const snapNft = form.collectionMints.find((m) => m.mint === row.mint)
         removeMintFromAllLists(row.mint)
-        const already = form.collectionMints.some((m) => m.mint === row.mint)
-        if (!already && form.collectionMints.length + form.splAssetMints.length >= MARKETPLACE_UI_MINTS_CAP) {
+        if (!snapNft && form.collectionMints.length + form.splAssetMints.length >= MARKETPLACE_UI_MINTS_CAP) {
           errors.push(`${row.mint}: mint cap reached`)
           continue
         }
         let preview: { collectionSize?: number; uniqueTraitCount?: number; traitTypes?: string[] } | null = null
-        try {
-          preview = await invokeEdgeFunction<{ collectionSize?: number; uniqueTraitCount?: number; traitTypes?: string[] }>(
-            supabase,
-            'marketplace',
-            { action: 'collection-preview', mint: row.mint },
-          )
-        } catch { /* use defaults */ }
-        const idx = form.collectionMints.findIndex((m) => m.mint === row.mint)
+        if (!snapNft) {
+          try {
+            preview = await invokeEdgeFunction<{ collectionSize?: number; uniqueTraitCount?: number; traitTypes?: string[] }>(
+              supabase,
+              'marketplace',
+              { action: 'collection-preview', mint: row.mint },
+            )
+          } catch { /* use defaults */ }
+        }
         const next: CollectionMint = {
+          ...(snapNft ?? {}),
           mint: row.mint,
           groupPath: row.groupPath,
           storeBps: row.storeBps,
-          collectionSize: preview?.collectionSize ?? 0,
-          uniqueTraitCount: preview?.uniqueTraitCount ?? 0,
-          traitTypes: preview?.traitTypes ?? [],
+          collectionSize: snapNft?.collectionSize ?? preview?.collectionSize ?? 0,
+          uniqueTraitCount: snapNft?.uniqueTraitCount ?? preview?.uniqueTraitCount ?? 0,
+          traitTypes: snapNft?.traitTypes ?? preview?.traitTypes ?? [],
         }
-        if (idx >= 0) form.collectionMints[idx] = { ...form.collectionMints[idx], ...next }
-        else form.collectionMints.push(next)
+        form.collectionMints.push(next)
         applied++
         continue
       }
@@ -294,30 +295,30 @@ export function useMarketplaceSettings(opts: {
             continue
           }
         }
+        const snapSpl = form.splAssetMints.find((m) => m.mint === row.mint)
         removeMintFromAllLists(row.mint)
-        const alreadySpl = form.splAssetMints.some((m) => m.mint === row.mint)
-        if (!alreadySpl && form.collectionMints.length + form.splAssetMints.length >= MARKETPLACE_UI_MINTS_CAP) {
+        if (!snapSpl && form.collectionMints.length + form.splAssetMints.length >= MARKETPLACE_UI_MINTS_CAP) {
           errors.push(`${row.mint}: mint cap reached`)
           continue
         }
         let d: { name?: string; symbol?: string; image?: string; decimals?: number; sellerFeeBasisPoints?: number } = {}
-        try {
-          d = (await invokeEdgeFunction(supabase, 'marketplace', { action: 'spl-preview', mint: row.mint })) ?? {}
-        } catch { /* empty */ }
-        const idx = form.splAssetMints.findIndex((m) => m.mint === row.mint)
+        if (!snapSpl) {
+          try {
+            d = (await invokeEdgeFunction(supabase, 'marketplace', { action: 'spl-preview', mint: row.mint })) ?? {}
+          } catch { /* empty */ }
+        }
         const next: SplAssetMint = {
+          ...(snapSpl ?? {}),
           mint: row.mint,
-          name: d.name,
-          symbol: d.symbol,
-          image: d.image,
-          decimals: d.decimals ?? null,
-          sellerFeeBasisPoints: d.sellerFeeBasisPoints ?? null,
+          name: snapSpl?.name ?? d.name,
+          symbol: snapSpl?.symbol ?? d.symbol,
+          image: snapSpl?.image ?? d.image,
+          decimals: snapSpl?.decimals ?? d.decimals ?? null,
+          sellerFeeBasisPoints: snapSpl?.sellerFeeBasisPoints ?? d.sellerFeeBasisPoints ?? null,
           groupPath: row.groupPath,
           storeBps: row.storeBps,
         }
-        if (idx >= 0) form.splAssetMints[idx] = { ...form.splAssetMints[idx], ...next }
-        else form.splAssetMints.push(next)
-        void ensureMint(row.mint, 'SPL').catch(() => {})
+        form.splAssetMints.push(next)
         applied++
         continue
       }
@@ -338,34 +339,32 @@ export function useMarketplaceSettings(opts: {
           continue
         }
       }
+      const snapCurr = form.currencyMints.find((c) => c.mint === row.mint)
       removeMintFromAllLists(row.mint)
       const base = BASE_CURRENCY_MINTS.find((b) => b.mint === row.mint)
       if (base) {
-        const idx = form.currencyMints.findIndex((c) => c.mint === row.mint)
         const item: CurrencyMint = { ...base, groupPath: row.groupPath, storeBps: row.storeBps, _loading: false, _error: undefined }
-        if (idx >= 0) form.currencyMints[idx] = item
-        else form.currencyMints.push(item)
+        form.currencyMints.push(item)
       } else {
         let d: { name?: string; symbol?: string; image?: string; decimals?: number; sellerFeeBasisPoints?: number } = {}
-        try {
-          d = (await invokeEdgeFunction(supabase, 'marketplace', { action: 'spl-preview', mint: row.mint })) ?? {}
-        } catch { /* empty */ }
-        const idx = form.currencyMints.findIndex((c) => c.mint === row.mint)
+        if (!snapCurr) {
+          try {
+            d = (await invokeEdgeFunction(supabase, 'marketplace', { action: 'spl-preview', mint: row.mint })) ?? {}
+          } catch { /* empty */ }
+        }
         const item: CurrencyMint = {
           mint: row.mint,
-          name: d.name ?? '',
-          symbol: d.symbol ?? '',
-          image: d.image,
-          decimals: d.decimals ?? null,
-          sellerFeeBasisPoints: d.sellerFeeBasisPoints ?? null,
+          name: snapCurr?.name ?? d.name ?? '',
+          symbol: snapCurr?.symbol ?? d.symbol ?? '',
+          image: snapCurr?.image ?? d.image,
+          decimals: snapCurr?.decimals ?? d.decimals ?? null,
+          sellerFeeBasisPoints: snapCurr?.sellerFeeBasisPoints ?? d.sellerFeeBasisPoints ?? null,
           groupPath: row.groupPath,
           storeBps: row.storeBps,
           _loading: false,
           _error: undefined,
         }
-        if (idx >= 0) form.currencyMints[idx] = item
-        else form.currencyMints.push(item)
-        void ensureMint(row.mint, 'SPL').catch(() => {})
+        form.currencyMints.push(item)
       }
       applied++
     }
