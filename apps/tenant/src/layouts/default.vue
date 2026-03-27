@@ -248,7 +248,9 @@ const effectiveRaffleWhitelist = useEffectiveGate(tenant, 'raffles', {
   raffleSettings,
 })
 
-const { isListed: isOnTenantDefaultList } = useWalletOnList(tenantDefaultListAddress)
+const { isListed: isOnTenantDefaultList, loading: tenantDefaultListLoading } = useWalletOnList(tenantDefaultListAddress)
+
+const auth = useAuth()
 
 const hasAnyPublicModule = computed(() => {
   if (tenant.value?.modules?.marketplace && isModuleVisibleToMembers(getModuleState(tenant.value.modules.marketplace)) && effectiveMarketplaceWhitelist.value === null) return true
@@ -257,17 +259,25 @@ const hasAnyPublicModule = computed(() => {
 })
 
 const isAdmin = computed(() => {
-  const w = useAuth().wallet.value
+  const w = auth.wallet.value
   const admins = tenant.value?.admins ?? []
   return !!(w && admins.includes(w))
 })
 
 const showTenantGatedMessage = computed(() => {
-  if (tenantDefaultIsAdminOnly.value && isAdmin.value) return false
-  if (tenantDefaultIsAdminOnly.value && !isAdmin.value) return true
+  const w = auth.wallet.value?.trim() ?? ''
+  const hasWallet = Boolean(w)
+
+  if (tenantDefaultIsAdminOnly.value) {
+    if (!hasWallet) return false
+    return !isAdmin.value
+  }
+
   if (!tenantDefaultListAddress.value) return false
   if (isOnTenantDefaultList.value === true) return false
   if (hasAnyPublicModule.value) return false
+  if (!hasWallet) return false
+  if (tenantDefaultListLoading.value) return false
   return true
 })
 

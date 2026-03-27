@@ -127,6 +127,12 @@ const cardStyle = computed(() => {
 
 .discovery-card__gate-icon {
   font-size: 1rem;
+  color: inherit;
+}
+
+.discovery-card__gate :deep(svg),
+.discovery-card__module-gate :deep(svg) {
+  fill: currentColor;
 }
 
 .discovery-card__top {
@@ -189,6 +195,7 @@ const cardStyle = computed(() => {
 
 .discovery-card__module-gate-icon {
   font-size: 0.875rem;
+  color: inherit;
 }
 
 .discovery-card__bottom {

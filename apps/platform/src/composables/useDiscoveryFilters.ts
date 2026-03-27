@@ -30,14 +30,6 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
     }, 300)
   }, { immediate: true })
 
-  function hasGates(tenant: TenantConfig): boolean {
-    const dg = tenant.defaultGate
-    if (dg && typeof dg === 'object' && 'account' in dg) {
-      return Boolean(dg.account?.trim())
-    }
-    return false
-  }
-
   function activeModuleIds(tenant: TenantConfig): string[] {
     if (!tenant.modules || typeof tenant.modules !== 'object') return []
     return Object.entries(tenant.modules)
@@ -77,6 +69,13 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
         hasGate: effective !== null,
       }
     })
+  }
+
+  function hasGates(tenant: TenantConfig): boolean {
+    const dg = tenant.defaultGate
+    if (dg === 'admin-only') return true
+    if (dg && typeof dg === 'object' && 'account' in dg && Boolean(dg.account?.trim())) return true
+    return activeModulesWithGate(tenant).some((m) => m.hasGate)
   }
 
   const moduleFilterOptions = computed(() => {
