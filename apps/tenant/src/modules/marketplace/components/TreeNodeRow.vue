@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { TreeNode } from '~/composables/marketplace/useMarketplaceTree'
 
@@ -48,9 +48,26 @@ defineEmits<{
   select: [id: string | null]
 }>()
 
+function descendantMatches(n: TreeNode, id: string | null): boolean {
+  if (!id) return false
+  if (n.id === id) return true
+  for (const c of n.children ?? []) {
+    if (descendantMatches(c, id)) return true
+  }
+  return false
+}
+
 const hasChildren = computed(() => (props.node.children?.length ?? 0) > 0)
 const isSelected = computed(() => props.selectedId === props.node.id)
-const expanded = ref(true)
+const expanded = ref(false)
+
+watch(
+  () => props.selectedId,
+  (id) => {
+    if (hasChildren.value && descendantMatches(props.node, id)) expanded.value = true
+  },
+  { immediate: true },
+)
 
 const kindIcon = computed(() => {
   switch (props.node.kind) {

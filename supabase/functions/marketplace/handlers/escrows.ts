@@ -22,6 +22,18 @@ function readI64LE(data: Uint8Array, offset: number): string {
   return String(BigInt.asIntN(64, (BigInt(view.getUint32(4, true)) << 32n) | BigInt(view.getUint32(0, true))))
 }
 
+const MIN_REMAINING_HUMAN = 0.0000001
+
+function isDepositDustComplete(remainingStr: string, decimals: number): boolean {
+  const rawThreshold = Math.max(1, Math.round(MIN_REMAINING_HUMAN * 10 ** decimals))
+  try {
+    const rem = BigInt(remainingStr)
+    return rem < BigInt(rawThreshold)
+  } catch {
+    return false
+  }
+}
+
 function parseEscrowAccount(data: Uint8Array, pubkey: string): EscrowApiShape | null {
   const DISCRIMINATOR = 8
   const MIN_SIZE = DISCRIMINATOR + 32 + 32 + 32 + 8 + 8 + 8 + 2 + 4 + 8 + 1 + 1 + 1 + 8 + 32 + 1 + 1 + 1 + 32
@@ -82,6 +94,11 @@ export async function handleEscrows(body: Record<string, unknown>, db: Db, _auth
 
   const connection = getSolanaConnection()
   let escrows = await fetchEscrowsInScope(connection, scopeMints)
+  escrows = escrows.filter((e) => {
+    const rem = e.account.tokensDepositRemaining as string
+    const dec = e.account.decimals as number
+    return !isDepositDustComplete(rem, dec)
+  })
   if (wallet) escrows = escrows.filter((e) => (e.account.maker as string) === wallet)
   return jsonResponse({ escrows }, req)
 }
