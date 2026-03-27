@@ -4,44 +4,16 @@
       <div v-if="!marketplaceActive" class="market-shell-inactive">
         <p>Marketplace is not enabled for this dGuild.</p>
       </div>
-      <div
-        v-else
-        class="market-shell"
-        :class="{
-          'market-shell--no-tree': activeTab === 'open-trades',
-          'market-shell--tree-collapsed': activeTab !== 'open-trades' && !treeSidebarOpen,
-        }"
-      >
+      <div v-else class="market-shell" :class="{ 'market-shell--no-tree': activeTab === 'open-trades' }">
         <div v-if="marketplaceDeactivating" class="market-shell__banner">
           Marketplace is winding down. You can cancel your trades or claim goods; no new trades can be created or filled.
         </div>
         <aside v-if="activeTab !== 'open-trades'" class="market-shell__tree">
-          <button
-            v-if="!treeSidebarOpen"
-            type="button"
-            class="market-shell__tree-toggle"
-            aria-label="Show asset tree"
-            @click="treeSidebarOpen = true"
-          >
-            <Icon icon="lucide:panel-left-open" />
-          </button>
-          <div v-show="treeSidebarOpen" class="market-shell__tree-inner">
-            <div class="market-shell__tree-toolbar">
-              <button
-                type="button"
-                class="market-shell__tree-collapse"
-                aria-label="Hide asset tree"
-                @click="treeSidebarOpen = false"
-              >
-                <Icon icon="lucide:panel-left-close" />
-              </button>
-            </div>
-            <MarketTree
-              :tree="tree"
-              :selected-node-id="selectedNodeId"
-              @select="selectNode"
-            />
-          </div>
+          <MarketTree
+            :tree="tree"
+            :selected-node-id="selectedNodeId"
+            @select="selectNode"
+          />
         </aside>
         <main class="market-shell__main">
           <div class="market-shell__content">
@@ -179,7 +151,6 @@ watch(
   { immediate: true }
 )
 
-const treeSidebarOpen = ref(false)
 const createTradeModalOpen = ref(false)
 const offerRequestChoiceOpen = ref(false)
 const createInitialOfferMint = ref<string | null>(null)
@@ -267,10 +238,6 @@ function onEscrowModalClose() {
   min-height: 24rem;
 }
 
-.market-shell--tree-collapsed {
-  grid-template-columns: 2.75rem 1fr;
-}
-
 .market-shell--no-tree {
   grid-template-columns: 1fr;
 }
@@ -282,49 +249,10 @@ function onEscrowModalClose() {
 }
 
 .market-shell__tree {
-  position: relative;
   border-right: var(--theme-border-thin) solid var(--theme-border);
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-}
-
-.market-shell__tree-inner {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.market-shell__tree-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  flex-shrink: 0;
-  margin-bottom: var(--theme-space-2xs);
-}
-
-.market-shell__tree-toggle,
-.market-shell__tree-collapse {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--theme-space-xs);
-  background: var(--theme-bg-secondary);
-  border: var(--theme-border-thin) solid var(--theme-border);
-  border-radius: var(--theme-radius-md);
-  color: var(--theme-text-secondary);
-  cursor: pointer;
-  font-size: 1.125rem;
-}
-
-.market-shell__tree-toggle {
-  width: 100%;
-}
-
-.market-shell__tree-toggle:hover,
-.market-shell__tree-collapse:hover {
-  color: var(--theme-text-primary);
-  border-color: var(--theme-primary);
 }
 
 @media (max-width: 768px) {
