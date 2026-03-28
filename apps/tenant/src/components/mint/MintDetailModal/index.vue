@@ -61,7 +61,9 @@
               v-model="memberNftView"
               :combined-holders="combinedHolders"
               :holders-updated-at="display.track_holders ? display.holdersUpdatedAt : null"
+              :holders-total="isWatchtower ? watchtowerHoldersTotal : undefined"
               :loading="memberNftsLoading"
+              :loading-more="holdersLoadingMore"
               :spl-mode="holdersSectionSplMode"
               :format-token-amount="formatHolderAmount"
               :nft-link="nftLink"
@@ -70,6 +72,7 @@
               :account-url="(addr) => explorerLinks.accountUrl(addr)"
               :token-url="(m) => explorerLinks.tokenUrl(m)"
               @copy="onHoldersCopy"
+              @load-more="loadMoreWatchtowerHolders"
             />
             <MintDetailModalSnapshots
               v-if="showSnapshotsSection"
@@ -151,6 +154,7 @@ const {
   showJson, copied, expandedSnapshotDate, memberNftView, copiedMint, copiedWallet,
   combinedHolders, showHoldersAndNftsSection, holdersSectionSplMode, memberNftsLoading, nftLink,
   snapshotsForDisplay, snapshotsLoading, holdersForSnapshot, walletsLoading, showSnapshotsSection,
+  holdersLoadingMore, watchtowerHoldersTotal, loadMoreWatchtowerHolders,
   shipmentBannerImage, shipmentBannerSaving, jsonPreview,
   close, copyMint, copyToClipboard, onHoldersCopy, formatHolderAmount, toggleSnapshot, saveShipmentBanner,
   explorerLinks, truncateAddress,

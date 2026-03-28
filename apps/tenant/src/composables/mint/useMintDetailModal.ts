@@ -6,6 +6,8 @@ import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
 import type { CatalogMintItem, AddressBookEntry } from '~/types/mints'
 
+const WATCHTOWER_HOLDERS_PAGE = 80
+
 interface DisplayMint {
   mint: string; kind: string; label: string; symbol?: string | null; image?: string | null
   decimals?: number | null; sellerFeeBasisPoints?: number | null; updateAuthority?: string | null
@@ -13,8 +15,9 @@ interface DisplayMint {
   editionNonce?: number | null; tokenStandard?: string | null; traitTypes?: string[]
   tier?: string; createdAt?: string; track_holders?: boolean; track_snapshot?: boolean
   track_transactions?: boolean; holders?: Array<{ wallet: string; amount: string }>
+  holdersTotal?: number
   holdersUpdatedAt?: string | null
-  snapshots?: { date: string; holderCount: number; holderWallets?: Array<{ wallet: string; amount: string } | string> }[]
+  snapshots?: { date: string; holderCount: number; snapshotAt?: string | null }[]
   memberNfts?: { mint: string; name: string | null; image: string | null; traits: Array<{ trait_type?: string; traitType?: string; value?: string | number }>; owner?: string | null }[]
 }
 
@@ -57,6 +60,8 @@ export function useMintDetailModal(
   const selectedSnapshotDate = ref<string | null>(null)
   const holdersFromSupabase = ref<Array<{ wallet: string; amount: string }>>([])
   const walletsLoading = ref(false)
+  const holdersLoadingMore = ref(false)
+  const watchtowerSnapshotHolders = ref<Array<{ wallet: string; amount: string }>>([])
   const shipmentBannerImage = ref('')
   const shipmentBannerSaving = ref(false)
 
@@ -150,7 +155,10 @@ export function useMintDetailModal(
   const showHoldersAndNftsSection = computed(() => {
     const d = display.value
     if (!d) return false
-    if (d.kind === 'SPL') return !!(d.track_holders && displayHolders.value.length > 0)
+    if (d.kind === 'SPL') {
+      const total = typeof d.holdersTotal === 'number' ? d.holdersTotal : displayHolders.value.length
+      return !!(d.track_holders && total > 0)
+    }
     if (d.kind === 'NFT') {
       return memberNfts.value.length > 0 || !!(d.track_holders && displayHolders.value.length > 0)
     }
@@ -179,12 +187,32 @@ export function useMintDetailModal(
   })
 
   const holdersForSnapshot = computed(() => {
-    if (isWatchtower.value) {
-      const s = display.value?.snapshots?.find((x) => x.date === expandedSnapshot.value)
-      return toHoldersWithAmount(s?.holderWallets)
-    }
+    if (isWatchtower.value) return watchtowerSnapshotHolders.value
     return selectedSnapshotDate.value ? holdersFromSupabase.value : []
   })
+
+  async function loadWatchtowerSnapshotWallets(snapshotAt: string) {
+    const m = mintAddress.value
+    if (!m) return
+    walletsLoading.value = true
+    watchtowerSnapshotHolders.value = []
+    try {
+      const supabase = useSupabase()
+      const { data, error: err } = await supabase
+        .from('holder_snapshots')
+        .select('holder_wallets')
+        .eq('mint', m)
+        .eq('snapshot_at', snapshotAt)
+        .maybeSingle()
+      if (!err && data) {
+        watchtowerSnapshotHolders.value = toHoldersWithAmount(
+          (data as { holder_wallets?: unknown }).holder_wallets,
+        )
+      }
+    } finally {
+      walletsLoading.value = false
+    }
+  }
 
   const jsonPreview = computed(() => {
     const m = props.mint.value as CatalogMintItem | null | undefined
@@ -238,23 +266,49 @@ export function useMintDetailModal(
     return formatRawTokenAmount(amountStr, decimals, kind)
   }
 
-  async function fetchWatchtowerDetail() {
+  function parseWatchtowerHoldersFromRaw(raw: unknown): Array<{ wallet: string; amount: string }> {
+    if (!Array.isArray(raw)) return []
+    return raw
+      .map((h) =>
+        typeof h === 'string' ? { wallet: h, amount: '1' } : { wallet: (h as { wallet?: string }).wallet ?? '', amount: (h as { amount?: string }).amount ?? '1' },
+      )
+      .filter((h) => h.wallet)
+  }
+
+  async function fetchWatchtowerDetail(appendHolders = false) {
     const mint = props.mint.value
     const tenantId = props.tenantId.value
     if (!mint || typeof mint !== 'string' || !tenantId) { fetchedDetail.value = null; return }
-    loading.value = true; error.value = null; fetchedDetail.value = null; expandedSnapshot.value = null
+    if (!appendHolders) {
+      loading.value = true
+      fetchedDetail.value = null
+      expandedSnapshot.value = null
+      watchtowerSnapshotHolders.value = []
+    } else {
+      holdersLoadingMore.value = true
+    }
+    error.value = null
     try {
       const supabase = useSupabase()
-      const data = await invokeEdgeFunction<Record<string, unknown>>(supabase, 'watchtower', { action: 'mint-detail', tenantId, mint }, { errorFallback: 'Request failed' })
+      const offset = appendHolders && fetchedDetail.value?.holders?.length
+        ? fetchedDetail.value.holders.length
+        : 0
+      const data = await invokeEdgeFunction<Record<string, unknown>>(supabase, 'watchtower', {
+        action: 'mint-detail',
+        tenantId,
+        mint,
+        holdersOffset: offset,
+        holdersLimit: WATCHTOWER_HOLDERS_PAGE,
+      }, { errorFallback: 'Request failed' })
       const raw = (data ?? {}) as Record<string, unknown>
+      const pageHolders = parseWatchtowerHoldersFromRaw(raw.holders)
+      const holdersTotalParsed = typeof raw.holdersTotal === 'number' ? raw.holdersTotal : pageHolders.length
       const snapshots = Array.isArray(raw.snapshots)
-        ? (raw.snapshots as Record<string, unknown>[]).map((s) => {
-            const hw = Array.isArray(s.holderWallets) ? (s.holderWallets as unknown[]) : []
-            const holders = hw.map((h) =>
-              typeof h === 'string' ? { wallet: h, amount: '1' } : { wallet: (h as { wallet?: string }).wallet ?? '', amount: (h as { amount?: string }).amount ?? '1' }
-            ).filter((x) => x.wallet)
-            return { date: (s.date as string) ?? '', holderCount: holders.length, holderWallets: holders }
-          })
+        ? (raw.snapshots as Record<string, unknown>[]).map((s) => ({
+            date: (s.date as string) ?? '',
+            holderCount: Number(s.holderCount) || 0,
+            snapshotAt: (s.snapshotAt as string) ?? null,
+          }))
         : []
       const memberNftsRaw = Array.isArray(raw.memberNfts)
         ? (raw.memberNfts as Record<string, unknown>[]).map((m) => ({
@@ -265,9 +319,14 @@ export function useMintDetailModal(
             owner: (m.owner as string) ?? null,
           }))
         : []
+      const kindParsed = (raw.kind as string) ?? 'SPL'
+      const mergedHolders = appendHolders && fetchedDetail.value?.holders?.length
+        ? [...fetchedDetail.value.holders, ...pageHolders]
+        : pageHolders
+
       fetchedDetail.value = {
         mint: (raw.mint as string) ?? mint ?? '',
-        kind: (raw.kind as string) ?? 'SPL',
+        kind: kindParsed,
         label: (raw.label as string) ?? (raw.name as string) ?? mint ?? '',
         name: (raw.name as string) ?? null,
         image: (raw.image as string) ?? null,
@@ -284,18 +343,26 @@ export function useMintDetailModal(
         track_holders: Boolean(raw.track_holders),
         track_snapshot: Boolean(raw.track_snapshot),
         track_transactions: Boolean(raw.track_transactions),
-        holders: Array.isArray(raw.holders)
-          ? (raw.holders as unknown[]).map((h) =>
-              typeof h === 'string' ? { wallet: h, amount: '1' } : { wallet: (h as { wallet?: string }).wallet ?? '', amount: (h as { amount?: string }).amount ?? '1' }
-            ).filter((h) => h.wallet)
-          : [],
+        holders: mergedHolders,
+        ...(kindParsed === 'SPL' ? { holdersTotal: holdersTotalParsed } : {}),
         holdersUpdatedAt: (raw.holdersUpdatedAt as string) ?? null,
         snapshots,
         memberNfts: memberNftsRaw,
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load'
-    } finally { loading.value = false }
+    } finally {
+      loading.value = false
+      holdersLoadingMore.value = false
+    }
+  }
+
+  function loadMoreWatchtowerHolders() {
+    if (!isWatchtower.value || fetchedDetail.value?.kind !== 'SPL') return
+    const d = fetchedDetail.value
+    const cap = typeof d.holdersTotal === 'number' ? d.holdersTotal : d.holders.length
+    if (d.holders.length >= cap) return
+    void fetchWatchtowerDetail(true)
   }
 
   async function fetchCatalogSnapshots() {
@@ -346,7 +413,13 @@ export function useMintDetailModal(
 
   function toggleSnapshot(date: string, snapshotAtForQuery?: string) {
     if (isWatchtower.value) {
-      expandedSnapshot.value = expandedSnapshot.value === date ? null : date
+      const closing = expandedSnapshot.value === date
+      expandedSnapshot.value = closing ? null : date
+      if (closing) {
+        watchtowerSnapshotHolders.value = []
+      } else if (snapshotAtForQuery) {
+        void loadWatchtowerSnapshotWallets(snapshotAtForQuery)
+      }
     } else {
       if (selectedSnapshotDate.value === date) {
         selectedSnapshotDate.value = null; holdersFromSupabase.value = []
@@ -374,6 +447,7 @@ export function useMintDetailModal(
       } else {
         fetchedDetail.value = null; error.value = null; expandedSnapshot.value = null
         catalogSnapshots.value = []; selectedSnapshotDate.value = null; holdersFromSupabase.value = []
+        watchtowerSnapshotHolders.value = []
       }
     },
     { immediate: true },
@@ -386,11 +460,18 @@ export function useMintDetailModal(
 
   const holdersSectionSplMode = computed(() => display.value?.kind === 'SPL')
 
+  const watchtowerHoldersTotal = computed(() => {
+    const d = display.value
+    if (!d || d.kind !== 'SPL') return undefined
+    return typeof d.holdersTotal === 'number' ? d.holdersTotal : d.holders?.length
+  })
+
   return {
     display, loading, error, isWatchtower, isCatalog, mintAddress, mintExplorerUrl,
     showJson, copied, expandedSnapshotDate, memberNftView, copiedMint, copiedWallet,
     combinedHolders, showHoldersAndNftsSection, holdersSectionSplMode, memberNftsLoading, nftLink,
     snapshotsForDisplay, snapshotsLoading, holdersForSnapshot, walletsLoading, showSnapshotsSection,
+    holdersLoadingMore, watchtowerHoldersTotal, loadMoreWatchtowerHolders,
     shipmentBannerImage, shipmentBannerSaving, jsonPreview,
     close, copyMint, copyToClipboard, onHoldersCopy, formatHolderAmount, toggleSnapshot, saveShipmentBanner,
     explorerLinks, truncateAddress,

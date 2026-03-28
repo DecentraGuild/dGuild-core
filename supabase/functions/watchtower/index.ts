@@ -4,13 +4,23 @@
  *
  * Actions:
  *   catalog – List mints with any track enabled (public).
- *   mint-detail – Metadata, holders, snapshots for a mint (public).
+ *   mint-detail – Metadata, holders (paginated for SPL), snapshot summaries for a mint (public).
  */
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { isMintWithinLimit } from '../_shared/watchtower-billing.ts'
 import { compareMintCatalogDisplay } from '../_shared/mint-display-sort.ts'
+
+function sortHoldersByAmountDesc(h: Array<{ wallet: string; amount: string }>): Array<{ wallet: string; amount: string }> {
+  return [...h].sort((a, b) => {
+    const na = BigInt(a.amount || '0')
+    const nb = BigInt(b.amount || '0')
+    if (nb > na) return 1
+    if (nb < na) return -1
+    return 0
+  })
+}
 
 Deno.serve(async (req: Request) => {
   try {
@@ -162,23 +172,41 @@ Deno.serve(async (req: Request) => {
         watch?.track_snapshot ? isMintWithinLimit(db, tenantId, mint, 'mintsSnapshot') : Promise.resolve(true),
       ])
       const rawHolders = (holderSnapshot as { holder_wallets?: Array<{ wallet?: string; amount?: string } | string> } | null)?.holder_wallets ?? []
-      const holders = holdersWithinCurrent
+      const allHoldersNorm = holdersWithinCurrent
         ? rawHolders
             .map((h) => (typeof h === 'string' ? { wallet: h, amount: '1' } : { wallet: h.wallet ?? '', amount: h.amount ?? '1' }))
             .filter((h) => h.wallet)
         : []
+
+      const catalogKind = ((catalogRow as Record<string, unknown> | null)?.kind as string) ?? 'SPL'
+      const defaultLimit = 80
+      const maxLimit = 200
+      const holdersLimitRaw = Number(body.holdersLimit)
+      const holdersOffsetRaw = Number(body.holdersOffset)
+      const holdersLimit = Number.isFinite(holdersLimitRaw) && holdersLimitRaw > 0
+        ? Math.min(Math.floor(holdersLimitRaw), maxLimit)
+        : defaultLimit
+      const holdersOffset = Number.isFinite(holdersOffsetRaw) && holdersOffsetRaw > 0 ? Math.floor(holdersOffsetRaw) : 0
+
+      let holdersPage = allHoldersNorm
+      let holdersTotal = allHoldersNorm.length
+      if (catalogKind === 'SPL' && allHoldersNorm.length > 0) {
+        const sorted = sortHoldersByAmountDesc(allHoldersNorm)
+        holdersTotal = sorted.length
+        holdersPage = sorted.slice(holdersOffset, holdersOffset + holdersLimit)
+      }
+
       const snapshots = holdersWithinSnapshot
         ? trackerSnapshots.map((s) => {
-        const row = s as { snapshot_date: string; snapshot_at?: string; holder_wallets?: string[] }
+        const row = s as { snapshot_date: string; snapshot_at?: string; holder_wallets?: unknown[] }
         const hw = row.holder_wallets ?? []
-        // Prefer snapshot_at for display when present (includes time for 5-min buckets)
         const dateLabel = row.snapshot_at
           ? new Date(row.snapshot_at).toISOString().slice(0, 16).replace('T', ' ')
           : row.snapshot_date
         return {
           date: dateLabel,
           holderCount: hw.length,
-          holderWallets: hw,
+          snapshotAt: row.snapshot_at ?? null,
         }
       })
         : []
@@ -254,7 +282,10 @@ Deno.serve(async (req: Request) => {
         track_holders: watch?.track_holders ?? false,
         track_snapshot: watch?.track_snapshot ?? false,
         track_transactions: watch?.track_transactions ?? false,
-        holders: holders.map((h) => ({ wallet: h.wallet, amount: h.amount })),
+        holders: holdersPage.map((h) => ({ wallet: h.wallet, amount: h.amount })),
+        ...(catalogKind === 'SPL'
+          ? { holdersTotal, holdersOffset, holdersLimit }
+          : {}),
         holdersUpdatedAt: holder?.last_updated ?? null,
         snapshots,
         transactions: [],

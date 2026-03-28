@@ -275,6 +275,30 @@
 .mint-modal__nft-list-row--spl {
   grid-template-columns: minmax(8rem, 1fr) minmax(6rem, 1fr);
 }
+.mint-modal__holders-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--theme-space-md) 0 0;
+}
+.mint-modal__load-more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  padding: var(--theme-space-sm) var(--theme-space-md);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-primary);
+  background: var(--theme-bg-secondary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  cursor: pointer;
+}
+.mint-modal__load-more:hover:not(:disabled) {
+  border-color: var(--theme-text-muted);
+}
+.mint-modal__load-more:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
 .mint-modal__nft-list-col {
   display: flex;
   align-items: center;
