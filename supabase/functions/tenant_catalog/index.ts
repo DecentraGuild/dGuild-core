@@ -18,6 +18,7 @@ function isBaseCurrencyMint(mint: string): boolean {
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { requireTenantAdmin } from '../_shared/auth.ts'
+import { compareMintCatalogDisplay } from '../_shared/mint-display-sort.ts'
 
 Deno.serve(async (req: Request) => {
   const preflight = handlePreflight(req)
@@ -143,6 +144,7 @@ Deno.serve(async (req: Request) => {
       return out
     })
 
+    enriched.sort(compareMintCatalogDisplay)
     return jsonResponse({ entries: enriched }, req)
   }
 
@@ -200,23 +202,32 @@ Deno.serve(async (req: Request) => {
         .order('mint'),
       db
         .from('mint_metadata')
-        .select('mint, name, image, trait_index, decimals')
+        .select('mint, name, image, symbol, trait_index, decimals')
         .in('mint', mints),
     ])
 
     const { data: catalogRows, error } = catalogRes as { data: unknown[] | null; error: { message: string } | null }
     if (error) return errorResponse(error.message, req, 500)
 
-    const metaRows = (metaRes as { data: Array<{ mint: string; name?: string; image?: string; trait_index?: unknown; decimals?: number | null }> | null }).data ?? []
+    const metaRows = (metaRes as {
+      data: Array<{ mint: string; name?: string; image?: string; symbol?: string | null; trait_index?: unknown; decimals?: number | null }> | null
+    }).data ?? []
     const metaByMint = new Map(metaRows.map((m) => [m.mint, m]))
 
     const entries = (catalogRows ?? []).map((r) => {
       const w = watchByMint.get(r.mint as string)
-      const meta = metaByMint.get(r.mint as string) as { name?: string; image?: string; trait_index?: unknown; decimals?: number | null } | undefined
+      const meta = metaByMint.get(r.mint as string) as {
+        name?: string
+        image?: string
+        symbol?: string | null
+        trait_index?: unknown
+        decimals?: number | null
+      } | undefined
       return {
         ...r,
         name: meta?.name ?? null,
         image: meta?.image ?? null,
+        symbol: meta?.symbol ?? null,
         trait_index: meta?.trait_index ?? null,
         decimals: meta?.decimals ?? null,
         track_holders: w?.track_holders ?? false,
@@ -224,6 +235,7 @@ Deno.serve(async (req: Request) => {
         track_transactions: w?.track_transactions ?? false,
       }
     })
+    entries.sort(compareMintCatalogDisplay)
     return jsonResponse({ entries }, req)
   }
 
