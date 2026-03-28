@@ -33,8 +33,8 @@
           </div>
         </div>
 
-        <div v-if="!loading && memberships.length > 0" class="gates-page__layout layout-split">
-          <div class="gates-page__grid layout-split__main admin__card-grid--auto-dense">
+        <div v-if="!loading && memberships.length > 0" class="gates-page__layout">
+          <div class="gates-page__grid admin__card-grid--auto-dense">
             <button
               v-for="m in memberships"
               :key="m.address"
@@ -51,7 +51,7 @@
             </button>
           </div>
 
-          <aside v-if="selectedListAddress" class="gates-page__detail layout-split__sidebar">
+          <section v-if="selectedListAddress" class="gates-page__detail">
             <h4 class="gates-page__detail-heading">
               Members of {{ selectedListName }}
             </h4>
@@ -84,7 +84,7 @@
                 </button>
               </li>
             </ul>
-          </aside>
+          </section>
         </div>
       </div>
     </div>
@@ -298,6 +298,11 @@ watch(wallet, () => {
   color: var(--theme-text-secondary);
 }
 
+.gates-page__layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-lg);
+}
 
 .gates-page__card-item {
   position: relative;
@@ -343,17 +348,13 @@ watch(wallet, () => {
 }
 
 .gates-page__detail {
-  flex-shrink: 0;
   width: 100%;
-  max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
   padding: var(--theme-space-md);
   border-radius: var(--theme-radius-lg);
   border: var(--theme-border-thin) solid var(--theme-border);
   background: var(--theme-bg-card);
-  max-height: 80vh;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
@@ -391,12 +392,6 @@ watch(wallet, () => {
   border-radius: var(--theme-radius-sm);
   word-break: break-all;
   overflow-wrap: anywhere;
-}
-
-@media (min-width: 1024px) {
-  .gates-page__detail {
-    max-width: 320px;
-  }
 }
 
 .gates-page__copy-btn {

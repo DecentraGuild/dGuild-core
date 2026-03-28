@@ -1,5 +1,7 @@
 import { truncateAddress } from '@decentraguild/display'
+import { PublicKey } from '@solana/web3.js'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { shallowRef, watchEffect } from 'vue'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
 
@@ -9,12 +11,23 @@ interface ProfileEntry {
   nickname: string | null
 }
 
-const cache = reactive<Map<string, Map<string, string>>>(new Map())
+function canonicalSolanaAddress(address: string): string | null {
+  const t = address.trim()
+  if (!t) return null
+  try {
+    return new PublicKey(t).toBase58()
+  } catch {
+    return null
+  }
+}
+
+const tenantNicknameMaps = shallowRef(new Map<string, Map<string, string>>())
 const loadingSet = new Set<string>()
 
 async function loadForTenant(tenantId: string) {
-  if (cache.has(tenantId) || loadingSet.has(tenantId)) return
+  if (tenantNicknameMaps.value.has(tenantId) || loadingSet.has(tenantId)) return
   loadingSet.add(tenantId)
+  let inner = new Map<string, string>()
   try {
     const supabase = useSupabase()
     const data = await invokeEdgeFunction<{ profiles: ProfileEntry[] }>(
@@ -22,15 +35,23 @@ async function loadForTenant(tenantId: string) {
       'member-profile',
       { action: 'profiles', tenantId },
     )
-    const map = new Map<string, string>()
-    for (const p of data.profiles) {
-      if (p.nickname) map.set(p.wallet_address, p.nickname)
+    const built = new Map<string, string>()
+    for (const p of data.profiles ?? []) {
+      const nick = typeof p.nickname === 'string' ? p.nickname.trim() : ''
+      if (!nick) continue
+      const raw = (p.wallet_address ?? '').trim()
+      const canon = canonicalSolanaAddress(raw) ?? raw
+      built.set(canon, nick)
+      if (raw !== canon) built.set(raw, nick)
     }
-    cache.set(tenantId, map)
+    inner = built
   } catch {
-    cache.set(tenantId, new Map())
+    inner = new Map()
   } finally {
     loadingSet.delete(tenantId)
+    const next = new Map(tenantNicknameMaps.value)
+    next.set(tenantId, inner)
+    tenantNicknameMaps.value = next
   }
 }
 
@@ -39,16 +60,24 @@ export function useMemberProfiles() {
   const tenantId = computed(() => tenantStore.tenantId)
 
   watchEffect(() => {
-    if (tenantId.value) loadForTenant(tenantId.value)
+    if (tenantId.value) void loadForTenant(tenantId.value)
   })
 
   function resolveWallet(address: string, startChars = 6, endChars = 4): string {
-    const nickname = cache.get(tenantId.value ?? '')?.get(address)
+    const tid = tenantId.value ?? ''
+    const map = tenantNicknameMaps.value.get(tid)
+    const raw = address.trim()
+    const canon = canonicalSolanaAddress(raw) ?? raw
+    const nickname = map?.get(canon) ?? map?.get(raw)
     return nickname ?? truncateAddress(address, startChars, endChars)
   }
 
   function invalidateCache() {
-    if (tenantId.value) cache.delete(tenantId.value)
+    const tid = tenantId.value
+    if (!tid) return
+    const next = new Map(tenantNicknameMaps.value)
+    next.delete(tid)
+    tenantNicknameMaps.value = next
   }
 
   return { resolveWallet, invalidateCache }
