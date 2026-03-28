@@ -1,13 +1,39 @@
 /**
  * SPL token holders via paginated JSON-RPC `getProgramAccountsV2` + dataSlice.
- * Avoids single-shot `getProgramAccounts` spikes that blow Edge isolates (HTTP 546).
- * Requires an RPC that implements `getProgramAccountsV2` (e.g. Helius). Set `HELIUS_RPC_URL`.
+ * Large mints: use `fetchSplHoldersWithProgress` + `maxPages` and persist `pagination_key`
+ * in `spl_holder_gpa_progress` across cron invocations (Edge WORKER_LIMIT / HTTP 546).
  */
 const SPL_DATA_SIZE = 165
 const OWNER_AMOUNT_SLICE_OFFSET = 32
 const OWNER_AMOUNT_SLICE_LEN = 40
 const GPA_V2_MAX_LIMIT = 10_000
-const DEFAULT_PAGE_LIMIT = 4_000
+const DEFAULT_PAGE_LIMIT = 800
+
+export function holderWalletsJsonToMap(raw: unknown): Map<string, bigint> {
+  const m = new Map<string, bigint>()
+  if (!Array.isArray(raw)) return m
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const o = row as { wallet?: unknown; amount?: unknown }
+    if (o.wallet == null || o.amount == null) continue
+    const w = String(o.wallet)
+    try {
+      const a = BigInt(String(o.amount))
+      if (a > 0n) m.set(w, a)
+    } catch {
+      /* non-numeric amount */
+    }
+  }
+  return m
+}
+
+function mapToHolders(m: Map<string, bigint>): Array<{ wallet: string; amount: string }> {
+  const out: Array<{ wallet: string; amount: string }> = []
+  for (const [wallet, amount] of m) {
+    if (amount > 0n) out.push({ wallet, amount: String(amount) })
+  }
+  return out
+}
 
 function parsePageLimit(): number {
   const raw = Deno.env.get('SPL_HOLDERS_PAGE_LIMIT')?.trim()
@@ -50,19 +76,42 @@ async function solanaRpc<T>(rpcUrl: string, method: string, params: unknown[]): 
   return json.result
 }
 
+export type FetchSplHoldersOptions = {
+  /** Cursor from `spl_holder_gpa_progress` to continue the same chain-wide scan */
+  resumePaginationKey?: string | null
+  /** Existing wallets (e.g. from `holder_current`) — amounts are cumulative per wallet so far */
+  mergeInto?: Map<string, bigint>
+  /** Max GPA pages this Edge invocation (omit for full scan in one request — may 546 on huge mints) */
+  maxPages?: number
+}
+
+export type FetchSplHoldersProgress = {
+  holders: Array<{ wallet: string; amount: string }>
+  completed: boolean
+  nextPaginationKey: string | null
+}
+
 /**
  * Classic SPL-Token program only (Tokenkeg…). Token-2022 not supported here.
- * Dynamic-imports web3 + spl-token so NFT-only cron batches do not load these when unused.
  */
-export async function fetchSplHolders(
+export async function fetchSplHoldersWithProgress(
   rpcUrl: string,
   mint: string,
-): Promise<Array<{ wallet: string; amount: string }>> {
+  options?: FetchSplHoldersOptions,
+): Promise<FetchSplHoldersProgress> {
   const { PublicKey } = await import('npm:@solana/web3.js@1')
   const { TOKEN_PROGRAM_ID } = await import('npm:@solana/spl-token@0.4')
+  const bs58pkg = await import('npm:bs58@6.0.0') as {
+    encode?: (d: Uint8Array) => string
+    default?: { encode: (d: Uint8Array) => string }
+  }
+  const encode58 = bs58pkg.encode ?? bs58pkg.default?.encode
+  if (!encode58) throw new Error('bs58 encode unavailable')
+
   const mintPk = new PublicKey(mint)
   const programId = TOKEN_PROGRAM_ID.toBase58()
   const limit = parsePageLimit()
+  const byWallet = options?.mergeInto ?? new Map<string, bigint>()
 
   const baseOpts = {
     commitment: 'confirmed',
@@ -75,8 +124,13 @@ export async function fetchSplHolders(
     limit,
   }
 
-  const byWallet = new Map<string, bigint>()
-  let paginationKey: string | null | undefined = undefined
+  let paginationKey: string | null | undefined =
+    options?.resumePaginationKey === '' || options?.resumePaginationKey == null
+      ? undefined
+      : options.resumePaginationKey
+
+  const maxPages = options?.maxPages
+  let pagesDone = 0
 
   for (;;) {
     const opts = paginationKey != null ? { ...baseOpts, paginationKey } : baseOpts
@@ -92,16 +146,42 @@ export async function fetchSplHolders(
       if (typeof b64 !== 'string') continue
       const data = decodeBase64(b64)
       if (data.length < OWNER_AMOUNT_SLICE_LEN) continue
-      const owner = new PublicKey(data.slice(0, 32)).toBase58()
+      const owner = encode58(data.subarray(0, 32))
       const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
       const amount = view.getBigUint64(32, true)
       if (amount > 0n) byWallet.set(owner, (byWallet.get(owner) ?? 0n) + amount)
     }
 
-    const nextKey = result.paginationKey
-    paginationKey = nextKey != null && nextKey !== '' ? nextKey : null
-    if (paginationKey == null) break
-  }
+    pagesDone++
+    const nextKeyRaw = result.paginationKey
+    const nextKey = nextKeyRaw != null && nextKeyRaw !== '' ? nextKeyRaw : null
 
-  return [...byWallet.entries()].map(([wallet, amount]) => ({ wallet, amount: String(amount) }))
+    if (maxPages != null && pagesDone >= maxPages) {
+      const completed = nextKey == null
+      return {
+        holders: mapToHolders(byWallet),
+        completed,
+        nextPaginationKey: completed ? null : nextKey,
+      }
+    }
+
+    if (nextKey == null) {
+      return {
+        holders: mapToHolders(byWallet),
+        completed: true,
+        nextPaginationKey: null,
+      }
+    }
+
+    paginationKey = nextKey
+  }
+}
+
+/** Full scan in one invocation (small/medium mints only — large SPL will 546). */
+export async function fetchSplHolders(
+  rpcUrl: string,
+  mint: string,
+): Promise<Array<{ wallet: string; amount: string }>> {
+  const r = await fetchSplHoldersWithProgress(rpcUrl, mint)
+  return r.holders
 }
