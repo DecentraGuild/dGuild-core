@@ -93,12 +93,9 @@ export function useConditionSet(catalogMints: Ref<CatalogMint[]>) {
       return !!(c.mint_or_group?.trim() && days >= 1)
     }
     if (c.type === 'TIME_WEIGHTED') {
-      return !!(
-        c.mint_or_group?.trim() &&
-        c.begin_snapshot_at &&
-        c.end_snapshot_at &&
-        c.begin_snapshot_at <= c.end_snapshot_at
-      )
+      if (!c.mint_or_group?.trim() || !c.begin_snapshot_at) return false
+      if (c.end_snapshot_at?.trim()) return c.begin_snapshot_at <= c.end_snapshot_at
+      return true
     }
     return false
   }
@@ -225,12 +222,13 @@ export function useConditionSet(catalogMints: Ref<CatalogMint[]>) {
       }
       if (c.type === 'TIME_WEIGHTED') {
         const minPercent = Math.max(0, Math.min(100, Math.floor(Number(form.minPercent) || 0)))
+        const endAt = c.end_snapshot_at?.trim()
         return {
           type: 'TIME_WEIGHTED' as const,
           payload: {
             mint: c.mint_or_group.trim(),
             begin_snapshot_at: c.begin_snapshot_at!,
-            end_snapshot_at: c.end_snapshot_at!,
+            ...(endAt ? { end_snapshot_at: endAt } : {}),
             ...(minPercent > 0 && { min_percent: minPercent }),
           },
           logic_to_next,

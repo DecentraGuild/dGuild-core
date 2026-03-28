@@ -345,17 +345,20 @@ Deno.serve(async (req: Request) => {
     const beginSnapshotAt = (p.begin_snapshot_at as string)?.trim()
     const endSnapshotAt = (p.end_snapshot_at as string)?.trim()
 
-    if (!condMint || !beginSnapshotAt || !endSnapshotAt || beginSnapshotAt > endSnapshotAt) {
-      return errorResponse('TIME_WEIGHTED condition must have mint, begin_snapshot_at, end_snapshot_at', req, 400)
+    if (!condMint || !beginSnapshotAt) {
+      return errorResponse('TIME_WEIGHTED condition must have mint and begin_snapshot_at', req, 400)
+    }
+    if (endSnapshotAt && beginSnapshotAt > endSnapshotAt) {
+      return errorResponse('TIME_WEIGHTED begin_snapshot_at must be <= end_snapshot_at', req, 400)
     }
 
-    const { data: snaps } = await db
+    let snapQuery = db
       .from('holder_snapshots')
       .select('snapshot_at, holder_wallets')
       .eq('mint', condMint)
       .gte('snapshot_at', beginSnapshotAt)
-      .lte('snapshot_at', endSnapshotAt)
-      .order('snapshot_at', { ascending: true })
+    if (endSnapshotAt) snapQuery = snapQuery.lte('snapshot_at', endSnapshotAt)
+    const { data: snaps } = await snapQuery.order('snapshot_at', { ascending: true })
 
     if (!snaps?.length) {
       return jsonResponse({ mint, recipients: [], totalAmount: 0 }, req)

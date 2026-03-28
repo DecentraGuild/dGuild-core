@@ -251,10 +251,22 @@ const beginSnapshotAtOptions = computed(() => [
   { value: '', label: 'Begin snapshot' },
   ...(props.snapshotAtForMint ?? []).map((s) => ({ value: s, label: formatSnapshotAt(s) })),
 ])
-const endSnapshotAtOptions = computed(() => [
-  { value: '', label: 'End snapshot' },
-  ...(props.snapshotAtForMint ?? []).map((s) => ({ value: s, label: formatSnapshotAt(s) })),
-])
+const endSnapshotAtOptions = computed(() => {
+  const begin = props.cond.begin_snapshot_at ?? ''
+  const list = (props.snapshotAtForMint ?? []).filter((s) => !begin || s >= begin)
+  return [
+    { value: '', label: 'Through latest snapshot' },
+    ...list.map((s) => ({ value: s, label: formatSnapshotAt(s) })),
+  ]
+})
+
+watch(
+  () => props.cond.begin_snapshot_at,
+  (begin) => {
+    const end = props.cond.end_snapshot_at
+    if (begin && end && end < begin) emit('update:end_snapshot_at', '')
+  }
+)
 
 const hasSecondaryRow = computed(
   () =>

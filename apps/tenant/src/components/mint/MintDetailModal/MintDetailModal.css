@@ -208,6 +208,20 @@
   gap: var(--theme-space-md);
   margin-bottom: var(--theme-space-sm);
 }
+.mint-modal__section-header--holders {
+  align-items: flex-start;
+}
+.mint-modal__section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  flex-shrink: 0;
+}
+.mint-modal__csv-error {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-error);
+  margin: 0 0 var(--theme-space-xs);
+}
 .mint-modal__section-title {
   margin: 0;
   font-size: var(--theme-font-xs);
@@ -275,29 +289,49 @@
 .mint-modal__nft-list-row--spl {
   grid-template-columns: minmax(8rem, 1fr) minmax(6rem, 1fr);
 }
-.mint-modal__holders-more {
+.mint-modal__holders-pager {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
+  gap: var(--theme-space-md);
   padding: var(--theme-space-md) 0 0;
 }
-.mint-modal__load-more {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--theme-space-xs);
-  padding: var(--theme-space-sm) var(--theme-space-md);
+.mint-modal__pager-btn {
   font-size: var(--theme-font-sm);
+  padding: var(--theme-space-xs) var(--theme-space-md);
   color: var(--theme-text-primary);
   background: var(--theme-bg-secondary);
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
   cursor: pointer;
 }
-.mint-modal__load-more:hover:not(:disabled) {
+.mint-modal__pager-btn:hover:not(:disabled) {
   border-color: var(--theme-text-muted);
 }
-.mint-modal__load-more:disabled {
-  opacity: 0.65;
+.mint-modal__pager-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
+}
+.mint-modal__pager-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-muted);
+}
+.mint-modal__pager-spinner {
+  width: 1rem;
+  height: 1rem;
+}
+.mint-modal__snapshot-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+}
+.mint-modal__snapshot-row-wrap .mint-modal__snapshot-row {
+  flex: 1;
+  min-width: 0;
 }
 .mint-modal__nft-list-col {
   display: flex;

@@ -4,9 +4,10 @@ import { useCollectionMembers } from '~/composables/mint/useCollectionMembers'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
+import { csvFilenameSlug, downloadCsvFile } from '~/utils/holdersCsv'
 import type { CatalogMintItem, AddressBookEntry } from '~/types/mints'
 
-const WATCHTOWER_HOLDERS_PAGE = 80
+const WATCHTOWER_HOLDERS_PAGE_SIZE = 1000
 
 interface DisplayMint {
   mint: string; kind: string; label: string; symbol?: string | null; image?: string | null
@@ -60,7 +61,10 @@ export function useMintDetailModal(
   const selectedSnapshotDate = ref<string | null>(null)
   const holdersFromSupabase = ref<Array<{ wallet: string; amount: string }>>([])
   const walletsLoading = ref(false)
-  const holdersLoadingMore = ref(false)
+  const watchtowerHoldersPage = ref(1)
+  const holdersPageLoading = ref(false)
+  const holdersCsvDownloading = ref(false)
+  const holdersCsvError = ref<string | null>(null)
   const watchtowerSnapshotHolders = ref<Array<{ wallet: string; amount: string }>>([])
   const shipmentBannerImage = ref('')
   const shipmentBannerSaving = ref(false)
@@ -275,94 +279,142 @@ export function useMintDetailModal(
       .filter((h) => h.wallet)
   }
 
-  async function fetchWatchtowerDetail(appendHolders = false) {
-    const mint = props.mint.value
-    const tenantId = props.tenantId.value
-    if (!mint || typeof mint !== 'string' || !tenantId) { fetchedDetail.value = null; return }
-    if (!appendHolders) {
-      loading.value = true
-      fetchedDetail.value = null
-      expandedSnapshot.value = null
-      watchtowerSnapshotHolders.value = []
-    } else {
-      holdersLoadingMore.value = true
+  function buildFetchedDetailFromMintDetailRaw(
+    raw: Record<string, unknown>,
+    mint: string,
+    pageHolders: Array<{ wallet: string; amount: string }>,
+    holdersTotalParsed: number,
+  ): FetchedDetail {
+    const snapshots = Array.isArray(raw.snapshots)
+      ? (raw.snapshots as Record<string, unknown>[]).map((s) => ({
+          date: (s.date as string) ?? '',
+          holderCount: Number(s.holderCount) || 0,
+          snapshotAt: (s.snapshotAt as string) ?? null,
+        }))
+      : []
+    const memberNftsRaw = Array.isArray(raw.memberNfts)
+      ? (raw.memberNfts as Record<string, unknown>[]).map((m) => ({
+          mint: (m.mint as string) ?? '',
+          name: (m.name as string) ?? null,
+          image: (m.image as string) ?? null,
+          traits: (Array.isArray(m.traits) ? m.traits : []) as Array<{ trait_type?: string; traitType?: string; value?: string | number }>,
+          owner: (m.owner as string) ?? null,
+        }))
+      : []
+    const kindParsed = (raw.kind as string) ?? 'SPL'
+    return {
+      mint: (raw.mint as string) ?? mint ?? '',
+      kind: kindParsed,
+      label: (raw.label as string) ?? (raw.name as string) ?? mint ?? '',
+      name: (raw.name as string) ?? null,
+      image: (raw.image as string) ?? null,
+      symbol: (raw.symbol as string) ?? null,
+      decimals: (raw.decimals as number) ?? null,
+      sellerFeeBasisPoints: (raw.sellerFeeBasisPoints as number) ?? null,
+      updateAuthority: (raw.updateAuthority as string) ?? null,
+      uri: (raw.uri as string) ?? null,
+      primarySaleHappened: typeof raw.primarySaleHappened === 'boolean' ? raw.primarySaleHappened : null,
+      isMutable: typeof raw.isMutable === 'boolean' ? raw.isMutable : null,
+      editionNonce: typeof raw.editionNonce === 'number' ? raw.editionNonce : null,
+      tokenStandard: (raw.tokenStandard as string) ?? null,
+      traitTypes: Array.isArray(raw.traitTypes) ? (raw.traitTypes as string[]) : [],
+      track_holders: Boolean(raw.track_holders),
+      track_snapshot: Boolean(raw.track_snapshot),
+      track_transactions: Boolean(raw.track_transactions),
+      holders: pageHolders,
+      ...(kindParsed === 'SPL' ? { holdersTotal: holdersTotalParsed } : {}),
+      holdersUpdatedAt: (raw.holdersUpdatedAt as string) ?? null,
+      snapshots,
+      memberNfts: memberNftsRaw,
     }
+  }
+
+  async function loadWatchtowerHoldersPage() {
+    const mint = props.mint.value
+    const tenantId = props.tenantId.value || tenantStore.tenantId
+    if (!mint || typeof mint !== 'string' || !tenantId || !fetchedDetail.value) return
+    holdersPageLoading.value = true
     error.value = null
     try {
       const supabase = useSupabase()
-      const offset = appendHolders && fetchedDetail.value?.holders?.length
-        ? fetchedDetail.value.holders.length
-        : 0
+      const offset = (watchtowerHoldersPage.value - 1) * WATCHTOWER_HOLDERS_PAGE_SIZE
       const data = await invokeEdgeFunction<Record<string, unknown>>(supabase, 'watchtower', {
         action: 'mint-detail',
         tenantId,
         mint,
         holdersOffset: offset,
-        holdersLimit: WATCHTOWER_HOLDERS_PAGE,
+        holdersLimit: WATCHTOWER_HOLDERS_PAGE_SIZE,
       }, { errorFallback: 'Request failed' })
       const raw = (data ?? {}) as Record<string, unknown>
       const pageHolders = parseWatchtowerHoldersFromRaw(raw.holders)
       const holdersTotalParsed = typeof raw.holdersTotal === 'number' ? raw.holdersTotal : pageHolders.length
-      const snapshots = Array.isArray(raw.snapshots)
-        ? (raw.snapshots as Record<string, unknown>[]).map((s) => ({
-            date: (s.date as string) ?? '',
-            holderCount: Number(s.holderCount) || 0,
-            snapshotAt: (s.snapshotAt as string) ?? null,
-          }))
-        : []
-      const memberNftsRaw = Array.isArray(raw.memberNfts)
-        ? (raw.memberNfts as Record<string, unknown>[]).map((m) => ({
-            mint: (m.mint as string) ?? '',
-            name: (m.name as string) ?? null,
-            image: (m.image as string) ?? null,
-            traits: (Array.isArray(m.traits) ? m.traits : []) as Array<{ trait_type?: string; traitType?: string; value?: string | number }>,
-            owner: (m.owner as string) ?? null,
-          }))
-        : []
-      const kindParsed = (raw.kind as string) ?? 'SPL'
-      const mergedHolders = appendHolders && fetchedDetail.value?.holders?.length
-        ? [...fetchedDetail.value.holders, ...pageHolders]
-        : pageHolders
-
       fetchedDetail.value = {
-        mint: (raw.mint as string) ?? mint ?? '',
-        kind: kindParsed,
-        label: (raw.label as string) ?? (raw.name as string) ?? mint ?? '',
-        name: (raw.name as string) ?? null,
-        image: (raw.image as string) ?? null,
-        symbol: (raw.symbol as string) ?? null,
-        decimals: (raw.decimals as number) ?? null,
-        sellerFeeBasisPoints: (raw.sellerFeeBasisPoints as number) ?? null,
-        updateAuthority: (raw.updateAuthority as string) ?? null,
-        uri: (raw.uri as string) ?? null,
-        primarySaleHappened: typeof raw.primarySaleHappened === 'boolean' ? raw.primarySaleHappened : null,
-        isMutable: typeof raw.isMutable === 'boolean' ? raw.isMutable : null,
-        editionNonce: typeof raw.editionNonce === 'number' ? raw.editionNonce : null,
-        tokenStandard: (raw.tokenStandard as string) ?? null,
-        traitTypes: Array.isArray(raw.traitTypes) ? (raw.traitTypes as string[]) : [],
-        track_holders: Boolean(raw.track_holders),
-        track_snapshot: Boolean(raw.track_snapshot),
-        track_transactions: Boolean(raw.track_transactions),
-        holders: mergedHolders,
-        ...(kindParsed === 'SPL' ? { holdersTotal: holdersTotalParsed } : {}),
-        holdersUpdatedAt: (raw.holdersUpdatedAt as string) ?? null,
-        snapshots,
-        memberNfts: memberNftsRaw,
+        ...fetchedDetail.value,
+        holders: pageHolders,
+        ...(fetchedDetail.value.kind === 'SPL' ? { holdersTotal: holdersTotalParsed } : {}),
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load'
     } finally {
-      loading.value = false
-      holdersLoadingMore.value = false
+      holdersPageLoading.value = false
     }
   }
 
-  function loadMoreWatchtowerHolders() {
-    if (!isWatchtower.value || fetchedDetail.value?.kind !== 'SPL') return
-    const d = fetchedDetail.value
-    const cap = typeof d.holdersTotal === 'number' ? d.holdersTotal : d.holders.length
-    if (d.holders.length >= cap) return
-    void fetchWatchtowerDetail(true)
+  async function fetchWatchtowerDetail() {
+    const mint = props.mint.value
+    const tenantId = props.tenantId.value || tenantStore.tenantId
+    if (!mint || typeof mint !== 'string' || !tenantId) {
+      fetchedDetail.value = null
+      return
+    }
+    loading.value = true
+    fetchedDetail.value = null
+    expandedSnapshot.value = null
+    watchtowerSnapshotHolders.value = []
+    watchtowerHoldersPage.value = 1
+    error.value = null
+    try {
+      const supabase = useSupabase()
+      const data = await invokeEdgeFunction<Record<string, unknown>>(supabase, 'watchtower', {
+        action: 'mint-detail',
+        tenantId,
+        mint,
+        holdersOffset: 0,
+        holdersLimit: WATCHTOWER_HOLDERS_PAGE_SIZE,
+      }, { errorFallback: 'Request failed' })
+      const raw = (data ?? {}) as Record<string, unknown>
+      const pageHolders = parseWatchtowerHoldersFromRaw(raw.holders)
+      const holdersTotalParsed = typeof raw.holdersTotal === 'number' ? raw.holdersTotal : pageHolders.length
+      fetchedDetail.value = buildFetchedDetailFromMintDetailRaw(raw, mint, pageHolders, holdersTotalParsed)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to load'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function downloadMintHoldersCsv(snapshotAt?: string | null) {
+    const mint = mintAddress.value
+    const tenantId = tenantIdForWatchtowerApi.value
+    if (!mint || !tenantId) return
+    holdersCsvError.value = null
+    holdersCsvDownloading.value = true
+    try {
+      const supabase = useSupabase()
+      const data = await invokeEdgeFunction<Record<string, unknown>>(supabase, 'watchtower', {
+        action: 'mint-holders-csv',
+        tenantId,
+        mint,
+        ...(snapshotAt ? { snapshotAt } : {}),
+      }, { errorFallback: 'Export failed' })
+      const csv = typeof data?.csv === 'string' ? data.csv : ''
+      if (!csv.length) throw new Error('Empty export')
+      downloadCsvFile(csvFilenameSlug(mint, snapshotAt ? 'snapshot' : 'current', snapshotAt), csv)
+    } catch (e) {
+      holdersCsvError.value = e instanceof Error ? e.message : 'Export failed'
+    } finally {
+      holdersCsvDownloading.value = false
+    }
   }
 
   async function fetchCatalogSnapshots() {
@@ -439,7 +491,7 @@ export function useMintDetailModal(
         shipmentBannerImage.value = (m as { shipment_banner_image?: string | null })?.shipment_banner_image ?? e?.shipment_banner_image ?? ''
       }
       if (props.modelValue.value) {
-        if (isWatchtower.value && props.mint.value && typeof props.mint.value === 'string' && props.tenantId.value) {
+        if (isWatchtower.value && props.mint.value && typeof props.mint.value === 'string' && (props.tenantId.value || tenantStore.tenantId)) {
           fetchWatchtowerDetail()
         } else if (isCatalog.value) {
           showJson.value = false; fetchCatalogSnapshots()
@@ -447,7 +499,7 @@ export function useMintDetailModal(
       } else {
         fetchedDetail.value = null; error.value = null; expandedSnapshot.value = null
         catalogSnapshots.value = []; selectedSnapshotDate.value = null; holdersFromSupabase.value = []
-        watchtowerSnapshotHolders.value = []
+        watchtowerSnapshotHolders.value = []; holdersCsvError.value = null; watchtowerHoldersPage.value = 1
       }
     },
     { immediate: true },
@@ -466,12 +518,50 @@ export function useMintDetailModal(
     return typeof d.holdersTotal === 'number' ? d.holdersTotal : d.holders?.length
   })
 
+  const watchtowerHoldersPageCount = computed(() => {
+    const total = watchtowerHoldersTotal.value
+    if (typeof total !== 'number') return 1
+    return Math.max(1, Math.ceil(total / WATCHTOWER_HOLDERS_PAGE_SIZE))
+  })
+
+  const showWatchtowerHoldersPagination = computed(
+    () =>
+      isWatchtower.value &&
+      display.value?.kind === 'SPL' &&
+      typeof watchtowerHoldersTotal.value === 'number' &&
+      watchtowerHoldersTotal.value > WATCHTOWER_HOLDERS_PAGE_SIZE,
+  )
+
+  const tenantIdForWatchtowerApi = computed(() => props.tenantId.value || tenantStore.tenantId || '')
+
+  const showHoldersCsvDownload = computed(() => {
+    const d = display.value
+    const m = mintAddress.value
+    if (!d?.track_holders || !m || !tenantIdForWatchtowerApi.value) return false
+    if (d.kind === 'SPL') {
+      const n = typeof d.holdersTotal === 'number' ? d.holdersTotal : 0
+      return n > 0
+    }
+    return combinedHolders.value.length > 0
+  })
+
+  function goWatchtowerHoldersPage(page: number) {
+    if (!isWatchtower.value || fetchedDetail.value?.kind !== 'SPL') return
+    const total = fetchedDetail.value.holdersTotal ?? 0
+    const pages = Math.max(1, Math.ceil(total / WATCHTOWER_HOLDERS_PAGE_SIZE))
+    if (page < 1 || page > pages || page === watchtowerHoldersPage.value) return
+    watchtowerHoldersPage.value = page
+    void loadWatchtowerHoldersPage()
+  }
+
   return {
     display, loading, error, isWatchtower, isCatalog, mintAddress, mintExplorerUrl,
     showJson, copied, expandedSnapshotDate, memberNftView, copiedMint, copiedWallet,
     combinedHolders, showHoldersAndNftsSection, holdersSectionSplMode, memberNftsLoading, nftLink,
     snapshotsForDisplay, snapshotsLoading, holdersForSnapshot, walletsLoading, showSnapshotsSection,
-    holdersLoadingMore, watchtowerHoldersTotal, loadMoreWatchtowerHolders,
+    watchtowerHoldersTotal, watchtowerHoldersPage, watchtowerHoldersPageCount,
+    showWatchtowerHoldersPagination, holdersPageLoading, goWatchtowerHoldersPage,
+    showHoldersCsvDownload, holdersCsvDownloading, holdersCsvError, downloadMintHoldersCsv,
     shipmentBannerImage, shipmentBannerSaving, jsonPreview,
     close, copyMint, copyToClipboard, onHoldersCopy, formatHolderAmount, toggleSnapshot, saveShipmentBanner,
     explorerLinks, truncateAddress,
