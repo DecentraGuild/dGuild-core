@@ -160,7 +160,7 @@
                 <Icon icon="lucide:external-link" /> {{ row.label }}
               </a>
             </p>
-            <p class="plan-shipment-tab__history-by">By {{ truncateAddress(r.created_by, 8, 6) }}</p>
+            <p class="plan-shipment-tab__history-by">By {{ resolveWallet(r.created_by, 8, 6) }}</p>
             <p class="plan-shipment-tab__history-at">{{ formatDateTime(r.created_at) }}</p>
           </div>
         </li>
@@ -275,6 +275,7 @@ import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import ConfirmTransactionModal from '~/components/ui/confirm-transaction-modal/ConfirmTransactionModal.vue'
 import ConditionSetCatalog from '~/components/gates/ConditionSetCatalog.vue'
 import { truncateAddress, formatDate, formatDateTime } from '@decentraguild/display'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 import { useShipWallet } from '~/composables/shipment/useShipWallet'
 import { usePlanShipmentForm, JSON_PLACEHOLDER } from '~/composables/shipment/usePlanShipmentForm'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
@@ -296,6 +297,7 @@ const { tenantId } = storeToRefs(tenantStore)
 const shipWallet = useShipWallet()
 const { connection, rpcUrl } = useSolanaConnection()
 const explorerLinks = useExplorerLinks()
+const { resolveWallet } = useMemberProfiles()
 const supabase = useSupabase()
 
 function shipmentTxRows(txSignature: string): Array<{ sig: string; label: string }> {

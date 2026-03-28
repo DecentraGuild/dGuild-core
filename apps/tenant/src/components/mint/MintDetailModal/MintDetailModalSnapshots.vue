@@ -35,7 +35,7 @@
           <ul v-else class="mint-modal__wallet-list">
             <li v-for="h in holders.slice(0, 50)" :key="h.wallet" class="mint-modal__wallet-item">
               <span class="mint-modal__holder-amount">{{ formatHolderAmount(h.amount) }}</span>
-              <span class="mint-modal__holder-wallet">{{ truncateAddress(h.wallet, 6, 4) }}</span>
+              <span class="mint-modal__holder-wallet">{{ resolveWallet(h.wallet, 6, 4) }}</span>
               <button type="button" class="mint-modal__icon-btn" aria-label="Copy" @click="onCopyWallet(h.wallet)">
                 <Icon :icon="copiedWallet === h.wallet ? 'lucide:check' : 'lucide:copy'" />
               </button>
@@ -55,7 +55,9 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { truncateAddress } from '@decentraguild/display'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
+
+const { resolveWallet } = useMemberProfiles()
 
 interface SnapshotItem {
   date: string

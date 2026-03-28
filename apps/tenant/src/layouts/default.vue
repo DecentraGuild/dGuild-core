@@ -142,6 +142,15 @@
           </nav>
         </template>
         <template #actions>
+          <button
+            v-if="showProfileIcon"
+            type="button"
+            class="layout-profile-btn"
+            aria-label="My profile"
+            @click="navigateTo(linkTo('/profile'))"
+          >
+            <Icon icon="lucide:user-circle" />
+          </button>
           <AuthWidget />
         </template>
       </AppHeader>
@@ -193,6 +202,7 @@
 
 <script setup lang="ts">
 import { AuthWidget, useAuth } from '@decentraguild/auth'
+import { getModuleState, isModuleVisibleToMembers } from '@decentraguild/core'
 import { Icon } from '@iconify/vue'
 import { useThemeStore } from '@decentraguild/ui'
 import { useTenantStore } from '~/stores/tenant'
@@ -204,6 +214,7 @@ import {
 } from '~/config/modules'
 import { onClickOutside, useEventListener } from '@vueuse/core'
 import { useTenantGateAccess } from '~/composables/gates/useTenantGateAccess'
+import { useSupabase } from '~/composables/core/useSupabase'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
 import { useNavModules } from '~/composables/core/useNavModules'
 import { useTenantInLinks } from '~/composables/core/useTenantInLinks'
@@ -241,6 +252,38 @@ const {
 } = useTenantGateAccess()
 
 const { navModules } = useNavModules()
+
+const auth = useAuth()
+const connectedWallet = computed(
+  () => auth.connectorState.value?.account ?? auth.wallet.value ?? null,
+)
+const hasTenantPrimaryList = ref(false)
+
+async function checkPrimaryList() {
+  const id = tenantStore.tenantId
+  if (!id) { hasTenantPrimaryList.value = false; return }
+  try {
+    const supabase = useSupabase()
+    const { data } = await supabase
+      .from('gate_lists')
+      .select('address')
+      .eq('tenant_id', id)
+      .eq('is_primary', true)
+      .limit(1)
+    hasTenantPrimaryList.value = (data ?? []).length > 0
+  } catch {
+    hasTenantPrimaryList.value = false
+  }
+}
+
+watch(() => tenantStore.tenantId, () => checkPrimaryList(), { immediate: true })
+
+const showProfileIcon = computed(() => {
+  if (!connectedWallet.value) return false
+  if (!hasTenantPrimaryList.value) return false
+  const gatesState = getModuleState(tenant.value?.modules?.gates)
+  return isModuleVisibleToMembers(gatesState)
+})
 
 const subnavTabs = computed(() => getModuleSubnavForPath(route.path, tenant.value) ?? [])
 
@@ -635,6 +678,29 @@ button.layout-subnav__tab {
 
 .layout-nav__discover-icon {
   font-size: 1.25rem;
+}
+
+.layout-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--theme-input-height);
+  height: var(--theme-input-height);
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  border-radius: var(--theme-radius-md);
+  font-size: 1.4rem;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.layout-profile-btn:hover {
+  color: var(--theme-primary);
+  background: var(--theme-bg-card);
 }
 
 .tenant-gate-pending {

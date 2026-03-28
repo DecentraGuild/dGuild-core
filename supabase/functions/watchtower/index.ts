@@ -11,6 +11,16 @@
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { isMintWithinLimit } from '../_shared/watchtower-billing.ts'
+
+function firstParallelError(
+  results: Array<{ error?: { message: string } | null }>,
+): string | null {
+  for (const r of results) {
+    const e = r.error
+    if (e?.message) return e.message
+  }
+  return null
+}
 import { compareMintCatalogDisplay } from '../_shared/mint-display-sort.ts'
 import { buildHoldersCsv } from '../_shared/holders-csv.ts'
 
@@ -156,16 +166,23 @@ Deno.serve(async (req: Request) => {
           .limit(2000),
       ])
 
-      const catalogRow = (catalogRes as { data: unknown; error: unknown }).data
-      const metaRow = (metaRes as { data: unknown; error: unknown }).data
-      const watchRow = (watchRes as { data: unknown; error: unknown }).data
-      const holderSnapshot = (holderRes as { data: unknown; error: unknown }).data
-      const trackerSnapshots = (trackerRes as { data: unknown[] | null; error: unknown }).data ?? []
-      const memberCatalogRows = (scopeRes as { data: unknown[] | null; error: unknown }).data ?? []
+      const parallelErr = firstParallelError([
+        catalogRes as { error?: { message: string } | null },
+        metaRes as { error?: { message: string } | null },
+        watchRes as { error?: { message: string } | null },
+        holderRes as { error?: { message: string } | null },
+        trackerRes as { error?: { message: string } | null },
+        scopeRes as { error?: { message: string } | null },
+      ])
+      if (parallelErr) return errorResponse(parallelErr, req, 500)
 
-      if ((catalogRes as { error: unknown }).error) {
-        return errorResponse((catalogRes as { error: { message: string } }).error.message, req, 500)
-      }
+      const catalogRow = (catalogRes as { data: unknown }).data
+      const metaRow = (metaRes as { data: unknown }).data
+      const watchRow = (watchRes as { data: unknown }).data
+      const holderSnapshot = (holderRes as { data: unknown }).data
+      const trackerSnapshots = (trackerRes as { data: unknown[] | null }).data ?? []
+      const memberCatalogRows = (scopeRes as { data: unknown[] | null }).data ?? []
+
       if (!catalogRow) return errorResponse('Mint not found in catalog', req, 404)
 
       const watch = watchRow as { track_holders?: boolean; track_snapshot?: boolean; track_transactions?: boolean } | null
@@ -314,6 +331,15 @@ Deno.serve(async (req: Request) => {
       if (catErr) return errorResponse(catErr.message, req, 500)
       if (!catRow) return errorResponse('Mint not found in catalog', req, 404)
 
+      const { data: watchRow, error: watchErr } = await db
+        .from('watchtower_watches')
+        .select('track_holders, track_snapshot')
+        .eq('tenant_id', tenantId)
+        .eq('mint', mint)
+        .maybeSingle()
+      if (watchErr) return errorResponse(watchErr.message, req, 500)
+      const watch = watchRow as { track_holders?: boolean; track_snapshot?: boolean } | null
+
       const catalogKind = ((catRow as { kind?: string }).kind as string) ?? 'SPL'
 
       let rawHolders: unknown[] = []
@@ -334,6 +360,20 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
         if (curErr) return errorResponse(curErr.message, req, 500)
         rawHolders = (cur?.holder_wallets as unknown[]) ?? []
+      }
+
+      if (snapshotAt) {
+        if (!watch?.track_snapshot) {
+          return errorResponse('Snapshot track not enabled for this mint', req, 403)
+        }
+        const within = await isMintWithinLimit(db, tenantId, mint, 'mintsSnapshot')
+        if (!within) return errorResponse('Pay to activate this track', req, 403)
+      } else {
+        if (!watch?.track_holders) {
+          return errorResponse('Holders track not enabled for this mint', req, 403)
+        }
+        const within = await isMintWithinLimit(db, tenantId, mint, 'mints_current')
+        if (!within) return errorResponse('Pay to activate this track', req, 403)
       }
 
       const allHoldersNorm = rawHolders

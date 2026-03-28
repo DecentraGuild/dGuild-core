@@ -59,7 +59,7 @@
           class="mint-modal__nft-list-row mint-modal__nft-list-row--spl"
         >
           <div class="mint-modal__nft-list-col mint-modal__nft-list-col--holder">
-            <span class="mint-modal__nft-list-value">{{ truncateAddress(h.wallet, 8, 4) }}</span>
+            <span class="mint-modal__nft-list-value">{{ resolveWallet(h.wallet, 8, 4) }}</span>
             <button
               type="button"
               class="mint-modal__icon-btn mint-modal__icon-btn--sm"
@@ -117,7 +117,7 @@
         class="mint-modal__nft-list-row"
       >
         <div class="mint-modal__nft-list-col mint-modal__nft-list-col--holder">
-          <span class="mint-modal__nft-list-value">{{ truncateAddress(h.wallet, 8, 4) }}</span>
+          <span class="mint-modal__nft-list-value">{{ resolveWallet(h.wallet, 8, 4) }}</span>
           <button
             type="button"
             class="mint-modal__icon-btn mint-modal__icon-btn--sm"
@@ -178,7 +178,7 @@
           </div>
           <div class="mint-modal__nft-info">
             <p class="mint-modal__nft-name">{{ nft.name ?? truncateAddress(nft.mint, 8, 6) }}</p>
-            <p class="mint-modal__nft-mint">{{ truncateAddress(h.wallet, 6, 4) }}</p>
+            <p class="mint-modal__nft-mint">{{ resolveWallet(h.wallet, 6, 4) }}</p>
             <div v-if="(nft.traits?.length ?? 0) > 0" class="mint-modal__nft-traits">
               <span
                 v-for="(attr, idx) in (nft.traits ?? []).slice(0, 2)"
@@ -198,6 +198,9 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
 import { formatDate, truncateAddress } from '@decentraguild/display'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
+
+const { resolveWallet } = useMemberProfiles()
 
 interface HolderNft {
   mint: string

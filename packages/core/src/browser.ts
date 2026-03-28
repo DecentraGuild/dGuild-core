@@ -10,6 +10,8 @@ export type {
   ModuleGateModuleId,
   MarketplaceGateSettings,
   TransactionGateOverride,
+  ProfileFieldKey,
+  ProfileFieldConfig,
 } from './types.js'
 export {
   isModuleVisibleToMembers,
@@ -18,6 +20,9 @@ export {
   getEffectiveGate,
   getModuleGateFromTenant,
   resolveGateForTransaction,
+  PROFILE_FIELD_KEYS,
+  coerceProfileFieldValue,
+  normalizeProfileFieldConfig,
 } from './types.js'
 export { getTenantSlugFromHost } from './resolver.js'
 export {

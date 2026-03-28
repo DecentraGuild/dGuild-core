@@ -165,6 +165,7 @@ async function copyClaimError() {
       claimErrorCopyReset = null
     }, 2000)
   } catch {
+    void 0
   }
 }
 

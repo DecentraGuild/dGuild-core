@@ -14,6 +14,13 @@ export type {
   MarketplaceSplAsset,
   MarketplaceGateSettings,
   MarketplaceShopFee,
+  ProfileFieldKey,
+  ProfileFieldConfig,
+} from './types.js'
+export {
+  PROFILE_FIELD_KEYS,
+  coerceProfileFieldValue,
+  normalizeProfileFieldConfig,
 } from './types.js'
 export {
   normalizeModules,

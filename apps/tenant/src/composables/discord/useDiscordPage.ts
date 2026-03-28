@@ -8,8 +8,8 @@ import {
   connectWallet,
   subscribeToConnectorState,
 } from '@decentraguild/web3/wallet'
-import { truncateAddress } from '@decentraguild/display'
 import { useAuth, useConnectWalletModalExtras } from '@decentraguild/auth'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
@@ -24,6 +24,7 @@ export interface DiscordMe {
 export function useDiscordPage() {
   const auth = useAuth()
   const tenantStore = useTenantStore()
+  const { resolveWallet } = useMemberProfiles()
 
   const me = ref<DiscordMe | null>(null)
   const loadingMe = ref(true)
@@ -42,7 +43,7 @@ export function useDiscordPage() {
     },
   })
 
-  const truncate = (addr: string) => truncateAddress(addr, 6, 4)
+  const truncate = (addr: string) => resolveWallet(addr, 6, 4)
 
   async function fetchMe() {
     loadingMe.value = true

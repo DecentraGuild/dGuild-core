@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { TenantConfig, MarketplaceSettings, MarketplaceGateSettings } from '@decentraguild/core'
+import { normalizeProfileFieldConfig } from '@decentraguild/core'
 import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
 import { parseCurrencyMintsFromView } from '~/utils/parseTenantCurrencyMints'
 import { useThemeStore } from '@decentraguild/ui'
@@ -74,6 +75,7 @@ export const useTenantStore = defineStore('tenant', () => {
         modules: data.modules as TenantConfig['modules'],
         admins: data.admins as string[],
         treasury: data.treasury as string | undefined,
+        profileFields: normalizeProfileFieldConfig(data.profile_fields),
       }
 
       const rawSettings = data.marketplace_settings as MarketplaceSettings | null

@@ -61,6 +61,49 @@
 
       <div v-if="selectedList" class="gates-tab__entries">
         <h4>List details</h4>
+
+        <div class="gates-tab__primary-row">
+          <label class="gates-tab__primary-label">
+            <Switch
+              :model-value="selectedList.isPrimary"
+              @update:model-value="onPrimarySwitchChange($event)"
+            />
+            <span>Primary list</span>
+          </label>
+          <p class="gates-tab__primary-hint">
+            Members on the primary list can create a profile. Only one list can be primary.
+          </p>
+        </div>
+
+        <div v-if="selectedList.isPrimary" class="gates-tab__profile-fields gates-tab__profile-fields--under-primary">
+          <h4 class="gates-tab__profile-fields-title">Member profile fields</h4>
+          <p class="gates-tab__profile-fields-hint">
+            Choose which fields members can fill out on their profile. Discord is always shown from verified link data.
+          </p>
+          <div class="gates-tab__field-checks">
+            <label v-for="field in PROFILE_FIELD_OPTIONS" :key="field.key" class="gates-tab__field-check">
+              <input
+                type="checkbox"
+                :checked="editProfileFields[field.key] === true"
+                @change="onProfileFieldCheckboxChange(field.key, ($event.target as HTMLInputElement).checked)"
+              >
+              <span>{{ field.label }}</span>
+            </label>
+          </div>
+          <div class="gates-tab__profile-fields-actions">
+            <Button
+              variant="brand"
+              size="sm"
+              :disabled="savingProfileFields"
+              @click="saveProfileFields"
+            >
+              <Icon v-if="savingProfileFields" icon="lucide:loader-2" class="gates-tab__spinner" />
+              Save profile fields
+            </Button>
+            <span v-if="profileFieldsSaved" class="gates-tab__saved-label">Saved</span>
+          </div>
+        </div>
+
         <div class="gates-tab__image-row">
           <FormInput
             v-model="editImageUrl"
@@ -101,7 +144,16 @@
             :key="e.wallet"
             class="gates-tab__entry-item"
           >
-            <code class="gates-tab__wallet">{{ truncateAddress(e.wallet, 6, 4) }}</code>
+            <button
+              v-if="selectedList.isPrimary"
+              type="button"
+              class="gates-tab__wallet-btn"
+              :title="'View member profile (' + e.wallet + ')'"
+              @click="openAdminMemberProfile(e.wallet)"
+            >
+              {{ resolveWallet(e.wallet, 6, 4) }}
+            </button>
+            <code v-else class="gates-tab__wallet">{{ resolveWallet(e.wallet, 6, 4) }}</code>
             <Button
               variant="ghost"
               size="sm"
@@ -183,15 +235,144 @@
       </div>
     </div>
   </SimpleModal>
+
+  <SimpleModal
+    :model-value="showPrimaryModal"
+    :title="primaryModalEnabling ? 'Set as primary list' : 'Remove primary status'"
+    @update:model-value="(v: boolean) => { if (!v) closePrimaryModal() }"
+  >
+    <div class="gates-tab__primary-modal">
+      <template v-if="primaryModalEnabling">
+        <p>
+          Only one list per community can be the primary member list. Setting
+          <strong>{{ selectedList?.name }}</strong> as primary will unlock
+          <strong>Member Profiles</strong> for all wallets on this list.
+        </p>
+        <p>
+          Members on the primary list can create a profile with a nickname,
+          avatar, description, and social links. Their nickname will be shown
+          across the platform instead of their truncated wallet address.
+        </p>
+        <p v-if="hasPrimaryList && !selectedList?.isPrimary" class="gates-tab__primary-modal-warn">
+          Another list is currently set as primary. Enabling this one will replace it.
+        </p>
+      </template>
+      <template v-else>
+        <p>
+          Removing primary status from <strong>{{ selectedList?.name }}</strong> will
+          disable Member Profiles for this community. Existing profiles will be
+          preserved but members won't be able to edit them until a primary list
+          is set again.
+        </p>
+      </template>
+      <div class="gates-tab__primary-modal-actions">
+        <Button variant="secondary" :disabled="togglingPrimary" @click="closePrimaryModal">
+          Cancel
+        </Button>
+        <Button variant="brand" :disabled="togglingPrimary" @click="confirmPrimaryToggle">
+          <Icon v-if="togglingPrimary" icon="lucide:loader-2" class="gates-tab__spinner" />
+          {{ primaryModalEnabling ? 'Set as primary' : 'Remove primary' }}
+        </Button>
+      </div>
+    </div>
+  </SimpleModal>
+
+  <SimpleModal
+    :model-value="showMemberProfileModal"
+    wide
+    :title="memberProfileModalTitle"
+    @update:model-value="onMemberProfileModalClose"
+  >
+    <div class="gates-tab__member-profile-modal">
+      <template v-if="viewingWallet">
+        <div class="gates-tab__member-profile-row gates-tab__member-profile-row--wallet">
+          <span class="gates-tab__member-profile-label">Wallet</span>
+          <div class="gates-tab__member-profile-wallet-line">
+            <code class="gates-tab__member-profile-value">{{ viewingWallet }}</code>
+            <Button variant="ghost" size="sm" type="button" @click="copyMemberWallet(viewingWallet)">
+              <Icon icon="lucide:copy" class="gates-tab__copy-icon" />
+              Copy
+            </Button>
+          </div>
+        </div>
+        <div v-if="memberProfileLoading" class="gates-tab__member-profile-loading">
+          <Icon icon="lucide:loader-2" class="gates-tab__spinner" />
+          Loading profile…
+        </div>
+        <p v-else-if="memberProfileError" class="gates-tab__error">{{ memberProfileError }}</p>
+        <template v-else>
+          <template v-if="!memberProfile">
+            <p class="gates-tab__member-profile-empty">No member profile saved for this wallet yet.</p>
+          </template>
+          <dl v-else class="gates-tab__member-profile-dl">
+            <dt class="gates-tab__member-profile-label">Member ID</dt>
+            <dd class="gates-tab__member-profile-value">{{ memberProfile.member_id ?? '—' }}</dd>
+            <template v-if="memberProfile.nickname">
+              <dt class="gates-tab__member-profile-label">Nickname</dt>
+              <dd class="gates-tab__member-profile-value">{{ memberProfile.nickname }}</dd>
+            </template>
+            <template v-if="memberProfile.description">
+              <dt class="gates-tab__member-profile-label">Description</dt>
+              <dd class="gates-tab__member-profile-value gates-tab__member-profile-value--multiline">{{ memberProfile.description }}</dd>
+            </template>
+            <template v-if="memberProfile.avatar_url && isHttpUrl(String(memberProfile.avatar_url))">
+              <dt class="gates-tab__member-profile-label">Avatar</dt>
+              <dd class="gates-tab__member-profile-value">
+                <img
+                  :src="String(memberProfile.avatar_url)"
+                  alt=""
+                  class="gates-tab__member-profile-avatar"
+                >
+              </dd>
+            </template>
+            <dt class="gates-tab__member-profile-label">Discord</dt>
+            <dd class="gates-tab__member-profile-value">
+              {{ memberProfile.discord_user_id != null && String(memberProfile.discord_user_id).trim() !== ''
+                ? memberProfile.discord_user_id
+                : 'Not linked' }}
+            </dd>
+            <template v-if="memberProfile.x_handle">
+              <dt class="gates-tab__member-profile-label">X</dt>
+              <dd class="gates-tab__member-profile-value">{{ memberProfile.x_handle }}</dd>
+            </template>
+            <template v-if="memberProfile.telegram_handle">
+              <dt class="gates-tab__member-profile-label">Telegram</dt>
+              <dd class="gates-tab__member-profile-value">{{ memberProfile.telegram_handle }}</dd>
+            </template>
+            <template v-if="memberProfile.email">
+              <dt class="gates-tab__member-profile-label">Email</dt>
+              <dd class="gates-tab__member-profile-value">{{ memberProfile.email }}</dd>
+            </template>
+            <template v-if="memberProfile.phone">
+              <dt class="gates-tab__member-profile-label">Phone</dt>
+              <dd class="gates-tab__member-profile-value">{{ memberProfile.phone }}</dd>
+            </template>
+            <template v-if="linkedWalletsForModal.length">
+              <dt class="gates-tab__member-profile-label">Linked wallets</dt>
+              <dd class="gates-tab__member-profile-value">
+                <ul class="gates-tab__member-profile-linked">
+                  <li v-for="(w, i) in linkedWalletsForModal" :key="i">
+                    <code>{{ w }}</code>
+                  </li>
+                </ul>
+              </dd>
+            </template>
+          </dl>
+        </template>
+      </template>
+    </div>
+  </SimpleModal>
 </template>
 
 <script setup lang="ts">
 import { truncateAddress } from '@decentraguild/display'
-import type { ModuleState } from '@decentraguild/core'
+import type { ModuleState, ProfileFieldConfig, ProfileFieldKey } from '@decentraguild/core'
+import { normalizeProfileFieldConfig, PROFILE_FIELD_KEYS } from '@decentraguild/core'
 import type { Ref } from 'vue'
 import { useAdminGating } from '~/composables/admin/useAdminGating'
 import GateSelectRow from '~/components/gates/GateSelectRow.vue'
 import type { BillingPeriod } from '@decentraguild/billing'
+import { Switch } from '~/components/ui/switch'
 import {
   deriveWhitelistPda,
   buildInitializeWhitelistTransaction,
@@ -211,6 +392,7 @@ import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 import type { BillingSameTxPrepare } from '~/composables/admin/useAdminBilling'
 import { ComputeBudgetProgram, Transaction } from '@solana/web3.js'
 
@@ -221,6 +403,7 @@ interface GateEntry {
   name: string
   authority: string
   imageUrl?: string | null
+  isPrimary?: boolean
 }
 
 interface ListEntry {
@@ -260,6 +443,7 @@ const emit = defineEmits<{
 const tenantStore = useTenantStore()
 const tenantId = computed(() => tenantStore.tenantId)
 const { connection } = useSolanaConnection()
+const { resolveWallet } = useMemberProfiles()
 
 const { getValue, dirty, rowState, onUpdate, save } = useAdminGating(
   ref(null) as Ref<import('@decentraguild/core').MarketplaceGateSettings | null>
@@ -323,7 +507,7 @@ async function fetchLists() {
     const supabase = useSupabase()
     const { data, error } = await supabase
       .from('gate_lists')
-      .select('address, name, authority, image_url')
+      .select('address, name, authority, image_url, is_primary')
       .eq('tenant_id', tenantId.value)
       .order('name')
 
@@ -333,6 +517,7 @@ async function fetchLists() {
       name: r.name as string,
       authority: r.authority as string,
       imageUrl: r.image_url as string | null,
+      isPrimary: r.is_primary === true,
     }))
     if (!lists.value.some((l) => l.address === selectedListAddress.value)) {
       selectedListAddress.value = lists.value[0]?.address ?? ''
@@ -556,6 +741,185 @@ async function removeWallet(walletAddr: string) {
   }
 }
 
+const showPrimaryModal = ref(false)
+const primaryModalEnabling = ref(false)
+const togglingPrimary = ref(false)
+
+function onPrimarySwitchChange(checked: boolean) {
+  if (!selectedList.value) return
+  primaryModalEnabling.value = checked
+  showPrimaryModal.value = true
+}
+
+function closePrimaryModal() {
+  showPrimaryModal.value = false
+}
+
+async function confirmPrimaryToggle() {
+  if (!tenantId.value || !selectedList.value) return
+  togglingPrimary.value = true
+  const supabase = useSupabase()
+  try {
+    await invokeEdgeFunction(supabase, 'gates', {
+      action: 'list-update',
+      tenantId: tenantId.value,
+      address: selectedList.value.address,
+      name: selectedList.value.name,
+      imageUrl: selectedList.value.imageUrl ?? null,
+      isPrimary: primaryModalEnabling.value,
+    }, { errorFallback: 'Failed to update primary status' })
+    await fetchLists()
+    closePrimaryModal()
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Failed to update primary'
+  } finally {
+    togglingPrimary.value = false
+  }
+}
+
+const hasPrimaryList = computed(() => lists.value.some((l) => l.isPrimary))
+
+const PROFILE_FIELD_LABELS: Record<ProfileFieldKey, string> = {
+  nickname: 'Nickname',
+  description: 'Description',
+  avatar_url: 'Avatar',
+  x_handle: 'X handle',
+  telegram_handle: 'Telegram',
+  email: 'Email',
+  phone: 'Phone',
+  linked_wallets: 'Linked wallets',
+}
+
+const PROFILE_FIELD_OPTIONS = PROFILE_FIELD_KEYS.map((key) => ({
+  key,
+  label: PROFILE_FIELD_LABELS[key],
+}))
+
+const editProfileFields = reactive<Record<string, boolean>>({})
+const savingProfileFields = ref(false)
+const profileFieldsSaved = ref(false)
+/** When true, do not overwrite checkboxes from tenant store (avoids resets during edits / refetch races). */
+const profileFieldsEditorDirty = ref(false)
+
+function applyProfileFieldsToForm(fields: ProfileFieldConfig | undefined) {
+  const normalized = normalizeProfileFieldConfig(fields ?? {})
+  for (const key of PROFILE_FIELD_KEYS) {
+    editProfileFields[key] = normalized[key] === true
+  }
+}
+
+watch(
+  () => tenantStore.tenant?.profileFields,
+  (fields) => {
+    if (profileFieldsEditorDirty.value) return
+    applyProfileFieldsToForm(fields)
+  },
+  { immediate: true },
+)
+
+function onProfileFieldCheckboxChange(key: ProfileFieldKey, checked: boolean) {
+  profileFieldsEditorDirty.value = true
+  editProfileFields[key] = checked
+}
+
+async function saveProfileFields() {
+  if (!tenantId.value) return
+  savingProfileFields.value = true
+  profileFieldsSaved.value = false
+  try {
+    const supabase = useSupabase()
+    const payload: Record<string, boolean> = {}
+    for (const key of PROFILE_FIELD_KEYS) {
+      payload[key] = editProfileFields[key] === true
+    }
+    const data = await invokeEdgeFunction<{ ok?: boolean; profileFields?: Record<string, boolean> }>(
+      supabase,
+      'member-profile',
+      {
+        action: 'admin-update-profile-fields',
+        tenantId: tenantId.value,
+        profileFields: payload,
+      },
+      { errorFallback: 'Failed to save profile fields' },
+    )
+    await tenantStore.refetchTenantContext()
+    profileFieldsEditorDirty.value = false
+    applyProfileFieldsToForm(
+      data.profileFields != null && typeof data.profileFields === 'object'
+        ? data.profileFields
+        : tenantStore.tenant?.profileFields,
+    )
+    profileFieldsSaved.value = true
+    setTimeout(() => { profileFieldsSaved.value = false }, 3000)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Failed to save profile fields'
+  } finally {
+    savingProfileFields.value = false
+  }
+}
+
+function isHttpUrl(s: string): boolean {
+  return /^https?:\/\/.+/i.test(s)
+}
+
+const showMemberProfileModal = ref(false)
+const viewingWallet = ref<string | null>(null)
+const memberProfileLoading = ref(false)
+const memberProfile = ref<Record<string, unknown> | null>(null)
+const memberProfileError = ref<string | null>(null)
+
+const memberProfileModalTitle = computed(() =>
+  viewingWallet.value
+    ? `Member profile · ${truncateAddress(viewingWallet.value, 8, 6)}`
+    : 'Member profile',
+)
+
+const linkedWalletsForModal = computed(() => {
+  const lw = memberProfile.value?.linked_wallets
+  if (!Array.isArray(lw)) return []
+  return lw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+})
+
+async function openAdminMemberProfile(wallet: string) {
+  if (!tenantId.value) return
+  viewingWallet.value = wallet
+  showMemberProfileModal.value = true
+  memberProfileLoading.value = true
+  memberProfile.value = null
+  memberProfileError.value = null
+  try {
+    const supabase = useSupabase()
+    const data = await invokeEdgeFunction<{ profile: Record<string, unknown> | null }>(
+      supabase,
+      'member-profile',
+      { action: 'admin-get', tenantId: tenantId.value, wallet },
+      { errorFallback: 'Failed to load profile' },
+    )
+    memberProfile.value = data.profile
+  } catch (e) {
+    memberProfileError.value = e instanceof Error ? e.message : 'Failed to load profile'
+  } finally {
+    memberProfileLoading.value = false
+  }
+}
+
+function onMemberProfileModalClose(open: boolean) {
+  if (open) return
+  showMemberProfileModal.value = false
+  viewingWallet.value = null
+  memberProfile.value = null
+  memberProfileError.value = null
+  memberProfileLoading.value = false
+}
+
+async function copyMemberWallet(addr: string) {
+  try {
+    await navigator.clipboard.writeText(addr)
+  } catch {
+    /* ignore */
+  }
+}
+
 onMounted(() => fetchLists())
 </script>
 
@@ -626,6 +990,95 @@ onMounted(() => fetchLists())
   padding: 2px var(--theme-space-xs);
   border-radius: var(--theme-radius-sm);
 }
+.gates-tab__wallet-btn {
+  font-family: ui-monospace, monospace;
+  font-size: var(--theme-font-sm);
+  text-align: left;
+  padding: 2px var(--theme-space-xs);
+  border: none;
+  border-radius: var(--theme-radius-sm);
+  background: var(--theme-bg-secondary);
+  color: var(--theme-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--theme-primary) 40%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.gates-tab__wallet-btn:hover {
+  color: var(--theme-text-primary);
+  text-decoration-color: currentColor;
+}
+.gates-tab__member-profile-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-md);
+  min-width: 0;
+}
+.gates-tab__member-profile-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-sm);
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+}
+.gates-tab__member-profile-empty {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-muted);
+}
+.gates-tab__member-profile-row--wallet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-xs);
+}
+.gates-tab__member-profile-wallet-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--theme-space-sm);
+}
+.gates-tab__member-profile-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(6rem, 9rem) 1fr;
+  gap: var(--theme-space-sm) var(--theme-space-md);
+  font-size: var(--theme-font-sm);
+}
+.gates-tab__member-profile-dl dt {
+  margin: 0;
+}
+.gates-tab__member-profile-dl dd {
+  margin: 0;
+  min-width: 0;
+}
+.gates-tab__member-profile-label {
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+}
+.gates-tab__member-profile-value {
+  color: var(--theme-text-primary);
+  word-break: break-all;
+}
+.gates-tab__member-profile-value--multiline {
+  white-space: pre-wrap;
+}
+.gates-tab__member-profile-avatar {
+  max-width: 5rem;
+  max-height: 5rem;
+  border-radius: var(--theme-radius-md);
+  object-fit: cover;
+  border: var(--theme-border-thin) solid var(--theme-border);
+}
+.gates-tab__member-profile-linked {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.gates-tab__member-profile-linked li {
+  margin: var(--theme-space-xs) 0;
+}
+.gates-tab__copy-icon {
+  font-size: 1rem;
+}
 .gates-tab__empty,
 .gates-tab__error {
   margin: 0;
@@ -658,5 +1111,88 @@ onMounted(() => fetchLists())
 }
 @keyframes gates-spin {
   to { transform: rotate(360deg); }
+}
+.gates-tab__primary-row {
+  margin-bottom: var(--theme-space-md);
+  padding-bottom: var(--theme-space-md);
+  border-bottom: var(--theme-border-thin) solid var(--theme-border);
+}
+.gates-tab__primary-label {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-sm);
+  font-size: var(--theme-font-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.gates-tab__primary-hint {
+  margin: var(--theme-space-xs) 0 0;
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+}
+.gates-tab__profile-fields {
+  margin-top: var(--theme-space-lg);
+  padding-top: var(--theme-space-lg);
+  border-top: var(--theme-border-thin) solid var(--theme-border);
+}
+.gates-tab__profile-fields--under-primary {
+  margin-top: 0;
+  margin-bottom: var(--theme-space-md);
+  padding: var(--theme-space-md);
+  border-top: none;
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-bg-secondary);
+}
+.gates-tab__profile-fields-title {
+  font-size: var(--theme-font-md);
+  font-weight: 600;
+  margin: 0 0 var(--theme-space-xs);
+}
+.gates-tab__profile-fields-hint {
+  margin: 0 0 var(--theme-space-md);
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+}
+.gates-tab__field-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-space-sm) var(--theme-space-lg);
+  margin-bottom: var(--theme-space-md);
+}
+.gates-tab__field-check {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  font-size: var(--theme-font-sm);
+  cursor: pointer;
+}
+.gates-tab__profile-fields-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-sm);
+}
+.gates-tab__saved-label {
+  font-size: var(--theme-font-sm);
+  color: var(--theme-status-success);
+}
+.gates-tab__primary-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-md);
+}
+.gates-tab__primary-modal p {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+}
+.gates-tab__primary-modal-warn {
+  color: var(--theme-status-warning, var(--theme-text-secondary));
+  font-weight: 500;
+}
+.gates-tab__primary-modal-actions {
+  display: flex;
+  gap: var(--theme-space-sm);
+  justify-content: flex-end;
 }
 </style>
