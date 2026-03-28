@@ -1,113 +1,113 @@
 <template>
   <PageSection title="Watchtower" module-id="watchtower">
     <div class="watchtower-page">
-    <div v-if="!watchtowerVisible" class="watchtower-page__inactive">
-      <p>Watchtower is not enabled for this dGuild.</p>
-    </div>
-
-    <template v-else>
-      <p class="watchtower-page__intro">
-        View tracked mints, metadata, current holders, and snapshots.
-      </p>
-
-      <div v-if="loading" class="watchtower-page__loading">
-        <Icon icon="lucide:loader-2" class="watchtower-page__spinner" />
-        Loading...
+      <div v-if="!watchtowerVisible" class="watchtower-page__inactive">
+        <p>Watchtower is not enabled for this dGuild.</p>
       </div>
 
       <template v-else>
-        <p v-if="fetchError" class="watchtower-page__error">
-          {{ fetchError }}
-          <button type="button" class="watchtower-page__retry" @click="retryFetch">
-            Retry
-          </button>
+        <p class="watchtower-page__intro">
+          View tracked mints, metadata, current holders, and snapshots.
         </p>
-        <p v-else-if="!entries.length" class="watchtower-page__empty">
-          No mints configured yet. Add mints in Admin > Address Book and enable tracking in Admin > Watchtower.
-        </p>
+
+        <div v-if="loading" class="watchtower-page__loading">
+          <Icon icon="lucide:loader-2" class="watchtower-page__spinner" />
+          Loading...
+        </div>
 
         <template v-else>
-          <div class="watchtower-page__search-wrap">
-            <input
-              v-model="searchQuery"
-              type="search"
-              class="watchtower-page__search"
-              placeholder="Search by name or address..."
-              aria-label="Search mints"
-            />
-            <Icon icon="lucide:search" class="watchtower-page__search-icon" />
-          </div>
-
-          <section v-if="filteredSpl.length" class="watchtower-page__section">
-            <h3 class="watchtower-page__section-title">SPL tokens</h3>
-            <div class="watchtower-page__grid">
-              <Card
-                v-for="entry in filteredSpl"
-                :key="entry.mint"
-                class="watchtower-page__card watchtower-page__card--clickable"
-                @click="openMint(entry)"
-              >
-                <div class="watchtower-page__card-thumb">
-                  <img v-if="entry.image" :src="entry.image" :alt="entry.label ?? ''" class="watchtower-page__card-img" />
-                  <span v-else class="watchtower-page__card-placeholder">
-                    <Icon icon="lucide:circle-dollar-sign" />
-                  </span>
-                </div>
-                <div class="watchtower-page__card-body">
-                  <h4 class="watchtower-page__card-name">{{ entry.label ?? truncateAddress(entry.mint, 8, 6) }}</h4>
-                  <code class="watchtower-page__card-addr">{{ truncateAddress(entry.mint, 8, 6) }}</code>
-                  <TrackIndicators
-                    :track-holders="entry.track_holders"
-                    :track-snapshot="entry.track_snapshot"
-                    :track-transactions="entry.track_transactions"
-                  />
-                </div>
-                <Icon icon="lucide:chevron-right" class="watchtower-page__card-arrow" />
-              </Card>
-            </div>
-          </section>
-
-          <section v-if="filteredNfts.length" class="watchtower-page__section">
-            <h3 class="watchtower-page__section-title">NFT collections</h3>
-            <div class="watchtower-page__grid">
-              <Card
-                v-for="entry in filteredNfts"
-                :key="entry.mint"
-                class="watchtower-page__card watchtower-page__card--clickable"
-                @click="openMint(entry)"
-              >
-                <div class="watchtower-page__card-thumb">
-                  <img v-if="entry.image" :src="entry.image" :alt="entry.label ?? ''" class="watchtower-page__card-img" />
-                  <span v-else class="watchtower-page__card-placeholder">
-                    <Icon icon="lucide:image-off" />
-                  </span>
-                </div>
-                <div class="watchtower-page__card-body">
-                  <h4 class="watchtower-page__card-name">{{ entry.label ?? truncateAddress(entry.mint, 8, 6) }}</h4>
-                  <code class="watchtower-page__card-addr">{{ truncateAddress(entry.mint, 8, 6) }}</code>
-                  <TrackIndicators
-                    :track-holders="entry.track_holders"
-                    :track-snapshot="entry.track_snapshot"
-                    :track-transactions="entry.track_transactions"
-                  />
-                </div>
-                <Icon icon="lucide:chevron-right" class="watchtower-page__card-arrow" />
-              </Card>
-            </div>
-          </section>
-
-          <p v-if="!filteredSpl.length && !filteredNfts.length" class="watchtower-page__no-match">
-            No mints match your search.
+          <p v-if="fetchError" class="watchtower-page__error">
+            {{ fetchError }}
+            <button type="button" class="watchtower-page__retry" @click="retryFetch">
+              Retry
+            </button>
           </p>
+          <p v-else-if="!entries.length" class="watchtower-page__empty">
+            No mints configured yet. Add mints in Admin > Address Book and enable tracking in Admin > Watchtower.
+          </p>
+
+          <template v-else>
+            <div class="watchtower-page__search-wrap">
+              <input
+                v-model="searchQuery"
+                type="search"
+                class="watchtower-page__search"
+                placeholder="Search by name or address..."
+                aria-label="Search mints"
+              />
+              <Icon icon="lucide:search" class="watchtower-page__search-icon" />
+            </div>
+
+            <section v-if="filteredSpl.length" class="watchtower-page__section">
+              <h3 class="watchtower-page__section-title">SPL tokens</h3>
+              <div class="watchtower-page__grid">
+                <Card
+                  v-for="entry in filteredSpl"
+                  :key="entry.mint"
+                  class="watchtower-page__card watchtower-page__card--clickable"
+                  @click="openMint(entry)"
+                >
+                  <div class="watchtower-page__card-thumb">
+                    <img v-if="entry.image" :src="entry.image" :alt="entry.label ?? ''" class="watchtower-page__card-img" />
+                    <span v-else class="watchtower-page__card-placeholder">
+                      <Icon icon="lucide:circle-dollar-sign" />
+                    </span>
+                  </div>
+                  <div class="watchtower-page__card-body">
+                    <h4 class="watchtower-page__card-name">{{ entry.label ?? truncateAddress(entry.mint, 8, 6) }}</h4>
+                    <code class="watchtower-page__card-addr">{{ truncateAddress(entry.mint, 8, 6) }}</code>
+                    <TrackIndicators
+                      :track-holders="entry.track_holders"
+                      :track-snapshot="entry.track_snapshot"
+                      :track-transactions="entry.track_transactions"
+                    />
+                  </div>
+                  <Icon icon="lucide:chevron-right" class="watchtower-page__card-arrow" />
+                </Card>
+              </div>
+            </section>
+
+            <section v-if="filteredNfts.length" class="watchtower-page__section">
+              <h3 class="watchtower-page__section-title">NFT collections</h3>
+              <div class="watchtower-page__grid">
+                <Card
+                  v-for="entry in filteredNfts"
+                  :key="entry.mint"
+                  class="watchtower-page__card watchtower-page__card--clickable"
+                  @click="openMint(entry)"
+                >
+                  <div class="watchtower-page__card-thumb">
+                    <img v-if="entry.image" :src="entry.image" :alt="entry.label ?? ''" class="watchtower-page__card-img" />
+                    <span v-else class="watchtower-page__card-placeholder">
+                      <Icon icon="lucide:image-off" />
+                    </span>
+                  </div>
+                  <div class="watchtower-page__card-body">
+                    <h4 class="watchtower-page__card-name">{{ entry.label ?? truncateAddress(entry.mint, 8, 6) }}</h4>
+                    <code class="watchtower-page__card-addr">{{ truncateAddress(entry.mint, 8, 6) }}</code>
+                    <TrackIndicators
+                      :track-holders="entry.track_holders"
+                      :track-snapshot="entry.track_snapshot"
+                      :track-transactions="entry.track_transactions"
+                    />
+                  </div>
+                  <Icon icon="lucide:chevron-right" class="watchtower-page__card-arrow" />
+                </Card>
+              </div>
+            </section>
+
+            <p v-if="!filteredSpl.length && !filteredNfts.length" class="watchtower-page__no-match">
+              No mints match your search.
+            </p>
+          </template>
         </template>
       </template>
-    </template>
 
-    <MintDetailModal
-      v-model="detailOpen"
-      :mint="selectedMint"
-      :tenant-id="tenantStore.tenantId ?? ''"
-    />
+      <MintDetailModal
+        v-model="detailOpen"
+        :mint="selectedMint"
+        :tenant-id="tenantStore.tenantId ?? ''"
+      />
     </div>
   </PageSection>
 </template>

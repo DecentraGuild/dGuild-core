@@ -3,7 +3,9 @@
     <div v-if="title || $slots.header || moduleId" class="page-section__header">
       <h2 v-if="title" class="page-section__title">{{ title }}</h2>
       <slot name="header" />
-      <ModuleUserCostsInfo v-if="moduleId" :module-id="moduleId" class="page-section__costs-info" />
+      <div v-if="moduleId" class="page-section__costs-info">
+        <ModuleUserCostsInfo :module-id="moduleId" />
+      </div>
     </div>
     <slot />
   </section>

@@ -18,6 +18,12 @@
             <Icon icon="lucide:loader-2" class="gates-page__spinner" />
             Loading…
           </p>
+          <p v-else-if="membershipsError" class="gates-page__error">
+            {{ membershipsError }}
+            <button type="button" class="gates-page__retry" @click="fetchMemberships">
+              Retry
+            </button>
+          </p>
           <p v-else-if="memberships.length === 0" class="gates-page__empty">
             You are not on any member lists for this community.
           </p>
@@ -53,6 +59,12 @@
               <Icon icon="lucide:loader-2" class="gates-page__spinner" />
               Loading members…
             </p>
+            <p v-else-if="membersError" class="gates-page__error">
+              {{ membersError }}
+              <button type="button" class="gates-page__retry" @click="fetchMembersForSelected">
+                Retry
+              </button>
+            </p>
             <p v-else-if="memberWallets.length === 0" class="gates-page__empty">
               No wallets on this list yet.
             </p>
@@ -62,7 +74,7 @@
                 :key="addr"
                 class="gates-page__member-item"
               >
-                <code class="gates-page__address">{{ addr }}</code>
+                <code class="gates-page__address">{{ resolveWallet(addr, 6, 4) }}</code>
                 <button
                   type="button"
                   class="gates-page__copy-btn"
@@ -88,15 +100,16 @@ import { useAuth } from '@decentraguild/auth'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
 import { useWalletOnList } from '~/composables/gates/useWalletOnList'
 
 const tenantStore = useTenantStore()
 const auth = useAuth()
+const { resolveWallet } = useMemberProfiles()
 
 const tenant = computed(() => tenantStore.tenant)
 const tenantId = computed(() => tenantStore.tenantId)
-const _slug = computed(() => tenantStore.slug ?? '')
 /** Use whichever is available first: connector (adapter) or session (fetchMe). Speeds up load after login. */
 const wallet = computed(
   () => auth.connectorState.value?.account ?? auth.wallet.value ?? null
@@ -136,6 +149,8 @@ interface Membership {
 
 const memberships = ref<Membership[]>([])
 const loading = ref(true)
+const membershipsError = ref<string | null>(null)
+const membersError = ref<string | null>(null)
 const selectedListAddress = ref<string | null>(null)
 const selectedListName = ref<string | null>(null)
 const memberWallets = ref<string[]>([])
@@ -146,15 +161,18 @@ async function fetchMemberships() {
   if (!id || !gatesVisible.value) {
     memberships.value = []
     loading.value = false
+    membershipsError.value = null
     return
   }
   loading.value = true
+  membershipsError.value = null
   try {
     const supabase = useSupabase()
     const data = await invokeEdgeFunction<{ memberships?: Membership[] }>(supabase, 'gates', { action: 'my-memberships', tenantId: id })
     memberships.value = data.memberships ?? []
-  } catch {
+  } catch (e) {
     memberships.value = []
+    membershipsError.value = e instanceof Error ? e.message : 'Failed to load memberships'
   } finally {
     loading.value = false
   }
@@ -164,15 +182,28 @@ async function fetchMembersForSelected() {
   const addr = selectedListAddress.value
   if (!addr) {
     memberWallets.value = []
+    membersError.value = null
+    return
+  }
+  const id = tenantId.value
+  if (!id) {
+    memberWallets.value = []
+    membersError.value = null
     return
   }
   membersLoading.value = true
+  membersError.value = null
   try {
     const supabase = useSupabase()
-    const data = await invokeEdgeFunction<{ entries?: string[] }>(supabase, 'gates', { action: 'entries-public', listAddress: addr })
+    const data = await invokeEdgeFunction<{ entries?: string[] }>(
+      supabase,
+      'gates',
+      { action: 'entries-public', tenantId: id, listAddress: addr },
+    )
     memberWallets.value = data.entries ?? []
-  } catch {
+  } catch (e) {
     memberWallets.value = []
+    membersError.value = e instanceof Error ? e.message : 'Failed to load list members'
   } finally {
     membersLoading.value = false
   }
@@ -214,6 +245,27 @@ watch(wallet, () => {
   margin: 0;
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
+}
+
+.gates-page__error {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-status-error, #dc2626);
+}
+
+.gates-page__retry {
+  margin-left: var(--theme-space-sm);
+  padding: 2px 8px;
+  font-size: var(--theme-font-xs);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-sm);
+  background: var(--theme-bg-primary);
+  color: var(--theme-text-primary);
+  cursor: pointer;
+}
+
+.gates-page__retry:hover {
+  background: var(--theme-bg-muted);
 }
 .gates-page__content {
   padding: var(--theme-space-md) 0;
@@ -300,6 +352,10 @@ watch(wallet, () => {
   border-radius: var(--theme-radius-lg);
   border: var(--theme-border-thin) solid var(--theme-border);
   background: var(--theme-bg-card);
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .gates-page__detail-heading {
@@ -311,6 +367,8 @@ watch(wallet, () => {
   list-style: none;
   padding: 0;
   margin: 0;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .gates-page__member-item {

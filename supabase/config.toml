@@ -118,6 +118,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.gates]
 verify_jwt = false
+[functions.member-profile]
+verify_jwt = false
 [functions.marketplace]
 verify_jwt = false
 [functions.tenant_catalog]

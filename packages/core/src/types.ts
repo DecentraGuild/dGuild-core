@@ -162,6 +162,8 @@ export interface TenantConfig {
   treasury?: string
   /** Custom domain (e.g. www.skull.com). Reserved for future use. */
   customDomain?: string | null
+  /** Admin-configured profile field visibility. Keys from ProfileFieldKey. */
+  profileFields?: ProfileFieldConfig
   createdAt?: string
   updatedAt?: string
 }
@@ -199,6 +201,69 @@ export interface MarketplaceSplAsset {
   sellerFeeBasisPoints?: number
   groupPath?: MarketplaceGroupPath
   storeBps?: number | null
+}
+
+export type ProfileFieldKey =
+  | 'nickname'
+  | 'description'
+  | 'avatar_url'
+  | 'x_handle'
+  | 'telegram_handle'
+  | 'email'
+  | 'phone'
+  | 'linked_wallets'
+
+export type ProfileFieldConfig = Partial<Record<ProfileFieldKey, boolean>>
+
+/** Canonical keys for admin profile-field toggles (keep in sync with ProfileFieldKey). */
+export const PROFILE_FIELD_KEYS: readonly ProfileFieldKey[] = [
+  'nickname',
+  'description',
+  'avatar_url',
+  'x_handle',
+  'telegram_handle',
+  'email',
+  'phone',
+  'linked_wallets',
+]
+
+/** Normalize JSONB / API values so checkboxes stay in sync (handles true, "true", 1, etc.). */
+export function coerceProfileFieldValue(v: unknown): boolean {
+  if (v === true) return true
+  if (v === false || v == null) return false
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase()
+    return s === 'true' || s === '1' || s === 'yes'
+  }
+  if (typeof v === 'number') return v === 1
+  return false
+}
+
+/** Build a clean ProfileFieldConfig from raw DB / PostgREST JSON. */
+export function normalizeProfileFieldConfig(raw: unknown): ProfileFieldConfig {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const o = raw as Record<string, unknown>
+  const out: ProfileFieldConfig = {}
+  for (const key of PROFILE_FIELD_KEYS) {
+    if (coerceProfileFieldValue(o[key])) out[key] = true
+  }
+  return out
+}
+
+export interface MemberProfile {
+  tenantId: string
+  walletAddress: string
+  memberId: string
+  nickname?: string | null
+  description?: string | null
+  avatarUrl?: string | null
+  xHandle?: string | null
+  telegramHandle?: string | null
+  email?: string | null
+  phone?: string | null
+  linkedWallets?: string[]
+  discordUserId?: string | null
+  updatedAt?: string
 }
 
 /** Gate (access list) settings: programId + account address. Alias: MarketplaceWhitelistSettings for backward compat. */

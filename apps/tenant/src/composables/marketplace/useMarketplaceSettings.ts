@@ -229,7 +229,7 @@ export function useMarketplaceSettings(opts: {
 
     let applied = 0
     for (const row of rows) {
-      let catKind = catalogByMint.get(row.mint)
+      const catKind = catalogByMint.get(row.mint)
       if (row.kind === 'nft') {
         if (catKind === 'SPL') {
           errors.push(`${row.mint}: already SPL in catalog`)

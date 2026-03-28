@@ -4,9 +4,10 @@
  */
 import { computed, ref, watch, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
-import { formatUiAmount, truncateAddress, toRawUnits, escrowPriceToHuman, sanitizeTokenLabel } from '@decentraguild/display'
+import { formatUiAmount, toRawUnits, escrowPriceToHuman, sanitizeTokenLabel } from '@decentraguild/display'
 import { useEscrowDisplay } from '~/composables/marketplace/useEscrowDisplay'
 import { useTenantStore } from '~/stores/tenant'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useMarketplaceEscrowLinks } from '~/composables/marketplace/useMarketplaceEscrowLinks'
 import { useAuth } from '@decentraguild/auth'
@@ -62,6 +63,7 @@ export function useEscrowDetail(props: {
   modelValue: Ref<boolean>
 }) {
   const tenantStore = useTenantStore()
+  const { resolveWallet } = useMemberProfiles()
   const { slug } = storeToRefs(tenantStore)
   const { shareUrl: getShareUrl } = useMarketplaceEscrowLinks(slug)
   const auth = useAuth()
@@ -531,7 +533,7 @@ export function useEscrowDetail(props: {
     copyShareLinkAndNotify,
     handleFill,
     handleCancel,
-    truncateAddress,
+    truncateAddress: resolveWallet,
     explorerLinks,
   }
 }
