@@ -22,7 +22,7 @@ export interface WHITELISTPayload {
 export interface TIME_WEIGHTEDPayload {
   mint: string
   begin_snapshot_at: string
-  end_snapshot_at: string
+  end_snapshot_at?: string
   min_percent?: number
 }
 

@@ -148,7 +148,7 @@ Deno.serve(async (req: Request) => {
     const allWhitelistListIds = new Set<string>()
     const shipmentMints = new Map<string, { begin_date: string; end_date: string }>()
     const snapshotMints = new Map<string, { days: number }>()
-    const weightedMints = new Map<string, { begin_snapshot_at: string; end_snapshot_at: string }>()
+    const weightedMints = new Map<string, { begin_snapshot_at: string; end_snapshot_at?: string }>()
     for (const conditions of conditionsByRule.values()) {
       for (const c of conditions) {
         if ((c.type === 'HOLDING') && (c.payload as HOLDINGPayload).mint) allAssetIds.add((c.payload as HOLDINGPayload).mint)
@@ -169,11 +169,12 @@ Deno.serve(async (req: Request) => {
             snapshotMints.set(c.payload.mint as string, { days })
           }
         }
-        if (c.type === 'TIME_WEIGHTED' && c.payload.mint && c.payload.begin_snapshot_at && c.payload.end_snapshot_at) {
+        if (c.type === 'TIME_WEIGHTED' && c.payload.mint && c.payload.begin_snapshot_at) {
+          const endAt = (c.payload.end_snapshot_at as string | undefined)?.trim()
           allAssetIds.add(c.payload.mint as string)
           weightedMints.set(c.payload.mint as string, {
             begin_snapshot_at: c.payload.begin_snapshot_at as string,
-            end_snapshot_at: c.payload.end_snapshot_at as string,
+            ...(endAt ? { end_snapshot_at: endAt } : {}),
           })
         }
         if (c.type === 'WHITELIST' && (c.payload as WHITELISTPayload).list_address) {
@@ -218,13 +219,15 @@ Deno.serve(async (req: Request) => {
       const snapshotRange = snapshotMints.get(m)
 
       if (weightedRange) {
-        const { data: snaps } = await db
+        let wq = db
           .from('holder_snapshots')
           .select('snapshot_at, holder_wallets')
           .eq('mint', m)
           .gte('snapshot_at', weightedRange.begin_snapshot_at)
-          .lte('snapshot_at', weightedRange.end_snapshot_at)
-          .order('snapshot_at', { ascending: true })
+        if (weightedRange.end_snapshot_at) {
+          wq = wq.lte('snapshot_at', weightedRange.end_snapshot_at)
+        }
+        const { data: snaps } = await wq.order('snapshot_at', { ascending: true })
         if (snaps?.length) {
           const n = snaps.length
           const msPerDay = 24 * 60 * 60 * 1000

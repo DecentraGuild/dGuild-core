@@ -61,9 +61,7 @@
               v-model="memberNftView"
               :combined-holders="combinedHolders"
               :holders-updated-at="display.track_holders ? display.holdersUpdatedAt : null"
-              :holders-total="isWatchtower ? watchtowerHoldersTotal : undefined"
               :loading="memberNftsLoading"
-              :loading-more="holdersLoadingMore"
               :spl-mode="holdersSectionSplMode"
               :format-token-amount="formatHolderAmount"
               :nft-link="nftLink"
@@ -71,8 +69,16 @@
               :copied-mint="copiedMint"
               :account-url="(addr) => explorerLinks.accountUrl(addr)"
               :token-url="(m) => explorerLinks.tokenUrl(m)"
+              :show-pagination="showWatchtowerHoldersPagination"
+              :holders-page="watchtowerHoldersPage"
+              :holders-page-count="watchtowerHoldersPageCount"
+              :holders-page-loading="holdersPageLoading"
+              :show-csv-download="showHoldersCsvDownload"
+              :csv-downloading="holdersCsvDownloading"
+              :csv-error="holdersCsvError"
               @copy="onHoldersCopy"
-              @load-more="loadMoreWatchtowerHolders"
+              @holders-page="goWatchtowerHoldersPage"
+              @download-csv="downloadMintHoldersCsv"
             />
             <MintDetailModalSnapshots
               v-if="showSnapshotsSection"
@@ -84,8 +90,10 @@
               :copied-wallet="copiedWallet"
               :format-holder-amount="formatHolderAmount"
               :account-url="(addr) => explorerLinks.accountUrl(addr)"
+              :csv-downloading="holdersCsvDownloading"
               @toggle="toggleSnapshot"
               @copy-wallet="(w) => copyToClipboard(w, display!.mint, 'owner', w)"
+              @download-csv="(snapshotAt) => downloadMintHoldersCsv(snapshotAt)"
             />
             <section v-if="display.track_transactions" class="mint-modal__section mint-modal__section--bordered">
               <h4 class="mint-modal__section-title">Transactions</h4>
@@ -154,7 +162,9 @@ const {
   showJson, copied, expandedSnapshotDate, memberNftView, copiedMint, copiedWallet,
   combinedHolders, showHoldersAndNftsSection, holdersSectionSplMode, memberNftsLoading, nftLink,
   snapshotsForDisplay, snapshotsLoading, holdersForSnapshot, walletsLoading, showSnapshotsSection,
-  holdersLoadingMore, watchtowerHoldersTotal, loadMoreWatchtowerHolders,
+  watchtowerHoldersPage, watchtowerHoldersPageCount,
+  showWatchtowerHoldersPagination, holdersPageLoading, goWatchtowerHoldersPage,
+  showHoldersCsvDownload, holdersCsvDownloading, holdersCsvError, downloadMintHoldersCsv,
   shipmentBannerImage, shipmentBannerSaving, jsonPreview,
   close, copyMint, copyToClipboard, onHoldersCopy, formatHolderAmount, toggleSnapshot, saveShipmentBanner,
   explorerLinks, truncateAddress,

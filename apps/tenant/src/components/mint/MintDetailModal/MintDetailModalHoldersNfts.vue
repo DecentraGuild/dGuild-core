@@ -1,28 +1,44 @@
 <template>
   <section class="mint-modal__section mint-modal__section--bordered">
-    <div class="mint-modal__section-header">
+    <div class="mint-modal__section-header mint-modal__section-header--holders">
       <h4 class="mint-modal__section-title">{{ splMode ? 'Holders' : 'Holders & NFTs' }}</h4>
-      <div v-if="!splMode" class="mint-modal__view-toggle">
+      <div class="mint-modal__section-header-actions">
         <button
+          v-if="showCsvDownload"
           type="button"
-          class="mint-modal__view-btn"
-          :class="{ 'mint-modal__view-btn--active': modelValue === 'list' }"
-          aria-label="List view"
-          @click="$emit('update:modelValue', 'list')"
+          class="mint-modal__icon-btn mint-modal__icon-btn--sm"
+          title="Download holders as CSV"
+          :disabled="csvDownloading"
+          @click="$emit('download-csv')"
         >
-          <Icon icon="lucide:list" />
+          <Icon
+            :icon="csvDownloading ? 'lucide:loader-2' : 'lucide:download'"
+            :class="{ 'mint-modal__spinner': csvDownloading }"
+          />
         </button>
-        <button
-          type="button"
-          class="mint-modal__view-btn"
-          :class="{ 'mint-modal__view-btn--active': modelValue === 'card' }"
-          aria-label="Card view"
-          @click="$emit('update:modelValue', 'card')"
-        >
-          <Icon icon="lucide:layout-grid" />
-        </button>
+        <div v-if="!splMode" class="mint-modal__view-toggle">
+          <button
+            type="button"
+            class="mint-modal__view-btn"
+            :class="{ 'mint-modal__view-btn--active': modelValue === 'list' }"
+            aria-label="List view"
+            @click="$emit('update:modelValue', 'list')"
+          >
+            <Icon icon="lucide:list" />
+          </button>
+          <button
+            type="button"
+            class="mint-modal__view-btn"
+            :class="{ 'mint-modal__view-btn--active': modelValue === 'card' }"
+            aria-label="Card view"
+            @click="$emit('update:modelValue', 'card')"
+          >
+            <Icon icon="lucide:layout-grid" />
+          </button>
+        </div>
       </div>
     </div>
+    <p v-if="csvError" class="mint-modal__csv-error">{{ csvError }}</p>
     <p v-if="holdersUpdatedAt" class="mint-modal__muted">Updated {{ formatDate(holdersUpdatedAt) }}</p>
     <div v-if="loading && !combinedHolders.length" class="mint-modal__loading">
       <Icon icon="lucide:loader-2" class="mint-modal__spinner" />
@@ -31,50 +47,64 @@
     <div v-else-if="!combinedHolders.length" class="mint-modal__empty">
       {{ splMode ? 'No holders yet. Enable Holders tracking in Watchtower.' : 'No holders or member NFTs yet. Add the collection in Address Book and enable Holders tracking.' }}
     </div>
-    <div v-else-if="splMode" class="mint-modal__nft-list mint-modal__nft-list--spl">
-      <div class="mint-modal__nft-list-header mint-modal__nft-list-header--spl">
-        <span class="mint-modal__nft-list-col mint-modal__nft-list-col--holder">Holder</span>
-        <span class="mint-modal__nft-list-col mint-modal__nft-list-col--count">Balance</span>
-      </div>
-      <div
-        v-for="h in combinedHolders"
-        :key="h.wallet"
-        class="mint-modal__nft-list-row mint-modal__nft-list-row--spl"
-      >
-        <div class="mint-modal__nft-list-col mint-modal__nft-list-col--holder">
-          <span class="mint-modal__nft-list-value">{{ truncateAddress(h.wallet, 8, 4) }}</span>
-          <button
-            type="button"
-            class="mint-modal__icon-btn mint-modal__icon-btn--sm"
-            :class="{ 'mint-modal__icon-btn--success': copiedWallet === h.wallet }"
-            :title="copiedWallet === h.wallet ? 'Copied' : 'Copy wallet'"
-            @click.stop="onCopy(h.wallet, 'owner', h.wallet)"
-          >
-            <Icon :icon="copiedWallet === h.wallet ? 'lucide:check' : 'lucide:copy'" />
-          </button>
-          <a :href="accountUrl(h.wallet)" target="_blank" rel="noopener" class="mint-modal__icon-btn mint-modal__icon-btn--sm" title="Solscan">
-            <Icon icon="lucide:external-link" />
-          </a>
+    <template v-else-if="splMode">
+      <div class="mint-modal__nft-list mint-modal__nft-list--spl">
+        <div class="mint-modal__nft-list-header mint-modal__nft-list-header--spl">
+          <span class="mint-modal__nft-list-col mint-modal__nft-list-col--holder">Holder</span>
+          <span class="mint-modal__nft-list-col mint-modal__nft-list-col--count">Balance</span>
         </div>
-        <div class="mint-modal__nft-list-col mint-modal__nft-list-col--count">
-          <span class="mint-modal__holder-amount">{{ formatTokenAmount(h.splAmount ?? '0') }}</span>
+        <div
+          v-for="h in combinedHolders"
+          :key="h.wallet"
+          class="mint-modal__nft-list-row mint-modal__nft-list-row--spl"
+        >
+          <div class="mint-modal__nft-list-col mint-modal__nft-list-col--holder">
+            <span class="mint-modal__nft-list-value">{{ truncateAddress(h.wallet, 8, 4) }}</span>
+            <button
+              type="button"
+              class="mint-modal__icon-btn mint-modal__icon-btn--sm"
+              :class="{ 'mint-modal__icon-btn--success': copiedWallet === h.wallet }"
+              :title="copiedWallet === h.wallet ? 'Copied' : 'Copy wallet'"
+              @click.stop="onCopy(h.wallet, 'owner', h.wallet)"
+            >
+              <Icon :icon="copiedWallet === h.wallet ? 'lucide:check' : 'lucide:copy'" />
+            </button>
+            <a :href="accountUrl(h.wallet)" target="_blank" rel="noopener" class="mint-modal__icon-btn mint-modal__icon-btn--sm" title="Solscan">
+              <Icon icon="lucide:external-link" />
+            </a>
+          </div>
+          <div class="mint-modal__nft-list-col mint-modal__nft-list-col--count">
+            <span class="mint-modal__holder-amount">{{ formatTokenAmount(h.splAmount ?? '0') }}</span>
+          </div>
         </div>
       </div>
-      <div
-        v-if="splMode && holdersTotal != null && combinedHolders.length < holdersTotal"
-        class="mint-modal__holders-more"
-      >
+      <div v-if="showPagination" class="mint-modal__holders-pager">
         <button
           type="button"
-          class="mint-modal__load-more"
-          :disabled="loadingMore"
-          @click="$emit('load-more')"
+          class="mint-modal__pager-btn"
+          :disabled="holdersPage <= 1 || holdersPageLoading"
+          @click="$emit('holders-page', holdersPage - 1)"
         >
-          <Icon v-if="loadingMore" icon="lucide:loader-2" class="mint-modal__spinner" />
-          {{ loadingMore ? 'Loading…' : `Load more (${holdersTotal - combinedHolders.length} remaining)` }}
+          Previous
+        </button>
+        <span class="mint-modal__pager-meta">
+          Page {{ holdersPage }} of {{ holdersPageCount }}
+          <Icon
+            v-if="holdersPageLoading"
+            icon="lucide:loader-2"
+            class="mint-modal__spinner mint-modal__pager-spinner"
+          />
+        </span>
+        <button
+          type="button"
+          class="mint-modal__pager-btn"
+          :disabled="holdersPage >= holdersPageCount || holdersPageLoading"
+          @click="$emit('holders-page', holdersPage + 1)"
+        >
+          Next
         </button>
       </div>
-    </div>
+    </template>
     <div v-else-if="modelValue === 'list'" class="mint-modal__nft-list">
       <div class="mint-modal__nft-list-header">
         <span class="mint-modal__nft-list-col mint-modal__nft-list-col--holder">Holder</span>
@@ -189,7 +219,6 @@ defineProps<{
   holdersUpdatedAt?: string | null
   holdersTotal?: number
   loading?: boolean
-  loadingMore?: boolean
   modelValue: 'list' | 'card'
   splMode?: boolean
   formatTokenAmount?: (raw: string) => string
@@ -198,12 +227,20 @@ defineProps<{
   copiedMint?: string | null
   accountUrl: (addr: string) => string
   tokenUrl: (mint: string) => string
+  showPagination?: boolean
+  holdersPage?: number
+  holdersPageCount?: number
+  holdersPageLoading?: boolean
+  showCsvDownload?: boolean
+  csvDownloading?: boolean
+  csvError?: string | null
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [v: 'list' | 'card']
   copy: [text: string, field: 'owner' | 'mint', wallet?: string]
-  'load-more': []
+  'holders-page': [page: number]
+  'download-csv': []
 }>()
 
 function onCopy(text: string, field: 'owner' | 'mint', wallet?: string) {

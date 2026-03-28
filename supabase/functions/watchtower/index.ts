@@ -4,13 +4,15 @@
  *
  * Actions:
  *   catalog – List mints with any track enabled (public).
- *   mint-detail – Metadata, holders (paginated for SPL), snapshot summaries for a mint (public).
+ *   mint-detail – Metadata, holders (SPL paginated, 1000 per page), snapshot summaries for a mint (public).
+ *   mint-holders-csv – Full holder_current or snapshot row as CSV (public, mint must be in tenant catalog).
  */
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { isMintWithinLimit } from '../_shared/watchtower-billing.ts'
 import { compareMintCatalogDisplay } from '../_shared/mint-display-sort.ts'
+import { buildHoldersCsv } from '../_shared/holders-csv.ts'
 
 function sortHoldersByAmountDesc(h: Array<{ wallet: string; amount: string }>): Array<{ wallet: string; amount: string }> {
   return [...h].sort((a, b) => {
@@ -179,8 +181,8 @@ Deno.serve(async (req: Request) => {
         : []
 
       const catalogKind = ((catalogRow as Record<string, unknown> | null)?.kind as string) ?? 'SPL'
-      const defaultLimit = 80
-      const maxLimit = 200
+      const defaultLimit = 1000
+      const maxLimit = 1000
       const holdersLimitRaw = Number(body.holdersLimit)
       const holdersOffsetRaw = Number(body.holdersOffset)
       const holdersLimit = Number.isFinite(holdersLimitRaw) && holdersLimitRaw > 0
@@ -292,6 +294,63 @@ Deno.serve(async (req: Request) => {
         memberNfts,
         ...(graceMessage && { graceMessage }),
       }, req)
+    }
+
+    // ---------------------------------------------------------------------------
+    // mint-holders-csv – full wallet list as CSV (current or snapshot row)
+    // ---------------------------------------------------------------------------
+    if (action === 'mint-holders-csv') {
+      const mint = (body.mint as string)?.trim()
+      if (!mint) return errorResponse('mint required', req)
+      const snapshotAtRaw = (body.snapshotAt as string | undefined)?.trim()
+      const snapshotAt = snapshotAtRaw || null
+
+      const { data: catRow, error: catErr } = await db
+        .from('tenant_mint_catalog')
+        .select('mint, kind')
+        .eq('tenant_id', tenantId)
+        .eq('mint', mint)
+        .maybeSingle()
+      if (catErr) return errorResponse(catErr.message, req, 500)
+      if (!catRow) return errorResponse('Mint not found in catalog', req, 404)
+
+      const catalogKind = ((catRow as { kind?: string }).kind as string) ?? 'SPL'
+
+      let rawHolders: unknown[] = []
+      if (snapshotAt) {
+        const { data: snap, error: snapErr } = await db
+          .from('holder_snapshots')
+          .select('holder_wallets')
+          .eq('mint', mint)
+          .eq('snapshot_at', snapshotAt)
+          .maybeSingle()
+        if (snapErr) return errorResponse(snapErr.message, req, 500)
+        rawHolders = (snap?.holder_wallets as unknown[]) ?? []
+      } else {
+        const { data: cur, error: curErr } = await db
+          .from('holder_current')
+          .select('holder_wallets')
+          .eq('mint', mint)
+          .maybeSingle()
+        if (curErr) return errorResponse(curErr.message, req, 500)
+        rawHolders = (cur?.holder_wallets as unknown[]) ?? []
+      }
+
+      const allHoldersNorm = rawHolders
+        .map((h) =>
+          typeof h === 'string'
+            ? { wallet: h, amount: '1' }
+            : { wallet: (h as { wallet?: string }).wallet ?? '', amount: (h as { amount?: string }).amount ?? '1' },
+        )
+        .filter((h) => h.wallet)
+
+      let rows = allHoldersNorm
+      if (catalogKind === 'SPL' && rows.length > 0) {
+        rows = sortHoldersByAmountDesc(rows)
+      }
+
+      const csv = buildHoldersCsv(rows)
+      return jsonResponse({ csv }, req)
     }
 
     return errorResponse(`Unknown action: ${action}`, req, 400)

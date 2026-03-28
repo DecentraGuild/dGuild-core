@@ -237,7 +237,10 @@ Deno.serve(async (req: Request) => {
           }
         }
         const supplyLabel = label || '?'
-        return `Holding at least ${minPct}% of the total supply of ${supplyLabel} during the period of ${formatDate(beginAt)} and ${formatDate(endAt)}`
+        if (endAt) {
+          return `Holding at least ${minPct}% of the total supply of ${supplyLabel} during the period of ${formatDate(beginAt)} and ${formatDate(endAt)}`
+        }
+        return `Holding at least ${minPct}% of the total supply of ${supplyLabel} from ${formatDate(beginAt)} through the latest snapshot`
       }
       return `Holding ${amountStr} ${label}`
     }
