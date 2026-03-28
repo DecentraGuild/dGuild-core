@@ -26,10 +26,20 @@ import {
   loadWatchtowerSyncConfig,
 } from '../_shared/watchtower-sync-config.ts'
 import { getRpcUrl } from '../_shared/rpc-url.ts'
-import { fetchSplHolders } from '../_shared/fetch-spl-holders.ts'
+import { fetchSplHoldersWithProgress, holderWalletsJsonToMap } from '../_shared/fetch-spl-holders.ts'
 
 const METADATA_REFRESH_AGE_DAYS = 7
 const CHUNK_SIZE = 8
+
+function splCronPageBudget(): number {
+  const n = Number(Deno.env.get('SPL_HOLDERS_MAX_PAGES_PER_TICK') ?? '12')
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 12
+}
+
+function splAdminPageBudget(): number {
+  const n = Number(Deno.env.get('SPL_HOLDERS_ADMIN_MAX_PAGES_PER_TICK') ?? '40')
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 40
+}
 
 // ---------------------------------------------------------------------------
 // RPC helpers
@@ -234,13 +244,56 @@ Deno.serve(async (req: Request) => {
     }
 
     let holders: Array<{ wallet: string; amount: string }>
+    let splCompleted = true
+
     if (kind === 'SPL') {
-      holders = await fetchSplHolders(rpcEndpoint, syncMint)
+      const { data: gpaRow } = await db
+        .from('spl_holder_gpa_progress')
+        .select('pagination_key')
+        .eq('mint', syncMint)
+        .maybeSingle()
+
+      const resumeKey = gpaRow?.pagination_key ?? null
+      const resuming = resumeKey != null
+
+      let mergeMap = new Map<string, bigint>()
+      if (resuming) {
+        const { data: cur } = await db
+          .from('holder_current')
+          .select('holder_wallets')
+          .eq('mint', syncMint)
+          .maybeSingle()
+        mergeMap = holderWalletsJsonToMap(cur?.holder_wallets)
+      }
+
+      const spl = await fetchSplHoldersWithProgress(rpcEndpoint, syncMint, {
+        resumePaginationKey: resumeKey,
+        mergeInto: mergeMap,
+        maxPages: splAdminPageBudget(),
+      })
+      holders = spl.holders
+      splCompleted = spl.completed
+
+      if (!spl.completed && spl.nextPaginationKey != null) {
+        await db.from('spl_holder_gpa_progress').upsert({
+          mint: syncMint,
+          pagination_key: spl.nextPaginationKey,
+          updated_at: now.toISOString(),
+        }, { onConflict: 'mint' })
+      } else {
+        await db.from('spl_holder_gpa_progress').delete().eq('mint', syncMint)
+      }
     } else {
       holders = await fetchNftHolders(rpcEndpoint, syncMint)
     }
 
-    if (syncCurrent) {
+    if (kind === 'SPL') {
+      await db.from('holder_current').upsert({
+        mint: syncMint,
+        holder_wallets: holders,
+        last_updated: now.toISOString(),
+      }, { onConflict: 'mint' })
+    } else if (syncCurrent) {
       await db.from('holder_current').upsert({
         mint: syncMint,
         holder_wallets: holders,
@@ -249,6 +302,14 @@ Deno.serve(async (req: Request) => {
     }
 
     if (syncSnapshot) {
+      if (kind === 'SPL' && !splCompleted) {
+        return jsonResponse({
+          processed: 1,
+          synced: 0,
+          splHoldersContinuing: true,
+          message: 'SPL holder sync in progress; snapshot is written when the holder scan completes.',
+        }, req)
+      }
       const { data: existing } = await db
         .from('holder_snapshots')
         .select('mint')
@@ -266,7 +327,11 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return jsonResponse({ processed: 1, synced: 1 }, req)
+    return jsonResponse({
+      processed: 1,
+      synced: kind === 'SPL' && !splCompleted ? 0 : 1,
+      splHoldersContinuing: kind === 'SPL' && !splCompleted,
+    }, req)
   }
 
   // -------------------------------------------------------------------------
@@ -374,6 +439,18 @@ Deno.serve(async (req: Request) => {
     .eq('snapshot_at', snapshotAt)
   const existingSnapMints = new Set((existingSnaps ?? []).map((s) => s.mint as string))
 
+  const { data: gpaRows } = await db
+    .from('spl_holder_gpa_progress')
+    .select('mint, pagination_key')
+    .in('mint', mintKeys)
+
+  const gpaByMint = new Map<string, string>()
+  for (const r of gpaRows ?? []) {
+    const m = r.mint as string | undefined
+    const k = r.pagination_key as string | undefined
+    if (m && k) gpaByMint.set(m, k)
+  }
+
   let processed = 0
   let synced = 0
 
@@ -400,7 +477,10 @@ Deno.serve(async (req: Request) => {
     )
     const snapshotDue = anySnapshot && !existingSnapMints.has(mint)
 
-    if (!currentDue && !snapshotDue) {
+    const splResumeKey = kind === 'SPL' ? gpaByMint.get(mint) ?? null : null
+    const splIncomplete = kind === 'SPL' && splResumeKey != null
+
+    if (!currentDue && !snapshotDue && !splIncomplete) {
       processed++
       continue
     }
@@ -410,16 +490,48 @@ Deno.serve(async (req: Request) => {
         await refreshMintMetadataIfStale(db, rpcEndpoint, mint, now)
       }
 
-      // Single RPC fetch — shared by both adopters
       let holders: Array<{ wallet: string; amount: string }>
+      let splCompleted = true
+
       if (kind === 'SPL') {
-        holders = await fetchSplHolders(rpcEndpoint, mint)
+        let mergeMap = new Map<string, bigint>()
+        if (splIncomplete) {
+          const { data: cur } = await db
+            .from('holder_current')
+            .select('holder_wallets')
+            .eq('mint', mint)
+            .maybeSingle()
+          mergeMap = holderWalletsJsonToMap(cur?.holder_wallets)
+        }
+        const spl = await fetchSplHoldersWithProgress(rpcEndpoint, mint, {
+          resumePaginationKey: splResumeKey,
+          mergeInto: mergeMap,
+          maxPages: splCronPageBudget(),
+        })
+        holders = spl.holders
+        splCompleted = spl.completed
+        if (!spl.completed && spl.nextPaginationKey != null) {
+          await db.from('spl_holder_gpa_progress').upsert({
+            mint,
+            pagination_key: spl.nextPaginationKey,
+            updated_at: now.toISOString(),
+          }, { onConflict: 'mint' })
+          gpaByMint.set(mint, spl.nextPaginationKey)
+        } else {
+          await db.from('spl_holder_gpa_progress').delete().eq('mint', mint)
+          gpaByMint.delete(mint)
+        }
       } else {
         holders = await fetchNftHolders(rpcEndpoint, mint)
       }
 
-      // Adopter A: global current holders
-      if (currentDue) {
+      if (kind === 'SPL') {
+        await db.from('holder_current').upsert({
+          mint,
+          holder_wallets: holders,
+          last_updated: now.toISOString(),
+        }, { onConflict: 'mint' })
+      } else if (currentDue) {
         await db.from('holder_current').upsert({
           mint,
           holder_wallets: holders,
@@ -427,8 +539,7 @@ Deno.serve(async (req: Request) => {
         }, { onConflict: 'mint' })
       }
 
-      // Adopter B: global snapshot bucket
-      if (snapshotDue) {
+      if (snapshotDue && (kind !== 'SPL' || splCompleted)) {
         await db.from('holder_snapshots').upsert({
           mint,
           snapshot_at: snapshotAt,
