@@ -68,6 +68,7 @@ import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import MintListItem from '~/components/mint/MintListItem.vue'
 import type { CatalogMintItem } from '~/types/mints'
+import { compareMintDisplayName } from '~/utils/mintDisplaySort'
 
 const props = defineProps<{
   mints: CatalogMintItem[]
@@ -86,13 +87,23 @@ const emit = defineEmits<{
 const splMints = computed(() =>
   props.mints
     .filter((m) => m.kind === 'SPL')
-    .sort((a, b) => a.label.localeCompare(b.label))
+    .sort((a, b) =>
+      compareMintDisplayName(
+        { mint: a.mint, label: a.label, symbol: a.symbol ?? null },
+        { mint: b.mint, label: b.label, symbol: b.symbol ?? null },
+      ),
+    ),
 )
 
 const nftMints = computed(() =>
   props.mints
     .filter((m) => m.kind === 'NFT')
-    .sort((a, b) => a.label.localeCompare(b.label))
+    .sort((a, b) =>
+      compareMintDisplayName(
+        { mint: a.mint, label: a.label, symbol: a.symbol ?? null },
+        { mint: b.mint, label: b.label, symbol: b.symbol ?? null },
+      ),
+    ),
 )
 </script>
 

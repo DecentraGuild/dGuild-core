@@ -8,6 +8,7 @@ import { ADDRESS_BOOK_DEFAULT_MINTS } from '@decentraguild/core'
 import { useTenantStore } from '~/stores/tenant'
 import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
 import { useSupabase } from '~/composables/core/useSupabase'
+import { sortByMintDisplayName } from '~/utils/mintDisplaySort'
 
 export interface AddressBookEntry {
   id?: number
@@ -68,21 +69,23 @@ export function useAddressBook() {
         }
       }
       const defaults = defaultEntriesFromMeta(metaByMint)
-      const catalogEntries = data
-        .filter((row) => !DEFAULT_MINT_SET.has(row.mint))
-        .map((row) => ({
-          id: row.id,
-          mint: row.mint,
-          kind: row.kind,
-          tier: 'base' as const,
-          label: row.label,
-          image: row.image,
-          name: row.name,
-          symbol: row.symbol ?? null,
-          collectionSize: row.collectionSize,
-          uniqueTraitCount: row.uniqueTraitCount,
-          traitIndex: row.trait_index,
-        }))
+      const catalogEntries = sortByMintDisplayName(
+        data
+          .filter((row) => !DEFAULT_MINT_SET.has(row.mint))
+          .map((row) => ({
+            id: row.id,
+            mint: row.mint,
+            kind: row.kind,
+            tier: 'base' as const,
+            label: row.label,
+            image: row.image,
+            name: row.name,
+            symbol: row.symbol ?? null,
+            collectionSize: row.collectionSize,
+            uniqueTraitCount: row.uniqueTraitCount,
+            traitIndex: row.trait_index,
+          })),
+      )
       entries.value = [...defaults, ...catalogEntries]
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load address book'

@@ -26,8 +26,7 @@
             </div>
             <div class="admin__module-cell admin__module-cell--name">
               <span class="admin__module-name">{{ MODULE_NAV[id]?.label ?? id }}</span>
-              <Badge v-if="moduleStatus(id) === 'coming_soon'" variant="outline" class="admin__module-badge">Coming soon</Badge>
-              <Badge v-else-if="moduleStatus(id) === 'deprecated'" variant="outline" class="admin__module-badge">Deprecated</Badge>
+              <Badge v-if="moduleStatus(id) === 'deprecated'" variant="outline" class="admin__module-badge">Deprecated</Badge>
             </div>
             <div class="admin__module-cell admin__module-cell--actions">
               <button

@@ -4,6 +4,7 @@ import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
 import type { SubscriptionInfo, WatchtowerSubscriptionByScope } from './useAdminSubscriptions'
+import { sortByMintDisplayName } from '~/utils/mintDisplaySort'
 
 interface MintRow {
   mint: string
@@ -164,12 +165,20 @@ export function useAdminWatchtowerScope(
       const metaByMint = new Map<string, { name: string | null; image: string | null }>(
         metaData.map((m) => [m.mint, { name: m.name, image: m.image }])
       )
-      mints.value = catalogRows
-        .filter((r) => !isBaseCurrencyMint(r.mint as string))
-        .map((r) => {
-          const meta = metaByMint.get(r.mint as string)
-          return { mint: r.mint as string, kind: r.kind as string, label: r.label as string | null, name: meta?.name ?? null, image: meta?.image ?? null }
-        })
+      mints.value = sortByMintDisplayName(
+        catalogRows
+          .filter((r) => !isBaseCurrencyMint(r.mint as string))
+          .map((r) => {
+            const meta = metaByMint.get(r.mint as string)
+            return {
+              mint: r.mint as string,
+              kind: r.kind as string,
+              label: r.label as string | null,
+              name: meta?.name ?? null,
+              image: meta?.image ?? null,
+            }
+          }),
+      )
       watches.value = (watchesRes.data ?? []).map((r) => ({
         mint: r.mint as string,
         track_holders: Boolean(r.track_holders),

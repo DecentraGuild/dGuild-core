@@ -48,6 +48,7 @@ import type {
   SplAssetMint,
   CatalogMintItem,
 } from '~/types/mints'
+import { sortByMintDisplayName } from '~/utils/mintDisplaySort'
 
 defineProps<{
   slug: string
@@ -78,7 +79,7 @@ async function fetchAddressBook() {
   if (!id) return
   loading.value = true
   try {
-    const data = await catalog.list()
+    const data = sortByMintDisplayName(await catalog.list())
     const entries: AddressBookEntry[] = data.map((r) => ({
       id: r.id,
       mint: r.mint,

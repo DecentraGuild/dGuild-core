@@ -10,6 +10,7 @@
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { isMintWithinLimit } from '../_shared/watchtower-billing.ts'
+import { compareMintCatalogDisplay } from '../_shared/mint-display-sort.ts'
 
 Deno.serve(async (req: Request) => {
   try {
@@ -88,6 +89,7 @@ Deno.serve(async (req: Request) => {
         }
       })
 
+      entries.sort(compareMintCatalogDisplay)
       return jsonResponse({ entries }, req)
     }
 

@@ -122,6 +122,7 @@ import { useSupabase } from '~/composables/core/useSupabase'
 import { isModuleVisibleToMembers } from '@decentraguild/core'
 import MintDetailModal from '~/components/mint/MintDetailModal/index.vue'
 import TrackIndicators from '~/components/mint/TrackIndicators.vue'
+import { compareMintDisplayName } from '~/utils/mintDisplaySort'
 
 const tenantStore = useTenantStore()
 const watchtowerVisible = computed(() =>
@@ -157,8 +158,22 @@ const filteredEntries = computed(() => {
   })
 })
 
-const filteredSpl = computed(() => filteredEntries.value.filter((e) => e.kind === 'SPL'))
-const filteredNfts = computed(() => filteredEntries.value.filter((e) => e.kind === 'NFT'))
+const filteredSpl = computed(() =>
+  [...filteredEntries.value.filter((e) => e.kind === 'SPL')].sort((a, b) =>
+    compareMintDisplayName(
+      { mint: a.mint, name: a.name, label: a.label },
+      { mint: b.mint, name: b.name, label: b.label },
+    ),
+  ),
+)
+const filteredNfts = computed(() =>
+  [...filteredEntries.value.filter((e) => e.kind === 'NFT')].sort((a, b) =>
+    compareMintDisplayName(
+      { mint: a.mint, name: a.name, label: a.label },
+      { mint: b.mint, name: b.name, label: b.label },
+    ),
+  ),
+)
 
 async function fetchCatalog() {
   const id = tenantStore.tenantId
