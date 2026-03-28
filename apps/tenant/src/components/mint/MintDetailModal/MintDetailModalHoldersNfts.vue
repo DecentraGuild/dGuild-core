@@ -60,6 +60,20 @@
           <span class="mint-modal__holder-amount">{{ formatTokenAmount(h.splAmount ?? '0') }}</span>
         </div>
       </div>
+      <div
+        v-if="splMode && holdersTotal != null && combinedHolders.length < holdersTotal"
+        class="mint-modal__holders-more"
+      >
+        <button
+          type="button"
+          class="mint-modal__load-more"
+          :disabled="loadingMore"
+          @click="$emit('load-more')"
+        >
+          <Icon v-if="loadingMore" icon="lucide:loader-2" class="mint-modal__spinner" />
+          {{ loadingMore ? 'Loading…' : `Load more (${holdersTotal - combinedHolders.length} remaining)` }}
+        </button>
+      </div>
     </div>
     <div v-else-if="modelValue === 'list'" class="mint-modal__nft-list">
       <div class="mint-modal__nft-list-header">
@@ -173,7 +187,9 @@ interface CombinedHolder {
 defineProps<{
   combinedHolders: CombinedHolder[]
   holdersUpdatedAt?: string | null
+  holdersTotal?: number
   loading?: boolean
+  loadingMore?: boolean
   modelValue: 'list' | 'card'
   splMode?: boolean
   formatTokenAmount?: (raw: string) => string
@@ -187,6 +203,7 @@ defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [v: 'list' | 'card']
   copy: [text: string, field: 'owner' | 'mint', wallet?: string]
+  'load-more': []
 }>()
 
 function onCopy(text: string, field: 'owner' | 'mint', wallet?: string) {
