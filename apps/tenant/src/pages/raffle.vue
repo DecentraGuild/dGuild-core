@@ -50,6 +50,9 @@
                 >
                   {{ r.chainData.stateDisplay }}
                 </span>
+                <p v-if="r.chainData?.winner" class="raffle-card__winner">
+                  Winner: {{ resolveWallet(r.chainData.winner, 8, 4) }}
+                </p>
                 <div v-if="r.chainData" class="raffle-card__footer">
                   <span
                     class="raffle-card__mint-name"
@@ -89,6 +92,21 @@
               >
                 <h4 class="raffle-panel__reward-title">Prize</h4>
                 <p class="raffle-panel__reward-value">{{ formatPrizeLine(selectedRaffle.chainData) }}</p>
+              </div>
+              <div v-if="selectedRaffle.chainData?.winner" class="raffle-panel__winner">
+                <h4 class="raffle-panel__winner-title">Winner</h4>
+                <p class="raffle-panel__winner-row">
+                  <span class="raffle-panel__winner-value">{{ resolveWallet(selectedRaffle.chainData.winner, 8, 6) }}</span>
+                  <a
+                    :href="accountUrl(selectedRaffle.chainData.winner)"
+                    target="_blank"
+                    rel="noopener"
+                    class="raffle-panel__winner-link"
+                    title="View on explorer"
+                  >
+                    <Icon icon="lucide:external-link" />
+                  </a>
+                </p>
               </div>
               <template v-if="canBuyTickets">
                 <div class="raffle-panel__field">
@@ -146,7 +164,7 @@ const {
   loading, selectedRaffle, buyAmount, buySubmitting, buyTxStatus, buyError,
   visibleRaffles, canBuyTickets, availableTickets, canSubmitBuy, formatTotalCost,
   prizeConfigured, mintCatalogLabel, mintCatalogLabelLong, formatPrizeLine, formatTicketPrice,
-  selectRaffle, onBuyTickets,
+  selectRaffle, onBuyTickets, resolveWallet,
 } = useRafflePublic(tenantId, connection)
 </script>
 
@@ -270,6 +288,13 @@ const {
   margin-bottom: var(--theme-space-sm);
 }
 
+.raffle-card__winner {
+  margin: 0 0 var(--theme-space-sm);
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 .raffle-card__footer {
   display: flex;
   align-items: center;
@@ -362,6 +387,47 @@ const {
   font-size: var(--theme-font-md);
   font-weight: 600;
   color: var(--theme-text-primary);
+}
+
+.raffle-panel__winner {
+  margin: 0 0 var(--theme-space-md);
+  padding-top: var(--theme-space-sm);
+  border-top: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.raffle-panel__winner-title {
+  margin: 0 0 var(--theme-space-xs);
+  font-size: var(--theme-font-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--theme-text-secondary);
+}
+
+.raffle-panel__winner-row {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  flex-wrap: wrap;
+}
+
+.raffle-panel__winner-value {
+  font-size: var(--theme-font-md);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  font-family: var(--theme-font-mono, monospace);
+  word-break: break-all;
+}
+
+.raffle-panel__winner-link {
+  color: var(--theme-primary);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.raffle-panel__winner-link:hover {
+  color: var(--theme-primary-hover);
 }
 
 .raffle-panel__field {

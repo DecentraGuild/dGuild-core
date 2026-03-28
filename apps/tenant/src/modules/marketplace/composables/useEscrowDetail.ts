@@ -533,7 +533,7 @@ export function useEscrowDetail(props: {
     copyShareLinkAndNotify,
     handleFill,
     handleCancel,
-    truncateAddress: resolveWallet,
+    walletLabel: resolveWallet,
     explorerLinks,
   }
 }

@@ -9,6 +9,7 @@ interface ProfileEntry {
   wallet_address: string
   member_id: string
   nickname: string | null
+  linked_wallets?: string[] | null
 }
 
 function canonicalSolanaAddress(address: string): string | null {
@@ -19,6 +20,14 @@ function canonicalSolanaAddress(address: string): string | null {
   } catch {
     return null
   }
+}
+
+function addNicknameKeys(map: Map<string, string>, addressRaw: string, nickname: string) {
+  const raw = addressRaw.trim()
+  if (!raw) return
+  const canon = canonicalSolanaAddress(raw) ?? raw
+  map.set(canon, nickname)
+  if (raw !== canon) map.set(raw, nickname)
 }
 
 const tenantNicknameMaps = shallowRef(new Map<string, Map<string, string>>())
@@ -39,10 +48,11 @@ async function loadForTenant(tenantId: string) {
     for (const p of data.profiles ?? []) {
       const nick = typeof p.nickname === 'string' ? p.nickname.trim() : ''
       if (!nick) continue
-      const raw = (p.wallet_address ?? '').trim()
-      const canon = canonicalSolanaAddress(raw) ?? raw
-      built.set(canon, nick)
-      if (raw !== canon) built.set(raw, nick)
+      addNicknameKeys(built, p.wallet_address ?? '', nick)
+      const linked = Array.isArray(p.linked_wallets) ? p.linked_wallets : []
+      for (const lw of linked) {
+        if (typeof lw === 'string' && lw.trim()) addNicknameKeys(built, lw, nick)
+      }
     }
     inner = built
   } catch {

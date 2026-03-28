@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
   if (action === 'profiles') {
     const { data, error } = await db
       .from('tenant_member_profiles')
-      .select('wallet_address, member_id, nickname')
+      .select('wallet_address, member_id, nickname, linked_wallets')
       .eq('tenant_id', tenantId)
 
     if (error) return errorResponse(error.message, req, 500)
