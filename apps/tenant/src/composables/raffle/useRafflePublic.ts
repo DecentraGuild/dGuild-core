@@ -10,6 +10,7 @@ import {
 import { PublicKey } from '@solana/web3.js'
 import { useMintLabels } from '~/composables/mint/useMintLabels'
 import { useMintMetadata } from '~/composables/mint/useMintMetadata'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 import { useSupabase } from '~/composables/core/useSupabase'
 import type { Connection } from '@solana/web3.js'
 
@@ -67,6 +68,7 @@ export function useRafflePublic(
 
   const { labelByMint } = useMintLabels(mintsForCatalogLabels)
   const { fetchMetadata } = useMintMetadata()
+  const { resolveWallet } = useMemberProfiles()
   const decimalsByMint = ref<Map<string, number>>(new Map())
 
   watch(
@@ -227,5 +229,6 @@ export function useRafflePublic(
     visibleRaffles, canBuyTickets, availableTickets, canSubmitBuy, formatTotalCost,
     prizeConfigured, mintCatalogLabel, mintCatalogLabelLong, formatPrizeLine, formatTicketPrice,
     selectRaffle, onBuyTickets,
+    resolveWallet,
   }
 }

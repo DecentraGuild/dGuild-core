@@ -29,6 +29,19 @@
     <p v-if="slotCard.chainData && slotCard.chainData.ticketsTotal > 0" class="raffle-slot-card__tickets">
       Tickets: {{ slotCard.chainData.ticketsSold }} / {{ slotCard.chainData.ticketsTotal }}
     </p>
+    <div v-if="slotCard.chainData?.winner" class="raffle-slot-card__winner">
+      <span class="raffle-slot-card__winner-label">Winner</span>
+      <code class="raffle-slot-card__winner-wallet">{{ resolveWallet(slotCard.chainData.winner, 8, 4) }}</code>
+      <a
+        :href="accountUrl(slotCard.chainData.winner)"
+        target="_blank"
+        rel="noopener"
+        class="raffle-slot-card__link"
+        title="View winner on explorer"
+      >
+        <Icon icon="lucide:external-link" />
+      </a>
+    </div>
     <p v-if="actionError && slotCard.raffle?.rafflePubkey === actionErrorRaffle" class="raffle-slot-card__error">{{ actionError }}</p>
     <div class="raffle-slot-card__actions">
       <Button v-if="canAddReward" variant="ghost" class="raffle-slot-card__action" @click="$emit('add-reward')">
@@ -69,6 +82,7 @@ import type { RaffleChainData } from '@decentraguild/web3'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import { formatDate, fromRawUnits } from '@decentraguild/display'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 
 interface RaffleItem {
   id: string
@@ -104,6 +118,7 @@ defineEmits<{
 }>()
 
 const { accountUrl } = useExplorerLinks()
+const { resolveWallet } = useMemberProfiles()
 
 const isSubmitting = computed(() => props.actionSubmitting === props.slotCard.raffle?.rafflePubkey)
 
@@ -243,6 +258,26 @@ function ticketMintShort(chainData: RaffleChainData): string {
   margin: 0 0 var(--theme-space-sm);
   font-size: var(--theme-font-xs);
   color: var(--theme-text-secondary);
+}
+.raffle-slot-card__winner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--theme-space-xs);
+  margin: 0 0 var(--theme-space-sm);
+  font-size: var(--theme-font-xs);
+}
+.raffle-slot-card__winner-label {
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.raffle-slot-card__winner-wallet {
+  font-family: var(--theme-font-mono, monospace);
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-primary);
+  word-break: break-all;
 }
 .raffle-slot-card__error {
   margin: 0 0 var(--theme-space-xs);

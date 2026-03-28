@@ -17,7 +17,7 @@
       <dl class="escrow-modal__details-list">
         <dt>Escrow</dt>
         <dd>
-          <code>{{ truncateAddress(escrowId ?? '', 8, 8) }}</code>
+          <code>{{ walletLabel(escrowId ?? '', 8, 8) }}</code>
           <a
             v-if="escrowId"
             :href="explorerLinks.accountUrl(escrowId)"
@@ -34,19 +34,19 @@
         </dd>
         <dt>Maker</dt>
         <dd>
-          <code>{{ truncateAddress(escrow.account.maker.toBase58(), 8, 8) }}</code>
+          <code>{{ walletLabel(escrow.account.maker.toBase58(), 8, 8) }}</code>
           <a :href="explorerLinks.accountUrl(escrow.account.maker.toBase58())" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="lucide:external-link" /></a>
           <button type="button" class="escrow-modal__copy" aria-label="Copy maker address" @click="copyToClipboard(escrow.account.maker.toBase58(), 'Maker address')"><Icon icon="lucide:copy" /></button>
         </dd>
         <dt>Deposit token</dt>
         <dd>
-          <code>{{ truncateAddress(escrow.account.depositToken.toBase58(), 8, 8) }}</code>
+          <code>{{ walletLabel(escrow.account.depositToken.toBase58(), 8, 8) }}</code>
           <a :href="explorerLinks.tokenUrl(escrow.account.depositToken.toBase58())" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="lucide:external-link" /></a>
           <button type="button" class="escrow-modal__copy" aria-label="Copy mint" @click="copyToClipboard(escrow.account.depositToken.toBase58(), 'Deposit token mint')"><Icon icon="lucide:copy" /></button>
         </dd>
         <dt>Request token</dt>
         <dd>
-          <code>{{ truncateAddress(escrow.account.requestToken.toBase58(), 8, 8) }}</code>
+          <code>{{ walletLabel(escrow.account.requestToken.toBase58(), 8, 8) }}</code>
           <a :href="explorerLinks.tokenUrl(escrow.account.requestToken.toBase58())" target="_blank" rel="noopener" class="escrow-modal__link" title="View on Solscan"><Icon icon="lucide:external-link" /></a>
           <button type="button" class="escrow-modal__copy" aria-label="Copy mint" @click="copyToClipboard(escrow.account.requestToken.toBase58(), 'Request token mint')"><Icon icon="lucide:copy" /></button>
         </dd>
@@ -57,7 +57,7 @@
           <TokenAmountWithLabel v-if="display" :amount="display.depositAmount" :decimals="display.depositDecimals" :symbol="display.depositSymbol" :name="display.depositName" :mint="escrow.account.depositToken.toBase58()" :show-mint-short="false" />
         </dd>
         <dt>Recipient</dt>
-        <dd>{{ isPublicRecipient ? 'Any wallet' : truncateAddress(escrow.account.recipient.toBase58(), 8, 8) }}</dd>
+        <dd>{{ isPublicRecipient ? 'Any wallet' : walletLabel(escrow.account.recipient.toBase58(), 8, 8) }}</dd>
       </dl>
     </div>
     <div v-if="showQrAndLink" class="escrow-modal__details-col-right">
@@ -98,7 +98,7 @@ const props = defineProps<{
   shareUrlValue: string
   shareQrDataUrl: string
   showQrAndLink?: boolean
-  truncateAddress: (addr: string, a: number, b: number) => string
+  walletLabel: (addr: string, a: number, b: number) => string
   explorerLinks: { accountUrl: (a: string) => string; tokenUrl: (a: string) => string }
   copyToClipboard: (text: string, label: string) => void
 }>()
