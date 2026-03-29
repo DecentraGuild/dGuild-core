@@ -1,0 +1,43 @@
+,,,,
+,Admin,,,
+,Registration,19,USDC,One-time
+,Slug,49,USDC,Yearly
+,,,,
+,Memberlist,,,
+,Create list,50,USDC,One-time
+,Memberprofile,0,USDC,Free
+,Memberslot,0.00129,SOL,Reclaimable
+,,,,
+,Watchtower,,,
+,Current holders,5,USDC,Monthly
+,Snapshots,5,USDC,Monthly
+,Transactions,20,USDC,Monthly
+,,,,
+,Shipment,,,
+,Create shipment,0,USDC,Free
+,Claim shipment,0,USDC,Free
+,Register token,0.002,SOL,One-time per mint to drop
+,Compress slot,0.0002,SOL,Per wallet
+,,,,
+,Discord,,,
+,Link server,0,USDC,Free
+,,,,
+,Crafter,,,
+,Create token,5,USDC,One-time
+,Mint/Burn/Edit,0,USDC,Free
+,,,,
+,Market,,,
+,Base (1-10 mints),0,USDC,Free
+,Growth (11-100 mints),19,USDC,Monthly
+,Base (101-250 mints),29,USDC,Monthly
+,Custom Currency,5,USDC,Monthly
+,Add store fee,10,USDC,Monthly
+,Maker-fee,0.001,SOL,Per trade
+,Taker-fee,0.0006,SOL,Per trade
+,,,,
+,Raffle,,,
+,Base (1 slot),5,USDC,Per raffle
+,Growth (3 slots),15,USDC,Monthly
+,Pro (10 slots),29,USDC,Monthly
+,Extra slot,5,USDC,Monthly
+,Purchase fee,0.001,SOL,Per purchase

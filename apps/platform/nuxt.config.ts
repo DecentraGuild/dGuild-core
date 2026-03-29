@@ -28,6 +28,7 @@ export default defineNuxtConfig({
         '/docs/general/creating-a-dguild',
         '/docs/general/directory',
         '/docs/general/billing-overview',
+        '/docs/general/price-list',
         '/docs/modules/admin',
         '/docs/modules/admin/domains-and-slugs',
         '/docs/modules/marketplace',
