@@ -184,9 +184,11 @@ const displayModules = computed(() =>
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.modules__card:hover {
+.modules__card:hover,
+.modules__card:focus-within {
   transform: translateY(-2px);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+  border-color: var(--theme-primary);
 }
 
 .modules__card-bg-icon {
@@ -210,7 +212,8 @@ const displayModules = computed(() =>
   transition: opacity 0.15s ease;
 }
 
-.modules__card:hover .modules__card-bg-icon-svg {
+.modules__card:hover .modules__card-bg-icon-svg,
+.modules__card:focus-within .modules__card-bg-icon-svg {
   opacity: 0;
 }
 

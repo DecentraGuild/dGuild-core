@@ -231,7 +231,14 @@ const {
 .raffle-card__overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 40%, transparent 70%);
+  /* Full-card darken so type reads on bright art; stronger band at bottom where copy sits */
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.88) 0%,
+    rgba(0, 0, 0, 0.52) 38%,
+    rgba(0, 0, 0, 0.32) 68%,
+    rgba(0, 0, 0, 0.22) 100%
+  );
   pointer-events: none;
 }
 
