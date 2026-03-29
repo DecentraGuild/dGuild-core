@@ -1,10 +1,5 @@
 import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js'
 import {
-  SolanaSignIn,
-  type SolanaSignInInput,
-  type SolanaSignInOutput,
-} from '@solana/wallet-standard-features'
-import {
   ConnectorClient,
   createSolanaMainnet,
   getDefaultConfig,
@@ -381,25 +376,18 @@ async function signAllTransactionsLedgerSafe<T extends Transaction | VersionedTr
 /**
  * Adapter for `supabase.auth.signInWithWeb3({ chain: 'solana', wallet })`.
  *
- * Desktop path: `connectWallet` first, then pass this adapter to Supabase.
+ * Expose **only** `signMessage` + `publicKey`. If we also exposed Wallet Standard `signIn`,
+ * `@supabase/auth-js` would prefer it and set `message = TextDecoder.decode(signedMessage)`;
+ * for Ledger, `signedMessage` is off-chain **binary**, not SIWS text, so SIWS parse fails
+ * (`message needs at least 6 lines`) and GoTrue gets garbage. The `signMessage` path builds
+ * the SIWS string in auth-js and posts that plaintext; GoTrue still verifies Ledger signatures
+ * via the Anza off-chain wrapper in `siws.VerifySignature` (supabase/auth).
  *
- * **Ledger / Backpack:** `@supabase/auth-js` prefers `wallet.signIn` when present. That
- * matches Wallet Standard `solana:signIn`, which returns the bytes actually signed
- * (including Solana off-chain message framing) plus the signature. We therefore expose
- * `signIn` when the connected wallet supports it; otherwise we fall back to `signMessage`.
- *
- * GoTrue verifies both plain SIWS bytes and the Anza off-chain wrapper built from the same
- * SIWS text (`internal/utilities/siws` in supabase/auth).
- *
- * For MWA mobile, use `mwaSingleSessionSignIn` (see `useAuth.ts`).
+ * MWA: `mwaSingleSessionSignIn` (useAuth) still passes `message` + `signature` directly.
  */
 export type SupabaseSolanaWalletAdapter = {
   publicKey: { toBase58: () => string }
-  signIn?: (input: SolanaSignInInput) => Promise<{
-    signedMessage: string | Uint8Array
-    signature: Uint8Array
-  }>
-  signMessage?: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
+  signMessage: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
 }
 
 export function getSupabaseWalletAdapter(): SupabaseSolanaWalletAdapter | null {
@@ -407,55 +395,20 @@ export function getSupabaseWalletAdapter(): SupabaseSolanaWalletAdapter | null {
   const pair = getWalletAndAccount(client)
   if (!pair) return null
 
-  const adapter: SupabaseSolanaWalletAdapter = {
-    publicKey: { toBase58: () => pair.account.address },
-  }
-
-  const signInFeature = pair.wallet.features[SolanaSignIn as keyof typeof pair.wallet.features]
-  if (
-    signInFeature &&
-    typeof signInFeature === 'object' &&
-    signInFeature !== null &&
-    'signIn' in signInFeature &&
-    typeof (signInFeature as { signIn: unknown }).signIn === 'function'
-  ) {
-    const walletSignIn = (
-      signInFeature as {
-        signIn: (inputs: readonly SolanaSignInInput[]) => Promise<readonly SolanaSignInOutput[]>
-      }
-    ).signIn
-    adapter.signIn = async (input: SolanaSignInInput) => {
-      const [first] = await walletSignIn([
-        {
-          ...input,
-          address: pair.account.address,
-        },
-      ])
-      if (!first?.signedMessage || !first?.signature) {
-        throw new Error('Wallet sign-in returned no signature')
-      }
-      return {
-        signedMessage: first.signedMessage,
-        signature: first.signature,
-      }
-    }
-  }
-
   const signer = createTransactionSigner({
     wallet: pair.wallet,
     account: pair.account,
     cluster: clusterForSigner(client),
   })
-  if (signer?.signMessage) {
-    const signMessage = signer.signMessage
-    adapter.signMessage = async (message: Uint8Array) => {
+  if (!signer?.signMessage) return null
+  const signMessage = signer.signMessage
+  return {
+    publicKey: { toBase58: () => pair.account.address },
+    signMessage: async (message: Uint8Array) => {
       const sig = await signMessage(message)
       return signatureBytesFromSignerResult(sig as Uint8Array | string)
-    }
+    },
   }
-
-  if (!adapter.signIn && !adapter.signMessage) return null
-  return adapter
 }
 
 /**
