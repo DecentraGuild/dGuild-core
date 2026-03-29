@@ -402,11 +402,19 @@ export function getSupabaseWalletAdapter(): SupabaseSolanaWalletAdapter | null {
   })
   if (!signer?.signMessage) return null
   const signMessage = signer.signMessage
+  const addressBase58 = new PublicKey(pair.account.address).toBase58()
   return {
-    publicKey: { toBase58: () => pair.account.address },
+    publicKey: { toBase58: () => addressBase58 },
     signMessage: async (message: Uint8Array) => {
       const sig = await signMessage(message)
-      return signatureBytesFromSignerResult(sig as Uint8Array | string)
+      let bytes = signatureBytesFromSignerResult(sig as Uint8Array | string)
+      if (bytes.length > 64) {
+        bytes = bytes.subarray(-64)
+      }
+      if (bytes.length !== 64) {
+        throw new Error(`Wallet signMessage returned invalid signature length: ${bytes.length}`)
+      }
+      return bytes
     },
   }
 }
