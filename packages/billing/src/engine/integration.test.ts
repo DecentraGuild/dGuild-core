@@ -364,3 +364,53 @@ describe('Raffles quote – recurring vs marginal (tier_rules)', () => {
     expect(quote.quotedMeterTiers?.raffle_slots?.perMarginalUnitUsdc).toBe(0)
   })
 })
+
+describe('Admin quote – registration one-time vs recurring display', () => {
+  let db: ReturnType<typeof createMockDb>
+
+  beforeEach(() => {
+    db = createMockDb({
+      tenant_config: [{ id: 't-adm', slug: null }],
+      tenant_meter_limits: [{ tenant_id: 't-adm', meter_key: 'registration', quantity_total: 1 }],
+      tier_rules: [
+        {
+          product_key: 'admin',
+          meter_key: 'registration',
+          min_quantity: 1,
+          max_quantity: null,
+          unit_price: 0.19,
+          tier_price: null,
+          label: 'dGuild registration',
+        },
+        {
+          product_key: 'admin',
+          meter_key: 'slug',
+          min_quantity: 1,
+          max_quantity: null,
+          unit_price: 5.444444,
+          tier_price: null,
+          label: 'Custom slug',
+        },
+      ],
+      duration_rules: [{ duration_days: 365, price_multiplier: 9 }],
+      billing_quotes: [],
+    })
+  })
+
+  it('yearly quote: no registration in recurring display; slug charge rounds to catalogue cents', async () => {
+    const { quote } = await resolveQuote(
+      {
+        tenantId: 't-adm',
+        productKey: 'admin',
+        durationDays: 365,
+        meterOverrides: { slug: 1 },
+      },
+      db,
+    )
+
+    expect(quote.recurringDisplayUsdc).toBe(49)
+    expect(quote.priceUsdc).toBe(49)
+    expect(quote.quotedMeterTiers?.registration).toBeUndefined()
+    expect(quote.quotedMeterTiers?.slug?.perMarginalUnitUsdc).toBe(49)
+  })
+})

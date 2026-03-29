@@ -11,8 +11,14 @@ import {
   quotedMeterTiersForMarketplaceMints,
   type TierRow,
 } from './marketplace-mints-pricing.js'
+import { roundUsdcCents } from '../usdc-math.js'
 
 const QUOTE_TTL_MINUTES = 60
+
+/** Admin `registration` is a one-time meter; do not annualize it into recurring display. */
+function skipRegistrationRecurringDisplay(meterKey: string, durationDays: number): boolean {
+  return meterKey === 'registration' && durationDays > 0
+}
 const DURATION_WHITELIST = [0, 30, 90, 365] as const
 
 interface DurationRow {
@@ -55,14 +61,14 @@ function displayPriceAtTarget(
   }
   const hasTierPrice = tier.tier_price != null && Number(tier.tier_price) > 0
   if (hasTierPrice) {
-    return Number(tier.tier_price) * priceMultiplier
+    return roundUsdcCents(Number(tier.tier_price) * priceMultiplier)
   }
   // tiered_with_one_time: `unit_price` is OTC per marginal unit only (see quotedMeterTiers).
   // Recurring display is `tier_price` when set; never quantity × unit_price (that would double-count Base).
   if (getProductDisplayType(productKey) === 'tiered_with_one_time') {
     return 0
   }
-  return target * tier.unit_price * priceMultiplier
+  return roundUsdcCents(target * tier.unit_price * priceMultiplier)
 }
 
 export async function resolveQuote(
@@ -171,12 +177,14 @@ export async function resolveQuote(
         continue
       }
 
-      if (target > 0 && tiers.length > 0) {
+      if (target > 0 && tiers.length > 0 && !skipRegistrationRecurringDisplay(meterKey, durationDays)) {
         const displayTier = findTier(tiers, target)
         if (displayTier) {
           const hasFlat = displayTier.tier_price != null && Number(displayTier.tier_price) > 0
           const mult = durationRule.price_multiplier
-          const perMarginalUnitUsdc = hasFlat ? 0 : Number(displayTier.unit_price) * mult
+          const perMarginalUnitUsdc = hasFlat
+            ? 0
+            : roundUsdcCents(Number(displayTier.unit_price) * mult)
           quotedMeterTiers[meterKey] = {
             label: displayTier.label,
             minQuantity: displayTier.min_quantity,
@@ -209,9 +217,11 @@ export async function resolveQuote(
       if (!tier) continue
 
       const hasTierPrice = tier.tier_price != null && Number(tier.tier_price) > 0
-      const itemPrice = hasTierPrice
-        ? Number(tier.tier_price) * durationRule.price_multiplier
-        : gap * tier.unit_price * durationRule.price_multiplier
+      const itemPrice = roundUsdcCents(
+        hasTierPrice
+          ? Number(tier.tier_price) * durationRule.price_multiplier
+          : gap * tier.unit_price * durationRule.price_multiplier,
+      )
       const grantQty = hasTierPrice && tier.max_quantity != null
         ? Number(tier.max_quantity)
         : gap
@@ -228,6 +238,9 @@ export async function resolveQuote(
       priceUsdc += itemPrice
     }
   }
+
+  recurringDisplayUsdc = roundUsdcCents(recurringDisplayUsdc)
+  priceUsdc = roundUsdcCents(priceUsdc)
 
   const expiresAt = new Date(Date.now() + QUOTE_TTL_MINUTES * 60 * 1000).toISOString()
   const { data: inserted, error } = await db
