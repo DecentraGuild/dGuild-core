@@ -158,7 +158,7 @@ export function useAuth() {
       const { getSupabaseWalletAdapter, getConnectorClient } = await import('@decentraguild/web3/wallet')
       const walletAdapter = getSupabaseWalletAdapter()
       if (!walletAdapter) {
-        error.value = 'Wallet does not support message signing'
+        error.value = 'Wallet does not support Solana sign-in'
         return false
       }
 
