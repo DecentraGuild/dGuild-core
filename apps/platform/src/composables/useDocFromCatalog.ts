@@ -1,5 +1,7 @@
 import { marked } from 'marked'
 import { getModuleCatalogList, getModuleCatalogEntry, isModuleInPublicDocs } from '@decentraguild/catalog'
+import pricelistCsv from '../../../../catalog/module-catalog/pricelist.csv?raw'
+import { buildPricelistHtml } from '~/utils/pricelistHtml'
 
 const GENERAL_SLUG_TO_KEY: Record<string, string> = {
   'getting-started': 'gettingStarted',
@@ -29,13 +31,23 @@ export function getDocContentFromCatalog(path: string): DocFromCatalogResult | n
   }
   if (normalized.startsWith('/docs/general/')) {
     const slug = normalized.slice('/docs/general/'.length)
+    if (slug === 'price-list') {
+      return { html: buildPricelistHtml(pricelistCsv), title: 'Price list', subtitle: INTRO_SUBTITLE }
+    }
     const key = GENERAL_SLUG_TO_KEY[slug]
     if (!key) return null
     const dguild = getModuleCatalogEntry('dguild')
     const raw = dguild?.docs?.[key]
     if (!raw) return null
     const html = marked.parse(raw, { async: false }) as string
-    const title = slug === 'getting-started' ? 'Getting started' : slug === 'creating-a-dguild' ? 'Creating a dGuild' : slug === 'billing-overview' ? 'Billing' : 'Directory'
+    const title =
+      slug === 'getting-started'
+        ? 'Getting started'
+        : slug === 'creating-a-dguild'
+          ? 'Creating a dGuild'
+          : slug === 'billing-overview'
+            ? 'Billing'
+            : 'Directory'
     return { html, title, subtitle: INTRO_SUBTITLE }
   }
   if (normalized.startsWith('/docs/modules/')) {
@@ -72,6 +84,7 @@ export function getDocsSidebarSections(): DocsSidebarSection[] {
       { path: '/docs/general/creating-a-dguild', label: 'Creating a dGuild' },
       { path: '/docs/general/directory', label: 'Directory' },
       { path: '/docs/general/billing-overview', label: 'Billing' },
+      { path: '/docs/general/price-list', label: 'Price list' },
     ]
     sections.push({ title: 'Intro', items: introItems })
   }
@@ -99,6 +112,7 @@ export function getDocsOrder(): { path: string; label: string }[] {
     order.push({ path: '/docs/general/creating-a-dguild', label: 'Creating a dGuild' })
     order.push({ path: '/docs/general/directory', label: 'Directory' })
     order.push({ path: '/docs/general/billing-overview', label: 'Billing' })
+    order.push({ path: '/docs/general/price-list', label: 'Price list' })
   }
   for (const m of list) {
     if (m.id === 'dguild' || !m.docs) continue

@@ -89,4 +89,38 @@ defineProps<{
   background: none;
   border: none;
 }
+
+.docs-prose :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--theme-space-md) 0 var(--theme-space-xl);
+  font-size: var(--theme-font-sm);
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.docs-prose :deep(thead th) {
+  text-align: left;
+  padding: var(--theme-space-sm) var(--theme-space-md);
+  background: color-mix(in srgb, var(--theme-primary) 12%, var(--theme-bg-card));
+  color: var(--theme-text-primary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.docs-prose :deep(tbody td) {
+  padding: var(--theme-space-sm) var(--theme-space-md);
+  border-bottom: 1px solid var(--theme-border);
+  color: var(--theme-text-secondary);
+  vertical-align: top;
+}
+
+.docs-prose :deep(tbody tr:nth-child(even) td) {
+  background: color-mix(in srgb, var(--theme-bg-card) 80%, transparent);
+}
+
+.docs-prose :deep(tbody tr:last-child td) {
+  border-bottom: none;
+}
 </style>
