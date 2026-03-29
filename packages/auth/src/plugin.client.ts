@@ -18,11 +18,28 @@ import {
 import { useAuth } from './useAuth'
 import { getBrowserClient } from './supabase-client'
 
+/** Same host rule as SIWS: connector metadata / WalletConnect icons must match the live origin. */
+function resolveClientAppUrlForWallet(configured: string | undefined): string | undefined {
+  const c = configured?.trim().replace(/\/$/, '') ?? ''
+  if (typeof window === 'undefined') {
+    return c || undefined
+  }
+  const origin = `${window.location.protocol}//${window.location.host}`.replace(/\/$/, '')
+  if (!c || !/^https?:\/\//i.test(c)) return origin
+  try {
+    if (new URL(c).host === window.location.host) return c
+  } catch {
+    return origin
+  }
+  return origin
+}
+
 export default defineNuxtPlugin(async () => {
   if (import.meta.server) return
 
   const config = useRuntimeConfig()
-  const appUrl = (config.public.appUrl as string | undefined) || undefined
+  const configuredAppUrl = (config.public.appUrl as string | undefined) || undefined
+  const appUrl = resolveClientAppUrlForWallet(configuredAppUrl)
   setConnectorWebOptions({
     appUrl,
     walletConnectProjectId:

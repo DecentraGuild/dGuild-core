@@ -121,7 +121,7 @@ function createConnectorClient(): ConnectorClient {
             name: 'DecentraGuild',
             description: 'Solana community dApp',
             url: appUrl,
-            icons: [`${appUrl}/favicon.ico`],
+            icons: [`${appUrl}/favicon.svg`],
           },
           onDisplayUri: (uri: string) => {
             setWalletConnectDisplayUri(uri)
@@ -490,7 +490,7 @@ export async function mwaSingleSessionSignIn({
   const appIdentity = {
     name: 'DecentraGuild',
     uri: parsedUrl.origin,
-    icon: '/favicon.ico',
+    icon: '/favicon.svg',
   }
 
   return (transact as (cb: (w: unknown) => Promise<unknown>) => Promise<unknown>)(
@@ -608,7 +608,7 @@ async function mwaSingleSessionSignTransactions(
     '@solana-mobile/mobile-wallet-adapter-protocol'
   )
   const appUrl = resolveAppUrl()
-  const identity = { name: 'DecentraGuild', uri: appUrl, icon: '/favicon.ico' }
+  const identity = { name: 'DecentraGuild', uri: appUrl, icon: '/favicon.svg' }
 
   let cachedEntry: { auth_token?: string; wallet_uri_base?: string } | null = null
   try {
