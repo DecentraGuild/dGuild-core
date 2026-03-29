@@ -380,8 +380,9 @@ async function signAllTransactionsLedgerSafe<T extends Transaction | VersionedTr
  * `@supabase/auth-js` would prefer it and set `message = TextDecoder.decode(signedMessage)`;
  * for Ledger, `signedMessage` is off-chain **binary**, not SIWS text, so SIWS parse fails
  * (`message needs at least 6 lines`) and GoTrue gets garbage. The `signMessage` path builds
- * the SIWS string in auth-js and posts that plaintext; GoTrue still verifies Ledger signatures
- * via the Anza off-chain wrapper in `siws.VerifySignature` (supabase/auth).
+ * the SIWS string in auth-js and posts that plaintext. GoTrue verifies via `siws.VerifySignature`
+ * (raw SIWS + Anza preamble with message-format **0x00** only); Ledger paths that sign the
+ * UTF-8 preamble (**0x01**) can still fail hosted Auth — see `.cursor/memory/modules/LEDGER/workarounds.md`.
  *
  * MWA: `mwaSingleSessionSignIn` (useAuth) still passes `message` + `signature` directly.
  */

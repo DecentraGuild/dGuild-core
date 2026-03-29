@@ -12,21 +12,23 @@
     "goActiveImmediately": true
   },
   "catalog": {
-    "shortDescription": "Control who may enter your realm. Define access across your entire guild.",
-    "longDescription": "Gates allow you to create on-chain access lists that can be applied across your guild, modules, or specific actions. They are the foundation of permission and exclusivity.",
+    "shortDescription": "Control who may enter your realm. Define access across your entire guild and optional member profiles.",
+    "longDescription": "Gates allow you to create on-chain access lists that can be applied across your guild, modules, or specific actions. They are the foundation of permission and exclusivity. Designate one list as primary so those members can create a guild profile; you choose which fields they may edit, while Discord identity comes from verified link data.",
     "keyInfo": [
       "On-chain wallet lists",
+      "Primary list unlocks member profiles",
+      "Admin-controlled profile fields",
       "Global / module / transaction level usage",
       "Works with Discord & airdrops",
       "Composable across modules"
     ],
-    "userCostsInfo": "Viewing member lists is free. There are no transaction costs for members; the guild pays for list creation and on-chain storage."
+    "userCostsInfo": "Viewing member lists and editing an enabled member profile are free for members. There are no transaction costs for members; the guild pays for list creation and on-chain storage."
   },
   "docs": {
-    "overview": "The Gates module allows you to define who can access your systems. It acts as your guild's permission layer.",
-    "mechanics": "Each gate = on-chain wallet list\n\nCan be applied to: Entire guild, Specific modules, Individual actions\n\nIntegrates with: Marketplace, Raffles, Discord roles, Shipments",
-    "setup": "Create a gate\n\nAdd wallet addresses\n\nAssign gate to modules or actions",
-    "pricing": "50 USDC per gate list\n\nOn-chain storage cost per wallet slot (reclaimable)"
+    "overview": "The Gates module allows you to define who can access your systems. It acts as your guild's permission layer and, with a primary list, lets recognized members maintain an optional profile in your guild.",
+    "mechanics": "Each gate = on-chain wallet list\n\nCan be applied to: Entire guild, Specific modules, Individual actions\n\nPrimary list: One list per guild can be marked primary. Wallets on that list may create or update a member profile with the fields you want (nickname, bio, avatar, socials, contact, linked wallets). Discord is shown from verified Discord link data, not free-form profile text.\n\nIntegrates with: Marketplace, Raffles, Discord roles, Shipments",
+    "setup": "Create a gate\n\nAdd wallet addresses\n\nOptionally set one list as primary and choose allowed profile fields\n\nAssign gate to modules or actions",
+    "pricing": "49 USDC per gate list\n\nOn-chain storage cost per wallet slot (reclaimable)"
   },
   "activationInstructions": {
     "intro": "Decide who may enter your halls. Forge your access scroll and seal it on-chain.",
@@ -34,6 +36,8 @@
       "Create a new member list",
       "Add wallet addresses",
       "Remove wallet addresses as needed",
+      "Mark your main roster as the primary list if you want member profiles",
+      "Choose which profile fields members may fill (Discord stays tied to verified link)",
       "Choose where the gate applies (global, module, transaction)"
     ],
     "note": "Module is active immediately; billing is per list when you create one."
