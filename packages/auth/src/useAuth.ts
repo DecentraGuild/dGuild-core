@@ -39,11 +39,31 @@ const connectorState = ref<ConnectorStateSnapshot>({
 /** When set true, AuthWidget should open the connect modal. Reset by AuthWidget after opening. */
 export const openConnectModalRequested = ref(false)
 
-/** SIWS `URI` / domain for GoTrue; prefer canonical deploy URL so it matches Supabase redirect allow-list. */
+/**
+ * SIWS `URI` / first-line domain for GoTrue and for Wallet Standard `signIn`.
+ * Must match the browser tab’s host: wallets reject “Domain does not match requesting domain”
+ * when `NUXT_PUBLIC_APP_URL` is e.g. `https://dguild.org` but the user is on `www`, `dapp`, etc.
+ *
+ * When config host matches the tab, we still use config (stable path if you set a non-root URL).
+ * Otherwise use this page’s URL (no hash). Add every production origin you use to Supabase
+ * Auth → URL Configuration (redirect / Site URL) so verification still passes.
+ */
 function resolveSolanaWeb3SignInPageUrl(appUrlConfig: string | undefined): string {
+  const stripHash = (u: string) => u.replace(/#[\s\S]*$/, '')
+  if (typeof window !== 'undefined') {
+    const live = stripHash(window.location.href)
+    const configured = appUrlConfig?.trim().replace(/\/$/, '') ?? ''
+    if (!configured || !/^https?:\/\//i.test(configured)) return live
+    try {
+      const configHost = new URL(configured).host
+      if (configHost === window.location.host) return stripHash(configured)
+    } catch {
+      return live
+    }
+    return live
+  }
   const base = appUrlConfig?.trim().replace(/\/$/, '')
   if (base && /^https?:\/\//i.test(base)) return base
-  if (typeof window !== 'undefined') return window.location.href
   return 'http://localhost:3000'
 }
 

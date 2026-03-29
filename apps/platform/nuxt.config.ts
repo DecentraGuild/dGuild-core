@@ -10,6 +10,11 @@ export default defineNuxtConfig({
   srcDir: 'src',
   compatibilityDate: '2025-02-10',
   experimental: { clientNodeCompat: true },
+  app: {
+    head: {
+      link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+    },
+  },
   modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', 'shadcn-nuxt'],
   shadcn: {
     prefix: '',
