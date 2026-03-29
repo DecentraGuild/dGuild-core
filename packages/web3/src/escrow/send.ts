@@ -24,6 +24,17 @@ type ConnectionWithRpc = Connection & {
   _rpcRequest?: (method: string, args: unknown[]) => Promise<RpcSimulateResponse>
 }
 
+function looksLikeUserRejectedWalletSign(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+  return (
+    msg.includes('user rejected') ||
+    msg.includes('user denied') ||
+    msg.includes('rejected the request') ||
+    msg.includes('user cancelled') ||
+    msg.includes('user canceled')
+  )
+}
+
 function legacyWireToBase64(wire: Uint8Array): string {
   const u8 = wire instanceof Uint8Array ? wire : new Uint8Array(wire)
   let binary = ''
@@ -112,6 +123,8 @@ async function simulateSignedLegacyTransaction(
  * When `wallet.signAndSendTransaction` exists and there are no extra keypair signers, we delegate
  * broadcast to the wallet (Phantom, Solflare, …). Backpack omits that hook in
  * `getEscrowWalletFromConnector` and uses sign + `sendRawTransaction` plus RPC simulation here.
+ * If sign-and-send throws for non-user-reject reasons (e.g. some Ledger paths), we fall back to
+ * sign + `sendRawTransaction` the same way.
  */
 export async function sendAndConfirmTransaction(
   connection: Connection,
@@ -135,10 +148,15 @@ export async function sendAndConfirmTransaction(
 
   if (typeof wallet.signAndSendTransaction === 'function' && signers.length === 0) {
     onStatus?.('signing')
-    const sig = await wallet.signAndSendTransaction(transaction)
-    onStatus?.('confirming')
-    await connection.confirmTransaction(sig)
-    return sig
+    try {
+      const sig = await wallet.signAndSendTransaction(transaction)
+      onStatus?.('confirming')
+      await connection.confirmTransaction(sig)
+      return sig
+    } catch (e) {
+      if (looksLikeUserRejectedWalletSign(e)) throw e
+      // Ledger / some extensions: sign-and-send fails even when `signAndSend` exists; use sign + RPC send.
+    }
   }
 
   const { blockhash: signBlockhash, lastValidBlockHeight: signLastValid } =

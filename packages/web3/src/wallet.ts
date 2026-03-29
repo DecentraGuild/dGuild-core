@@ -20,6 +20,7 @@ export {
   clearWalletConnectDisplayUri,
   type ConnectorStateSnapshot,
   type ConnectorWebOptions,
+  type SupabaseSolanaWalletAdapter,
 } from './connector.js'
 export {
   isMobileUserAgent,

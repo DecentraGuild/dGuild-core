@@ -1,10 +1,16 @@
 import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js'
 import {
+  SolanaSignIn,
+  type SolanaSignInInput,
+  type SolanaSignInOutput,
+} from '@solana/wallet-standard-features'
+import {
   ConnectorClient,
   createSolanaMainnet,
   getDefaultConfig,
   createTransactionSigner,
   isConnected,
+  isTransactionError,
   type ConnectOptions,
   type ConnectorState,
   type WalletConnectorId,
@@ -296,35 +302,160 @@ export function getWalletAndAccount(client: ConnectorClient): { wallet: Wallet; 
 }
 
 /**
+ * Wallet Standard account labels often mark hardware-backed keys (Ledger path in Phantom, Backpack, …).
+ */
+function accountLabelSuggestsHardwareWallet(label: string | undefined): boolean {
+  if (!label || typeof label !== 'string') return false
+  const l = label.toLowerCase()
+  return (
+    l.includes('ledger') ||
+    l.includes('hardware wallet') ||
+    l.includes('hardware') ||
+    l.includes('keystone') ||
+    l.includes('gridplus')
+  )
+}
+
+function isUserRejectedSigningError(error: unknown): boolean {
+  if (isTransactionError(error)) {
+    if (error.code === 'USER_REJECTED') return true
+    const msg = error.message.toLowerCase()
+    if (
+      msg.includes('user rejected') ||
+      msg.includes('user denied') ||
+      msg.includes('rejected the request')
+    ) {
+      return true
+    }
+    if (error.originalError) return isUserRejectedSigningError(error.originalError)
+  }
+  if (error instanceof Error) {
+    const m = error.message.toLowerCase()
+    return (
+      m.includes('user rejected') ||
+      m.includes('user denied') ||
+      m.includes('rejected the request') ||
+      m.includes('user cancelled') ||
+      m.includes('user canceled')
+    )
+  }
+  return false
+}
+
+type ConnectorTransactionSigner = NonNullable<ReturnType<typeof createTransactionSigner>>
+
+/**
+ * ConnectorKit uses `solana:signAllTransactions` in one RPC when available. Ledger and many
+ * hardware flows reject batch signing; fall back to one `signTransaction` per tx (without
+ * re-prompting after an explicit user reject).
+ */
+async function signAllTransactionsLedgerSafe<T extends Transaction | VersionedTransaction>(
+  signer: ConnectorTransactionSigner,
+  transactions: T[],
+  preferSequential: boolean,
+): Promise<T[]> {
+  if (transactions.length === 0) return []
+  if (transactions.length === 1) {
+    const signed = await signer.signTransaction(transactions[0]!)
+    return [signed as T]
+  }
+
+  const sequential = async (): Promise<T[]> => {
+    const out: T[] = []
+    for (const tx of transactions) {
+      out.push((await signer.signTransaction(tx)) as T)
+    }
+    return out
+  }
+
+  if (preferSequential) return sequential()
+
+  try {
+    return (await signer.signAllTransactions(transactions)) as T[]
+  } catch (e) {
+    if (isUserRejectedSigningError(e)) throw e
+    return sequential()
+  }
+}
+
+/**
  * Adapter for `supabase.auth.signInWithWeb3({ chain: 'solana', wallet })`.
  *
- * Used by the desktop (two-step) sign-in path: `connectWallet` first, then pass this
- * adapter to Supabase so it signs with the already-connected wallet via `signMessage`.
+ * Desktop path: `connectWallet` first, then pass this adapter to Supabase.
  *
- * For MWA mobile, use `mwaSingleSessionSignIn` (one-shot authorize + signMessages in a
- * single transact()) instead (see `useAuth.ts`).
+ * **Ledger / Backpack:** `@supabase/auth-js` prefers `wallet.signIn` when present. That
+ * matches Wallet Standard `solana:signIn`, which returns the bytes actually signed
+ * (including Solana off-chain message framing) plus the signature. We therefore expose
+ * `signIn` when the connected wallet supports it; otherwise we fall back to `signMessage`.
+ *
+ * GoTrue verifies both plain SIWS bytes and the Anza off-chain wrapper built from the same
+ * SIWS text (`internal/utilities/siws` in supabase/auth).
+ *
+ * For MWA mobile, use `mwaSingleSessionSignIn` (see `useAuth.ts`).
  */
-export function getSupabaseWalletAdapter(): {
+export type SupabaseSolanaWalletAdapter = {
   publicKey: { toBase58: () => string }
-  signMessage: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
-} | null {
+  signIn?: (input: SolanaSignInInput) => Promise<{
+    signedMessage: string | Uint8Array
+    signature: Uint8Array
+  }>
+  signMessage?: (message: Uint8Array, _display?: string) => Promise<Uint8Array>
+}
+
+export function getSupabaseWalletAdapter(): SupabaseSolanaWalletAdapter | null {
   const client = getClient()
   const pair = getWalletAndAccount(client)
   if (!pair) return null
+
+  const adapter: SupabaseSolanaWalletAdapter = {
+    publicKey: { toBase58: () => pair.account.address },
+  }
+
+  const signInFeature = pair.wallet.features[SolanaSignIn as keyof typeof pair.wallet.features]
+  if (
+    signInFeature &&
+    typeof signInFeature === 'object' &&
+    signInFeature !== null &&
+    'signIn' in signInFeature &&
+    typeof (signInFeature as { signIn: unknown }).signIn === 'function'
+  ) {
+    const walletSignIn = (
+      signInFeature as {
+        signIn: (inputs: readonly SolanaSignInInput[]) => Promise<readonly SolanaSignInOutput[]>
+      }
+    ).signIn
+    adapter.signIn = async (input: SolanaSignInInput) => {
+      const [first] = await walletSignIn([
+        {
+          ...input,
+          address: pair.account.address,
+        },
+      ])
+      if (!first?.signedMessage || !first?.signature) {
+        throw new Error('Wallet sign-in returned no signature')
+      }
+      return {
+        signedMessage: first.signedMessage,
+        signature: first.signature,
+      }
+    }
+  }
+
   const signer = createTransactionSigner({
     wallet: pair.wallet,
     account: pair.account,
     cluster: clusterForSigner(client),
   })
-  if (!signer?.signMessage) return null
-  const signMessage = signer.signMessage
-  return {
-    publicKey: { toBase58: () => pair.account.address },
-    signMessage: async (message: Uint8Array) => {
+  if (signer?.signMessage) {
+    const signMessage = signer.signMessage
+    adapter.signMessage = async (message: Uint8Array) => {
       const sig = await signMessage(message)
       return signatureBytesFromSignerResult(sig as Uint8Array | string)
-    },
+    }
   }
+
+  if (!adapter.signIn && !adapter.signMessage) return null
+  return adapter
 }
 
 /**
@@ -576,6 +707,7 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
   const address = pair.account.address
   const publicKey = typeof address === 'string' ? new PublicKey(address) : address
   const isMwa = isMobileWalletAdapterConnector(connectorId)
+  const hardwareSigningLikely = accountLabelSuggestsHardwareWallet(pair.account.label)
   // When ConnectorKit has a valid MWA session, let wallet-standard-mobile's own signer handle
   // signing. Its internal _transact() reads wallet_uri_base from the in-memory _authorization
   // (set by connectWallet(silent:true) in ensureSigningWalletForSession), so Backpack is opened
@@ -585,15 +717,18 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
     return signed as T
   }
   const signAllTransactions = async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-    const signed = await signer.signAllTransactions(txs)
-    return signed as T[]
+    return signAllTransactionsLedgerSafe(signer, txs, hardwareSigningLikely)
   }
   const canSend = signer.getCapabilities().canSend
   // Backpack extension: signAndSend + ConnectorKit's `transactions: [bytes]` looks like a batch in the UI.
   // Mobile Wallet Adapter: same wire + wallet-broadcast path often returns to the browser without a clear
   // approval screen or fails spuriously; sign + dapp `sendRawTransaction` matches the Backpack workaround.
+  // Hardware-backed accounts (Ledger, …): omit signAndSend so escrow uses sign + RPC send (reliable on device).
   const signAndSendTransaction =
-    canSend && !isBackpackConnector(connectorId) && !isMwa
+    canSend &&
+    !isBackpackConnector(connectorId) &&
+    !isMwa &&
+    !hardwareSigningLikely
       ? async (tx: Transaction | VersionedTransaction): Promise<string> => {
           return signer.signAndSendTransaction(tx)
         }
