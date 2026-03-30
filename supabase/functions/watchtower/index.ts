@@ -10,7 +10,6 @@
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
-import { isMintWithinLimit } from '../_shared/watchtower-billing.ts'
 
 function firstParallelError(
   results: Array<{ error?: { message: string } | null }>,
@@ -143,7 +142,7 @@ Deno.serve(async (req: Request) => {
           .maybeSingle(),
         db
           .from('watchtower_watches')
-          .select('track_holders, track_snapshot, track_transactions')
+          .select('track_holders, track_snapshot, track_transactions, billing_eligible_current, billing_eligible_snapshot')
           .eq('tenant_id', tenantId)
           .eq('mint', mint)
           .maybeSingle(),
@@ -185,11 +184,15 @@ Deno.serve(async (req: Request) => {
 
       if (!catalogRow) return errorResponse('Mint not found in catalog', req, 404)
 
-      const watch = watchRow as { track_holders?: boolean; track_snapshot?: boolean; track_transactions?: boolean } | null
-      const [holdersWithinCurrent, holdersWithinSnapshot] = await Promise.all([
-        watch?.track_holders ? isMintWithinLimit(db, tenantId, mint, 'mints_current') : Promise.resolve(true),
-        watch?.track_snapshot ? isMintWithinLimit(db, tenantId, mint, 'mintsSnapshot') : Promise.resolve(true),
-      ])
+      const watch = watchRow as {
+        track_holders?: boolean
+        track_snapshot?: boolean
+        track_transactions?: boolean
+        billing_eligible_current?: boolean
+        billing_eligible_snapshot?: boolean
+      } | null
+      const holdersWithinCurrent = !watch?.track_holders || Boolean(watch.billing_eligible_current)
+      const holdersWithinSnapshot = !watch?.track_snapshot || Boolean(watch.billing_eligible_snapshot)
       const rawHolders = (holderSnapshot as { holder_wallets?: Array<{ wallet?: string; amount?: string } | string> } | null)?.holder_wallets ?? []
       const allHoldersNorm = holdersWithinCurrent
         ? rawHolders
@@ -333,12 +336,17 @@ Deno.serve(async (req: Request) => {
 
       const { data: watchRow, error: watchErr } = await db
         .from('watchtower_watches')
-        .select('track_holders, track_snapshot')
+        .select('track_holders, track_snapshot, billing_eligible_current, billing_eligible_snapshot')
         .eq('tenant_id', tenantId)
         .eq('mint', mint)
         .maybeSingle()
       if (watchErr) return errorResponse(watchErr.message, req, 500)
-      const watch = watchRow as { track_holders?: boolean; track_snapshot?: boolean } | null
+      const watch = watchRow as {
+        track_holders?: boolean
+        track_snapshot?: boolean
+        billing_eligible_current?: boolean
+        billing_eligible_snapshot?: boolean
+      } | null
 
       const catalogKind = ((catRow as { kind?: string }).kind as string) ?? 'SPL'
 
@@ -366,14 +374,16 @@ Deno.serve(async (req: Request) => {
         if (!watch?.track_snapshot) {
           return errorResponse('Snapshot track not enabled for this mint', req, 403)
         }
-        const within = await isMintWithinLimit(db, tenantId, mint, 'mintsSnapshot')
-        if (!within) return errorResponse('Pay to activate this track', req, 403)
+        if (!watch.billing_eligible_snapshot) {
+          return errorResponse('Pay to activate this track', req, 403)
+        }
       } else {
         if (!watch?.track_holders) {
           return errorResponse('Holders track not enabled for this mint', req, 403)
         }
-        const within = await isMintWithinLimit(db, tenantId, mint, 'mints_current')
-        if (!within) return errorResponse('Pay to activate this track', req, 403)
+        if (!watch.billing_eligible_current) {
+          return errorResponse('Pay to activate this track', req, 403)
+        }
       }
 
       const allHoldersNorm = rawHolders

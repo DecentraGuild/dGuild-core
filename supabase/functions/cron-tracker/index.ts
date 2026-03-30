@@ -2,43 +2,84 @@
  * Tracker sync Edge Function — unified mode.
  *
  * pg_cron: tracker-unified (every 5 min) with body { mode: "unified" }.
- * Each tick advances a DB-backed rolodex cursor over the deduplicated set of
- * watched mints (all tenants, track_holders OR track_snapshot).
- * A single RPC fetch per mint feeds two adopters:
- *   • holder_current  — written when the holder-count tier says a refresh is due.
- *   • holder_snapshots — written once per snapshot bucket (cycle_minutes × N)
- *                        when at least one in-limit tenant has track_snapshot.
- * Snapshot data is global (no per-tenant mirror). Billing / access is gated by
- * watchtower_watches + tenant_meter_limits; no duplicate JSON is stored.
+ * Unified batch: due-first / snapshot-first over all billable watches (`billing_eligible_*` on
+ * watchtower_watches, maintained by triggers). Capped by `watchtower_max_mints_per_tick` (Supabase IO).
+ * A single RPC lists candidates + meta; each selected mint may update holder_current and holder_snapshots.
  *
  * Body: { mode?, syncMint?, tenantId? }
- *   mode "unified"  — batch rolodex advance (pg_cron, service role required).
- *   syncMint + tenantId — immediate single-mint sync (admin JWT, ignores mode).
+ *   mode "unified"  — batch (pg_cron, service role required).
+ *   syncMint + tenantId — immediate single-mint sync (admin JWT; NFT tier delay bypassed).
  */
 
 import { jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getWalletFromAuthHeader, isServiceRoleAuthorization, walletMatchesTenantAdmins } from '../_shared/auth.ts'
-import { getWithinLimitMints } from '../_shared/watchtower-billing.ts'
 import {
   alignSnapshotBucket,
+  currentTierOverdueMinutes,
   isHolderSyncDue,
+  isNftHolderSyncDue,
   loadWatchtowerSyncConfig,
+  type WatchtowerSyncConfig,
 } from '../_shared/watchtower-sync-config.ts'
 import { getRpcUrl } from '../_shared/rpc-url.ts'
 import { fetchSplHoldersWithProgress, holderWalletsJsonToMap } from '../_shared/fetch-spl-holders.ts'
+import {
+  fetchNftHoldersWithProgress,
+  nftHolderWalletsJsonToMap,
+} from '../_shared/fetch-nft-holders.ts'
 
 const METADATA_REFRESH_AGE_DAYS = 7
-const CHUNK_SIZE = 8
 
-function splCronPageBudget(): number {
-  const n = Number(Deno.env.get('SPL_HOLDERS_MAX_PAGES_PER_TICK') ?? '12')
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 12
+type CronCandidateRow = {
+  mint: string
+  kind: string
+  last_updated: string | null
+  holder_count: number
+  item_total: number
+  has_snapshot_for_bucket: boolean
+  spl_pagination_key: string | null
+  nft_next_page: number | null
+  any_current_eligible: boolean
+  any_snapshot_eligible: boolean
 }
 
-function splAdminPageBudget(): number {
-  const n = Number(Deno.env.get('SPL_HOLDERS_ADMIN_MAX_PAGES_PER_TICK') ?? '40')
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 40
+type ClassifiedWork = {
+  row: CronCandidateRow
+  kind: 'SPL' | 'NFT'
+  tier: number
+  overdueMin: number
+}
+
+function classifyCronWork(row: CronCandidateRow, config: WatchtowerSyncConfig, now: Date): ClassifiedWork | null {
+  const kind = row.kind === 'SPL' ? 'SPL' : 'NFT'
+  const resume = kind === 'SPL'
+    ? Boolean(row.spl_pagination_key)
+    : row.nft_next_page != null && Number.isFinite(Number(row.nft_next_page)) && Number(row.nft_next_page) >= 1
+  const snapshotDue = row.any_snapshot_eligible && !row.has_snapshot_for_bucket
+  const itemTotal = Number(row.item_total) || 0
+  const holderCount = Number(row.holder_count) || 0
+  const currentDue = row.any_current_eligible && (
+    kind === 'NFT'
+      ? isNftHolderSyncDue(row.last_updated, itemTotal, config.nft_item_tiers, now)
+      : isHolderSyncDue(row.last_updated, holderCount, config.tiers, now)
+  )
+  if (!resume && !snapshotDue && !currentDue) return null
+  let tier = 2
+  if (resume) tier = 0
+  else if (snapshotDue) tier = 1
+  const overdueMin = tier === 2
+    ? currentTierOverdueMinutes(
+      row.last_updated,
+      holderCount,
+      itemTotal,
+      kind,
+      config.tiers,
+      config.nft_item_tiers,
+      now,
+    )
+    : 0
+  return { row, kind, tier, overdueMin }
 }
 
 // ---------------------------------------------------------------------------
@@ -88,35 +129,6 @@ async function fetchMintMetadata(
   } catch {
     return null
   }
-}
-
-async function fetchNftHolders(
-  rpcEndpoint: string,
-  mint: string,
-): Promise<Array<{ wallet: string; amount: string }>> {
-  const countByWallet = new Map<string, number>()
-  let page = 1
-  let hasMore = true
-  while (hasMore) {
-    const res = await fetch(rpcEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0', id: 1,
-        method: 'getAssetsByGroup',
-        params: { groupKey: 'collection', groupValue: mint, limit: 1000, page },
-      }),
-    })
-    const data = await res.json() as { result?: { items?: Array<{ ownership?: { owner?: string } }> } }
-    const items = data.result?.items ?? []
-    for (const item of items) {
-      const owner = item.ownership?.owner
-      if (owner) countByWallet.set(owner, (countByWallet.get(owner) ?? 0) + 1)
-    }
-    hasMore = items.length === 1000
-    page++
-  }
-  return [...countByWallet.entries()].map(([wallet, amount]) => ({ wallet, amount: String(amount) }))
 }
 
 async function refreshMintMetadataIfStale(
@@ -204,7 +216,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: watch } = await db
       .from('watchtower_watches')
-      .select('track_holders, track_snapshot')
+      .select('track_holders, track_snapshot, billing_eligible_current, billing_eligible_snapshot')
       .eq('tenant_id', syncTenantId)
       .eq('mint', syncMint)
       .maybeSingle()
@@ -212,12 +224,8 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ processed: 0, synced: 0, message: 'Mint not watched' }, req)
     }
 
-    const [currentWithin, snapshotWithin] = await Promise.all([
-      watch.track_holders ? getWithinLimitMints(db, syncTenantId, 'mints_current') : Promise.resolve(new Set<string>()),
-      watch.track_snapshot ? getWithinLimitMints(db, syncTenantId, 'mintsSnapshot') : Promise.resolve(new Set<string>()),
-    ])
-    const syncCurrent = watch.track_holders && currentWithin.has(syncMint)
-    const syncSnapshot = watch.track_snapshot && snapshotWithin.has(syncMint)
+    const syncCurrent = Boolean(watch.track_holders && watch.billing_eligible_current)
+    const syncSnapshot = Boolean(watch.track_snapshot && watch.billing_eligible_snapshot)
     if (!syncCurrent && !syncSnapshot) {
       return jsonResponse({ processed: 0, synced: 0, message: 'Mint over paid limit' }, req)
     }
@@ -245,6 +253,7 @@ Deno.serve(async (req: Request) => {
 
     let holders: Array<{ wallet: string; amount: string }>
     let splCompleted = true
+    let nftCompleted = true
 
     if (kind === 'SPL') {
       const { data: gpaRow } = await db
@@ -254,10 +263,9 @@ Deno.serve(async (req: Request) => {
         .maybeSingle()
 
       const resumeKey = gpaRow?.pagination_key ?? null
-      const resuming = resumeKey != null
 
       let mergeMap = new Map<string, bigint>()
-      if (resuming) {
+      if (resumeKey != null) {
         const { data: cur } = await db
           .from('holder_current')
           .select('holder_wallets')
@@ -269,7 +277,6 @@ Deno.serve(async (req: Request) => {
       const spl = await fetchSplHoldersWithProgress(rpcEndpoint, syncMint, {
         resumePaginationKey: resumeKey,
         mergeInto: mergeMap,
-        maxPages: splAdminPageBudget(),
       })
       holders = spl.holders
       splCompleted = spl.completed
@@ -284,7 +291,40 @@ Deno.serve(async (req: Request) => {
         await db.from('spl_holder_gpa_progress').delete().eq('mint', syncMint)
       }
     } else {
-      holders = await fetchNftHolders(rpcEndpoint, syncMint)
+      const { data: nftRow } = await db
+        .from('nft_holder_group_progress')
+        .select('next_page')
+        .eq('mint', syncMint)
+        .maybeSingle()
+      const resumePage = nftRow?.next_page != null ? Number(nftRow.next_page) : null
+      const resumingNft = resumePage != null && Number.isFinite(resumePage) && resumePage >= 1
+
+      let mergeCounts = new Map<string, number>()
+      if (resumingNft) {
+        const { data: cur } = await db
+          .from('holder_current')
+          .select('holder_wallets')
+          .eq('mint', syncMint)
+          .maybeSingle()
+        mergeCounts = nftHolderWalletsJsonToMap(cur?.holder_wallets)
+      }
+
+      const nft = await fetchNftHoldersWithProgress(rpcEndpoint, syncMint, {
+        startPage: resumingNft ? resumePage! : 1,
+        mergeInto: mergeCounts,
+      })
+      holders = nft.holders
+      nftCompleted = nft.completed
+
+      if (!nft.completed && nft.nextPage != null) {
+        await db.from('nft_holder_group_progress').upsert({
+          mint: syncMint,
+          next_page: nft.nextPage,
+          updated_at: now.toISOString(),
+        }, { onConflict: 'mint' })
+      } else {
+        await db.from('nft_holder_group_progress').delete().eq('mint', syncMint)
+      }
     }
 
     if (kind === 'SPL') {
@@ -293,7 +333,7 @@ Deno.serve(async (req: Request) => {
         holder_wallets: holders,
         last_updated: now.toISOString(),
       }, { onConflict: 'mint' })
-    } else if (syncCurrent) {
+    } else {
       await db.from('holder_current').upsert({
         mint: syncMint,
         holder_wallets: holders,
@@ -308,6 +348,14 @@ Deno.serve(async (req: Request) => {
           synced: 0,
           splHoldersContinuing: true,
           message: 'SPL holder sync in progress; snapshot is written when the holder scan completes.',
+        }, req)
+      }
+      if (kind === 'NFT' && !nftCompleted) {
+        return jsonResponse({
+          processed: 1,
+          synced: 0,
+          nftHoldersContinuing: true,
+          message: 'NFT holder sync in progress; snapshot is written when the group scan completes.',
         }, req)
       }
       const { data: existing } = await db
@@ -327,10 +375,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const done = (kind === 'SPL' ? splCompleted : nftCompleted)
     return jsonResponse({
       processed: 1,
-      synced: kind === 'SPL' && !splCompleted ? 0 : 1,
+      synced: done ? 1 : 0,
       splHoldersContinuing: kind === 'SPL' && !splCompleted,
+      nftHoldersContinuing: kind === 'NFT' && !nftCompleted,
     }, req)
   }
 
@@ -341,8 +391,6 @@ Deno.serve(async (req: Request) => {
     return errorResponse('Unauthorized', req, 401)
   }
 
-  // Bare `invoke_edge_function('cron-tracker')` sends `{}` (default jsonb). A ghost pg_cron
-  // row can keep firing that after migration to tracker-unified; treat as unified batch work.
   if (!mode) {
     mode = 'unified'
   }
@@ -354,133 +402,87 @@ Deno.serve(async (req: Request) => {
   const config = await loadWatchtowerSyncConfig(db)
   const { snapshotAt, snapshotDate } = alignSnapshotBucket(now, config.snapshot_interval_minutes)
 
-  // Load cursor (last processed mint from previous tick)
-  const { data: stateRow } = await db
-    .from('cron_tracker_state')
-    .select('last_mint')
-    .eq('id', 1)
-    .maybeSingle()
-  const cursor = (stateRow as { last_mint: string | null } | null)?.last_mint ?? null
-
-  // Advance cursor: load next CHUNK_SIZE distinct mints after the cursor
-  const { data: mintRows, error: mintErr } = await db.rpc('cron_tracker_next_mints', {
-    p_after_mint: cursor,
-    p_limit: CHUNK_SIZE,
+  const { data: rawCandidates, error: candErr } = await db.rpc('watchtower_cron_mint_candidates', {
+    p_snapshot_at: snapshotAt,
   })
-  if (mintErr) return errorResponse(mintErr.message, req, 500)
+  if (candErr) return errorResponse(candErr.message, req, 500)
 
-  const mints = (mintRows ?? []) as Array<{
-    mint: string
-    needs_current: boolean
-    needs_snapshot: boolean
-    kind: string
-  }>
-
-  // Empty slice: we hit the end of the list — wrap cursor back to NULL so next tick starts over
-  if (!mints.length) {
-    if (cursor !== null) {
-      await db.from('cron_tracker_state')
-        .update({ last_mint: null, updated_at: now.toISOString() })
-        .eq('id', 1)
-    }
-    return jsonResponse({ processed: 0, synced: 0, cursor: null, wrapped: true, mode }, req)
+  const candidates = (rawCandidates ?? []) as CronCandidateRow[]
+  const classified: ClassifiedWork[] = []
+  for (const row of candidates) {
+    const c = classifyCronWork(row, config, now)
+    if (c) classified.push(c)
   }
 
-  const mintKeys = mints.map((m) => m.mint)
+  classified.sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier
+    if (a.tier === 2) return b.overdueMin - a.overdueMin
+    return a.row.mint.localeCompare(b.row.mint)
+  })
 
-  // Collect all tenants watching these mints to check billing limits in bulk
-  const { data: allWatches } = await db
-    .from('watchtower_watches')
-    .select('tenant_id, mint, track_holders, track_snapshot')
-    .in('mint', mintKeys)
+  const maxTick = Math.max(1, config.max_mints_per_tick)
+  const workSet = classified.slice(0, maxTick)
+  const candidateWorkCount = classified.length
+  const capped = candidateWorkCount > maxTick
 
-  const tenantIds = [...new Set((allWatches ?? []).map((w) => String(w.tenant_id ?? '')))]
-    .filter(Boolean)
-
-  // Billing limits — one getWithinLimitMints call per tenant (current + snapshot)
-  const withinCurrentByTenant = new Map<string, Set<string>>()
-  const withinSnapshotByTenant = new Map<string, Set<string>>()
-  await Promise.all(tenantIds.map(async (tid) => {
-    const [cur, snap] = await Promise.all([
-      getWithinLimitMints(db, tid, 'mints_current'),
-      getWithinLimitMints(db, tid, 'mintsSnapshot'),
-    ])
-    withinCurrentByTenant.set(tid, cur)
-    withinSnapshotByTenant.set(tid, snap)
-  }))
-
-  // Index watches by mint
-  const watchesByMint = new Map<string, Array<{ tenant_id: string; track_holders: boolean; track_snapshot: boolean }>>()
-  for (const w of allWatches ?? []) {
-    const m = w.mint as string
-    const list = watchesByMint.get(m) ?? []
-    list.push({
-      tenant_id: String(w.tenant_id ?? ''),
-      track_holders: Boolean(w.track_holders),
-      track_snapshot: Boolean(w.track_snapshot),
-    })
-    watchesByMint.set(m, list)
+  if (workSet.length === 0) {
+    return jsonResponse({
+      processed: 0,
+      synced: 0,
+      mode,
+      capped: false,
+      candidateWorkCount: 0,
+      selectedCount: 0,
+      rpcCandidateRowCount: candidates.length,
+    }, req)
   }
-
-  // Holder-current freshness meta (avoids loading full JSONB)
-  const { data: syncMeta, error: syncMetaErr } = await db.rpc('holder_current_sync_meta', { p_mints: mintKeys })
-  if (syncMetaErr) return errorResponse(syncMetaErr.message, req, 500)
-
-  const currentByMint = new Map<string, { holderCount: number; last_updated: string }>()
-  for (const r of (syncMeta ?? []) as Array<{ mint: string; last_updated: string; holder_count: number }>) {
-    currentByMint.set(r.mint, { holderCount: Number(r.holder_count) || 0, last_updated: r.last_updated })
-  }
-
-  // Which snapshot buckets already exist (avoid re-fetching)
-  const { data: existingSnaps } = await db
-    .from('holder_snapshots')
-    .select('mint')
-    .in('mint', mintKeys)
-    .eq('snapshot_at', snapshotAt)
-  const existingSnapMints = new Set((existingSnaps ?? []).map((s) => s.mint as string))
-
-  const { data: gpaRows } = await db
-    .from('spl_holder_gpa_progress')
-    .select('mint, pagination_key')
-    .in('mint', mintKeys)
 
   const gpaByMint = new Map<string, string>()
-  for (const r of gpaRows ?? []) {
-    const m = r.mint as string | undefined
-    const k = r.pagination_key as string | undefined
-    if (m && k) gpaByMint.set(m, k)
+  const nftNextPageByMint = new Map<string, number>()
+  for (const item of workSet) {
+    const m = item.row.mint
+    const pk = item.row.spl_pagination_key
+    if (item.kind === 'SPL' && pk) gpaByMint.set(m, pk)
+    const np = item.row.nft_next_page
+    if (item.kind === 'NFT' && np != null && Number.isFinite(Number(np)) && Number(np) >= 1) {
+      nftNextPageByMint.set(m, Number(np))
+    }
   }
 
   let processed = 0
   let synced = 0
 
-  for (const mintRow of mints) {
-    const mint = mintRow.mint
-    const kind = (mintRow.kind as 'SPL' | 'NFT') ?? 'NFT'
-    const watches = watchesByMint.get(mint) ?? []
+  for (const item of workSet) {
+    const mint = item.row.mint
+    const kind = item.kind
+    const anyCurrent = item.row.any_current_eligible
+    const anySnapshot = item.row.any_snapshot_eligible
 
-    // Does any in-limit tenant need current?
-    const anyCurrent = watches.some(
-      (w) => w.track_holders && withinCurrentByTenant.get(w.tenant_id)?.has(mint),
+    const itemTotal = Number(item.row.item_total) || 0
+    const holderCount = Number(item.row.holder_count) || 0
+    const currentDue = anyCurrent && (
+      kind === 'NFT'
+        ? isNftHolderSyncDue(
+          item.row.last_updated,
+          itemTotal,
+          config.nft_item_tiers,
+          now,
+        )
+        : isHolderSyncDue(
+          item.row.last_updated,
+          holderCount,
+          config.tiers,
+          now,
+        )
     )
-    // Does any in-limit tenant need snapshot?
-    const anySnapshot = watches.some(
-      (w) => w.track_snapshot && withinSnapshotByTenant.get(w.tenant_id)?.has(mint),
-    )
-
-    const meta = currentByMint.get(mint)
-    const currentDue = anyCurrent && isHolderSyncDue(
-      meta?.last_updated ?? null,
-      meta?.holderCount ?? 0,
-      config.tiers,
-      now,
-    )
-    const snapshotDue = anySnapshot && !existingSnapMints.has(mint)
+    const snapshotDue = anySnapshot && !item.row.has_snapshot_for_bucket
 
     const splResumeKey = kind === 'SPL' ? gpaByMint.get(mint) ?? null : null
     const splIncomplete = kind === 'SPL' && splResumeKey != null
+    const nftResumePage = kind === 'NFT' ? nftNextPageByMint.get(mint) ?? null : null
+    const nftIncomplete = kind === 'NFT' && nftResumePage != null
 
-    if (!currentDue && !snapshotDue && !splIncomplete) {
+    if (!currentDue && !snapshotDue && !splIncomplete && !nftIncomplete) {
       processed++
       continue
     }
@@ -492,6 +494,7 @@ Deno.serve(async (req: Request) => {
 
       let holders: Array<{ wallet: string; amount: string }>
       let splCompleted = true
+      let nftCompleted = true
 
       if (kind === 'SPL') {
         let mergeMap = new Map<string, bigint>()
@@ -506,7 +509,6 @@ Deno.serve(async (req: Request) => {
         const spl = await fetchSplHoldersWithProgress(rpcEndpoint, mint, {
           resumePaginationKey: splResumeKey,
           mergeInto: mergeMap,
-          maxPages: splCronPageBudget(),
         })
         holders = spl.holders
         splCompleted = spl.completed
@@ -522,7 +524,33 @@ Deno.serve(async (req: Request) => {
           gpaByMint.delete(mint)
         }
       } else {
-        holders = await fetchNftHolders(rpcEndpoint, mint)
+        let mergeCounts = new Map<string, number>()
+        if (nftIncomplete) {
+          const { data: cur } = await db
+            .from('holder_current')
+            .select('holder_wallets')
+            .eq('mint', mint)
+            .maybeSingle()
+          mergeCounts = nftHolderWalletsJsonToMap(cur?.holder_wallets)
+        }
+        const startPage = nftResumePage ?? 1
+        const nft = await fetchNftHoldersWithProgress(rpcEndpoint, mint, {
+          startPage,
+          mergeInto: mergeCounts,
+        })
+        holders = nft.holders
+        nftCompleted = nft.completed
+        if (!nft.completed && nft.nextPage != null) {
+          await db.from('nft_holder_group_progress').upsert({
+            mint,
+            next_page: nft.nextPage,
+            updated_at: now.toISOString(),
+          }, { onConflict: 'mint' })
+          nftNextPageByMint.set(mint, nft.nextPage)
+        } else {
+          await db.from('nft_holder_group_progress').delete().eq('mint', mint)
+          nftNextPageByMint.delete(mint)
+        }
       }
 
       if (kind === 'SPL') {
@@ -531,7 +559,7 @@ Deno.serve(async (req: Request) => {
           holder_wallets: holders,
           last_updated: now.toISOString(),
         }, { onConflict: 'mint' })
-      } else if (currentDue) {
+      } else {
         await db.from('holder_current').upsert({
           mint,
           holder_wallets: holders,
@@ -539,7 +567,7 @@ Deno.serve(async (req: Request) => {
         }, { onConflict: 'mint' })
       }
 
-      if (snapshotDue && (kind !== 'SPL' || splCompleted)) {
+      if (snapshotDue && splCompleted && nftCompleted) {
         await db.from('holder_snapshots').upsert({
           mint,
           snapshot_at: snapshotAt,
@@ -556,13 +584,13 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Advance cursor: if slice was smaller than CHUNK_SIZE we hit the end → wrap
-  const wrapped = mints.length < CHUNK_SIZE
-  const nextCursor = wrapped ? null : (mints[mints.length - 1]?.mint ?? null)
-
-  await db.from('cron_tracker_state')
-    .update({ last_mint: nextCursor, updated_at: now.toISOString() })
-    .eq('id', 1)
-
-  return jsonResponse({ processed, synced, cursor: nextCursor, wrapped, mode }, req)
+  return jsonResponse({
+    processed,
+    synced,
+    mode,
+    capped,
+    candidateWorkCount,
+    selectedCount: workSet.length,
+    rpcCandidateRowCount: candidates.length,
+  }, req)
 })
