@@ -5,6 +5,7 @@ import {
   sanitizeTokenLabel,
   truncateAddress,
   formatUsdc,
+  formatBillingUsdc,
   formatUiAmount,
   formatRawTokenAmount,
   formatDate,
@@ -122,6 +123,14 @@ describe('formatUsdc', () => {
 
   it('strips trailing zeros', () => {
     expect(formatUsdc(1.100000)).toBe('1.1')
+  })
+})
+
+describe('formatBillingUsdc', () => {
+  it('rounds to cents and avoids float dust', () => {
+    expect(formatBillingUsdc(48.999996)).toBe('49')
+    expect(formatBillingUsdc(50.709996)).toBe('50.71')
+    expect(formatBillingUsdc(4.225833)).toBe('4.23')
   })
 })
 

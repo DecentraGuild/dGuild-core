@@ -77,6 +77,20 @@ export function formatUsdc(value: number): string {
 }
 
 /**
+ * Round USDC catalogue-style amounts to cents (avoids float dust in UI).
+ */
+export function roundBillingUsdcCents(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
+/**
+ * Format USDC for billing/pricing widgets: cent precision, no long fractional tails.
+ */
+export function formatBillingUsdc(value: number): string {
+  return formatUiAmount(roundBillingUsdcCents(value), 2)
+}
+
+/**
  * Format UI (human) amount for display. Strips trailing zeros.
  * Use for token amounts, balances, etc.
  * @param maxDecimals - Max decimal places; 0 for NFTs (floors to integer).
