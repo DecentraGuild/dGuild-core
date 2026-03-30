@@ -22,6 +22,9 @@ interface WatchRow {
   enabled_at_holders: string | null
   enabled_at_snapshot: string | null
   enabled_at_transactions: string | null
+  /** Precomputed billing window; do not send on upsert (DB triggers own these). */
+  billing_eligible_current: boolean
+  billing_eligible_snapshot: boolean
 }
 
 export function useAdminWatchtowerScope(
@@ -156,7 +159,7 @@ export function useAdminWatchtowerScope(
       const catalogMints = catalogRows.map((r) => r.mint as string)
 
       const [watchesRes, metaData] = await Promise.all([
-        supabase.from('watchtower_watches').select('mint, track_holders, track_snapshot, track_transactions, enabled_at_holders, enabled_at_snapshot, enabled_at_transactions').eq('tenant_id', id),
+        supabase.from('watchtower_watches').select('mint, track_holders, track_snapshot, track_transactions, enabled_at_holders, enabled_at_snapshot, enabled_at_transactions, billing_eligible_current, billing_eligible_snapshot').eq('tenant_id', id),
         catalogMints.length > 0
           ? supabase.from('mint_metadata').select('mint, name, image').in('mint', catalogMints).then((r) => r.data ?? [])
           : Promise.resolve([] as Array<{ mint: string; name: string | null; image: string | null }>),
@@ -187,6 +190,8 @@ export function useAdminWatchtowerScope(
         enabled_at_holders: (r.enabled_at_holders as string) ?? null,
         enabled_at_snapshot: (r.enabled_at_snapshot as string) ?? null,
         enabled_at_transactions: (r.enabled_at_transactions as string) ?? null,
+        billing_eligible_current: Boolean(r.billing_eligible_current),
+        billing_eligible_snapshot: Boolean(r.billing_eligible_snapshot),
       }))
       const gateVal = getModuleGateFromTenant(tenant.value, 'watchtower')
       initialGateStr.value =
@@ -224,6 +229,12 @@ export function useAdminWatchtowerScope(
       enabled_at_holders: field === 'track_holders' && value ? (existing?.enabled_at_holders ?? peerMinEnabledAt(mint, 'track_holders') ?? now) : (existing?.enabled_at_holders ?? null),
       enabled_at_snapshot: field === 'track_snapshot' && value ? (existing?.enabled_at_snapshot ?? peerMinEnabledAt(mint, 'track_snapshot') ?? now) : (existing?.enabled_at_snapshot ?? null),
       enabled_at_transactions: field === 'track_transactions' && value ? (existing?.enabled_at_transactions ?? peerMinEnabledAt(mint, 'track_transactions') ?? now) : (existing?.enabled_at_transactions ?? null),
+      billing_eligible_current: field === 'track_holders'
+        ? (value ? (existing?.billing_eligible_current ?? false) : false)
+        : (existing?.billing_eligible_current ?? false),
+      billing_eligible_snapshot: field === 'track_snapshot'
+        ? (value ? (existing?.billing_eligible_snapshot ?? false) : false)
+        : (existing?.billing_eligible_snapshot ?? false),
     }
     const idx = watches.value.findIndex((w) => w.mint === mint)
     if (idx >= 0) watches.value = [...watches.value.slice(0, idx), next, ...watches.value.slice(idx + 1)]
@@ -243,7 +254,7 @@ export function useAdminWatchtowerScope(
         if (w.track_holders || w.track_snapshot) {
           try {
             try {
-              await invokeEdgeFunction(supabase, 'cron-tracker', { mode: 'full', syncMint: w.mint, tenantId: id })
+              await invokeEdgeFunction(supabase, 'cron-tracker', { syncMint: w.mint, tenantId: id })
             } catch { /* best-effort; pg_cron will sync on schedule */ }
           } catch { /* network/timeout; pg_cron will sync */ }
         }

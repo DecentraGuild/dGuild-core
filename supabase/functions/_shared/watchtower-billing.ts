@@ -83,6 +83,42 @@ export async function getWithinLimitMints(
   return new Set((watches ?? []).map((w) => w.mint as string))
 }
 
+export async function getWithinLimitMintsBulk(
+  db: SupabaseClient,
+  tenantIds: string[],
+): Promise<{
+  withinCurrentByTenant: Map<string, Set<string>>
+  withinSnapshotByTenant: Map<string, Set<string>>
+}> {
+  const withinCurrentByTenant = new Map<string, Set<string>>()
+  const withinSnapshotByTenant = new Map<string, Set<string>>()
+  for (const tid of tenantIds) {
+    withinCurrentByTenant.set(tid, new Set())
+    withinSnapshotByTenant.set(tid, new Set())
+  }
+  if (tenantIds.length === 0) {
+    return { withinCurrentByTenant, withinSnapshotByTenant }
+  }
+
+  const { data, error } = await db.rpc('watchtower_within_limit_mints_bulk', {
+    p_tenant_ids: tenantIds,
+  })
+  if (error) throw new Error(error.message)
+
+  for (const row of (data ?? []) as Array<{ tenant_id: string; mint: string; meter_scope: string }>) {
+    const t = String(row.tenant_id ?? '')
+    const m = String(row.mint ?? '')
+    if (!t || !m) continue
+    if (row.meter_scope === 'mints_current') {
+      withinCurrentByTenant.get(t)?.add(m)
+    } else if (row.meter_scope === 'mints_snapshot') {
+      withinSnapshotByTenant.get(t)?.add(m)
+    }
+  }
+
+  return { withinCurrentByTenant, withinSnapshotByTenant }
+}
+
 export async function isMintWithinLimit(
   db: SupabaseClient,
   tenantId: string,
