@@ -378,7 +378,7 @@ describe('Admin quote – registration one-time vs recurring display', () => {
           meter_key: 'registration',
           min_quantity: 1,
           max_quantity: null,
-          unit_price: 0.19,
+          unit_price: 19,
           tier_price: null,
           label: 'dGuild registration',
         },
@@ -412,5 +412,31 @@ describe('Admin quote – registration one-time vs recurring display', () => {
     expect(quote.priceUsdc).toBe(49)
     expect(quote.quotedMeterTiers?.registration).toBeUndefined()
     expect(quote.quotedMeterTiers?.slug?.perMarginalUnitUsdc).toBe(49)
+  })
+
+  it('yearly quote: no slug entitlement → recurring display 0 (registration never adds to recurring)', async () => {
+    const { quote } = await resolveQuote(
+      {
+        tenantId: 't-adm',
+        productKey: 'admin',
+        durationDays: 365,
+      },
+      db,
+    )
+    expect(quote.recurringDisplayUsdc).toBe(0)
+  })
+
+  it('yearly quote: registration unit × mult must not appear in recurring (171 + 49 guard)', async () => {
+    const { quote } = await resolveQuote(
+      {
+        tenantId: 't-adm',
+        productKey: 'admin',
+        durationDays: 365,
+        meterOverrides: { slug: 1 },
+      },
+      db,
+    )
+    expect(quote.recurringDisplayUsdc).toBe(49)
+    expect(quote.recurringDisplayUsdc).not.toBe(220)
   })
 })

@@ -17,15 +17,15 @@
           </span>
           <div v-if="isTieredWithOneTime" class="pricing-widget__tier-prices">
             <span class="pricing-widget__tier-price-line">
-              <span class="pricing-widget__tier-price-value">{{ formatUsdc(tieredRecurringMonthlyDisplay) }} USDC/mo</span>
+              <span class="pricing-widget__tier-price-value">{{ formatBillingUsdc(tieredRecurringMonthlyDisplay) }} USDC/mo</span>
               <span class="pricing-widget__tier-price-muted">recurring</span>
             </span>
             <span class="pricing-widget__tier-price-line">
-              <span class="pricing-widget__tier-price-value">{{ formatUsdc(oneTimePerUnitEffective) }} USDC</span>
+              <span class="pricing-widget__tier-price-value">{{ formatBillingUsdc(oneTimePerUnitEffective) }} USDC</span>
               <span class="pricing-widget__tier-price-muted">per new {{ marginalUnitLabel }}</span>
             </span>
           </div>
-          <span v-else class="pricing-widget__tier-price">{{ formatUsdc(price.oneTimeTotal) }} USDC</span>
+          <span v-else class="pricing-widget__tier-price">{{ formatBillingUsdc(price.oneTimeTotal) }} USDC</span>
         </div>
         <div v-if="isTieredWithOneTime && usageRows.length" class="pricing-widget__usage">
           <div
@@ -43,7 +43,7 @@
         <div class="pricing-widget__tier">
           <span class="pricing-widget__tier-name">{{ selectedTier.name }}</span>
           <span class="pricing-widget__tier-price">
-            {{ formatUsdc(selectedPeriod === 'yearly' ? price.recurringYearly / 12 : price.recurringMonthly) }} USDC/mo
+            {{ formatBillingUsdc(selectedPeriod === 'yearly' ? price.recurringYearly / 12 : price.recurringMonthly) }} USDC/mo
           </span>
         </div>
 
@@ -66,18 +66,18 @@
             class="pricing-widget__addon-row"
           >
             <span>{{ addon.name }} &times;{{ addon.quantity }}</span>
-            <span>{{ formatUsdc(addon.amount) }} USDC/mo</span>
+            <span>{{ formatBillingUsdc(addon.amount) }} USDC/mo</span>
           </div>
         </div>
 
         <div class="pricing-widget__totals">
           <div v-if="selectedPeriod === 'yearly'" class="pricing-widget__total-row">
             <span>Recurring (yearly)</span>
-            <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
+            <span class="pricing-widget__total-value">{{ formatBillingUsdc(price.recurringYearly) }} USDC/yr</span>
           </div>
           <div v-else class="pricing-widget__total-row">
             <span>Recurring (monthly)</span>
-            <span class="pricing-widget__total-value">{{ formatUsdc(price.recurringMonthly) }} USDC/mo</span>
+            <span class="pricing-widget__total-value">{{ formatBillingUsdc(price.recurringMonthly) }} USDC/mo</span>
           </div>
         </div>
 
@@ -94,7 +94,7 @@
           <div class="pricing-widget__sub-row">
             <span>Recurring</span>
             <span>
-              {{ formatUsdc(subscription!.billingPeriod === 'yearly' ? price.recurringYearly : price.recurringMonthly) }}
+              {{ formatBillingUsdc(subscription!.billingPeriod === 'yearly' ? price.recurringYearly : price.recurringMonthly) }}
               {{ subscription!.billingPeriod === 'yearly' ? 'USDC/yr' : 'USDC/mo' }}
             </span>
           </div>
@@ -119,7 +119,7 @@
       <template v-else-if="price?.billable && moduleId === 'slug'">
         <div class="pricing-widget__tier">
           <span class="pricing-widget__tier-name">Custom slug</span>
-          <span class="pricing-widget__tier-price">{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
+          <span class="pricing-widget__tier-price">{{ formatBillingUsdc(price.recurringYearly) }} USDC/yr</span>
         </div>
         <div v-if="hasActiveSubscription" class="pricing-widget__subscription">
           <p class="pricing-widget__section-label">Subscription</p>
@@ -133,7 +133,7 @@
           </div>
           <div class="pricing-widget__sub-row">
             <span>Recurring</span>
-            <span>{{ formatUsdc(price.recurringYearly) }} USDC/yr</span>
+            <span>{{ formatBillingUsdc(price.recurringYearly) }} USDC/yr</span>
           </div>
         </div>
       </template>
@@ -259,7 +259,7 @@ import {
 import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
-import { formatDate, formatUsdc } from '@decentraguild/display'
+import { formatBillingUsdc, formatDate } from '@decentraguild/display'
 import { useQuote } from '~/composables/core/useQuote'
 import { usePricingDisplay } from '~/composables/core/usePricingDisplay'
 import { usePricingWidgetActions } from '~/composables/core/usePricingWidgetActions'
@@ -445,7 +445,9 @@ const price = computed((): PriceResult | null => {
   const tieredDef =
     isTieredWithOneTime.value && mk ? tierDefinitionFromQuotedMeter(q, mk) : null
   const oneTimePerUnitForSelectedTier = isTieredWithOneTime.value ? (tieredDef?.oneTimePerUnit ?? 0) : 0
-  const disp = q.recurringDisplayUsdc ?? q.priceUsdc
+  const dispRaw = q.recurringDisplayUsdc
+  const disp =
+    typeof dispRaw === 'number' && Number.isFinite(dispRaw) ? dispRaw : 0
   return {
     moduleId: props.moduleId,
     billable: true,

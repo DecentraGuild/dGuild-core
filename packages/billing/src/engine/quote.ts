@@ -15,9 +15,15 @@ import { roundUsdcCents } from '../usdc-math.js'
 
 const QUOTE_TTL_MINUTES = 60
 
-/** Admin `registration` is a one-time meter; do not annualize it into recurring display. */
-function skipRegistrationRecurringDisplay(meterKey: string, durationDays: number): boolean {
-  return meterKey === 'registration' && durationDays > 0
+/**
+ * Admin product: only these meters are recurring catalogue items. `registration` is one-time only
+ * and must never affect recurringDisplayUsdc (whitelist avoids any alias/typo bypassing a name check).
+ */
+const ADMIN_RECURRING_DISPLAY_METERS = new Set<string>(['slug'])
+
+function adminMeterContributesToRecurringDisplay(productKey: string, meterKey: string): boolean {
+  if (productKey !== 'admin') return true
+  return ADMIN_RECURRING_DISPLAY_METERS.has(meterKey)
 }
 const DURATION_WHITELIST = [0, 30, 90, 365] as const
 
@@ -134,6 +140,8 @@ export async function resolveQuote(
       .eq('duration_days', durationDays)
     const durationRule = (durationRows as DurationRow[] | null)?.[0]
     if (!durationRule) throw new Error(`No duration rule for ${durationDays} days`)
+    // `price_multiplier` is one value per quote (from `duration_rules` for `durationDays`), not per meter.
+    // Per-meter overrides would need a tier_rules flag or similar; slug stays unit_price × mult today.
 
     for (const meterKey of meterKeys) {
       const used = usage[meterKey] ?? 0
@@ -177,7 +185,7 @@ export async function resolveQuote(
         continue
       }
 
-      if (target > 0 && tiers.length > 0 && !skipRegistrationRecurringDisplay(meterKey, durationDays)) {
+      if (target > 0 && tiers.length > 0 && adminMeterContributesToRecurringDisplay(params.productKey, meterKey)) {
         const displayTier = findTier(tiers, target)
         if (displayTier) {
           const hasFlat = displayTier.tier_price != null && Number(displayTier.tier_price) > 0
