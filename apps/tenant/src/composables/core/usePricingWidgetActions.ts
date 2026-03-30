@@ -5,7 +5,7 @@ import type { Ref } from 'vue'
 import { computed } from 'vue'
 import type { BillingPeriod } from '@decentraguild/billing'
 import type { ModuleState } from '@decentraguild/core'
-import { formatBillingUsdc } from '@decentraguild/display'
+import { formatBillingUsdcWhole } from '@decentraguild/display'
 
 export interface UsePricingWidgetActionsOptions {
   moduleId: string
@@ -57,7 +57,7 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
     if (deploying.value) return moduleId === 'slug' ? 'Claiming...' : 'Deploying...'
     if (saving.value) return 'Saving...'
     if (moduleId === 'slug') {
-      return chargeAmount.value > 0 ? `Claim for ${formatBillingUsdc(chargeAmount.value)} USDC/yr` : 'Claim slug'
+      return chargeAmount.value > 0 ? `Claim for ${formatBillingUsdcWhole(chargeAmount.value)} USDC/yr` : 'Claim slug'
     }
     if (isTieredWithOneTime.value) {
       const r = upgradeRecurringAmount.value
@@ -65,18 +65,18 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
       const period = selectedPeriod.value === 'yearly' ? '/yr' : '/mo'
       const ul = marginalUnitLabel.value
       if (r > 0 && u > 0) {
-        return `Deploy for ${formatBillingUsdc(r)} USDC${period} + ${formatBillingUsdc(u)} USDC per ${ul}`
+        return `Deploy for ${formatBillingUsdcWhole(r)} USDC${period} + ${formatBillingUsdcWhole(u)} USDC per ${ul}`
       }
       if (r > 0) {
-        return `Deploy for ${formatBillingUsdc(r)} USDC${period}`
+        return `Deploy for ${formatBillingUsdcWhole(r)} USDC${period}`
       }
       if (u > 0) {
-        return `Deploy for ${formatBillingUsdc(u)} USDC`
+        return `Deploy for ${formatBillingUsdcWhole(u)} USDC`
       }
       return 'Deploy'
     }
     if (chargeAmount.value > 0) {
-      return `Deploy for ${formatBillingUsdc(chargeAmount.value)} USDC`
+      return `Deploy for ${formatBillingUsdcWhole(chargeAmount.value)} USDC`
     }
     return 'Deploy'
   })
@@ -84,7 +84,7 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
   const saveButtonLabel = computed(() => {
     if (saving.value) return 'Saving...'
     if (upgradeRecurringAmount.value > 0) {
-      return `Upgrade for ${formatBillingUsdc(upgradeRecurringAmount.value)} USDC${selectedPeriod.value === 'yearly' ? '/yr' : '/mo'}`
+      return `Upgrade for ${formatBillingUsdcWhole(upgradeRecurringAmount.value)} USDC${selectedPeriod.value === 'yearly' ? '/yr' : '/mo'}`
     }
     return 'Save'
   })
@@ -92,7 +92,7 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
   const hintText = computed(() => {
     if (moduleState.value === 'staging' && isAddUnit.value) {
       if (chargeAmount.value > 0) {
-        return `Deploy to activate. Create lists from the form (${formatBillingUsdc(chargeAmount.value)} USDC each).`
+        return `Deploy to activate. Create lists from the form (${formatBillingUsdcWhole(chargeAmount.value)} USDC each).`
       }
       return 'Deploy to activate. Create lists from the form; your entitlements cover the next list at no extra charge.'
     }
@@ -108,7 +108,7 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
       if (isTieredWithOneTime.value) {
         return null
       }
-      return `Create new lists from the form above (${formatBillingUsdc(chargeAmount.value)} USDC each).`
+      return `Create new lists from the form above (${formatBillingUsdcWhole(chargeAmount.value)} USDC each).`
     }
     return null
   })

@@ -30,7 +30,8 @@ export function usePricingDisplay(
   conditions: Ref<ConditionSet | null>,
   selectedTier: Ref<TierDefinition | null>,
   price: Ref<PriceResult | null>,
-  storedConditions?: Ref<ConditionSet | null>
+  storedConditions?: Ref<ConditionSet | null>,
+  extraSkipMeterKeys?: Ref<readonly string[] | undefined>,
 ) {
   const usageRows = computed((): UsageRowDisplay[] => {
     const pm = pricingModel.value
@@ -38,8 +39,9 @@ export function usePricingDisplay(
     const tier = selectedTier.value
     if (!pm || !cond || !tier) return []
     const storedCond = storedConditions?.value ?? null
+    const extraSkip = new Set(extraSkipMeterKeys?.value ?? [])
     return pm.conditionKeys
-      .filter((key) => !USAGE_DISPLAY_SKIP_METERS.has(key))
+      .filter((key) => !USAGE_DISPLAY_SKIP_METERS.has(key) && !extraSkip.has(key))
       .map((key) => {
         const condVal = valueFromConditionSetForMeter(cond, key)
         const inclVal = tier.included[key]

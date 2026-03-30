@@ -82,6 +82,9 @@ export function useAdminSubscriptions() {
       const qty = Number((limit as { quantity_total: number }).quantity_total)
       const expires = (limit as { expires_at_max: string | null }).expires_at_max
       const info = toSubscriptionInfo(qty, expires)
+      if (moduleId === 'slug') {
+        info.billingPeriod = 'yearly'
+      }
       info.conditionsSnapshot = { [meterKey]: qty }
       subscriptions[moduleId] = info
     }

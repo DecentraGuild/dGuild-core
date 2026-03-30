@@ -228,6 +228,43 @@ Deno.serve(async (req: Request) => {
       const bundleList = (bundleMints ?? []) as Array<{ token_mint: string; bundle_id: string; tokens_required: number }>
       const indList = (indMints ?? []) as Array<{ mint: string; label: string | null }>
 
+      const bundleIds = [...new Set(bundleList.map((b) => b.bundle_id).filter(Boolean))]
+      const { data: bundleRows } = bundleIds.length > 0
+        ? await db.from('bundles').select('id, label').in('id', bundleIds)
+        : { data: [] as Array<{ id: string; label: string }> }
+      const bundleLabelById = new Map((bundleRows ?? []).map((r) => [(r as { id: string }).id, ((r as { label: string }).label ?? '').trim()]))
+
+      const allMintSet = new Set<string>()
+      for (const b of bundleList) allMintSet.add(b.token_mint)
+      for (const i of indList) allMintSet.add(i.mint)
+      const allMints = [...allMintSet]
+      const { data: metaRows } = allMints.length > 0
+        ? await db.from('mint_metadata').select('mint, name').in('mint', allMints)
+        : { data: [] as Array<{ mint: string; name: string | null }> }
+      const metaNameByMint = new Map(
+        (metaRows ?? []).map((r) => {
+          const row = r as { mint: string; name: string | null }
+          const n = (row.name ?? '').trim()
+          return [row.mint, n || null] as const
+        }),
+      )
+
+      function resolveVoucherLabel(
+        mintAddr: string,
+        kind: 'bundle' | 'individual',
+        dbLabel: string | null | undefined,
+        bundleId: string | undefined,
+      ): string | null {
+        const chainName = metaNameByMint.get(mintAddr) ?? null
+        if (kind === 'individual') {
+          const manual = (dbLabel ?? '').trim()
+          return manual || chainName
+        }
+        const bl = bundleId ? bundleLabelById.get(bundleId) ?? null : null
+        const bundleLbl = bl && bl.length > 0 ? bl : null
+        return chainName || bundleLbl
+      }
+
       const bundleEntitlements = new Map<string, Array<{ meter_key: string; quantity: number; duration_days: number }>>()
       for (const b of bundleList) {
         const { data: ents } = await db
@@ -251,17 +288,60 @@ Deno.serve(async (req: Request) => {
           mint: b.token_mint,
           type: 'bundle' as const,
           bundleId: b.bundle_id,
+          label: resolveVoucherLabel(b.token_mint, 'bundle', null, b.bundle_id),
           tokensRequired: b.tokens_required ?? 1,
           entitlements: bundleEntitlements.get(b.token_mint) ?? [],
         })),
         ...indList.map((i) => ({
           mint: i.mint,
           type: 'individual' as const,
-          label: i.label,
+          label: resolveVoucherLabel(i.mint, 'individual', i.label, undefined),
           tokensRequired: 1,
           entitlements: indEntitlements.get(i.mint) ?? [],
         })),
       ]
+
+      const nowIso = new Date().toISOString()
+      const displayByMint = new Map<string, string>()
+      for (const v of vouchers) {
+        const display = (v.label ?? '').trim()
+        if (display) displayByMint.set(v.mint, display)
+      }
+      const catalogMints = [...displayByMint.keys()]
+      if (catalogMints.length > 0) {
+        const { data: existingCat } = await db
+          .from('tenant_mint_catalog')
+          .select('mint, label')
+          .eq('tenant_id', listTenantId)
+          .in('mint', catalogMints)
+        const existingLabelByMint = new Map(
+          (existingCat ?? []).map((r) => {
+            const row = r as { mint: string; label: string | null }
+            return [row.mint, (row.label ?? '').trim()] as const
+          }),
+        )
+        const inserts: Array<{ tenant_id: string; mint: string; kind: string; label: string; updated_at: string }> = []
+        const updateMints = new Set<string>()
+        for (const [mintAddr, display] of displayByMint) {
+          const existingLbl = existingLabelByMint.get(mintAddr) ?? ''
+          if (existingLbl.length > 0) continue
+          if (existingLabelByMint.has(mintAddr)) updateMints.add(mintAddr)
+          else inserts.push({ tenant_id: listTenantId, mint: mintAddr, kind: 'NFT', label: display, updated_at: nowIso })
+        }
+        if (inserts.length > 0) {
+          await db.from('tenant_mint_catalog').insert(inserts)
+        }
+        for (const m of updateMints) {
+          const display = displayByMint.get(m)
+          if (!display) continue
+          await db
+            .from('tenant_mint_catalog')
+            .update({ label: display, updated_at: nowIso })
+            .eq('tenant_id', listTenantId)
+            .eq('mint', m)
+        }
+      }
+
       return jsonResponse({ vouchers }, req)
     } catch (e) {
       return errorResponse(e instanceof Error ? e.message : 'List vouchers failed', req, 400)

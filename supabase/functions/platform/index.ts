@@ -12,7 +12,7 @@ import { handleGateFetchUnbound, handleGateBind, handleGateUnbind } from './hand
 import { handleRaffleFetchUnbound, handleRaffleBind, handleRaffleBindTenant, handleRaffleUnbind } from './handlers/raffles.ts'
 import { handleCrafterImportToken, handleCrafterRemoveToken } from './handlers/crafter.ts'
 import { handleBundleCreate, handleBundleGet, handleBundleUpdate, handleBundlesList } from './handlers/bundles.ts'
-import { handleVoucherPrepareMetadata, handleVoucherRegisterDraft, handleVoucherList, handleVoucherRemoveDraft, handleVoucherCreateBundle, handleVoucherCreateIndividual, handleIndividualVoucherGet, handleBundleVoucherGet, handleIndividualVoucherUpdate, handleBundleVoucherUpdate, handleVoucherDetail, handleVoucherHolders } from './handlers/vouchers.ts'
+import { handleVoucherPrepareMetadata, handleVoucherRegisterDraft, handleVoucherList, handleVoucherRemoveDraft, handleVoucherCreateBundle, handleVoucherCreateIndividual, handleIndividualVoucherGet, handleBundleVoucherGet, handleIndividualVoucherUpdate, handleBundleVoucherUpdate, handleVoucherDetail, handleVoucherSyncMintMetadata, handleVoucherHolders } from './handlers/vouchers.ts'
 import { handleMetersList, handleProductsList, handleProductTierDefaults } from './handlers/meters.ts'
 import { handleAuditLog } from './handlers/audit.ts'
 
@@ -61,6 +61,7 @@ const ROUTES = new Map<string, Handler>([
   ['products-list', handleProductsList],
   ['product-tier-defaults', handleProductTierDefaults],
   ['voucher-detail', handleVoucherDetail],
+  ['voucher-sync-mint-metadata', handleVoucherSyncMintMetadata],
   ['voucher-holders', handleVoucherHolders],
   ['audit-log', handleAuditLog],
 ])

@@ -91,6 +91,13 @@ export function formatBillingUsdc(value: number): string {
 }
 
 /**
+ * Whole USDC for admin pricing cards (no fractional cents in UI).
+ */
+export function formatBillingUsdcWhole(value: number): string {
+  return formatUiAmount(roundBillingUsdcCents(value), 0)
+}
+
+/**
  * Format UI (human) amount for display. Strips trailing zeros.
  * Use for token amounts, balances, etc.
  * @param maxDecimals - Max decimal places; 0 for NFTs (floors to integer).
