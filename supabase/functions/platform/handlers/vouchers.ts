@@ -430,6 +430,62 @@ export async function handleVoucherDetail(
   return errorResponse('Voucher not found', req, 404)
 }
 
+/** After on-chain Metaplex metadata update, persist name/symbol/image so tenant admin voucher UI resolves labels without address book. */
+export async function handleVoucherSyncMintMetadata(
+  body: Record<string, unknown>,
+  db: Db,
+  authHeader: string | null,
+  req: Request,
+): Promise<Response> {
+  const check = await requirePlatformAdmin(authHeader, req)
+  if (!check.ok) return check.response
+
+  const mint = (body.mint as string)?.trim()
+  if (!mint) return errorResponse('mint required', req)
+
+  const [{ data: bv }, { data: iv }] = await Promise.all([
+    db.from('bundle_vouchers').select('token_mint').eq('token_mint', mint).maybeSingle(),
+    db.from('individual_vouchers').select('mint').eq('mint', mint).maybeSingle(),
+  ])
+  if (!bv && !iv) return errorResponse('Mint is not a registered voucher', req, 404)
+
+  const nameIn = (body.name as string)?.trim()
+  const symbolIn = (body.symbol as string)?.trim()
+  const imageIn = typeof body.image === 'string' ? body.image.trim() : ''
+  const image = imageIn.length > 0 ? imageIn : null
+
+  const { data: existing } = await db.from('mint_metadata').select('*').eq('mint', mint).maybeSingle()
+  const ex = (existing ?? {}) as Record<string, unknown>
+  const now = new Date().toISOString()
+
+  const name = nameIn && nameIn.length > 0 ? nameIn : ((ex.name as string | null | undefined) ?? null)
+  const symbol = symbolIn && symbolIn.length > 0 ? symbolIn : ((ex.symbol as string | null | undefined) ?? null)
+  const imageMerged = image ?? ((ex.image as string | null | undefined) ?? null)
+
+  await db.from('mint_metadata').upsert(
+    {
+      mint,
+      name,
+      symbol,
+      image: imageMerged,
+      decimals: typeof ex.decimals === 'number' ? ex.decimals : 0,
+      traits: ex.traits ?? null,
+      trait_index: ex.trait_index ?? null,
+      seller_fee_basis_points: ex.seller_fee_basis_points ?? null,
+      update_authority: ex.update_authority ?? null,
+      uri: ex.uri ?? null,
+      primary_sale_happened: ex.primary_sale_happened ?? null,
+      is_mutable: ex.is_mutable ?? null,
+      edition_nonce: ex.edition_nonce ?? null,
+      token_standard: (ex.token_standard as string | null | undefined) ?? null,
+      updated_at: now,
+    },
+    { onConflict: 'mint' },
+  )
+
+  return jsonResponse({ ok: true }, req)
+}
+
 export async function handleVoucherHolders(
   body: Record<string, unknown>,
   _db: Db,

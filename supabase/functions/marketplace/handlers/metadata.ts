@@ -84,11 +84,13 @@ export async function loadPlatformMetadataMintList(db: Db): Promise<string[]> {
 
   for (const row of ADDRESS_BOOK_DEFAULT_MINTS_DATA) { mints.add(row.mint); kindByMint.set(row.mint, row.kind) }
 
-  const [catalogRes, watchesRes, scopeRes, tenantColScopeRes] = await Promise.all([
+  const [catalogRes, watchesRes, scopeRes, tenantColScopeRes, bundleVoucherRes, individualVoucherRes] = await Promise.all([
     db.from('tenant_mint_catalog').select('mint, kind'),
     db.from('watchtower_watches').select('mint'),
     db.from('marketplace_mint_scope').select('mint, source, collection_mint'),
     db.from('tenant_collection_scope').select('collection_mint'),
+    db.from('bundle_vouchers').select('token_mint'),
+    db.from('individual_vouchers').select('mint'),
   ])
 
   for (const r of catalogRes.data ?? []) { const m = r.mint as string; mints.add(m); kindByMint.set(m, (r.kind as 'SPL' | 'NFT') ?? 'SPL') }
@@ -99,6 +101,8 @@ export async function loadPlatformMetadataMintList(db: Db): Promise<string[]> {
     if (cm) mints.add(cm)
   }
   for (const r of tenantColScopeRes.data ?? []) mints.add(r.collection_mint as string)
+  for (const r of bundleVoucherRes.data ?? []) mints.add((r as { token_mint: string }).token_mint)
+  for (const r of individualVoucherRes.data ?? []) mints.add((r as { mint: string }).mint)
 
   const collectionRoots = new Set<string>()
   for (const m of mints) { if (kindByMint.get(m) === 'NFT') collectionRoots.add(m) }

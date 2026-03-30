@@ -223,6 +223,14 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
           ? buildUpdateMetadataTransaction({ mint: mintAddr, updateAuthority: wallet.publicKey, newName: resolvedName.slice(0, 32), newSymbol: resolvedSymbol.slice(0, 10), newUri: uri, sellerFeeBasisPoints })
           : buildCreateMetadataTransaction({ mint: mintAddr, name: resolvedName.slice(0, 32), symbol: resolvedSymbol.slice(0, 10), uri, updateAuthority: wallet.publicKey, payer: wallet.publicKey, sellerFeeBasisPoints })
         await sendAndConfirmTransaction(connection, metaTx, wallet, wallet.publicKey)
+        const imageForSync = (payload.imageUrl !== undefined ? payload.imageUrl.trim() : (editMetadata.value?.image ?? '')) || null
+        await invokeEdgeFunction(supabase, 'platform', {
+          action: 'voucher-sync-mint-metadata',
+          mint: mintAddr,
+          name: resolvedName,
+          symbol: resolvedSymbol,
+          image: imageForSync,
+        })
       }
 
       if (detail.value.type === 'bundle') {

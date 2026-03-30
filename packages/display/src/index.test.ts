@@ -6,6 +6,7 @@ import {
   truncateAddress,
   formatUsdc,
   formatBillingUsdc,
+  formatBillingUsdcWhole,
   formatUiAmount,
   formatRawTokenAmount,
   formatDate,
@@ -131,6 +132,14 @@ describe('formatBillingUsdc', () => {
     expect(formatBillingUsdc(48.999996)).toBe('49')
     expect(formatBillingUsdc(50.709996)).toBe('50.71')
     expect(formatBillingUsdc(4.225833)).toBe('4.23')
+  })
+})
+
+describe('formatBillingUsdcWhole', () => {
+  it('rounds to cents then floors to whole USDC', () => {
+    expect(formatBillingUsdcWhole(48.999996)).toBe('49')
+    expect(formatBillingUsdcWhole(50.709996)).toBe('50')
+    expect(formatBillingUsdcWhole(4.225833)).toBe('4')
   })
 })
 
