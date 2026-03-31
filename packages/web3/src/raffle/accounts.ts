@@ -52,6 +52,20 @@ export function deriveTicketVaultPda(
   return pda
 }
 
+/** BuyTickets entrant PDA: seeds `entrant` + raffle + signer (v0.2.0 on-chain IDL). */
+export function deriveEntrantPda(
+  raffle: PublicKey,
+  signer: PublicKey,
+  programId: PublicKey | string = RAFFLE_PROGRAM_ID
+): PublicKey {
+  const progId = typeof programId === 'string' ? new PublicKey(programId) : programId
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from('entrant', 'utf8'), raffle.toBuffer(), signer.toBuffer()],
+    progId
+  )
+  return pda
+}
+
 /**
  * Derive the prize vault PDA for a raffle.
  * Seeds: ["vaultPrize", raffle] per DDD_live raffleConfig.

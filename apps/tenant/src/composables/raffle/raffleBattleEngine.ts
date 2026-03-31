@@ -2,26 +2,97 @@ export interface BattleSoldierSeed {
   id: string
   owner: string
   isWinnerSide: boolean
+  /** Ticket count for this wallet; drives squad HP and (for winner) hit strength. */
+  tickets: number
 }
 
 const WORLD_W = 960
 const WORLD_H = 540
-const SPEED = 90
-const ATTACK_R = 16
-const COOLDOWN = 0.4
-const NO_KILL_NUDGE_SEC = 12
-const MAX_BATTLE_SEC = 90
-const NUDGE_AMP = 22
+/** Slower pacing so the canvas is readable. */
+const SPEED = 36
+const ATTACK_R = 20
+const COOLDOWN = 0.64
+const NO_KILL_NUDGE_SEC = 16
+const MAX_BATTLE_SEC = 120
+const NUDGE_AMP = 16
+
+/** Mortal HP scales with tickets but stays bounded so huge holders do not stall the fight. */
+const HP_BASE = 10
+const HP_PER_TICKET = 4
+const MAX_MORTAL_HP = 56
+
+/** Hero HP can drop from hits but never below this fraction of max (never dies / never empty ring). */
+const HERO_HP_MIN_FRAC = 0.14
 
 export interface SimUnit {
   id: string
   x: number
   y: number
   owner: string
+  squadColor: string
   invincible: boolean
+  ticketCount: number
+  hp: number
+  maxHp: number
   cooldown: number
   alive: boolean
   ang: number
+}
+
+export interface SlashEffect {
+  /** World-space origin (between attacker and target). */
+  x: number
+  y: number
+  /** Slash arc direction (radians). */
+  ang: number
+  age: number
+  ttl: number
+  /** Attacker squad color for glow. */
+  color: string
+}
+
+function fnv1a(str: string): number {
+  let h = 2166136261
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+
+/**
+ * Distinct, deterministic HSL colours per wallet for this battle (cheer / canvas / roster).
+ */
+export function assignSquadColors(owners: string[], salt: string): Map<string, string> {
+  const unique = [...new Set(owners)].sort()
+  const map = new Map<string, string>()
+  const n = unique.length || 1
+  const saltTwist = fnv1a(salt) % 40
+  for (let i = 0; i < unique.length; i += 1) {
+    const owner = unique[i]!
+    const spread = (i * (360 / n) + saltTwist) % 360
+    const jitter = fnv1a(owner) % 28
+    const h = (spread + jitter) % 360
+    const light = 48 + (fnv1a(`${owner}|L`) % 14)
+    map.set(owner, `hsl(${Math.round(h)}, 72%, ${light}%)`)
+  }
+  return map
+}
+
+function mortalMaxHp(tickets: number): number {
+  const t = Math.max(1, Math.floor(tickets))
+  return Math.min(MAX_MORTAL_HP, HP_BASE + t * HP_PER_TICKET)
+}
+
+function heroHpFloor(maxHp: number): number {
+  return Math.max(1, Math.ceil(maxHp * HERO_HP_MIN_FRAC))
+}
+
+function damageDealt(attacker: SimUnit): number {
+  if (attacker.invincible) {
+    return Math.max(3, 2 + Math.floor(attacker.ticketCount / 3))
+  }
+  return 1
 }
 
 function spawnXY(index: number, total: number): { x: number; y: number } {
@@ -39,6 +110,7 @@ function spawnXY(index: number, total: number): { x: number; y: number } {
   }
 }
 
+/** One squad per wallet so tickets add durability instead of many 1-shot pawns. */
 export function buildSoldierSeedsFromHolders(
   rows: { owner: string; tickets: bigint }[],
   winnerPubkey: string,
@@ -48,32 +120,42 @@ export function buildSoldierSeedsFromHolders(
   for (const r of rows) {
     const n = Number(r.tickets)
     if (!Number.isFinite(n) || n < 1) continue
-    const win = r.owner === winnerPubkey
-    for (let i = 0; i < n; i++) {
-      out.push({
-        id: `u-${seq++}`,
-        owner: r.owner,
-        isWinnerSide: win,
-      })
-    }
+    out.push({
+      id: `squad-${seq++}`,
+      owner: r.owner,
+      isWinnerSide: r.owner === winnerPubkey,
+      tickets: Math.floor(n),
+    })
   }
   return out
 }
 
-export function createRaffleBattleSimulator(seeds: BattleSoldierSeed[]) {
+export function createRaffleBattleSimulator(
+  seeds: BattleSoldierSeed[],
+  colorByOwner: Map<string, string>,
+) {
+  const defaultColor = 'hsl(210, 55%, 55%)'
   const units: SimUnit[] = seeds.map((s, i) => {
     const { x, y } = spawnXY(i, seeds.length)
+    const inv = s.isWinnerSide
+    const maxHp = mortalMaxHp(s.tickets)
     return {
       id: s.id,
       x,
       y,
       owner: s.owner,
-      invincible: s.isWinnerSide,
-      cooldown: 0,
+      squadColor: colorByOwner.get(s.owner) ?? defaultColor,
+      invincible: inv,
+      ticketCount: s.tickets,
+      hp: maxHp,
+      maxHp,
+      cooldown: Math.random() * COOLDOWN * 0.85,
       alive: true,
       ang: 0,
     }
   })
+
+  const slashEffects: SlashEffect[] = []
 
   let finished = false
   let noKillTimer = 0
@@ -93,16 +175,20 @@ export function createRaffleBattleSimulator(seeds: BattleSoldierSeed[]) {
     if (!anyMortal) finished = true
   }
 
+  function dist2(a: SimUnit, b: SimUnit): number {
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    return dx * dx + dy * dy
+  }
+
   function nearestEnemy(u: SimUnit): SimUnit | null {
     let best: SimUnit | null = null
-    let bestD = Infinity
+    let bestD2 = Infinity
     for (const v of units) {
       if (!v.alive || v.owner === u.owner) continue
-      const dx = v.x - u.x
-      const dy = v.y - u.y
-      const d2 = dx * dx + dy * dy
-      if (d2 < bestD) {
-        bestD = d2
+      const d2 = dist2(u, v)
+      if (d2 < bestD2) {
+        bestD2 = d2
         best = v
       }
     }
@@ -115,6 +201,12 @@ export function createRaffleBattleSimulator(seeds: BattleSoldierSeed[]) {
     if ((now - t0) / 1000 > MAX_BATTLE_SEC) {
       finished = true
       return
+    }
+
+    for (let i = slashEffects.length - 1; i >= 0; i -= 1) {
+      const fx = slashEffects[i]!
+      fx.age += dt
+      if (fx.age >= fx.ttl) slashEffects.splice(i, 1)
     }
 
     let killedThisStep = false
@@ -141,9 +233,27 @@ export function createRaffleBattleSimulator(seeds: BattleSoldierSeed[]) {
         u.y = Math.max(8, Math.min(WORLD_H - 8, u.y))
       } else if (u.cooldown <= 0) {
         u.cooldown = COOLDOWN
+        const mx = u.x + dx * 0.52
+        const my = u.y + dy * 0.52
+        const arcJitter = ((fnv1a(`${u.id}|${target.id}`) % 200) / 200 - 0.5) * 0.55
+        slashEffects.push({
+          x: mx,
+          y: my,
+          ang: u.ang + arcJitter,
+          age: 0,
+          ttl: target.invincible ? 0.14 : 0.2,
+          color: u.squadColor,
+        })
+        const dmg = damageDealt(u)
         if (!target.invincible) {
-          target.alive = false
-          killedThisStep = true
+          target.hp -= dmg
+          if (target.hp <= 0) {
+            target.alive = false
+            killedThisStep = true
+          }
+        } else {
+          const floor = heroHpFloor(target.maxHp)
+          target.hp = Math.max(floor, target.hp - dmg)
         }
       }
     }
@@ -181,8 +291,9 @@ export function createRaffleBattleSimulator(seeds: BattleSoldierSeed[]) {
       maxY = Math.max(maxY, u.y)
     }
     const pad = 48
+    const padTop = 62
     minX -= pad
-    minY -= pad
+    minY -= padTop
     maxX += pad
     maxY += pad
     const bw = Math.max(120, maxX - minX)
@@ -196,6 +307,7 @@ export function createRaffleBattleSimulator(seeds: BattleSoldierSeed[]) {
 
   return {
     units,
+    slashEffects,
     WORLD_W,
     WORLD_H,
     step,

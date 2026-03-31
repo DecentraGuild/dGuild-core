@@ -46,6 +46,7 @@ export function useRafflePublic(
   const buyWhitelistChecking = ref(false)
   const buyWhitelistMessage = ref<string | null>(null)
   const raffleBuyLock = useSubmitInFlightLock()
+  const chainRefreshLoading = ref(false)
 
   async function refreshBuyWhitelistEligibility() {
     const r = selectedRaffle.value
@@ -226,6 +227,26 @@ export function useRafflePublic(
     chainDataByRaffle.value = next
   }
 
+  async function refreshRaffleAvailability() {
+    const conn = connection.value
+    const sel = selectedRaffle.value
+    if (!conn || !sel) return
+    chainRefreshLoading.value = true
+    try {
+      const data = await fetchRaffleChainData(conn, sel.rafflePubkey)
+      const pk = sel.rafflePubkey
+      chainDataByRaffle.value = { ...chainDataByRaffle.value, [pk]: data ?? null }
+      selectedRaffle.value = { ...sel, chainData: data ?? null }
+      if (data) {
+        const max = Math.max(0, data.ticketsTotal - data.ticketsSold)
+        if (buyAmount.value > max) buyAmount.value = Math.max(1, max || 1)
+      }
+      void refreshBuyWhitelistEligibility()
+    } finally {
+      chainRefreshLoading.value = false
+    }
+  }
+
   async function loadRaffles() {
     const id = tenantId.value
     if (!id) return
@@ -280,13 +301,12 @@ export function useRafflePublic(
           }
         }
 
-        const tx = await buildBuyTicketsTransaction({
+        const tx = buildBuyTicketsTransaction({
           rafflePubkey: r.rafflePubkey,
           ticketAmount: amount,
           ticketMint: fresh.ticketMint,
           useWhitelist: fresh.useWhitelist,
           whitelist: fresh.whitelist,
-          connection: conn,
           wallet,
         })
         const TX_LABELS: Record<string, string> = { signing: 'Signing...', sending: 'Sending...', confirming: 'Confirming...' }
@@ -334,6 +354,7 @@ export function useRafflePublic(
   return {
     raffles, loading, selectedRaffle, buyAmount, buySubmitting, buyTxStatus, buyError,
     buyWhitelistChecking, buyWhitelistMessage,
+    chainRefreshLoading, refreshRaffleAvailability,
     visibleRaffles, canBuyTickets, availableTickets, canSubmitBuy, formatTotalCost,
     prizeConfigured, mintCatalogLabel, mintCatalogLabelLong, formatPrizeLine, formatTicketPrice,
     selectRaffle, onBuyTickets,

@@ -1,6 +1,6 @@
 import { ref, watch, type Ref } from 'vue'
+import type { Connection } from '@solana/web3.js'
 import { fetchRaffleTicketHoldersAggregated, type RaffleHolderBalanceRow } from '@decentraguild/web3'
-import { useRpc } from '@decentraguild/nuxt-composables'
 
 export interface RaffleHolderDisplayRow {
   owner: string
@@ -9,42 +9,39 @@ export interface RaffleHolderDisplayRow {
 }
 
 export function useRaffleTicketHolders(
+  connection: Ref<Connection | null>,
   context: Ref<{
     rafflePubkey: string
-    ticketMint: string
     ticketsSold: number
-    ticketDecimals: number
   } | null>,
 ) {
-  const { rpcUrl, hasRpc } = useRpc()
   const loading = ref(false)
   const error = ref<string | null>(null)
   const rows = ref<RaffleHolderDisplayRow[]>([])
   const rawRows = ref<RaffleHolderBalanceRow[]>([])
   const matchesSold = ref(true)
 
+  let fetchGen = 0
+
   async function refresh() {
+    const gen = ++fetchGen
     const c = context.value
+    const conn = connection.value
     error.value = null
     rows.value = []
     rawRows.value = []
     matchesSold.value = true
     if (!c || c.ticketsSold < 1) return
-    if (!hasRpc.value || !rpcUrl.value) {
-      error.value = 'Helius RPC is not configured. Entries require NUXT_PUBLIC_HELIUS_RPC.'
+    if (!conn) {
+      error.value = 'Connect to the network to load entries.'
       return
     }
     loading.value = true
     try {
-      const res = await fetchRaffleTicketHoldersAggregated(
-        rpcUrl.value,
-        c.rafflePubkey,
-        c.ticketMint,
-        c.ticketsSold,
-        c.ticketDecimals,
-      )
+      const res = await fetchRaffleTicketHoldersAggregated(conn, c.rafflePubkey, c.ticketsSold)
+      if (gen !== fetchGen) return
       if (!res) {
-        error.value = 'Could not load ticket holders. Try again later.'
+        error.value = 'Could not load ticket entries. Try again later.'
         return
       }
       rawRows.value = res.rows
@@ -56,13 +53,14 @@ export function useRaffleTicketHolders(
         sharePercent: (Number(r.tickets) / sold) * 100,
       }))
     } catch (e) {
+      if (gen !== fetchGen) return
       error.value = e instanceof Error ? e.message : 'Failed to load entries'
     } finally {
-      loading.value = false
+      if (gen === fetchGen) loading.value = false
     }
   }
 
-  watch([context, rpcUrl, hasRpc], refresh, { immediate: true })
+  watch([context, connection], refresh, { immediate: true })
 
   return {
     loading,

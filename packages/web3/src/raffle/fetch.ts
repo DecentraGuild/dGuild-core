@@ -88,7 +88,7 @@ function parseRaffleRaw(data: Buffer): {
   o += descRes.bytesRead
   const urlRes = readBorshString(data, o)
   o += urlRes.bytesRead
-  if (o + 32 + 8 + 1 + 32 + 4 + 1 + 32 + 32 > data.length) return null
+  if (o + 32 + 8 + 1 + 32 + 8 + 1 + 32 + 32 > data.length) return null
   const ticketMint = new PublicKey(data.subarray(o, o + 32)).toBase58()
   o += 32
   const ticketPrice = data.readBigUInt64LE(o)
@@ -97,8 +97,9 @@ function parseRaffleRaw(data: Buffer): {
   o += 1
   const prizeMint = new PublicKey(data.subarray(o, o + 32)).toBase58()
   o += 32
-  const prizeVaultCount = data.readUInt32LE(o)
-  o += 4
+  const prizeVaultCountBn = data.readBigUInt64LE(o)
+  o += 8
+  const prizeVaultCount = Number(prizeVaultCountBn)
   const prizeDecimals = data[o]
   o += 1
   o += 32 // tickets (pubkey)

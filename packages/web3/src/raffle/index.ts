@@ -1,9 +1,12 @@
 export { RAFFLE_MAX_TICKETS_TOTAL } from './constants.js'
-export { deriveRafflePda, deriveTicketsPda, deriveTicketVaultPda, derivePrizeVaultPda } from './accounts.js'
 export {
-  aggregateTicketBalancesByOwner,
-  fetchRaffleTicketHoldersAggregated,
-} from './ticket-holders.js'
+  deriveRafflePda,
+  deriveTicketsPda,
+  deriveTicketVaultPda,
+  derivePrizeVaultPda,
+  deriveEntrantPda,
+} from './accounts.js'
+export { fetchRaffleTicketHoldersAggregated } from './ticket-holders.js'
 export type { RaffleHolderBalanceRow, FetchRaffleTicketHoldersResult } from './ticket-holders.js'
 export { getRaffleProgram, getRaffleProgramReadOnly } from './provider.js'
 export {

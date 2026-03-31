@@ -1,6 +1,9 @@
 <template>
   <Dialog :open="modelValue" @update:open="onOpenChange">
-    <DialogContent :show-close-button="false" class="raffle-battle-reveal__shell">
+    <DialogContent
+      :show-close-button="false"
+      class="raffle-battle-reveal__shell !flex !flex-col !gap-3 !overflow-hidden !min-h-0 sm:!max-w-none"
+    >
         <DialogTitle class="sr-only">Raffle battle reveal</DialogTitle>
         <div ref="themeRef" class="raffle-battle-reveal">
           <div class="raffle-battle-reveal__toolbar">
@@ -26,20 +29,28 @@
                 The on-chain winner is not in the holder list (indexing lag). The animation may not match the real winner; the overlay still shows the chain winner.
               </p>
               <p class="raffle-battle-reveal__hint">
-                Each ticket is one fighter. Winner’s side cannot be eliminated. This is a presentation only; the draw is already on-chain.
+                Each wallet is one squad (colour + label); more tickets mean more health. Member nicknames show when your community has them. The on-chain winner cannot be eliminated. Presentation only — the draw is already settled on-chain.
               </p>
               <div class="raffle-battle-reveal__table-wrap">
                 <table class="raffle-battle-reveal__table">
                   <thead>
                     <tr>
-                      <th>Wallet</th>
+                      <th class="raffle-battle-reveal__th-swatch" aria-hidden="true" />
+                      <th>Squad</th>
                       <th>Fighters</th>
                       <th>Share</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="r in displayRows" :key="r.owner">
-                      <td>{{ formatWallet(r.owner) }}</td>
+                      <td class="raffle-battle-reveal__td-swatch">
+                        <span
+                          class="raffle-battle-reveal__swatch"
+                          :style="{ background: squadColorForOwner(r.owner) }"
+                          :title="formatWallet(r.owner, 8, 8)"
+                        />
+                      </td>
+                      <td>{{ formatWallet(r.owner, 10, 6) }}</td>
                       <td>{{ r.tickets }}</td>
                       <td>{{ r.sharePercent.toFixed(1) }}%</td>
                     </tr>
@@ -72,9 +83,11 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '~/components/ui/dialog'
 import {
+  assignSquadColors,
   buildSoldierSeedsFromHolders,
   createRaffleBattleSimulator,
   type RaffleBattleSimulator,
+  type SlashEffect,
 } from '~/composables/raffle/raffleBattleEngine'
 import type { RaffleHolderBalanceRow } from '@decentraguild/web3'
 
@@ -123,6 +136,26 @@ const winnerMissingFromHolders = computed(
         !props.rawHolderRows.some((r) => r.owner === props.winnerPubkey),
     ),
 )
+
+const battleColorSalt = computed(() => `${props.winnerPubkey}|${props.raffleName ?? ''}`)
+
+const squadColorByOwner = computed(() =>
+  assignSquadColors(
+    props.rawHolderRows.map((r) => r.owner),
+    battleColorSalt.value,
+  ),
+)
+
+function squadColorForOwner(owner: string): string {
+  return squadColorByOwner.value.get(owner) ?? 'hsl(210, 55%, 55%)'
+}
+
+/** Short label for canvas (nickname from formatWallet when set; cap length). */
+function squadCanvasLabel(owner: string): string {
+  const s = props.formatWallet(owner, 5, 4)
+  if (s.length <= 14) return s
+  return `${s.slice(0, 12)}…`
+}
 
 watch(
   () => props.modelValue,
@@ -187,6 +220,49 @@ function resizeCanvas() {
   c.style.height = `${h}px`
 }
 
+function drawSlashEffects(ctx: CanvasRenderingContext2D, effects: SlashEffect[], scale: number) {
+  for (const fx of effects) {
+    const life = 1 - fx.age / fx.ttl
+    if (life <= 0) continue
+    ctx.save()
+    ctx.translate(fx.x, fx.y)
+    ctx.rotate(fx.ang)
+    const wobble = Math.sin((fx.age / fx.ttl) * Math.PI)
+    const len = 24 + 20 * life
+    const bend = -8 * wobble * life
+
+    ctx.beginPath()
+    ctx.moveTo(-3, 0)
+    ctx.quadraticCurveTo(len * 0.4, bend * 1.35, len + 2, bend * 0.4)
+    ctx.strokeStyle = fx.color
+    ctx.globalAlpha = 0.42 * life
+    ctx.lineWidth = 10 / scale
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(0, 0)
+    ctx.quadraticCurveTo(len * 0.36, bend, len * 0.95, bend * 0.28)
+    const g = ctx.createLinearGradient(0, -2, len, 2)
+    g.addColorStop(0, `rgba(255,255,255,${0.98 * life})`)
+    g.addColorStop(0.45, `rgba(255,248,230,${0.88 * life})`)
+    g.addColorStop(1, 'rgba(255,190,120,0)')
+    ctx.strokeStyle = g
+    ctx.globalAlpha = 1
+    ctx.lineWidth = 3.4 / scale
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.arc(len * 0.88, bend * 0.22, 2.2 * life, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(255,255,255,${0.75 * life})`
+    ctx.fill()
+
+    ctx.restore()
+  }
+  ctx.globalAlpha = 1
+}
+
 function draw(simInst: RaffleBattleSimulator) {
   const c = canvasRef.value
   if (!c) return
@@ -204,25 +280,64 @@ function draw(simInst: RaffleBattleSimulator) {
 
   ctx.setTransform(scale * dpr, 0, 0, scale * dpr, (cssW / 2 - cx * scale) * dpr, (cssH / 2 - cy * scale) * dpr)
 
+  const bodyR = 8
+  const labelOffset = ringRLabel(bodyR)
+  const fontPx = Math.max(7, 10.5 / scale)
+  ctx.font = `600 ${fontPx}px ui-sans-serif, system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+
   for (const u of simInst.units) {
     if (!u.alive) continue
-    const fill = u.invincible ? colors.primary : colors.mortal
+    const ringR = bodyR + 5
+    if (u.maxHp > 0) {
+      const frac = Math.max(0, Math.min(1, u.hp / u.maxHp))
+      ctx.beginPath()
+      ctx.arc(u.x, u.y, ringR, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
+      ctx.strokeStyle = u.squadColor
+      ctx.lineWidth = 2.8 / scale
+      ctx.lineCap = 'round'
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(u.x, u.y, ringR, 0, Math.PI * 2)
+      ctx.strokeStyle = `${colors.muted}55`
+      ctx.lineWidth = 1.4 / scale
+      ctx.stroke()
+    }
+
     ctx.beginPath()
-    ctx.arc(u.x, u.y, 7, 0, Math.PI * 2)
-    ctx.fillStyle = fill
+    ctx.arc(u.x, u.y, bodyR, 0, Math.PI * 2)
+    ctx.fillStyle = u.squadColor
     ctx.fill()
     ctx.strokeStyle = colors.fg
     ctx.lineWidth = 1.2 / scale
     ctx.stroke()
-    const sx = u.x + Math.cos(u.ang) * 12
-    const sy = u.y + Math.sin(u.ang) * 12
+
+    const sx = u.x + Math.cos(u.ang) * (bodyR + 1.5)
+    const sy = u.y + Math.sin(u.ang) * (bodyR + 1.5)
     ctx.beginPath()
     ctx.moveTo(u.x, u.y)
     ctx.lineTo(sx, sy)
     ctx.strokeStyle = colors.fg
-    ctx.lineWidth = 2 / scale
+    ctx.globalAlpha = 0.45
+    ctx.lineWidth = 1.4 / scale
     ctx.stroke()
+    ctx.globalAlpha = 1
+
+    const lab = squadCanvasLabel(u.owner)
+    const ly = u.y - labelOffset
+    ctx.strokeStyle = 'rgba(0,0,0,0.62)'
+    ctx.lineWidth = 3 / scale
+    ctx.strokeText(lab, u.x, ly)
+    ctx.fillStyle = u.squadColor
+    ctx.fillText(lab, u.x, ly)
   }
+
+  drawSlashEffects(ctx, simInst.slashEffects, scale)
+}
+
+function ringRLabel(bodyR: number): number {
+  return bodyR + 5 + 10
 }
 
 function loop(t: number) {
@@ -246,7 +361,7 @@ function startBattle() {
   phase.value = 'battle'
   nextTick(() => {
     resizeCanvas()
-    sim = createRaffleBattleSimulator(seeds)
+    sim = createRaffleBattleSimulator(seeds, squadColorByOwner.value)
     lastT = 0
     stopLoop()
     rafId = requestAnimationFrame(loop)
@@ -289,37 +404,14 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <style scoped>
-.raffle-battle-reveal__shell {
-  position: fixed !important;
-  inset: var(--theme-space-md, 12px) !important;
-  left: var(--theme-space-md, 12px) !important;
-  top: var(--theme-space-md, 12px) !important;
-  right: var(--theme-space-md, 12px) !important;
-  bottom: var(--theme-space-md, 12px) !important;
-  width: auto !important;
-  height: auto !important;
-  min-height: min(88dvh, 720px) !important;
-  max-width: none !important;
-  max-height: none !important;
-  transform: none !important;
-  translate: none !important;
-  z-index: 101;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: var(--theme-space-md);
-  border-radius: var(--theme-radius-lg);
-  background: var(--theme-bg-card);
-  border: var(--theme-border-thin) solid var(--theme-border);
-  color: var(--theme-text-primary);
-}
-
 .raffle-battle-reveal {
   display: flex;
   flex-direction: column;
   gap: var(--theme-space-sm);
   min-height: 0;
+  min-width: 0;
   flex: 1;
+  width: 100%;
 }
 
 .raffle-battle-reveal__toolbar {
@@ -371,7 +463,7 @@ function onKeydown(e: KeyboardEvent) {
   overflow: auto;
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-md);
-  max-height: min(40vh, 320px);
+  max-height: min(32dvh, 360px);
 }
 
 .raffle-battle-reveal__table {
@@ -392,6 +484,26 @@ function onKeydown(e: KeyboardEvent) {
   font-weight: 600;
 }
 
+.raffle-battle-reveal__th-swatch {
+  width: 2rem;
+  padding-right: 0;
+}
+
+.raffle-battle-reveal__td-swatch {
+  width: 2rem;
+  padding-right: 0;
+  vertical-align: middle;
+}
+
+.raffle-battle-reveal__swatch {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  vertical-align: middle;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
 .raffle-battle-reveal__roster-actions {
   display: flex;
   gap: var(--theme-space-sm);
@@ -402,7 +514,7 @@ function onKeydown(e: KeyboardEvent) {
 .raffle-battle-reveal__canvas-wrap {
   position: relative;
   flex: 1;
-  min-height: min(52dvh, 420px);
+  min-height: min(58dvh, 640px);
   border-radius: var(--theme-radius-md);
   overflow: hidden;
   border: var(--theme-border-thin) solid var(--theme-border);
@@ -412,7 +524,7 @@ function onKeydown(e: KeyboardEvent) {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: min(52dvh, 420px);
+  min-height: min(58dvh, 640px);
 }
 
 .raffle-battle-reveal__victory {
@@ -444,5 +556,22 @@ function onKeydown(e: KeyboardEvent) {
   text-align: center;
   padding: 0 var(--theme-space-md);
   word-break: break-all;
+}
+</style>
+
+<style>
+/* Portaled dialog root: scoped CSS does not apply; override sm:max-w-lg + fill ~80% viewport. */
+[data-slot='dialog-content'].raffle-battle-reveal__shell {
+  box-sizing: border-box;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 101;
+  width: min(80vw, calc(100vw - 1.5rem));
+  max-width: min(80vw, calc(100vw - 1.5rem));
+  height: 80dvh;
+  max-height: 80dvh;
+  min-height: 0;
 }
 </style>
