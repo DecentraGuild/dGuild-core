@@ -20,13 +20,23 @@ import { useAdminTenant } from '~/composables/admin/useAdminTenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
-import type { Ref } from 'vue'
+import { onMounted, type Ref } from 'vue'
 import type { TenantConfig } from '@decentraguild/core'
 
 const TX_STATUS_LABELS: Record<string, string> = {
   signing: 'Signing...',
   sending: 'Sending...',
   confirming: 'Confirming...',
+}
+
+const BILLING_CONFIRM_RESUME_KEY = 'dg:billing-confirm-pending'
+const BILLING_CONFIRM_RESUME_MAX_MS = 24 * 60 * 60 * 1000
+
+type BillingConfirmResumePayload = {
+  paymentId: string
+  txSignature: string
+  slugToClaim?: string | null
+  ts: number
 }
 
 /** USDC billing ixs to prepend to a program tx, or no payment when price is zero. */
@@ -156,6 +166,44 @@ export function useAdminBilling(opts: {
     await invokeEdgeFunction(supabase, 'billing', confirmBody, { errorFallback: 'Confirm failed' })
   }
 
+  async function resumeBillingConfirmIfNeeded(): Promise<void> {
+    if (typeof sessionStorage === 'undefined') return
+    const raw = sessionStorage.getItem(BILLING_CONFIRM_RESUME_KEY)
+    if (!raw) return
+    let payload: BillingConfirmResumePayload
+    try {
+      payload = JSON.parse(raw) as BillingConfirmResumePayload
+    } catch {
+      sessionStorage.removeItem(BILLING_CONFIRM_RESUME_KEY)
+      return
+    }
+    if (!payload.paymentId || !payload.txSignature || typeof payload.ts !== 'number') {
+      sessionStorage.removeItem(BILLING_CONFIRM_RESUME_KEY)
+      return
+    }
+    if (Date.now() - payload.ts > BILLING_CONFIRM_RESUME_MAX_MS) {
+      sessionStorage.removeItem(BILLING_CONFIRM_RESUME_KEY)
+      return
+    }
+    try {
+      await confirmBillingFromTxSignature(
+        payload.paymentId,
+        payload.txSignature,
+        payload.slugToClaim ?? undefined,
+      )
+      sessionStorage.removeItem(BILLING_CONFIRM_RESUME_KEY)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/payment not found|not pending|already|confirmed/i.test(msg)) {
+        sessionStorage.removeItem(BILLING_CONFIRM_RESUME_KEY)
+      }
+    }
+  }
+
+  onMounted(() => {
+    void resumeBillingConfirmIfNeeded()
+  })
+
   async function handleBillingPayment(
     moduleId: string,
     billingPeriod: BillingPeriod,
@@ -206,22 +254,47 @@ export function useAdminBilling(opts: {
           },
         )
 
+        try {
+          sessionStorage.setItem(
+            BILLING_CONFIRM_RESUME_KEY,
+            JSON.stringify({
+              paymentId: r.paymentId,
+              txSignature,
+              slugToClaim: slugToClaim ?? null,
+              ts: Date.now(),
+            } satisfies BillingConfirmResumePayload),
+          )
+        } catch {
+          /* ignore quota / private mode */
+        }
+
         txNotifications.update(nid, {
-          status: 'success',
-          message: 'Payment confirmed.',
+          status: 'pending',
+          message: 'Recording payment…',
           signature: txSignature,
         })
 
         try {
           await confirmBillingFromTxSignature(r.paymentId, txSignature, slugToClaim)
+          try {
+            sessionStorage.removeItem(BILLING_CONFIRM_RESUME_KEY)
+          } catch {
+            /* ignore */
+          }
         } catch (confirmErr) {
           txNotifications.update(notificationId, {
             status: 'error',
             message: confirmErr instanceof Error ? confirmErr.message : 'Confirm failed',
-            signature: null,
+            signature: txSignature,
           })
           throw confirmErr
         }
+
+        txNotifications.update(nid, {
+          status: 'success',
+          message: 'Payment confirmed.',
+          signature: txSignature,
+        })
 
         return true
       } catch (e) {
