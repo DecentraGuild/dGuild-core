@@ -19,6 +19,28 @@ export function getDasRpcUrl(): string {
   return url.replace(/\/$/, '')
 }
 
+export async function dasRequestAtUrl<T>(
+  rpcUrl: string,
+  method: string,
+  params: Record<string, unknown>
+): Promise<T | null> {
+  const url = rpcUrl.replace(/\/$/, '')
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: '1',
+      method,
+      params,
+    }),
+  })
+  if (!res.ok) return null
+  const json = (await res.json()) as { result?: T; error?: { message: string } }
+  if (json.error) return null
+  return json.result ?? null
+}
+
 export async function dasRequest<T>(
   method: string,
   params: Record<string, unknown>

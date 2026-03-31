@@ -12,6 +12,7 @@ import {
   sendAndConfirmTransaction,
   buildInitializeRaffleTransaction,
   deriveRafflePda,
+  RAFFLE_MAX_TICKETS_TOTAL,
 } from '@decentraguild/web3'
 import { ComputeBudgetProgram, Transaction } from '@solana/web3.js'
 import { invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
@@ -107,6 +108,10 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
     }
     if (maxTickets < 1) {
       createError.value = 'Total tickets is required (minimum 1)'
+      return
+    }
+    if (maxTickets > RAFFLE_MAX_TICKETS_TOTAL) {
+      createError.value = `Total tickets cannot exceed ${RAFFLE_MAX_TICKETS_TOTAL}`
       return
     }
     const dec = ticketMintMeta.metadata.value?.decimals

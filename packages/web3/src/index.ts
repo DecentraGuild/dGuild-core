@@ -42,9 +42,14 @@ export { createConnection } from './connection.js'
 export {
   getDasRpcUrl,
   dasRequest,
+  dasRequestAtUrl,
   fetchAsset,
   fetchAssetsByGroup,
+  fetchTokenAccountsByMintPaginated,
+  sumTokenAmounts,
+  toBigIntAmount,
 } from './das/index.js'
+export type { DasTokenAccountEntry, GetTokenAccountsDasResult } from './das/index.js'
 export type { DasAsset, DasAttribute } from './das/index.js'
 
 export {
@@ -116,6 +121,7 @@ export type {
 } from './crafter/index.js'
 
 export {
+  RAFFLE_MAX_TICKETS_TOTAL,
   deriveRafflePda,
   deriveTicketsPda,
   deriveTicketVaultPda,
@@ -133,6 +139,8 @@ export {
   buildClaimTicketsTransaction,
   buildBuyTicketsTransaction,
   fetchRaffleChainData,
+  aggregateTicketBalancesByOwner,
+  fetchRaffleTicketHoldersAggregated,
   isRaffleVisibleToUsers,
   USER_VISIBLE_STATES,
 } from './raffle/index.js'
@@ -142,4 +150,6 @@ export type {
   BuildBuyTicketsParams,
   RaffleChainData,
   RaffleState,
+  RaffleHolderBalanceRow,
+  FetchRaffleTicketHoldersResult,
 } from './raffle/index.js'

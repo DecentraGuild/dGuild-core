@@ -55,6 +55,7 @@
       placeholder="e.g. 10"
       required
     />
+    <p class="raffle-create-form__max-hint">Maximum {{ raffleMaxTickets }} tickets per raffle.</p>
     <GateSelect
       v-if="showGateSelect"
       :slug="slug"
@@ -85,6 +86,7 @@
 </template>
 
 <script setup lang="ts">
+import { RAFFLE_MAX_TICKETS_TOTAL } from '@decentraguild/web3'
 import { getGateLabel } from '@decentraguild/catalog'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import { Button } from '~/components/ui/button'
@@ -93,6 +95,7 @@ import GateSelect from '~/components/gates/GateSelect.vue'
 import AddressBookModal from '~/components/shared/AddressBookModal.vue'
 
 const gateLabel = getGateLabel()
+const raffleMaxTickets = RAFFLE_MAX_TICKETS_TOTAL
 
 const addressBookModalOpen = ref(false)
 
@@ -128,6 +131,12 @@ defineEmits<{
   display: flex;
   flex-direction: column;
   gap: var(--theme-space-md);
+}
+
+.raffle-create-form__max-hint {
+  margin: calc(-1 * var(--theme-space-xs)) 0 0;
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
 }
 
 .raffle-create-form__field {

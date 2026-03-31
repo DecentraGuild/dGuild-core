@@ -6,6 +6,8 @@ import {
   buildBuyTicketsTransaction,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
+  isWalletOnWhitelist,
+  subscribeToConnectorState,
 } from '@decentraguild/web3'
 import { PublicKey } from '@solana/web3.js'
 import { useMintLabels } from '~/composables/mint/useMintLabels'
@@ -40,7 +42,51 @@ export function useRafflePublic(
   const buySubmitting = ref(false)
   const buyTxStatus = ref<string | null>(null)
   const buyError = ref<string | null>(null)
+  const buyWhitelistEligible = ref(true)
+  const buyWhitelistChecking = ref(false)
+  const buyWhitelistMessage = ref<string | null>(null)
   const raffleBuyLock = useSubmitInFlightLock()
+
+  async function refreshBuyWhitelistEligibility() {
+    const r = selectedRaffle.value
+    const conn = connection.value
+    const wallet = getEscrowWalletFromConnector()
+    if (!r?.chainData) {
+      buyWhitelistEligible.value = true
+      buyWhitelistMessage.value = null
+      buyWhitelistChecking.value = false
+      return
+    }
+    const cd = r.chainData
+    if (!cd.useWhitelist) {
+      buyWhitelistEligible.value = true
+      buyWhitelistMessage.value = null
+      buyWhitelistChecking.value = false
+      return
+    }
+    if (!cd.whitelist) {
+      buyWhitelistEligible.value = false
+      buyWhitelistMessage.value =
+        'This raffle is gated but no whitelist is configured on-chain.'
+      buyWhitelistChecking.value = false
+      return
+    }
+    if (!wallet?.publicKey || !conn) {
+      buyWhitelistEligible.value = false
+      buyWhitelistMessage.value = null
+      buyWhitelistChecking.value = false
+      return
+    }
+    buyWhitelistChecking.value = true
+    buyWhitelistMessage.value = null
+    try {
+      const ok = await isWalletOnWhitelist(conn, wallet.publicKey, cd.whitelist)
+      buyWhitelistEligible.value = ok
+      buyWhitelistMessage.value = ok ? null : 'Your wallet is not on this raffle whitelist.'
+    } finally {
+      buyWhitelistChecking.value = false
+    }
+  }
 
   const visibleRaffles = computed((): RaffleWithChainData[] => {
     const active = raffles.value.filter((r) => !r.closedAt)
@@ -130,7 +176,13 @@ export function useRafflePublic(
 
   const canSubmitBuy = computed(() => {
     const n = buyAmount.value
-    return Number.isInteger(n) && n >= 1 && n <= availableTickets.value
+    return (
+      Number.isInteger(n) &&
+      n >= 1 &&
+      n <= availableTickets.value &&
+      buyWhitelistEligible.value &&
+      !buyWhitelistChecking.value
+    )
   })
 
   const formatTotalCost = computed(() => {
@@ -150,6 +202,15 @@ export function useRafflePublic(
     buyAmount.value = 1
     buyError.value = null
     buyTxStatus.value = null
+    const next = selectedRaffle.value
+    if (!next?.chainData?.useWhitelist) {
+      buyWhitelistEligible.value = true
+      buyWhitelistMessage.value = null
+    } else {
+      buyWhitelistEligible.value = false
+      buyWhitelistMessage.value = null
+    }
+    void refreshBuyWhitelistEligibility()
   }
 
   async function fetchChainData() {
@@ -185,6 +246,7 @@ export function useRafflePublic(
           closedAt: r.closed_at as string | null,
         }))
         await fetchChainData()
+        void refreshBuyWhitelistEligibility()
       } else { raffles.value = [] }
     } catch { raffles.value = [] }
     finally { loading.value = false }
@@ -206,10 +268,24 @@ export function useRafflePublic(
         const available = fresh.ticketsTotal - fresh.ticketsSold
         if (amount > available) { buyError.value = `Only ${available} ticket(s) left. Please reduce your amount.`; return }
 
+        if (fresh.useWhitelist) {
+          if (!fresh.whitelist) {
+            buyError.value = 'This raffle is gated but no whitelist is configured on-chain.'
+            return
+          }
+          const listed = await isWalletOnWhitelist(conn, wallet.publicKey, fresh.whitelist)
+          if (!listed) {
+            buyError.value = 'Your wallet is not on this raffle whitelist.'
+            return
+          }
+        }
+
         const tx = await buildBuyTicketsTransaction({
           rafflePubkey: r.rafflePubkey,
           ticketAmount: amount,
-          chainData: { ticketMint: fresh.ticketMint, useWhitelist: fresh.useWhitelist, whitelist: fresh.whitelist },
+          ticketMint: fresh.ticketMint,
+          useWhitelist: fresh.useWhitelist,
+          whitelist: fresh.whitelist,
           connection: conn,
           wallet,
         })
@@ -220,6 +296,7 @@ export function useRafflePublic(
         buyTxStatus.value = 'Success'; buyError.value = null
         await fetchChainData()
         selectedRaffle.value = visibleRaffles.value.find((x) => x.rafflePubkey === r.rafflePubkey) ?? null
+        void refreshBuyWhitelistEligibility()
       } catch (e) {
         buyError.value = e instanceof Error ? e.message : 'Transaction failed'
       } finally { buySubmitting.value = false; buyTxStatus.value = null }
@@ -227,10 +304,36 @@ export function useRafflePublic(
     if (!exclusive.ok) return
   }
 
-  onMounted(() => { loadRaffles() })
+  let whitelistRefreshDebounce: ReturnType<typeof setTimeout> | null = null
+  function scheduleRefreshBuyWhitelist() {
+    if (whitelistRefreshDebounce) clearTimeout(whitelistRefreshDebounce)
+    whitelistRefreshDebounce = setTimeout(() => {
+      whitelistRefreshDebounce = null
+      void refreshBuyWhitelistEligibility()
+    }, 400)
+  }
+
+  let unsubConnector: (() => void) | null = null
+  onMounted(() => {
+    loadRaffles()
+    unsubConnector = subscribeToConnectorState(() => {
+      scheduleRefreshBuyWhitelist()
+    })
+  })
+  onUnmounted(() => {
+    if (whitelistRefreshDebounce) clearTimeout(whitelistRefreshDebounce)
+    whitelistRefreshDebounce = null
+    unsubConnector?.()
+    unsubConnector = null
+  })
+
+  watch(connection, () => {
+    scheduleRefreshBuyWhitelist()
+  })
 
   return {
     raffles, loading, selectedRaffle, buyAmount, buySubmitting, buyTxStatus, buyError,
+    buyWhitelistChecking, buyWhitelistMessage,
     visibleRaffles, canBuyTickets, availableTickets, canSubmitBuy, formatTotalCost,
     prizeConfigured, mintCatalogLabel, mintCatalogLabelLong, formatPrizeLine, formatTicketPrice,
     selectRaffle, onBuyTickets,
