@@ -8,9 +8,8 @@
     >
       <SelectTrigger :id="selectId" class="gate-select__trigger w-full">
         <SelectValue placeholder="Select…">
-          <template #default="{ selectedLabel }">
-            <template v-if="loading">Loading…</template>
-            <template v-else-if="selectedLabel.length">{{ selectedLabel.join(', ') }}</template>
+          <template #default>
+            <template v-if="loading && internalValue === EMPTY_SENTINEL">Loading…</template>
             <template v-else>{{ triggerDisplayText }}</template>
           </template>
         </SelectValue>

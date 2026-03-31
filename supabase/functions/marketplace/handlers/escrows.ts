@@ -34,9 +34,12 @@ function isDepositDustComplete(remainingStr: string, decimals: number): boolean 
   }
 }
 
+/** Serialized `Escrow` account body length (8-byte Anchor discriminator + Borsh fields). */
+const ESCROW_ACCOUNT_DATA_LEN = 8 + 32 + 32 + 32 + 8 + 8 + 8 + 2 + 4 + 8 + 3 + 8 + 32 + 1 + 1 + 1 + 32
+
 function parseEscrowAccount(data: Uint8Array, pubkey: string): EscrowApiShape | null {
   const DISCRIMINATOR = 8
-  const MIN_SIZE = DISCRIMINATOR + 32 + 32 + 32 + 8 + 8 + 8 + 2 + 4 + 8 + 1 + 1 + 1 + 8 + 32 + 1 + 1 + 1 + 32
+  const MIN_SIZE = ESCROW_ACCOUNT_DATA_LEN
   if (data.length < MIN_SIZE) return null
   let o = DISCRIMINATOR
   const maker = readPubkey(data, o); o += 32
@@ -58,12 +61,22 @@ function parseEscrowAccount(data: Uint8Array, pubkey: string): EscrowApiShape | 
   return { publicKey: pubkey, account: { maker, depositToken, requestToken, tokensDepositInit, tokensDepositRemaining, price, decimals, slippage, seed, expireTimestamp, recipient, onlyRecipient, onlyWhitelist, allowPartialFill, whitelist } }
 }
 
-async function fetchEscrowsInScope(connection: Connection, scopeMints: string[]): Promise<EscrowApiShape[]> {
+async function fetchEscrowsInScope(
+  connection: Connection,
+  scopeMints: string[],
+  makerWallet: string | null,
+): Promise<EscrowApiShape[]> {
   const ESCROW_PROGRAM_ID = Deno.env.get('ESCROW_PROGRAM_ID') ?? 'esccxeEDYUXQaeMwq1ZwWAvJaHVYfsXNva13JYb2Chs'
+  const programId = new PublicKey(ESCROW_PROGRAM_ID)
+  const scopeSet = new Set(scopeMints)
+  const filters: Array<{ dataSize?: number; memcmp?: { offset: number; bytes: string } }> = []
+  if (makerWallet) {
+    filters.push({ memcmp: { offset: 8, bytes: makerWallet } })
+  } else {
+    filters.push({ dataSize: ESCROW_ACCOUNT_DATA_LEN })
+  }
   try {
-    const programId = new PublicKey(ESCROW_PROGRAM_ID)
-    const accounts = await connection.getProgramAccounts(programId)
-    const scopeSet = new Set(scopeMints)
+    const accounts = await connection.getProgramAccounts(programId, { filters })
     const result: EscrowApiShape[] = []
     for (const { pubkey, account } of accounts) {
       const data = toUint8Array(account.data)
@@ -73,13 +86,23 @@ async function fetchEscrowsInScope(connection: Connection, scopeMints: string[])
       result.push(parsed)
     }
     return result
-  } catch { return [] }
+  } catch (e) {
+    console.error('[marketplace escrows] getProgramAccounts failed', e)
+    return []
+  }
 }
 
 export async function handleEscrows(body: Record<string, unknown>, db: Db, _authHeader: string | null, req: Request): Promise<Response> {
   const tenantId = body.tenantId as string
   const wallet = (body.wallet as string)?.trim() || null
   if (!tenantId) return errorResponse('tenantId required', req)
+  if (wallet) {
+    try {
+      new PublicKey(wallet)
+    } catch {
+      return errorResponse('Invalid wallet', req, 400)
+    }
+  }
 
   const { data: scope } = await db.from('marketplace_mint_scope').select('mint, source, collection_mint').eq('tenant_id', tenantId)
   const scopeRows = scope ?? []
@@ -93,7 +116,7 @@ export async function handleEscrows(body: Record<string, unknown>, db: Db, _auth
   if (scopeMints.length === 0) return jsonResponse({ escrows: [] }, req)
 
   const connection = getSolanaConnection()
-  let escrows = await fetchEscrowsInScope(connection, scopeMints)
+  let escrows = await fetchEscrowsInScope(connection, scopeMints, wallet)
   escrows = escrows.filter((e) => {
     const rem = e.account.tokensDepositRemaining as string
     const dec = e.account.decimals as number

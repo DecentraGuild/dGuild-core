@@ -279,8 +279,21 @@ async function load() {
           { action: 'escrows', tenantId: tid, wallet: addr },
         )
         const raw = data.escrows ?? []
-        const converted = raw.map(apiEscrowToFull)
-        escrows.value = converted.filter((e) => !isEffectivelyComplete(e.account.tokensDepositRemaining, e.account.decimals))
+        let converted = raw
+          .map(apiEscrowToFull)
+          .filter((e) => !isEffectivelyComplete(e.account.tokensDepositRemaining, e.account.decimals))
+        if (converted.length === 0 && conn) {
+          const all = await fetchAllEscrows(conn, addr)
+          const scope = scopeMintsSet.value
+          converted = all.filter((e) => {
+            if (isEffectivelyComplete(e.account.tokensDepositRemaining, e.account.decimals)) return false
+            if (scope.size === 0) return true
+            const dep = e.account.depositToken.toBase58()
+            const req = e.account.requestToken.toBase58()
+            return scope.has(dep) && scope.has(req)
+          })
+        }
+        escrows.value = converted
         return
       } catch {
         /* fall through to RPC */
@@ -331,7 +344,7 @@ async function loadExternal() {
 }
 
 watch(
-  () => [walletAddress.value, tenantStore.slug],
+  () => [walletAddress.value, tenantId.value] as const,
   () => { void load() },
   { immediate: false }
 )
