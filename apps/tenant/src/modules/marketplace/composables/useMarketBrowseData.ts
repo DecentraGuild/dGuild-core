@@ -14,6 +14,7 @@ import { useAuth } from '@decentraguild/auth'
 import { useEscrowsForMints } from '~/composables/marketplace/useEscrowsForMints'
 import { assetWithCounts } from '~/composables/mint/useAssetWithCounts'
 import { useMarketBrowseFilters } from './useMarketBrowseFilters'
+import { normalizeDisplayMediaUrl } from '@decentraguild/web3'
 import { getMarketplaceAssetFromSettings, getMintInfoFromSettings } from '~/utils/mintFromSettings'
 import type { TreeNode } from '~/composables/marketplace/useMarketplaceTree'
 import type { MarketplaceAsset } from '~/composables/marketplace/useMarketplaceAssets'
@@ -259,12 +260,14 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
     collectionMint?: string | null
     mint?: string
   }): string | null {
-    if (asset.metadata?.image) return asset.metadata.image
-    if ((asset as { image?: string | null }).image) return (asset as { image: string }).image
-    const mint = asset.collectionMint ?? asset.mint
-    if (!mint) return null
-    const info = getMintInfoFromSettings(mint, marketplaceSettings.value)
-    return info.image ?? null
+    let raw: string | null = null
+    if (asset.metadata?.image) raw = asset.metadata.image
+    else if ((asset as { image?: string | null }).image) raw = (asset as { image: string }).image
+    else {
+      const mint = asset.collectionMint ?? asset.mint
+      if (mint) raw = getMintInfoFromSettings(mint, marketplaceSettings.value).image ?? null
+    }
+    return normalizeDisplayMediaUrl(raw)
   }
 
   const effectiveAssetsLoading = computed(() =>

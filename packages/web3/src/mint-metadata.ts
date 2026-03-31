@@ -26,6 +26,19 @@ function cleanString(s: string | null | undefined): string | null {
   return t.length > 0 ? t : null
 }
 
+/** Turn ipfs:// and ar:// URLs into https URLs so browsers can load them in img src. */
+export function normalizeDisplayMediaUrl(url: string | null | undefined): string | null {
+  const t = cleanString(url)
+  if (!t) return null
+  if (t.startsWith('ipfs://')) {
+    return `https://ipfs.io/ipfs/${t.replace('ipfs://', '').replace(/^\/+/, '')}`
+  }
+  if (t.startsWith('ar://')) {
+    return `https://arweave.net/${t.replace('ar://', '').replace(/^\/+/, '')}`
+  }
+  return t
+}
+
 export interface FetchedMintMetadata {
   mint: string
   name: string | null
@@ -88,12 +101,7 @@ export async function fetchMintMetadataFromChain(
       const uri = data.subarray(offset, offset + uriLen).toString('utf8').trim()
       if (uri && !uri.startsWith('http://localhost')) {
         try {
-          let metadataUrl = uri
-          if (uri.startsWith('ipfs://')) {
-            metadataUrl = `https://ipfs.io/ipfs/${uri.replace('ipfs://', '').replace(/^\/+/, '')}`
-          } else if (uri.startsWith('ar://')) {
-            metadataUrl = `https://arweave.net/${uri.replace('ar://', '').replace(/^\/+/, '')}`
-          }
+          const metadataUrl = normalizeDisplayMediaUrl(uri) ?? uri
           const ctrl = new AbortController()
           const t = setTimeout(() => ctrl.abort(), 2500)
           const res = await fetch(metadataUrl, { signal: ctrl.signal, headers: { Accept: 'application/json' } })
@@ -106,12 +114,7 @@ export async function fetchMintMetadataFromChain(
                 image_uri?: string
                 seller_fee_basis_points?: number
               }
-              let img = json.image ?? json.image_uri ?? null
-              if (img?.startsWith('ipfs://')) {
-                img = `https://ipfs.io/ipfs/${img.replace('ipfs://', '').replace(/^\/+/, '')}`
-              } else if (img?.startsWith('ar://')) {
-                img = `https://arweave.net/${img.replace('ar://', '').replace(/^\/+/, '')}`
-              }
+              const img = normalizeDisplayMediaUrl(json.image ?? json.image_uri ?? null)
               result.image = img
               const bps = json.seller_fee_basis_points
               result.sellerFeeBasisPoints =
