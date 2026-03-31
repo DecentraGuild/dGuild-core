@@ -27,6 +27,7 @@ import {
   createUpdateMetadataAccountV2Instruction,
 } from '@metaplex-foundation/mpl-token-metadata'
 import { buildBillingTransfer } from '../billing/transfer.js'
+import { createMemoInstruction } from '../escrow/memo.js'
 const TOKEN_METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s')
 
 function getMetadataPda(mint: PublicKey, programId = TOKEN_METADATA_PROGRAM_ID): PublicKey {

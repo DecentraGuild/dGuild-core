@@ -95,6 +95,8 @@ export interface PaymentProvider {
     expectedAmountUsdc?: number
     expectedMemo?: string
     voucherMint?: string
+    /** SPL transfer authority must match (USDC TransferChecked), when set. */
+    expectedPayerWallet?: string
   }): Promise<{ valid: boolean; error?: string }>
 }
 
@@ -110,11 +112,23 @@ export interface QuoteParams {
   syncAllModules?: boolean
 }
 
+/** PII: stored on billing_payments for server-side tenant creation after registration payment. */
+export interface OnboardingOrgPayload {
+  name: string
+  description: string
+  logo?: string
+  discordInviteLink?: string
+}
+
 export interface ChargeParams {
   quoteId: string
   paymentMethod: 'usdc' | 'voucher'
   voucherMint?: string
   payerWallet: string
+  /** Required when quote includes slug entitlement and tenant has no slug yet. */
+  slugToClaim?: string
+  /** Required for new-org registration quotes when tenant_config row does not exist. */
+  onboardingOrg?: OnboardingOrgPayload
 }
 
 export interface ConfirmParams {

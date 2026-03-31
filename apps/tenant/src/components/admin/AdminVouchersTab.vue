@@ -285,16 +285,24 @@ async function redeem(v: RedeemableVoucher) {
       const tokensRequired = quote.tokensRequired ?? v.tokensRequired
       const voucherWallet = quote.voucherWallet ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
 
+      const slugToClaimForCharge =
+        hasSlugEntitlement(v) && !tenantSlug.value && slugStatusByMint.value[v.mint] === 'available'
+          ? (desiredSlugByMint.value[v.mint] ?? '').trim().toLowerCase()
+          : undefined
+
+      const chargePayload: Record<string, unknown> = {
+        action: 'charge',
+        quoteId: quote.quoteId,
+        payerWallet: wallet.publicKey.toBase58(),
+        paymentMethod: 'voucher',
+        voucherMint: v.mint,
+      }
+      if (slugToClaimForCharge) chargePayload.slugToClaim = slugToClaimForCharge
+
       const chargeData = await invokeEdgeFunction<{ paymentId?: string }>(
         supabase,
         'billing',
-        {
-          action: 'charge',
-          quoteId: quote.quoteId,
-          payerWallet: wallet.publicKey.toBase58(),
-          paymentMethod: 'voucher',
-          voucherMint: v.mint,
-        },
+        chargePayload,
         { errorFallback: 'Charge failed' },
       )
       const charge = chargeData
@@ -341,23 +349,16 @@ async function redeem(v: RedeemableVoucher) {
         signature: txSignature,
       })
 
-      const slugToClaim =
-        hasSlugEntitlement(v) && !tenantSlug.value && slugStatusByMint.value[v.mint] === 'available'
-          ? (desiredSlugByMint.value[v.mint] ?? '').trim().toLowerCase()
-          : undefined
-
-      const confirmBody: Record<string, unknown> = {
-        action: 'confirm',
-        paymentId: charge.paymentId,
-        txSignature,
-      }
-      if (slugToClaim) confirmBody.slugToClaim = slugToClaim
-
-      const confirmData = await invokeEdgeFunction<{ success?: boolean }>(supabase, 'billing', confirmBody, { errorFallback: 'Confirm failed' })
+      const confirmData = await invokeEdgeFunction<{ success?: boolean }>(
+        supabase,
+        'billing',
+        { action: 'confirm', paymentId: charge.paymentId, txSignature },
+        { errorFallback: 'Confirm failed' },
+      )
       const confirm = confirmData
       if (!confirm?.success) throw new Error('Confirmation failed')
 
-      if (slugToClaim) {
+      if (slugToClaimForCharge) {
         tenantStore.refetchTenantContext()
         desiredSlugByMint.value = { ...desiredSlugByMint.value, [v.mint]: '' }
         slugStatusByMint.value = { ...slugStatusByMint.value, [v.mint]: 'idle' }

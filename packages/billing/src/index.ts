@@ -11,6 +11,7 @@ export type {
   ChargeResult,
   ChargeParams,
   ConfirmParams,
+  OnboardingOrgPayload,
   PaymentProvider,
   PaymentIntent,
   PricingAdapter,

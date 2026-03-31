@@ -84,6 +84,20 @@ Deno.serve(async (req: Request) => {
       onConflict: 'discord_guild_id,role_id',
     })
     if (upsertErr) return errorResponse(upsertErr.message, req, 500)
+
+    const botRolePosition = body.botRolePosition
+    if (
+      typeof botRolePosition === 'number' &&
+      Number.isFinite(botRolePosition) &&
+      botRolePosition >= 0
+    ) {
+      const { error: posErr } = await db
+        .from('discord_servers')
+        .update({ bot_role_position: botRolePosition, updated_at: new Date().toISOString() })
+        .eq('discord_guild_id', guildId)
+      if (posErr) return errorResponse(posErr.message, req, 500)
+    }
+
     return jsonResponse({ ok: true }, req)
   }
 

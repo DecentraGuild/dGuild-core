@@ -10,6 +10,19 @@ import {
 import { hasBotSecret } from '../config.js'
 import { GUILD_NOT_LINKED_CODE } from '../discord-errors.js'
 
+/** Bot member is not always in cache when sync runs; fetch ensures we can read roles.highest.position. */
+async function resolveBotMember(guild: Guild): Promise<GuildMember | null> {
+  const cached = guild.members.me
+  if (cached) return cached
+  const uid = guild.client.user?.id
+  if (!uid) return null
+  try {
+    return await guild.members.fetch(uid)
+  } catch {
+    return null
+  }
+}
+
 /** Discord REST: 50001 Missing Access / 50013 Missing Permissions — usually role hierarchy or Manage Roles. */
 function discordRoleActionHint(err: unknown): string {
   const code =
@@ -142,8 +155,10 @@ export async function syncLinkedGuild(guild: Guild): Promise<void> {
         icon: r.icon ?? null,
         unicode_emoji: (r as { unicodeEmoji?: string | null }).unicodeEmoji ?? null,
       }))
-    const me = guild.members.me
-    const botRolePosition = me?.roles?.cache?.reduce((max, r) => Math.max(max, r.position), -1) ?? -1
+    const me = await resolveBotMember(guild)
+    const rawPos = me?.roles.highest?.position
+    const botRolePosition =
+      typeof rawPos === 'number' && Number.isFinite(rawPos) && rawPos >= 0 ? rawPos : -1
     await syncGuildRoles(
       guild.id,
       roles,

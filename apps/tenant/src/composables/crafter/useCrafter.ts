@@ -23,6 +23,7 @@ import {
   buildCloseMintTransaction,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
+  metaplexTokenSymbolValidationError,
 } from '@decentraguild/web3'
 import { invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
@@ -250,10 +251,13 @@ export function useCrafter() {
     const token = tokens.value.find((t) => t.mint === mint)
     if (!token) return { success: false, error: 'Token not found' }
 
+    const name = (form.name?.trim() || token.name) || 'Token'
+    const symbol = (form.symbol?.trim() || token.symbol) || 'TKN'
+    const symErr = metaplexTokenSymbolValidationError(symbol)
+    if (symErr) return { success: false, error: symErr }
+
     const exclusive = await crafterTxLock.runExclusive(async () => {
       try {
-        const name = (form.name?.trim() || token.name) || 'Token'
-        const symbol = (form.symbol?.trim() || token.symbol) || 'TKN'
         const tx = buildCreateMetadataTransaction({
           mint,
           name,
@@ -308,6 +312,9 @@ export function useCrafter() {
   }): Promise<{ metadataUri?: string; error?: string }> {
     const id = tenantId.value
     if (!id) return { error: 'No tenant' }
+
+    const prepSymErr = metaplexTokenSymbolValidationError(form.symbol.trim())
+    if (prepSymErr) return { error: prepSymErr }
 
     try {
       const headers = await getAuthHeaders()
@@ -462,6 +469,8 @@ export function useCrafter() {
     if (!name || !symbol || !uri) {
       return { success: false, error: 'Name, symbol, and metadata URI required' }
     }
+    const editSymErr = metaplexTokenSymbolValidationError(symbol)
+    if (editSymErr) return { success: false, error: editSymErr }
     const exclusive = await crafterTxLock.runExclusive(async () => {
       try {
         const tx = buildUpdateMetadataTransaction({

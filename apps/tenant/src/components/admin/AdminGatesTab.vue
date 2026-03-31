@@ -428,11 +428,7 @@ const props = defineProps<{
     slugToClaim?: string,
     conditions?: Record<string, number | boolean>,
   ) => Promise<BillingSameTxPrepare>
-  confirmBillingFromTxSignature: (
-    paymentId: string,
-    txSignature: string,
-    slugToClaim?: string,
-  ) => Promise<void>
+  confirmBillingFromTxSignature: (paymentId: string, txSignature: string) => Promise<void>
 }>()
 
 const emit = defineEmits<{

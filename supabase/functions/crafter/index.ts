@@ -14,7 +14,8 @@
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { requireTenantAdmin } from '../_shared/auth.ts'
-import { verifyBillingPayment } from '../_shared/billing-verify.ts'
+import { finalizeCrafterTokensForMemo } from '../_shared/billing-post-confirm.ts'
+import { metaplexTokenSymbolValidationError } from '../_shared/metaplex-token-symbol.ts'
 
 const PENDING_EXPIRY_MINUTES = 30
 
@@ -53,6 +54,8 @@ Deno.serve(async (req: Request) => {
     const sellerFeeBasisPoints = Math.max(0, Math.min(10000, typeof body.sellerFeeBasisPoints === 'number' ? body.sellerFeeBasisPoints : 0))
 
     if (!name || !symbol) return errorResponse('name and symbol required', req)
+    const symErr = metaplexTokenSymbolValidationError(symbol)
+    if (symErr) return errorResponse(symErr, req, 400)
 
     const metadataJson = {
       name,
@@ -146,7 +149,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: billingPayment, error: payErr } = await db
       .from('billing_payments')
-      .select('id, amount_usdc, status')
+      .select('id, status')
       .eq('tenant_id', tenantId)
       .eq('memo', memo)
       .maybeSingle()
@@ -155,67 +158,17 @@ Deno.serve(async (req: Request) => {
       return errorResponse('Payment record not found. Call billing confirm first.', req, 404)
     }
 
-    const pay = billingPayment as { id: string; amount_usdc: number; status: string }
+    const pay = billingPayment as { id: string; status: string }
     if (pay.status !== 'confirmed') {
       return errorResponse('Payment not confirmed. Call billing confirm first.', req, 400)
     }
 
-    const ver = await verifyBillingPayment({
-      txSignature,
-      expectedAmountUsdc: pay.amount_usdc,
-      expectedMemo: memo,
-    })
+    await finalizeCrafterTokensForMemo(db, { tenantId, memo, txSignature })
 
-    if (!ver.valid) return errorResponse(ver.error ?? 'Payment verification failed', req, 400)
-
-    const meta = (pending as { metadata_json: Record<string, unknown> }).metadata_json
-    const paymentId = pay.id
-    const name = (meta.name as string) ?? ''
-    const symbol = (meta.symbol as string) ?? ''
-    const decimals = (meta.decimals as number) ?? 6
-
-    const { error: tokenErr } = await db.from('crafter_tokens').insert({
-      tenant_id: tenantId,
-      mint,
-      billing_payment_id: paymentId,
-      name,
-      symbol,
-      decimals,
-      description: null,
-      image_url: null,
-      metadata_uri: '',
-      storage_backend: 'api',
-      authority: adminWallet,
-    })
-
-    if (tokenErr) return errorResponse(tokenErr.message, req, 500)
-
-    await db.from('mint_metadata').upsert(
-      {
-        mint,
-        name,
-        symbol,
-        image: null,
-        decimals,
-        updated_at: nowIso,
-      },
-      { onConflict: 'mint' },
-    )
-
-    await db
-      .from('tenant_mint_catalog')
-      .upsert(
-        {
-          tenant_id: tenantId,
-          mint,
-          kind: 'SPL',
-          label: name || symbol,
-          updated_at: nowIso,
-        },
-        { onConflict: 'tenant_id,mint' },
-      )
-
-    await db.from('crafter_pending').delete().eq('mint', mint).eq('memo', memo)
+    const { data: tok } = await db.from('crafter_tokens').select('mint').eq('mint', mint).maybeSingle()
+    if (!tok) {
+      return errorResponse('Token finalize failed. Retry or contact support.', req, 500)
+    }
 
     return jsonResponse({ success: true, mint }, req)
   }
@@ -265,6 +218,10 @@ Deno.serve(async (req: Request) => {
 
     if (!mint) return errorResponse('mint required', req)
     if (!metadataUri) return errorResponse('metadataUri required', req)
+    if (symbolOverride != null) {
+      const oErr = metaplexTokenSymbolValidationError(symbolOverride)
+      if (oErr) return errorResponse(oErr, req, 400)
+    }
 
     const { data: token, error: fetchErr } = await db
       .from('crafter_tokens')
@@ -333,6 +290,11 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
 
     if (fetchErr || !token) return errorResponse('Token not found', req, 404)
+
+    if (symbol !== undefined && symbol !== '') {
+      const uErr = metaplexTokenSymbolValidationError(symbol)
+      if (uErr) return errorResponse(uErr, req, 400)
+    }
 
     const updates: Record<string, unknown> = { updated_at: nowIso }
     if (name !== undefined) updates.name = name || null

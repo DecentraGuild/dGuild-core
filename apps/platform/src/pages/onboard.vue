@@ -163,6 +163,12 @@ async function submit() {
           quoteId: quote.quoteId,
           payerWallet,
           paymentMethod: 'usdc',
+          onboardingOrg: {
+            name: form.name.trim(),
+            description: form.description.trim(),
+            logo: form.logo.trim() || undefined,
+            discordInviteLink: form.discordInviteLink.trim() || undefined,
+          },
         },
       )
       const charge = chargeData
@@ -184,19 +190,24 @@ async function submit() {
 
       const { data: session } = await supabase.auth.getSession()
       const token = session?.session?.access_token
-      await invokeEdgeFunction(
-        supabase,
-        'billing',
-        {
-          action: 'register-create',
-          paymentId: charge.paymentId,
-          name: form.name.trim(),
-          description: form.description.trim() || null,
-          logo: form.logo.trim() || null,
-          discordInviteLink: form.discordInviteLink.trim() || null,
-        },
-        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
-      )
+      try {
+        await invokeEdgeFunction(
+          supabase,
+          'billing',
+          {
+            action: 'register-create',
+            paymentId: charge.paymentId,
+            name: form.name.trim(),
+            description: form.description.trim() || null,
+            logo: form.logo.trim() || null,
+            discordInviteLink: form.discordInviteLink.trim() || null,
+          },
+          token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+        )
+      } catch (regErr) {
+        const msg = regErr instanceof Error ? regErr.message : String(regErr)
+        if (!/already exists|Tenant already exists|409/.test(msg)) throw regErr
+      }
 
       const config = useRuntimeConfig()
       const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')

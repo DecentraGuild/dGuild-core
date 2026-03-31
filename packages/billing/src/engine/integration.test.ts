@@ -36,6 +36,7 @@ function createMockDb(tables: Record<string, Row[]> = {}) {
       for (const f of filters) {
         result = result.filter((r) => {
           if (f.op === 'eq') return r[f.field] === f.value
+          if (f.op === 'neq') return r[f.field] !== f.value
           if (f.op === 'gt') return (r[f.field] as string) > (f.value as string)
           if (f.op === 'is') return r[f.field] === f.value
           return true
@@ -70,6 +71,7 @@ function createMockDb(tables: Record<string, Row[]> = {}) {
     const chain: Record<string, unknown> = {
       select(_cols: string) { return chain },
       eq(field: string, value: unknown) { filters.push({ field, op: 'eq', value }); return chain },
+      neq(field: string, value: unknown) { filters.push({ field, op: 'neq', value }); return chain },
       gt(field: string, value: unknown) { filters.push({ field, op: 'gt', value }); return chain },
       is(field: string, value: unknown) { filters.push({ field, op: 'is', value }); return chain },
       order(field: string, opts?: { ascending?: boolean }) {
@@ -438,5 +440,80 @@ describe('Admin quote – registration one-time vs recurring display', () => {
     )
     expect(quote.recurringDisplayUsdc).toBe(49)
     expect(quote.recurringDisplayUsdc).not.toBe(220)
+  })
+})
+
+describe('Charge intent — slug on payment row', () => {
+  let db: ReturnType<typeof createMockDb>
+
+  beforeEach(() => {
+    db = createMockDb({
+      tenant_config: [{ id: 't-adm', slug: null }],
+      tenant_meter_limits: [],
+      tier_rules: [
+        {
+          product_key: 'admin',
+          meter_key: 'registration',
+          min_quantity: 1,
+          max_quantity: null,
+          unit_price: 19,
+          tier_price: null,
+          label: 'dGuild registration',
+        },
+        {
+          product_key: 'admin',
+          meter_key: 'slug',
+          min_quantity: 1,
+          max_quantity: null,
+          unit_price: 5.444444,
+          tier_price: null,
+          label: 'Custom slug',
+        },
+      ],
+      duration_rules: [{ duration_days: 365, price_multiplier: 9 }],
+      billing_quotes: [],
+      billing_payments: [],
+      granted_entitlements: [],
+      bundle_entitlements: [],
+    })
+  })
+
+  it('charge requires slugToClaim when quote includes slug and tenant has no slug', async () => {
+    const { quoteId } = await resolveQuote(
+      {
+        tenantId: 't-adm',
+        productKey: 'admin',
+        durationDays: 365,
+        meterOverrides: { slug: 1 },
+      },
+      db,
+    )
+    await expect(charge({ quoteId, paymentMethod: 'usdc', payerWallet: 'W1' }, db)).rejects.toThrow(/slugToClaim is required/)
+  })
+
+  it('confirm applies slug_to_claim from payment row', async () => {
+    const { quoteId } = await resolveQuote(
+      {
+        tenantId: 't-adm',
+        productKey: 'admin',
+        durationDays: 365,
+        meterOverrides: { slug: 1 },
+      },
+      db,
+    )
+    const cr = await charge(
+      { quoteId, paymentMethod: 'usdc', payerWallet: 'W1', slugToClaim: 'my-guild' },
+      db,
+    )
+    const mockProvider: PaymentProvider = {
+      id: 'usdc',
+      async verify() {
+        return { valid: true }
+      },
+    }
+    await confirm({ paymentId: cr.paymentId, txSignature: 'sig1' }, db, mockProvider)
+    const tenants = db._store['tenant_config'] ?? []
+    const t = tenants[0] as { slug: string }
+    expect(t.slug).toBe('my-guild')
   })
 })

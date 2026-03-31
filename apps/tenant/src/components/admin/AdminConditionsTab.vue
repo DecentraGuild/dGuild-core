@@ -140,10 +140,11 @@ async function fetchDiscordServer() {
       name: (r.name as string) ?? '',
     }))
     guildRolesAll.value = all
-    const assignable = (roles ?? []).filter((r) => {
-      const pos = (r.position as number) ?? 0
-      return botPos == null || pos < botPos
-    })
+    const botPosKnown =
+      typeof botPos === 'number' && Number.isFinite(botPos) && botPos >= 0
+    const assignable = botPosKnown
+      ? (roles ?? []).filter((r) => ((r.position as number) ?? 0) < botPos)
+      : []
     guildRoles.value = assignable.map((r) => ({
       role_id: r.role_id as string,
       name: (r.name as string) ?? '',

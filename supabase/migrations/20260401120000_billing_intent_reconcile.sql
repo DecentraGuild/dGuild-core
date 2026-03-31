@@ -1,4 +1,4 @@
-﻿-- Persist payment intent (slug, onboarding org) and support USDC reconciliation.
+-- Persist payment intent (slug, onboarding org) and support USDC reconciliation.
 -- RLS: billing_payments remains tenant-admin SELECT only; pre-org rows have no tenant admin
 -- until register hook runs — same as before (no broadened client read of sensitive columns).
 
@@ -12,9 +12,3 @@ COMMENT ON COLUMN public.billing_payments.onboarding_org IS 'PII: org fields for
 CREATE INDEX IF NOT EXISTS idx_billing_payments_pending_usdc_reconcile
   ON public.billing_payments (status, payment_method, created_at)
   WHERE status = 'pending' AND payment_method = 'usdc';
-
-SELECT cron.schedule(
-  'billing-reconcile-usdc-batch',
-  '*/5 * * * *',
-  $$SELECT public.invoke_edge_function('billing', '{"action":"reconcile-usdc-batch"}'::jsonb)$$
-);

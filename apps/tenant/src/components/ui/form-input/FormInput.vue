@@ -8,6 +8,7 @@
       :placeholder="placeholder"
       :disabled="disabled"
       :required="required"
+      :maxlength="maxlength"
       class="form-input__field"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       @blur="$emit('blur')"
@@ -30,6 +31,7 @@ withDefaults(
     disabled?: boolean
     error?: string
     required?: boolean
+    maxlength?: number
   }>(),
   { type: 'text', disabled: false }
 )

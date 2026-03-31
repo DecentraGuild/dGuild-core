@@ -7,6 +7,14 @@ import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getWalletFromAuthHeader, isServiceRoleAuthorization, requireTenantAdmin } from '../_shared/auth.ts'
 import { verifyBillingPayment, BILLING_WALLET_ATA } from '../_shared/billing-verify.ts'
 import { getVoucherRecipientAta, verifyVoucherPayment } from '../_shared/voucher-verify.ts'
+import { runBillingPostConfirm } from '../_shared/billing-post-confirm.ts'
+import {
+  parseTxSignatureFromWebhookBody,
+  reconcileSingleUsdcTx,
+  reconcileUsdcBatch,
+} from '../_shared/billing-reconcile-usdc.ts'
+import { getSolanaConnection } from '../_shared/solana-connection.ts'
+import type { PaymentProvider } from '@decentraguild/billing'
 import {
   resolveQuote,
   charge,
@@ -14,6 +22,23 @@ import {
   createUSDCTransferProvider,
   createVoucherTransferProvider,
 } from '@decentraguild/billing'
+
+function createPaymentProviderForRow(
+  paymentMethod: string,
+  voucherMint: string | null,
+): PaymentProvider {
+  return paymentMethod === 'voucher' && voucherMint
+    ? createVoucherTransferProvider(verifyVoucherPayment, voucherMint)
+    : createUSDCTransferProvider(verifyBillingPayment)
+}
+
+function isBillingUsdcReconcileAuthorized(req: Request): boolean {
+  if (isServiceRoleAuthorization(req)) return true
+  const expected = (Deno.env.get('BILLING_USDC_WEBHOOK_SECRET') ?? '').trim()
+  if (!expected) return false
+  const got = (req.headers.get('x-dguild-webhook-secret') ?? '').trim()
+  return got === expected && got.length > 0
+}
 
 const BILLING_ACTIONS_LEGACY = [
   'preview',
@@ -50,11 +75,47 @@ Deno.serve(async (req: Request) => {
     }
     const { error } = await db
       .from('billing_payments')
-      .update({ status: 'expired' })
+      .update({ status: 'expired', onboarding_org: null })
       .eq('status', 'pending')
       .lt('expires_at', new Date().toISOString())
     if (error) return errorResponse(error.message, req, 500)
     return jsonResponse({ ok: true }, req)
+  }
+
+  if (action === 'reconcile-usdc-single') {
+    if (!isBillingUsdcReconcileAuthorized(req)) {
+      return errorResponse('Unauthorized', req, 401)
+    }
+    const txSignature = parseTxSignatureFromWebhookBody(body)
+    if (!txSignature) return errorResponse('txSignature required', req, 400)
+    try {
+      const r = await reconcileSingleUsdcTx({
+        db,
+        connection: getSolanaConnection(),
+        txSignature,
+        createProvider: createPaymentProviderForRow,
+      })
+      if (!r.ok) return errorResponse(r.error ?? 'Reconcile failed', req, 400)
+      return jsonResponse({ ok: true, paymentId: r.paymentId }, req)
+    } catch (e) {
+      return errorResponse(e instanceof Error ? e.message : 'Reconcile failed', req, 400)
+    }
+  }
+
+  if (action === 'reconcile-usdc-batch') {
+    if (!isServiceRoleAuthorization(req)) {
+      return errorResponse('Unauthorized', req, 401)
+    }
+    try {
+      const r = await reconcileUsdcBatch({
+        db,
+        connection: getSolanaConnection(),
+        createProvider: createPaymentProviderForRow,
+      })
+      return jsonResponse({ ok: true, scanned: r.scanned, confirmed: r.confirmed }, req)
+    } catch (e) {
+      return errorResponse(e instanceof Error ? e.message : 'Batch reconcile failed', req, 500)
+    }
   }
 
   if (action === 'quote') {
@@ -356,6 +417,9 @@ Deno.serve(async (req: Request) => {
 
       const paymentMethod = (body.paymentMethod as 'usdc' | 'voucher') ?? 'usdc'
       const voucherMint = (body.voucherMint as string)?.trim() || undefined
+      const slugToClaimRaw = body.slugToClaim as string | undefined
+      const slugToClaim = typeof slugToClaimRaw === 'string' ? slugToClaimRaw.trim() : undefined
+      const onboardingOrg = body.onboardingOrg as Record<string, unknown> | undefined
 
       const result = await charge(
         {
@@ -363,6 +427,8 @@ Deno.serve(async (req: Request) => {
           paymentMethod,
           voucherMint,
           payerWallet,
+          slugToClaim: slugToClaim || undefined,
+          onboardingOrg: onboardingOrg ?? undefined,
         },
         db,
       )
@@ -383,11 +449,7 @@ Deno.serve(async (req: Request) => {
     try {
       const paymentId = (body.paymentId as string)?.trim()
       const txSignature = (body.txSignature as string)?.trim()
-      const slugToClaim = (body.slugToClaim as string)?.trim()?.toLowerCase()
       if (!paymentId || !txSignature) return errorResponse('paymentId and txSignature required', req)
-      if (slugToClaim && !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(slugToClaim)) {
-        return errorResponse('Invalid slug: must be 1–63 characters, only lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen.', req, 400)
-      }
 
       const { data: payment } = await db
         .from('billing_payments')
@@ -396,26 +458,14 @@ Deno.serve(async (req: Request) => {
         .maybeSingle()
 
       const pm = payment as { payment_method?: string; voucher_mint?: string | null } | null
-      const provider =
-        pm?.payment_method === 'voucher' && pm?.voucher_mint
-          ? createVoucherTransferProvider(verifyVoucherPayment, pm.voucher_mint)
-          : createUSDCTransferProvider(verifyBillingPayment)
+      const provider = createPaymentProviderForRow(
+        pm?.payment_method ?? 'usdc',
+        pm?.voucher_mint ?? null,
+      )
 
       const { success } = await confirm({ paymentId, txSignature }, db, provider)
-
-      if (success && slugToClaim) {
-        const { data: payment } = await db
-          .from('billing_payments')
-          .select('tenant_id')
-          .eq('id', paymentId)
-          .maybeSingle()
-        const tenantId = (payment as { tenant_id: string } | null)?.tenant_id
-        if (tenantId) {
-          await db
-            .from('tenant_config')
-            .update({ slug: slugToClaim, updated_at: new Date().toISOString() })
-            .eq('id', tenantId)
-        }
+      if (success) {
+        await runBillingPostConfirm(db, paymentId, txSignature)
       }
 
       return jsonResponse({ success }, req)
@@ -471,6 +521,7 @@ Deno.serve(async (req: Request) => {
     })
 
     if (insertErr) return errorResponse(insertErr.message, req, 500)
+    await db.from('billing_payments').update({ onboarding_org: null }).eq('id', paymentId)
     return jsonResponse({ success: true, tenantId: p.tenant_id }, req)
   }
 

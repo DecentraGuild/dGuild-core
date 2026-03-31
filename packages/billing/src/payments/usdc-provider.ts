@@ -9,6 +9,7 @@ export interface VerifyBillingPaymentFn {
     txSignature: string
     expectedAmountUsdc: number
     expectedMemo: string
+    expectedPayerWallet?: string
   }): Promise<{ valid: boolean; error?: string }>
 }
 
@@ -28,6 +29,7 @@ export function createUSDCTransferProvider(verify: VerifyBillingPaymentFn): Paym
         txSignature: params.txSignature,
         expectedAmountUsdc: amt,
         expectedMemo: memo,
+        expectedPayerWallet: params.expectedPayerWallet,
       })
     },
   }

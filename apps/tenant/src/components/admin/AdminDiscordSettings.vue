@@ -24,7 +24,10 @@
         <ul v-if="guildRoles.length" class="discord-settings__role-ul">
           <li v-for="r in guildRoles" :key="r.role_id">{{ r.name || r.role_id }}</li>
         </ul>
-        <p v-else class="discord-settings__role-empty">None (raise the bot’s role or wait for sync).</p>
+        <p v-else class="discord-settings__role-empty">
+          None yet: either every role is above the bot, the bot hasn’t reported its highest role (wait for the next
+          sync), or move the bot’s role higher in Discord → Server Settings → Roles.
+        </p>
       </div>
       <div class="discord-settings__role-col">
         <h4 class="discord-settings__role-heading">All server roles</h4>
@@ -255,10 +258,11 @@ async function fetchGuildRoles() {
     name: (r.name as string) ?? '',
   }))
   const botPos = server.value.bot_role_position
-  const assignable = rows.filter((r) => {
-    const pos = (r.position as number) ?? 0
-    return botPos == null || pos < botPos
-  })
+  const botPosKnown =
+    typeof botPos === 'number' && Number.isFinite(botPos) && botPos >= 0
+  const assignable = botPosKnown
+    ? rows.filter((r) => ((r.position as number) ?? 0) < botPos)
+    : []
   guildRoles.value = assignable.map((r) => ({
     role_id: r.role_id as string,
     name: (r.name as string) ?? '',

@@ -18,6 +18,8 @@ interface PaymentRow {
   tx_signature: string | null
   payment_method?: string
   voucher_mint?: string | null
+  payer_wallet?: string
+  slug_to_claim?: string | null
 }
 
 interface QuoteRow {
@@ -124,7 +126,9 @@ export async function confirm(
 
   const { data: payment, error: payErr } = await db
     .from('billing_payments')
-    .select('id, tenant_id, quote_id, amount_usdc, memo, status, tx_signature, payment_method, voucher_mint')
+    .select(
+      'id, tenant_id, quote_id, amount_usdc, memo, status, tx_signature, payment_method, voucher_mint, payer_wallet, slug_to_claim',
+    )
     .eq('id', paymentId)
     .maybeSingle()
 
@@ -133,10 +137,12 @@ export async function confirm(
   if (p.status === 'confirmed') return { success: true }
   if (p.status !== 'pending') throw new Error(`Payment not pending: ${p.status}`)
 
+  const amountUsdc = typeof p.amount_usdc === 'number' ? p.amount_usdc : Number(p.amount_usdc)
   const { valid, error } = await paymentProvider.verify({
     txSignature,
-    expectedAmountUsdc: p.amount_usdc,
+    expectedAmountUsdc: amountUsdc,
     expectedMemo: p.memo,
+    expectedPayerWallet: p.payment_method === 'usdc' && p.payer_wallet ? p.payer_wallet : undefined,
   })
   if (!valid) throw new Error(error ?? 'Payment verification failed')
 
@@ -254,9 +260,30 @@ export async function confirm(
     }
   }
 
+  const slugToApply = (p.slug_to_claim ?? '').trim()
+  if (slugToApply) {
+    const { data: taken } = await db
+      .from('tenant_config')
+      .select('id')
+      .eq('slug', slugToApply)
+      .neq('id', tenantId)
+      .maybeSingle()
+    if (taken) throw new Error('Slug is no longer available')
+    const { error: slugErr } = await db
+      .from('tenant_config')
+      .update({ slug: slugToApply, updated_at: now })
+      .eq('id', tenantId)
+    if (slugErr) throw new Error(slugErr.message)
+  }
+
   await db
     .from('billing_payments')
-    .update({ status: 'confirmed', tx_signature: txSignature, confirmed_at: now })
+    .update({
+      status: 'confirmed',
+      tx_signature: txSignature,
+      confirmed_at: now,
+      slug_to_claim: null,
+    })
     .eq('id', paymentId)
 
   return { success: true }

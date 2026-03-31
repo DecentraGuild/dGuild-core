@@ -17,3 +17,9 @@ export type {
   BuildUpdateMetadataTransactionParams,
   BuildCloseMintTransactionParams,
 } from './build.js'
+
+export {
+  METAPLEX_TOKEN_SYMBOL_MAX_LEN,
+  sanitizeMetaplexTokenSymbolInput,
+  metaplexTokenSymbolValidationError,
+} from './metaplex-symbol.js'

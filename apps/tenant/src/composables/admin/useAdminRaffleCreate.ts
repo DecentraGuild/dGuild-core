@@ -32,10 +32,7 @@ export interface AdminRaffleCreateDeps {
     | ((moduleId: string, period: BillingPeriod, slugToClaim?: string, conditions?: ConditionSet) => Promise<BillingSameTxPrepare>)
     | undefined
   >
-  confirmBilling: Ref<
-    | ((paymentId: string, txSignature: string, slugToClaim?: string) => Promise<void>)
-    | undefined
-  >
+  confirmBilling: Ref<((paymentId: string, txSignature: string) => Promise<void>) | undefined>
   closeRaffleModal: () => void
   openCreateModalBase: () => void
   fetchRaffles: () => Promise<void>
