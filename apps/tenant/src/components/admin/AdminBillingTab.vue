@@ -62,7 +62,7 @@
             class="admin__module-row"
           >
             <div class="admin__module-cell admin__module-cell--name">
-              <span class="admin__module-name">{{ MODULE_NAV[id]?.label ?? id }}</span>
+              <span class="admin__module-name">{{ getModuleDisplayName(id) }}</span>
             </div>
             <div class="admin__module-cell admin__module-cell--status">
               <span v-if="moduleDeactivationDate(id)" class="admin__module-date">
@@ -111,10 +111,11 @@
 
 <script setup lang="ts">
 import type { BillingPeriod } from '@decentraguild/billing'
-import { getProductDisplayType } from '@decentraguild/billing'
+import { getProductDisplayType, MODULE_TO_PRODUCT } from '@decentraguild/billing'
 import { formatUsdc } from '@decentraguild/display'
 import type { TenantConfig } from '@decentraguild/core'
-import { getModuleCatalogEntry } from '@decentraguild/catalog'
+import { getModuleDisplayName, getAddonModuleIds } from '@decentraguild/catalog'
+import { getModuleState } from '@decentraguild/core'
 import { Card } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
@@ -148,7 +149,31 @@ defineEmits<{
 const invoiceDownloadEnabled = false
 
 function isModuleBillable(moduleId: string): boolean {
-  return getModuleCatalogEntry(moduleId)?.pricing != null
+  return Object.hasOwn(MODULE_TO_PRODUCT, moduleId)
+}
+
+const extendSourceModuleIds = computed(() => {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const id of props.moduleIds) {
+    if (!seen.has(id)) {
+      seen.add(id)
+      out.push(id)
+    }
+  }
+  for (const id of getAddonModuleIds()) {
+    if (!seen.has(id)) {
+      seen.add(id)
+      out.push(id)
+    }
+  }
+  return out
+})
+
+function isActiveForExtend(moduleId: string): boolean {
+  const fromForm = props.form.modulesById[moduleId]
+  if (fromForm !== undefined) return fromForm === 'active'
+  return getModuleState(props.tenant?.modules?.[moduleId]) === 'active'
 }
 
 function isAddUnitOnly(moduleId: string): boolean {
@@ -157,12 +182,9 @@ function isAddUnitOnly(moduleId: string): boolean {
 }
 
 const extendableModuleIds = computed(() =>
-  props.moduleIds.filter(
+  extendSourceModuleIds.value.filter(
     (id) =>
-      id !== 'admin' &&
-      props.form.modulesById[id] === 'active' &&
-      isModuleBillable(id) &&
-      !isAddUnitOnly(id),
+      id !== 'admin' && isActiveForExtend(id) && isModuleBillable(id) && !isAddUnitOnly(id),
   ),
 )
 
