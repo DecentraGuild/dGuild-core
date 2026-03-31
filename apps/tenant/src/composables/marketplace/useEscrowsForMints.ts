@@ -186,10 +186,11 @@ export function useEscrowsForMints(
           const supabase = useSupabase()
           const data = await invokeEdgeFunction<{ escrows?: EscrowApiShape[] }>(supabase, 'marketplace', { action: 'escrows', tenantId })
           const raw = data.escrows ?? []
-          rawEscrows.value = raw
+          const mapped = raw
             .map(apiEscrowToFull)
             .filter((e) => !isEffectivelyComplete(e.account.tokensDepositRemaining, e.account.decimals))
-          return
+          rawEscrows.value = mapped
+          if (mapped.length > 0) return
         } catch {
           /* fall through to RPC */
         }
