@@ -15,7 +15,16 @@
         <li v-for="(item, i) in keyPoints" :key="i">{{ item }}</li>
       </ul>
       <p class="dguild-center__desc">{{ designedFor }}</p>
-      <p class="dguild-center__desc">{{ protocolLayer }}</p>
+      <p class="dguild-center__desc dguild-center__desc--last">{{ protocolLayer }}</p>
+      <a
+        :href="dguildDocsUrl"
+        target="_blank"
+        rel="noopener"
+        class="dguild-center__learn-more inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
+      >
+        Learn more
+        <Icon icon="mdi:open-in-new" class="size-4" aria-hidden="true" />
+      </a>
     </div>
   </article>
 </template>
@@ -23,6 +32,12 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
 import { Button } from '~/components/ui/button'
+
+const config = useRuntimeConfig()
+const dguildDocsUrl = computed(() => {
+  const base = (config.public.platformDocsUrl as string) ?? 'https://dguild.org/docs'
+  return `${base.replace(/\/$/, '')}/modules/dguild`
+})
 
 const intro = 'With dGuild BYO, partners can:'
 
@@ -129,6 +144,10 @@ const protocolLayer =
   color: var(--theme-text-secondary);
   margin: 0 0 var(--theme-space-sm);
   line-height: 1.5;
+}
+
+.dguild-center__desc--last {
+  margin-bottom: var(--theme-space-md);
 }
 
 .dguild-center__key-info {

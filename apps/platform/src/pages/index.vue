@@ -11,7 +11,7 @@
     <div v-else class="discovery">
       <div class="discovery__bar">
         <div class="discovery__search">
-          <Label for="discovery-search">Search</Label>
+          <Label for="discovery-search" class="discovery__label">Search</Label>
           <div class="relative">
             <Icon icon="mdi:magnify" class="discovery__search-icon" aria-hidden="true" />
             <Input
@@ -27,7 +27,7 @@
         </div>
         <div class="discovery__filters">
           <div class="discovery__filter">
-            <Label for="discovery-module">Module</Label>
+            <Label for="discovery-module" class="discovery__label">Module</Label>
             <Select v-model="moduleFilterModel" aria-label="Filter by module">
               <SelectTrigger id="discovery-module" class="w-[140px]">
                 <SelectValue placeholder="Any module" />
@@ -47,7 +47,7 @@
             </Select>
           </div>
           <div class="discovery__filter">
-            <Label for="discovery-access">Access</Label>
+            <Label for="discovery-access" class="discovery__label">Access</Label>
             <Select v-model="accessFilter" aria-label="Filter by access">
               <SelectTrigger id="discovery-access" class="w-[120px]">
                 <SelectValue />
@@ -205,7 +205,7 @@ const moduleFilterModel = computed({
   font-size: var(--theme-font-xs);
   font-weight: 500;
   color: var(--theme-text-secondary);
-  margin-bottom: 0.25rem;
+  margin-bottom: var(--theme-space-xs);
 }
 
 .discovery__input,
