@@ -501,7 +501,12 @@ const editImageUrl = ref('')
 const updatingImage = ref(false)
 
 async function fetchLists() {
-  if (!tenantId.value) return
+  if (!tenantId.value) {
+    loading.value = false
+    lists.value = []
+    selectedListAddress.value = ''
+    return
+  }
   loading.value = true
   loadError.value = null
   try {
@@ -933,7 +938,19 @@ async function copyMemberWallet(addr: string) {
   }
 }
 
-onMounted(() => fetchLists())
+watch(
+  tenantId,
+  (id) => {
+    if (id) void fetchLists()
+    else {
+      loading.value = false
+      lists.value = []
+      selectedListAddress.value = ''
+      entries.value = []
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

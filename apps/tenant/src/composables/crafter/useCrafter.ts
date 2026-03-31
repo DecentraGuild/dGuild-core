@@ -15,6 +15,7 @@ import {
 } from '@solana/spl-token'
 import {
   buildCreateMintAndBillingTransaction,
+  buildCreateMintWithMemoTransaction,
   buildCreateMetadataTransaction,
   buildMintTransaction,
   buildBurnTransaction,
@@ -133,7 +134,6 @@ export function useCrafter() {
             tenantId: id,
             productKey: 'crafter',
             meterOverrides: { crafter_tokens: currentCount + 1 },
-            durationDays: 30,
           },
           { errorFallback: 'Quote failed' },
         )
@@ -154,7 +154,9 @@ export function useCrafter() {
           { errorFallback: 'Charge failed' },
         )
         const charge = chargeData
-        if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
+        if (!charge?.paymentId || !charge?.memo) throw new Error('Invalid charge response')
+        const amountUsdc = charge.amountUsdc ?? 0
+        if (amountUsdc > 0 && !charge.recipientAta) throw new Error('Invalid charge response')
 
         const mintKeypair = Keypair.generate()
         const decimals = typeof form.decimals === 'number' ? form.decimals : parseInt(String(form.decimals), 10) || 6
@@ -176,15 +178,24 @@ export function useCrafter() {
         )
 
         createTxStatus.value = 'Sending transaction...'
-        const tx = await buildCreateMintAndBillingTransaction({
-          mintKeypair,
-          decimals,
-          memo: charge.memo,
-          amountUsdc: charge.amountUsdc ?? 0,
-          recipientAta: new PublicKey(charge.recipientAta),
-          payer: wallet.publicKey,
-          connection: conn,
-        })
+        const tx =
+          amountUsdc > 0
+            ? await buildCreateMintAndBillingTransaction({
+                mintKeypair,
+                decimals,
+                memo: charge.memo,
+                amountUsdc,
+                recipientAta: new PublicKey(charge.recipientAta as string),
+                payer: wallet.publicKey,
+                connection: conn,
+              })
+            : await buildCreateMintWithMemoTransaction({
+                mintKeypair,
+                decimals,
+                memo: charge.memo,
+                payer: wallet.publicKey,
+                connection: conn,
+              })
         const txSignature = await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey, {
           signers: [mintKeypair],
         })

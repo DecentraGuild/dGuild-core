@@ -7,7 +7,13 @@
       @update:model-value="onSelectUpdate"
     >
       <SelectTrigger :id="selectId" class="gate-select__trigger w-full">
-        <SelectValue :placeholder="loading ? 'Loading…' : 'Select…'" />
+        <SelectValue placeholder="Select…">
+          <template #default="{ selectedLabel }">
+            <template v-if="loading">Loading…</template>
+            <template v-else-if="selectedLabel.length">{{ selectedLabel.join(', ') }}</template>
+            <template v-else>{{ triggerDisplayText }}</template>
+          </template>
+        </SelectValue>
       </SelectTrigger>
       <SelectContent class="gate-select__content">
         <SelectItem
@@ -92,6 +98,23 @@ const internalValue = computed(() => {
   if (v === 'admin-only') return '__admin_only__'
   if (typeof v === 'object' && v.account && v.account.trim()) return v.account
   return EMPTY_SENTINEL
+})
+
+const triggerDisplayText = computed(() => {
+  const v = internalValue.value
+  const gl = gateLabelLower.value
+  if (v === EMPTY_SENTINEL) {
+    return lists.value.length ? `Public (no ${gl})` : 'No lists / Public'
+  }
+  if (v === '__admin_only__') return 'Admin only'
+  if (v === '__use_default__') return `Use dGuild default ${gl}`
+  const list = lists.value.find((l) => l.address === v)
+  if (list) {
+    return list.name
+      ? `${list.name} (${truncateAddress(list.address, 8, 4)})`
+      : truncateAddress(list.address, 8, 4)
+  }
+  return truncateAddress(v, 8, 4)
 })
 
 function onSelectUpdate(value: string | undefined) {

@@ -112,7 +112,7 @@
                     <td class="p-4">{{ entry.id }}</td>
                     <td class="p-4">{{ entry.state }}</td>
                     <td class="p-4">
-                      <span v-if="entry.subscription">{{ entry.subscription.billingPeriod }} until {{ formatDate(entry.subscription.periodEnd) }}</span>
+                      <span v-if="entry.subscription">{{ opsSubscriptionSummaryLine(entry.subscription) }}</span>
                       <span v-else class="text-muted-foreground">none</span>
                     </td>
                     <td class="p-4 flex flex-wrap items-center gap-1.5">
@@ -259,7 +259,11 @@
                       <tr v-for="entry in moduleRows" :key="entry.id" class="border-b border-border/50">
                         <td class="p-2">{{ entry.id }}</td>
                         <td class="p-2"><span v-if="entry.subscription">{{ entry.subscription.billingPeriod }}</span><span v-else class="text-muted-foreground">none</span></td>
-                        <td class="p-2"><span v-if="entry.subscription">{{ formatDate(entry.subscription.periodEnd) }}</span><span v-else class="text-muted-foreground">n/a</span></td>
+                        <td class="p-2">
+                          <span v-if="entry.subscription && opsSubscriptionHasPeriodEnd(entry.subscription)">{{ formatDate(entry.subscription.periodEnd) }}</span>
+                          <span v-else-if="entry.subscription" class="text-muted-foreground">Permanent</span>
+                          <span v-else class="text-muted-foreground">n/a</span>
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -433,6 +437,21 @@ const {
 } = useOpsTenantBindList<{ rafflePubkey: string; name: string }>(tenantId, { fetchAction: 'raffle-fetch-unbound', bindAction: 'raffle-bind', unbindAction: 'raffle-unbind', keyField: 'rafflePubkey', parseUnbound: (data) => (data as { unbound?: Array<{ rafflePubkey: string; name: string }> }).unbound ?? [] }, loadTenant)
 
 onMounted(async () => { await loadTenant() })
+
+function opsSubscriptionHasPeriodEnd(s: SubscriptionSummary): boolean {
+  const pe = s.periodEnd
+  return typeof pe === 'string' && pe.trim().length > 0
+}
+
+function opsSubscriptionSummaryLine(s: SubscriptionSummary): string {
+  if (opsSubscriptionHasPeriodEnd(s)) {
+    return `${s.billingPeriod} until ${formatDate(s.periodEnd)}`
+  }
+  if (s.billingPeriod && s.billingPeriod !== '—') {
+    return s.billingPeriod
+  }
+  return 'Permanent (no period end)'
+}
 
 function back() {
   if (history.length > 1) router.back()

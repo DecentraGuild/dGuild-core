@@ -90,6 +90,45 @@ export interface BuildCreateMintOnlyParams {
   connection: Connection
 }
 
+export interface BuildCreateMintWithMemoParams {
+  mintKeypair: { publicKey: PublicKey }
+  decimals: number
+  memo: string
+  payer: PublicKey
+  connection: Connection
+}
+
+/**
+ * Create mint + memo (no USDC). For $0 quotes: prepaid entitlement / voucher-backed capacity.
+ */
+export async function buildCreateMintWithMemoTransaction(
+  params: BuildCreateMintWithMemoParams
+): Promise<Transaction> {
+  const { mintKeypair, decimals, memo, payer, connection } = params
+  const mint = mintKeypair.publicKey
+
+  const lamports = await getMinimumBalanceForRentExemptMint(connection)
+  const createAccountIx = SystemProgram.createAccount({
+    fromPubkey: payer,
+    newAccountPubkey: mint,
+    space: MINT_SIZE,
+    lamports,
+    programId: TOKEN_PROGRAM_ID,
+  })
+  const createMintIx = createInitializeMint2Instruction(mint, decimals, payer, null, TOKEN_PROGRAM_ID)
+  const memoIx = createMemoInstruction(memo)
+
+  const combined = new Transaction()
+  combined.feePayer = payer
+  combined.add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: CRAFTER_COMPUTE_UNIT_LIMIT }),
+    createAccountIx,
+    createMintIx,
+    memoIx,
+  )
+  return combined
+}
+
 /**
  * Create mint only (no billing). For voucher creation etc.
  */

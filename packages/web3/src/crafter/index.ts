@@ -1,5 +1,6 @@
 export {
   buildCreateMintAndBillingTransaction,
+  buildCreateMintWithMemoTransaction,
   buildCreateMintOnlyTransaction,
   buildCreateMetadataTransaction,
   buildMintTransaction,

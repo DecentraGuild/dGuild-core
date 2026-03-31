@@ -17,7 +17,7 @@
           </span>
           <div v-if="isTieredWithOneTime" class="pricing-widget__tier-prices">
             <span class="pricing-widget__tier-price-line">
-              <span class="pricing-widget__tier-price-value">{{ formatBillingUsdcWhole(tieredRecurringMonthlyDisplay) }} USDC/mo</span>
+              <span class="pricing-widget__tier-price-value">{{ formatBillingUsdc(tieredRecurringMonthlyDisplay) }} USDC/mo</span>
               <span class="pricing-widget__tier-price-muted">recurring</span>
             </span>
             <span class="pricing-widget__tier-price-line">
@@ -43,7 +43,7 @@
         <div class="pricing-widget__tier">
           <span class="pricing-widget__tier-name">Custom slug</span>
           <span class="pricing-widget__tier-price">
-            {{ formatBillingUsdcWhole(price.recurringYearly / 12) }} USDC/mo
+            {{ formatBillingUsdc(price.recurringYearly / 12) }} USDC/mo
           </span>
         </div>
 
@@ -86,7 +86,12 @@
         <div class="pricing-widget__tier">
           <span class="pricing-widget__tier-name">{{ selectedTier.name }}</span>
           <span class="pricing-widget__tier-price">
-            {{ formatBillingUsdcWhole(selectedPeriod === 'yearly' ? price.recurringYearly / 12 : price.recurringMonthly) }} USDC/mo
+            {{
+              selectedPeriod === 'yearly'
+                ? formatBillingUsdc(price.recurringYearly / 12)
+                : formatBillingUsdcWhole(price.recurringMonthly)
+            }}
+            USDC/mo
           </span>
         </div>
 
@@ -280,7 +285,7 @@ import {
 import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
-import { formatBillingUsdcWhole, formatDate } from '@decentraguild/display'
+import { formatBillingUsdc, formatBillingUsdcWhole, formatDate } from '@decentraguild/display'
 import { useQuote } from '~/composables/core/useQuote'
 import { usePricingDisplay } from '~/composables/core/usePricingDisplay'
 import { usePricingWidgetActions } from '~/composables/core/usePricingWidgetActions'

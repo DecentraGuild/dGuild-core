@@ -93,6 +93,7 @@ export type {
 
 export {
   buildCreateMintAndBillingTransaction,
+  buildCreateMintWithMemoTransaction,
   buildCreateMintOnlyTransaction,
   buildCreateMetadataTransaction,
   buildMintTransaction,

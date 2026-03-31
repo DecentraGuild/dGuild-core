@@ -16,13 +16,18 @@ export function createUSDCTransferProvider(verify: VerifyBillingPaymentFn): Paym
   return {
     id: 'usdc',
     async verify(params) {
-      if (!params.expectedAmountUsdc || !params.expectedMemo) {
-        return { valid: false, error: 'Missing expectedAmountUsdc or expectedMemo' }
+      const amt = params.expectedAmountUsdc
+      if (typeof amt !== 'number' || !Number.isFinite(amt) || amt < 0) {
+        return { valid: false, error: 'Missing or invalid expectedAmountUsdc' }
+      }
+      const memo = params.expectedMemo
+      if (memo == null || String(memo).trim() === '') {
+        return { valid: false, error: 'Missing expectedMemo' }
       }
       return verify({
         txSignature: params.txSignature,
-        expectedAmountUsdc: params.expectedAmountUsdc,
-        expectedMemo: params.expectedMemo,
+        expectedAmountUsdc: amt,
+        expectedMemo: memo,
       })
     },
   }

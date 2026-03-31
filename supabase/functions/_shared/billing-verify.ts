@@ -25,6 +25,7 @@ export async function verifyBillingPayment(params: {
     if (!tx) return { valid: false, error: 'Transaction not found or not yet confirmed' }
     if (tx.meta?.err) return { valid: false, error: `Transaction failed on-chain` }
 
+    const zeroUsdc = expectedAmountUsdc <= 0
     const expectedBaseUnits = BigInt(Math.round(expectedAmountUsdc * 10 ** USDC_DECIMALS))
     const expectedAta = BILLING_WALLET_ATA.toBase58()
     let transferFound = false
@@ -62,7 +63,9 @@ export async function verifyBillingPayment(params: {
       scanInstructions(inner.instructions as unknown[])
     }
 
-    if (!transferFound) return { valid: false, error: `USDC transfer not found in transaction` }
+    if (!zeroUsdc && !transferFound) {
+      return { valid: false, error: `USDC transfer not found in transaction` }
+    }
     if (!memoFound) return { valid: false, error: 'Payment memo not found in transaction' }
     return { valid: true }
   } catch (e) {
