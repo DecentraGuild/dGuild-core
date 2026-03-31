@@ -34,11 +34,14 @@
             </div>
             <div class="raffle-page__grid admin__card-grid--auto-comfortable">
             <button
-              v-for="r in visibleRaffles"
+              v-for="r in orderedVisibleRaffles"
               :key="r.rafflePubkey"
               type="button"
               class="raffle-card"
-              :class="{ 'raffle-card--selected': selectedRaffle?.rafflePubkey === r.rafflePubkey }"
+              :class="{
+                'raffle-card--selected': selectedRaffle?.rafflePubkey === r.rafflePubkey,
+                'raffle-card--has-winner': publicRaffleHasDecidedWinner(r),
+              }"
               :style="r.chainData?.url ? { backgroundImage: `url(${r.chainData.url})` } : {}"
               @click="selectRaffle(r)"
             >
@@ -353,6 +356,22 @@ const anyPublicWinner = computed(() =>
   visibleRaffles.value.some((r) => Boolean(r.chainData?.winner?.trim())),
 )
 
+/** On-chain winner set — outcome tab / long-lived listings; sort last + highlight border. */
+function publicRaffleHasDecidedWinner(r: { chainData: { winner?: string | null } | null }): boolean {
+  return Boolean(r.chainData?.winner?.trim())
+}
+
+const orderedVisibleRaffles = computed(() => {
+  const list = visibleRaffles.value
+  const stillOpen: typeof list = []
+  const withWinner: typeof list = []
+  for (const r of list) {
+    if (publicRaffleHasDecidedWinner(r)) withWinner.push(r)
+    else stillOpen.push(r)
+  }
+  return [...stillOpen, ...withWinner]
+})
+
 function onEntriesToggle(ev: Event) {
   const el = ev.target
   if (el instanceof HTMLDetailsElement) entriesSectionOpen.value = el.open
@@ -441,6 +460,63 @@ const {
 .raffle-card--selected {
   border-color: var(--theme-primary);
   box-shadow: 0 0 0 2px var(--theme-primary);
+}
+
+.raffle-card--has-winner {
+  border-width: 2px;
+  border-color: var(--theme-primary);
+  animation: raffle-card-winner-glow 2.6s ease-in-out infinite;
+}
+
+.raffle-card--has-winner.raffle-card--selected {
+  animation: raffle-card-winner-glow-selected 2.6s ease-in-out infinite;
+}
+
+@keyframes raffle-card-winner-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--theme-primary) 65%, transparent),
+      0 0 20px color-mix(in srgb, var(--theme-primary) 32%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--theme-primary) 85%, transparent),
+      0 0 36px color-mix(in srgb, var(--theme-primary) 48%, transparent);
+  }
+}
+
+@keyframes raffle-card-winner-glow-selected {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--theme-primary),
+      0 0 22px color-mix(in srgb, var(--theme-primary) 38%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--theme-primary),
+      0 0 38px color-mix(in srgb, var(--theme-primary) 52%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .raffle-card--has-winner,
+  .raffle-card--has-winner.raffle-card--selected {
+    animation: none;
+  }
+
+  .raffle-card--has-winner:not(.raffle-card--selected) {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--theme-primary) 70%, transparent),
+      0 0 18px color-mix(in srgb, var(--theme-primary) 30%, transparent);
+  }
+
+  .raffle-card--has-winner.raffle-card--selected {
+    box-shadow:
+      0 0 0 2px var(--theme-primary),
+      0 0 20px color-mix(in srgb, var(--theme-primary) 35%, transparent);
+  }
 }
 
 .raffle-card__overlay {
