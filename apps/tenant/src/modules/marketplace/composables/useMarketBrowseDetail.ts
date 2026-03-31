@@ -6,13 +6,15 @@ import type { Ref } from 'vue'
 import { computed } from 'vue'
 import type { MarketplaceSettings } from '@decentraguild/core'
 import { normaliseAttributes } from '~/utils/nftFilterHelpers'
-import { getMarketplaceAssetFromSettings } from '~/utils/mintFromSettings'
+import { getMarketplaceAssetFromSettings, getMintInfoFromSettings } from '~/utils/mintFromSettings'
+import { normalizeDisplayMediaUrl } from '@decentraguild/web3'
 import type { MarketplaceAsset } from '~/composables/marketplace/useMarketplaceAssets'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
 
 /** Minimal escrow shape for eligibility check. */
 interface EscrowForEligibility {
   account: {
+    maker: { toBase58: () => string }
     onlyRecipient: boolean
     onlyWhitelist: boolean
     recipient: { toBase58: () => string }
@@ -34,6 +36,7 @@ const SYSTEM_PROGRAM = '11111111111111111111111111111111'
 
 function isEscrowEligibleToFill(e: EscrowForEligibility, wallet: string | null): boolean {
   if (e.account.onlyWhitelist) return false
+  if (wallet !== null && e.account.maker.toBase58() === wallet) return false
   if (!e.account.onlyRecipient) return true
   const rec = e.account.recipient.toBase58()
   if (rec === SYSTEM_PROGRAM) return true
@@ -47,15 +50,17 @@ export function useMarketBrowseDetail(options: UseMarketBrowseDetailOptions) {
   const detailAsset = computed(() => {
     if (!detailMint.value) return null
     const fromApi = assets.value.find((a) => a.mint === detailMint.value)
+    const settingsInfo = getMintInfoFromSettings(detailMint.value, marketplaceSettings.value)
     if (fromApi) {
       const meta = (fromApi as { metadata?: { name?: string; image?: string; traits?: unknown } }).metadata
       const decimals = (fromApi as { decimals?: number | null }).decimals ?? (meta as { decimals?: number })?.decimals ?? null
+      const rawImage = meta?.image ?? fromApi.image ?? settingsInfo.image ?? null
       return {
         ...fromApi,
         metadata: {
-          name: meta?.name ?? fromApi.name ?? null,
-          symbol: fromApi.symbol ?? null,
-          image: meta?.image ?? fromApi.image ?? null,
+          name: meta?.name ?? fromApi.name ?? settingsInfo.name ?? settingsInfo.symbol ?? null,
+          symbol: fromApi.symbol ?? settingsInfo.symbol ?? null,
+          image: normalizeDisplayMediaUrl(rawImage),
           traits: meta?.traits ?? undefined,
         },
         decimals,
@@ -64,12 +69,13 @@ export function useMarketBrowseDetail(options: UseMarketBrowseDetailOptions) {
     const fromSettings = getMarketplaceAssetFromSettings(detailMint.value, marketplaceSettings.value)
     if (fromSettings) {
       const m = fromSettings as { metadata?: { name?: string; symbol?: string; image?: string; decimals?: number | null } }
+      const rawImage = m.metadata?.image ?? settingsInfo.image ?? null
       return {
         ...fromSettings,
         metadata: {
-          name: m.metadata?.name ?? null,
-          symbol: m.metadata?.symbol ?? null,
-          image: m.metadata?.image ?? null,
+          name: m.metadata?.name ?? settingsInfo.name ?? settingsInfo.symbol ?? null,
+          symbol: m.metadata?.symbol ?? settingsInfo.symbol ?? null,
+          image: normalizeDisplayMediaUrl(rawImage),
           traits: undefined,
         },
         decimals: m.metadata?.decimals ?? null,

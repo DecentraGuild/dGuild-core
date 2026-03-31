@@ -50,6 +50,7 @@ export type { DasAsset, DasAttribute } from './das/index.js'
 export {
   fetchMintMetadataFromChain,
   hasMetaplexMetadataAccount,
+  normalizeDisplayMediaUrl,
 } from './mint-metadata.js'
 export type { FetchedMintMetadata } from './mint-metadata.js'
 
