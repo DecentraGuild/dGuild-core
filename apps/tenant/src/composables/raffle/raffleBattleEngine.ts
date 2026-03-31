@@ -95,6 +95,16 @@ function damageDealt(attacker: SimUnit): number {
   return 1
 }
 
+/** Extra chip when a mortal swings at the hero so the bar can reach the floor before the fight ends. */
+function damageDealtToTarget(attacker: SimUnit, target: SimUnit): number {
+  const base = damageDealt(attacker)
+  if (target.invincible && !attacker.invincible) {
+    const ticketBonus = Math.floor(attacker.ticketCount / 5)
+    return Math.min(7, Math.max(3, base + 2 + ticketBonus))
+  }
+  return base
+}
+
 function spawnXY(index: number, total: number): { x: number; y: number } {
   const cols = Math.max(1, Math.ceil(Math.sqrt(total * (WORLD_W / WORLD_H))))
   const rows = Math.max(1, Math.ceil(total / cols))
@@ -244,7 +254,7 @@ export function createRaffleBattleSimulator(
           ttl: target.invincible ? 0.14 : 0.2,
           color: u.squadColor,
         })
-        const dmg = damageDealt(u)
+        const dmg = damageDealtToTarget(u, target)
         if (!target.invincible) {
           target.hp -= dmg
           if (target.hp <= 0) {
