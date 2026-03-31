@@ -32,7 +32,7 @@
     "overview": "The Admin module is the central authority of your guild. It defines who you are, how your guild appears, and which systems are active.\n\nEvery dGuild is created with this module — it cannot be removed.",
     "mechanics": "Stores guild metadata (name, visuals, description)\n\nManages module activation states\n\nHandles subscription and billing hooks\n\nControls routing via slug system\n\nSingle-wallet authority (future: DAO/multisig)",
     "setup": "Set your guild name and identity\n\nUpload branding assets\n\n(Optional) Claim your custom slug\n\nExplore the Codex\n\nActivate modules",
-    "pricing": "Guild registration → 19 USDC (one-time)\n\nCustom slug → 5 USDC / month (45 USDC / year)"
+    "pricing": "Guild registration → 19 USDC (one-time)\n\nCustom slug → 45 USDC / year"
   },
   "activationInstructions": {
     "intro": "Your guild begins here. Establish your banner, name your hall, and prepare to expand.",
