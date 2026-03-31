@@ -12,7 +12,7 @@ import { useAuth } from '@decentraguild/auth'
 import { PublicKey } from '@solana/web3.js'
 import { useTenantStore } from '~/stores/tenant'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
-import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import type { Ref } from 'vue'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
@@ -42,6 +42,7 @@ export function useSlugClaim(opts: {
   const supabase = useSupabase()
   const txNotifications = useTransactionNotificationsStore()
   const auth = useAuth()
+  const slugExtendLock = useSubmitInFlightLock()
 
   const desiredSlug = ref('')
   const slugCheckStatus = ref<'idle' | 'checking' | 'available' | 'taken'>('idle')
@@ -117,92 +118,95 @@ export function useSlugClaim(opts: {
   async function extendSlug(_period: BillingPeriod) {
     const id = tenantId.value
     if (!id) return
-    saving.value = true
-    saveError.value = null
-    try {
-      const quoteData = await invokeEdgeFunction<{ quoteId: string; priceUsdc: number }>(supabase, 'billing', {
-        action: 'quote',
-        tenantId: id,
-        productKey: 'admin',
-        meterOverrides: { slug: 1 },
-        durationDays: 365,
-      }, { errorFallback: 'Quote failed' })
-      const quote = quoteData
-      if (!quote?.quoteId) throw new Error('No quote returned')
-
-      if (quote.priceUsdc <= 0) {
-        await fetchSubscription('slug')
-        return
-      }
-
-      await ensureSigningWalletForSession(auth.wallet.value)
-      const wallet = getEscrowWalletFromConnector()
-      if (!wallet?.publicKey) throw new Error('Wallet not connected')
-      const payerWallet = wallet.publicKey.toBase58()
-
-      const chargeData = await invokeEdgeFunction<{ paymentId: string; amountUsdc: number; memo: string; recipientAta: string }>(
-        supabase,
-        'billing',
-        {
-          action: 'charge',
-          quoteId: quote.quoteId,
-          payerWallet,
-          paymentMethod: 'usdc',
-        },
-        { errorFallback: 'Charge failed' },
-      )
-      const charge = chargeData
-      if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
-
-      const notificationId = `slug-extend-${charge.paymentId}`
-      txNotifications.add(notificationId, {
-        status: 'pending',
-        message: 'Extending slug. Confirm the transaction in your wallet.',
-        signature: null,
-      })
-
+    const exclusive = await slugExtendLock.runExclusive(async () => {
+      saving.value = true
+      saveError.value = null
       try {
-        if (!connection.value) throw new Error('Solana RPC not configured')
-        const tx = buildBillingTransfer({
-          payer: wallet.publicKey,
-          amountUsdc: charge.amountUsdc,
-          recipientAta: new PublicKey(charge.recipientAta),
-          memo: charge.memo,
-          connection: connection.value,
-        })
-        const txSignature = await sendAndConfirmTransaction(
-          connection.value,
-          tx,
-          wallet,
-          wallet.publicKey,
-        )
+        const quoteData = await invokeEdgeFunction<{ quoteId: string; priceUsdc: number }>(supabase, 'billing', {
+          action: 'quote',
+          tenantId: id,
+          productKey: 'admin',
+          meterOverrides: { slug: 1 },
+          durationDays: 365,
+        }, { errorFallback: 'Quote failed' })
+        const quote = quoteData
+        if (!quote?.quoteId) throw new Error('No quote returned')
 
-        const confirmData = await invokeEdgeFunction<{ tenant?: Record<string, unknown> }>(
+        if (quote.priceUsdc <= 0) {
+          await fetchSubscription('slug')
+          return
+        }
+
+        await ensureSigningWalletForSession(auth.wallet.value)
+        const wallet = getEscrowWalletFromConnector()
+        if (!wallet?.publicKey) throw new Error('Wallet not connected')
+        const payerWallet = wallet.publicKey.toBase58()
+
+        const chargeData = await invokeEdgeFunction<{ paymentId: string; amountUsdc: number; memo: string; recipientAta: string }>(
           supabase,
           'billing',
-          { action: 'confirm', paymentId: charge.paymentId, txSignature },
-          { errorFallback: 'Confirm failed' },
+          {
+            action: 'charge',
+            quoteId: quote.quoteId,
+            payerWallet,
+            paymentMethod: 'usdc',
+          },
+          { errorFallback: 'Charge failed' },
         )
+        const charge = chargeData
+        if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
-        const result = confirmData
-        if (result.tenant) tenantStore.setTenant(result.tenant as unknown as TenantConfig)
-        await fetchSubscription('slug')
-
-        txNotifications.update(notificationId, {
-          status: 'success',
-          message: 'Slug subscription extended.',
-          signature: txSignature,
+        const notificationId = `slug-extend-${charge.paymentId}`
+        txNotifications.add(notificationId, {
+          status: 'pending',
+          message: 'Extending slug. Confirm the transaction in your wallet.',
+          signature: null,
         })
+
+        try {
+          if (!connection.value) throw new Error('Solana RPC not configured')
+          const tx = buildBillingTransfer({
+            payer: wallet.publicKey,
+            amountUsdc: charge.amountUsdc,
+            recipientAta: new PublicKey(charge.recipientAta),
+            memo: charge.memo,
+            connection: connection.value,
+          })
+          const txSignature = await sendAndConfirmTransaction(
+            connection.value,
+            tx,
+            wallet,
+            wallet.publicKey,
+          )
+
+          const confirmData = await invokeEdgeFunction<{ tenant?: Record<string, unknown> }>(
+            supabase,
+            'billing',
+            { action: 'confirm', paymentId: charge.paymentId, txSignature },
+            { errorFallback: 'Confirm failed' },
+          )
+
+          const result = confirmData
+          if (result.tenant) tenantStore.setTenant(result.tenant as unknown as TenantConfig)
+          await fetchSubscription('slug')
+
+          txNotifications.update(notificationId, {
+            status: 'success',
+            message: 'Slug subscription extended.',
+            signature: txSignature,
+          })
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Extension failed'
+          txNotifications.update(notificationId, { status: 'error', message: msg, signature: null })
+          throw e
+        }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Extension failed'
-        txNotifications.update(notificationId, { status: 'error', message: msg, signature: null })
-        throw e
+        saveError.value = e instanceof Error ? e.message : 'Extend failed'
+      } finally {
+        saving.value = false
       }
-    } catch (e) {
-      saveError.value = e instanceof Error ? e.message : 'Extend failed'
-    } finally {
-      saving.value = false
-    }
+    })
+    if (!exclusive.ok) return
   }
 
   return {

@@ -24,17 +24,6 @@ type ConnectionWithRpc = Connection & {
   _rpcRequest?: (method: string, args: unknown[]) => Promise<RpcSimulateResponse>
 }
 
-function looksLikeUserRejectedWalletSign(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
-  return (
-    msg.includes('user rejected') ||
-    msg.includes('user denied') ||
-    msg.includes('rejected the request') ||
-    msg.includes('user cancelled') ||
-    msg.includes('user canceled')
-  )
-}
-
 function legacyWireToBase64(wire: Uint8Array): string {
   const u8 = wire instanceof Uint8Array ? wire : new Uint8Array(wire)
   let binary = ''
@@ -111,20 +100,13 @@ async function simulateSignedLegacyTransaction(
 }
 
 /**
- * Sets recent blockhash and fee payer on the transaction, optionally partialSigns with
- * extra signers, then signs with the wallet, optionally simulates, sends, and confirms.
- * Call this after building a transaction (builders no longer set blockhash/feePayer).
+ * Sets recent blockhash and fee payer, optionally simulates unsigned, refreshes blockhash,
+ * signs with the wallet (plus optional keypair partial signers), simulates signed if enabled,
+ * sends via `sendRawTransaction`, and confirms. Single broadcast path — no wallet `signAndSend`
+ * branch — so a failed confirmation cannot trigger a second submission.
  *
- * **Wallet Standard / ConnectorKit:** `createTransactionSigner` serializes your tx and calls
- * the wallet with `transactions: [bytes]` first (then falls back to singular `transaction`).
- * Some wallets render that one-element array like a nested or “batch” transaction — that is
- * upstream behavior, not an extra instruction in your transaction.
- *
- * When `wallet.signAndSendTransaction` exists and there are no extra keypair signers, we delegate
- * broadcast to the wallet (Phantom, Solflare, …). Backpack omits that hook in
- * `getEscrowWalletFromConnector` and uses sign + `sendRawTransaction` plus RPC simulation here.
- * If sign-and-send throws for non-user-reject reasons (e.g. some Ledger paths), we fall back to
- * sign + `sendRawTransaction` the same way.
+ * ConnectorKit may pass `transactions: [bytes]` to the wallet; some UIs show that as a batch.
+ * That is upstream presentation, not multiple on-chain transactions.
  */
 export async function sendAndConfirmTransaction(
   connection: Connection,
@@ -144,19 +126,6 @@ export async function sendAndConfirmTransaction(
 
   if (simulate) {
     await simulateUnsignedLegacyTransaction(connection, transaction)
-  }
-
-  if (typeof wallet.signAndSendTransaction === 'function' && signers.length === 0) {
-    onStatus?.('signing')
-    try {
-      const sig = await wallet.signAndSendTransaction(transaction)
-      onStatus?.('confirming')
-      await connection.confirmTransaction(sig)
-      return sig
-    } catch (e) {
-      if (looksLikeUserRejectedWalletSign(e)) throw e
-      // Ledger / some extensions: sign-and-send fails even when `signAndSend` exists; use sign + RPC send.
-    }
   }
 
   const { blockhash: signBlockhash, lastValidBlockHeight: signLastValid } =

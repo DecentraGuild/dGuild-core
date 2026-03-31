@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./useSupabase": "./src/useSupabase.ts",
     "./useRpc": "./src/useRpc.ts",
-    "./useExplorerLinks": "./src/useExplorerLinks.ts"
+    "./useExplorerLinks": "./src/useExplorerLinks.ts",
+    "./useSubmitInFlightLock": "./src/useSubmitInFlightLock.ts"
   },
   "scripts": {
     "build": "echo 'source-only package'",

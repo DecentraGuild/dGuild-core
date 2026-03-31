@@ -22,6 +22,7 @@ import { ESCROW_PROGRAM_ID } from '@decentraguild/contracts'
 import { SystemProgram, PublicKey } from '@solana/web3.js'
 import BN from 'bn.js'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
+import { useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 import { fetchWalletTokenBalances, type TokenBalance } from '~/composables/core/useWalletTokenBalances'
@@ -70,6 +71,7 @@ export function useEscrowDetail(props: {
   const { connection, rpcUrl, hasRpc, rpcError } = useSolanaConnection()
   const txNotifications = useTransactionNotificationsStore()
   const explorerLinks = useExplorerLinks()
+  const escrowActionLock = useSubmitInFlightLock()
 
   const escrow = ref<Awaited<ReturnType<typeof fetchEscrowByAddress>> | null>(null)
   const loading = ref(true)
@@ -266,76 +268,82 @@ export function useEscrowDetail(props: {
       return
     }
 
-    filling.value = true
-    const txId = `fill-${props.escrowId.value}-${Date.now()}`
-    txNotifications.add(txId, { status: 'pending', message: 'Filling escrow...' })
-    try {
-      if (!connection.value) throw new Error('RPC not configured')
-      const whitelistKey = escrow.value.account.whitelist
-      const escrowProgramId = new PublicKey(ESCROW_PROGRAM_ID)
-      const hasWhitelist =
-        whitelistKey &&
-        !whitelistKey.equals(SystemProgram.programId) &&
-        !whitelistKey.equals(escrowProgramId)
-      const tx = await buildExchangeTransaction({
-        maker: escrow.value.account.maker,
-        taker: wallet.publicKey,
-        depositTokenMint: escrow.value.account.depositToken,
-        requestTokenMint: escrow.value.account.requestToken,
-        amount: amountBN,
-        seed: escrow.value.account.seed,
-        connection: connection.value,
-        wallet,
-        whitelist: hasWhitelist ? whitelistKey.toBase58() : null,
-      })
-      const sig = await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
-      txNotifications.update(txId, { status: 'success', message: 'Escrow filled', signature: sig })
-      escrow.value = null
-      close()
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Fill failed'
-      txNotifications.update(txId, {
-        status: 'error',
-        message: msg,
-      })
-    } finally {
-      filling.value = false
-    }
+    const exclusive = await escrowActionLock.runExclusive(async () => {
+      filling.value = true
+      const txId = `fill-${props.escrowId.value}-${Date.now()}`
+      txNotifications.add(txId, { status: 'pending', message: 'Filling escrow...' })
+      try {
+        if (!connection.value) throw new Error('RPC not configured')
+        const whitelistKey = escrow.value.account.whitelist
+        const escrowProgramId = new PublicKey(ESCROW_PROGRAM_ID)
+        const hasWhitelist =
+          whitelistKey &&
+          !whitelistKey.equals(SystemProgram.programId) &&
+          !whitelistKey.equals(escrowProgramId)
+        const tx = await buildExchangeTransaction({
+          maker: escrow.value.account.maker,
+          taker: wallet.publicKey,
+          depositTokenMint: escrow.value.account.depositToken,
+          requestTokenMint: escrow.value.account.requestToken,
+          amount: amountBN,
+          seed: escrow.value.account.seed,
+          connection: connection.value,
+          wallet,
+          whitelist: hasWhitelist ? whitelistKey.toBase58() : null,
+        })
+        const sig = await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
+        txNotifications.update(txId, { status: 'success', message: 'Escrow filled', signature: sig })
+        escrow.value = null
+        close()
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Fill failed'
+        txNotifications.update(txId, {
+          status: 'error',
+          message: msg,
+        })
+      } finally {
+        filling.value = false
+      }
+    })
+    if (!exclusive.ok) return
   }
 
   async function handleCancel(close: () => void) {
     const wallet = getEscrowWalletFromConnector()
     if (!wallet || !escrow.value || !props.escrowId.value) return
-    cancelling.value = true
-    const txId = `cancel-${props.escrowId.value}-${Date.now()}`
-    txNotifications.add(txId, { status: 'pending', message: 'Cancelling escrow...' })
-    try {
-      if (!connection.value) throw new Error('RPC not configured')
-      const tx = await buildCancelTransaction({
-        maker: escrow.value.account.maker,
-        depositTokenMint: escrow.value.account.depositToken,
-        requestTokenMint: escrow.value.account.requestToken,
-        seed: escrow.value.account.seed,
-        connection: connection.value,
-        wallet,
-      })
-      const sig = await sendAndConfirmTransaction(
-        connection.value,
-        tx,
-        wallet,
-        escrow.value.account.maker
-      )
-      txNotifications.update(txId, { status: 'success', message: 'Escrow cancelled', signature: sig })
-      escrow.value = null
-      close()
-    } catch (e) {
-      txNotifications.update(txId, {
-        status: 'error',
-        message: e instanceof Error ? e.message : 'Cancel failed',
-      })
-    } finally {
-      cancelling.value = false
-    }
+    const exclusive = await escrowActionLock.runExclusive(async () => {
+      cancelling.value = true
+      const txId = `cancel-${props.escrowId.value}-${Date.now()}`
+      txNotifications.add(txId, { status: 'pending', message: 'Cancelling escrow...' })
+      try {
+        if (!connection.value) throw new Error('RPC not configured')
+        const tx = await buildCancelTransaction({
+          maker: escrow.value!.account.maker,
+          depositTokenMint: escrow.value!.account.depositToken,
+          requestTokenMint: escrow.value!.account.requestToken,
+          seed: escrow.value!.account.seed,
+          connection: connection.value,
+          wallet,
+        })
+        const sig = await sendAndConfirmTransaction(
+          connection.value,
+          tx,
+          wallet,
+          escrow.value!.account.maker
+        )
+        txNotifications.update(txId, { status: 'success', message: 'Escrow cancelled', signature: sig })
+        escrow.value = null
+        close()
+      } catch (e) {
+        txNotifications.update(txId, {
+          status: 'error',
+          message: e instanceof Error ? e.message : 'Cancel failed',
+        })
+      } finally {
+        cancelling.value = false
+      }
+    })
+    if (!exclusive.ok) return
   }
 
   const FETCH_TIMEOUT_MS = 15_000

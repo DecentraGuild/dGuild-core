@@ -388,7 +388,7 @@ import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import { Icon } from '@iconify/vue'
 import AdminPricingWidget from '~/components/admin/AdminPricingWidget.vue'
 import { useAdminGateModals } from '~/composables/admin/useAdminGateModals'
-import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
@@ -442,6 +442,7 @@ const emit = defineEmits<{
 
 const tenantStore = useTenantStore()
 const tenantId = computed(() => tenantStore.tenantId)
+const gatesChainLock = useSubmitInFlightLock()
 const { connection } = useSolanaConnection()
 const { resolveWallet } = useMemberProfiles()
 
@@ -561,61 +562,64 @@ async function createList() {
     return
   }
 
-  createError.value = null
-  creating.value = true
-  const supabase = useSupabase()
-  try {
-    const listConditions = { listsCount: lists.value.length + 1 }
-    const billingPrep = await props.prepareBillingInstructionsForSameTx(
-      'gates',
-      'monthly',
-      undefined,
-      listConditions,
-    )
+  const exclusive = await gatesChainLock.runExclusive(async () => {
+    createError.value = null
+    creating.value = true
+    const supabase = useSupabase()
+    try {
+      const listConditions = { listsCount: lists.value.length + 1 }
+      const billingPrep = await props.prepareBillingInstructionsForSameTx(
+        'gates',
+        'monthly',
+        undefined,
+        listConditions,
+      )
 
-    const whitelistTx = await buildInitializeWhitelistTransaction({
-      name,
-      authority: wallet.publicKey,
-      connection: connection.value,
-      wallet,
-    })
+      const whitelistTx = await buildInitializeWhitelistTransaction({
+        name,
+        authority: wallet.publicKey,
+        connection: connection.value,
+        wallet,
+      })
 
-    const tx = new Transaction()
-    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: BILLING_PLUS_PROGRAM_CU }))
-    if (billingPrep.kind === 'usdc') {
-      for (const ix of billingPrep.instructions) {
+      const tx = new Transaction()
+      tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: BILLING_PLUS_PROGRAM_CU }))
+      if (billingPrep.kind === 'usdc') {
+        for (const ix of billingPrep.instructions) {
+          tx.add(ix)
+        }
+      }
+      for (const ix of whitelistTx.instructions) {
         tx.add(ix)
       }
+
+      const txSignature = await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
+
+      if (billingPrep.kind === 'usdc') {
+        await props.confirmBillingFromTxSignature(billingPrep.paymentId, txSignature)
+      }
+
+      const address = deriveWhitelistPda(wallet.publicKey, name).toBase58()
+      await invokeEdgeFunction(supabase, 'gates', {
+        action: 'list-create',
+        tenantId: tenantId.value,
+        address,
+        name,
+        authority: wallet.publicKey.toBase58(),
+        imageUrl: createListImageUrl.value.trim() || null,
+      }, { errorFallback: 'Failed to save list' })
+
+      await fetchLists()
+      pricingRef.value?.refresh?.()
+      emit('created')
+      closeCreateModalAndReset()
+    } catch (e) {
+      createError.value = e instanceof Error ? e.message : 'Failed to create list'
+    } finally {
+      creating.value = false
     }
-    for (const ix of whitelistTx.instructions) {
-      tx.add(ix)
-    }
-
-    const txSignature = await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
-
-    if (billingPrep.kind === 'usdc') {
-      await props.confirmBillingFromTxSignature(billingPrep.paymentId, txSignature)
-    }
-
-    const address = deriveWhitelistPda(wallet.publicKey, name).toBase58()
-    await invokeEdgeFunction(supabase, 'gates', {
-      action: 'list-create',
-      tenantId: tenantId.value,
-      address,
-      name,
-      authority: wallet.publicKey.toBase58(),
-      imageUrl: createListImageUrl.value.trim() || null,
-    }, { errorFallback: 'Failed to save list' })
-
-    await fetchLists()
-    pricingRef.value?.refresh?.()
-    emit('created')
-    closeCreateModalAndReset()
-  } catch (e) {
-    createError.value = e instanceof Error ? e.message : 'Failed to create list'
-  } finally {
-    creating.value = false
-  }
+  })
+  if (!exclusive.ok) return
 }
 
 async function saveImage() {
@@ -648,97 +652,106 @@ async function doDelete() {
     closeDeleteModal()
     return
   }
-  deleting.value = true
-  try {
-    const wallet = getEscrowWalletFromConnector()
-    if (!wallet?.publicKey) throw new Error('Wallet not connected')
+  const exclusive = await gatesChainLock.runExclusive(async () => {
+    deleting.value = true
+    try {
+      const wallet = getEscrowWalletFromConnector()
+      if (!wallet?.publicKey) throw new Error('Wallet not connected')
 
-    const tx = await buildDeleteWhitelistTransaction({
-      name: list.name,
-      authority: list.authority,
-      connection: connection.value,
-      wallet,
-    })
-    await sendAndConfirmTransaction(
-      connection.value,
-      tx,
-      wallet,
-      wallet.publicKey
-    )
+      const tx = await buildDeleteWhitelistTransaction({
+        name: list.name,
+        authority: list.authority,
+        connection: connection.value,
+        wallet,
+      })
+      await sendAndConfirmTransaction(
+        connection.value,
+        tx,
+        wallet,
+        wallet.publicKey
+      )
 
-    const supabase = useSupabase()
-    const { error } = await supabase
-      .from('gate_lists')
-      .delete()
-      .eq('address', addr)
-      .eq('tenant_id', tenantId.value)
-    if (error) throw new Error(error.message ?? 'Failed to remove list')
-    await fetchLists()
-    if (selectedListAddress.value === addr) selectedListAddress.value = ''
-    closeDeleteModal()
-  } catch (e) {
-    createError.value = e instanceof Error ? e.message : 'Failed to delete list'
-  } finally {
-    deleting.value = false
-  }
+      const supabase = useSupabase()
+      const { error } = await supabase
+        .from('gate_lists')
+        .delete()
+        .eq('address', addr)
+        .eq('tenant_id', tenantId.value)
+      if (error) throw new Error(error.message ?? 'Failed to remove list')
+      await fetchLists()
+      if (selectedListAddress.value === addr) selectedListAddress.value = ''
+      closeDeleteModal()
+    } catch (e) {
+      createError.value = e instanceof Error ? e.message : 'Failed to delete list'
+    } finally {
+      deleting.value = false
+    }
+  })
+  if (!exclusive.ok) return
 }
 
 async function addWallet() {
   if (!walletToAdd.value.trim() || !selectedList.value || !connection.value) return
-  addError.value = null
-  adding.value = true
-  try {
-    const wallet = getEscrowWalletFromConnector()
-    if (!wallet?.publicKey) throw new Error('Wallet not connected')
+  const exclusive = await gatesChainLock.runExclusive(async () => {
+    addError.value = null
+    adding.value = true
+    try {
+      const wallet = getEscrowWalletFromConnector()
+      if (!wallet?.publicKey) throw new Error('Wallet not connected')
 
-    const tx = await buildAddToWhitelistTransaction({
-      whitelist: selectedList.value.address,
-      accountToAdd: walletToAdd.value.trim(),
-      authority: selectedList.value.authority,
-      connection: connection.value,
-      wallet,
-    })
-    await sendAndConfirmTransaction(
-      connection.value,
-      tx,
-      wallet,
-      wallet.publicKey
-    )
-    walletToAdd.value = ''
-    await fetchEntries()
-  } catch (e) {
-    addError.value = e instanceof Error ? e.message : 'Failed to add wallet'
-  } finally {
-    adding.value = false
-  }
+      const tx = await buildAddToWhitelistTransaction({
+        whitelist: selectedList.value.address,
+        accountToAdd: walletToAdd.value.trim(),
+        authority: selectedList.value.authority,
+        connection: connection.value,
+        wallet,
+      })
+      await sendAndConfirmTransaction(
+        connection.value,
+        tx,
+        wallet,
+        wallet.publicKey
+      )
+      walletToAdd.value = ''
+      await fetchEntries()
+    } catch (e) {
+      addError.value = e instanceof Error ? e.message : 'Failed to add wallet'
+    } finally {
+      adding.value = false
+    }
+  })
+  if (!exclusive.ok) return
 }
 
 async function removeWallet(walletAddr: string) {
   if (!selectedList.value || !connection.value) return
-  removing.value = walletAddr
-  try {
-    const wallet = getEscrowWalletFromConnector()
-    if (!wallet?.publicKey) throw new Error('Wallet not connected')
+  const exclusive = await gatesChainLock.runExclusive(async () => {
+    removing.value = walletAddr
+    try {
+      const wallet = getEscrowWalletFromConnector()
+      if (!wallet?.publicKey) throw new Error('Wallet not connected')
 
-    const tx = await buildRemoveFromWhitelistTransaction({
-      whitelist: selectedList.value.address,
-      accountToDelete: walletAddr,
-      authority: selectedList.value.authority,
-      connection: connection.value,
-      wallet,
-    })
-    await sendAndConfirmTransaction(
-      connection.value,
-      tx,
-      wallet,
-      wallet.publicKey
-    )
-    await fetchEntries()
-  } catch (e) {
-    addError.value = e instanceof Error ? e.message : 'Failed to remove wallet'
-  } finally {
-    removing.value = null
-  }
+      const tx = await buildRemoveFromWhitelistTransaction({
+        whitelist: selectedList.value.address,
+        accountToDelete: walletAddr,
+        authority: selectedList.value.authority,
+        connection: connection.value,
+        wallet,
+      })
+      await sendAndConfirmTransaction(
+        connection.value,
+        tx,
+        wallet,
+        wallet.publicKey
+      )
+      await fetchEntries()
+    } catch (e) {
+      addError.value = e instanceof Error ? e.message : 'Failed to remove wallet'
+    } finally {
+      removing.value = null
+    }
+  })
+  if (!exclusive.ok) return
 }
 
 const showPrimaryModal = ref(false)

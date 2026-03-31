@@ -14,7 +14,7 @@ import {
   isBackpackConnector,
 } from '@decentraguild/web3'
 import { PublicKey, type TransactionInstruction } from '@solana/web3.js'
-import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useAuth } from '@decentraguild/auth'
 import { useAdminTenant } from '~/composables/admin/useAdminTenant'
 import { useSupabase } from '~/composables/core/useSupabase'
@@ -47,6 +47,7 @@ export function useAdminBilling(opts: {
   const supabase = useSupabase()
   const { connection } = useSolanaConnection()
   const txNotifications = useTransactionNotificationsStore()
+  const billingSubmitLock = useSubmitInFlightLock()
 
   async function quoteAndChargeUsdc(
     moduleId: string,
@@ -161,77 +162,83 @@ export function useAdminBilling(opts: {
     slugToClaim?: string,
     conditions?: ConditionSet,
   ): Promise<boolean> {
-    let notificationId: string | undefined
-    try {
-      if (!connection.value) throw new Error('Solana RPC not configured')
-
-      const r = await quoteAndChargeUsdc(moduleId, billingPeriod, slugToClaim, conditions)
-      if (r.kind === 'free') return true
-
-      const wallet = getEscrowWalletFromConnector()
-      if (!wallet?.publicKey) throw new Error('Wallet not connected')
-
-      notificationId = `billing-${Date.now()}`
-      const nid = notificationId
-      txNotifications.add(nid, {
-        status: 'pending',
-        message: 'Payment. Confirm the transaction in your wallet.',
-        signature: null,
-      })
-
-      const connectorId = getConnectorState().connectorId
-      const tx = buildBillingTransfer({
-        payer: wallet.publicKey,
-        amountUsdc: r.amountUsdc,
-        recipientAta: new PublicKey(r.recipientAta),
-        memo: r.memo,
-        connection: connection.value,
-        instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
-      })
-      const txSignature = await sendAndConfirmTransaction(
-        connection.value,
-        tx,
-        wallet,
-        wallet.publicKey,
-        {
-          onStatus: (s) => {
-            const label = TX_STATUS_LABELS[s] ?? s
-            txNotifications.update(nid, {
-              status: 'pending',
-              message: `Payment: ${label}`,
-            })
-          },
-        },
-      )
-
-      txNotifications.update(nid, {
-        status: 'success',
-        message: 'Payment confirmed.',
-        signature: txSignature,
-      })
-
+    const exclusive = await billingSubmitLock.runExclusive(async () => {
+      let notificationId: string | undefined
       try {
-        await confirmBillingFromTxSignature(r.paymentId, txSignature, slugToClaim)
-      } catch (confirmErr) {
-        txNotifications.update(notificationId, {
-          status: 'error',
-          message: confirmErr instanceof Error ? confirmErr.message : 'Confirm failed',
-          signature: null,
-        })
-        throw confirmErr
-      }
+        if (!connection.value) throw new Error('Solana RPC not configured')
 
-      return true
-    } catch (e) {
-      if (notificationId) {
-        txNotifications.update(notificationId, {
-          status: 'error',
-          message: e instanceof Error ? e.message : 'Payment failed',
+        const r = await quoteAndChargeUsdc(moduleId, billingPeriod, slugToClaim, conditions)
+        if (r.kind === 'free') return true
+
+        const wallet = getEscrowWalletFromConnector()
+        if (!wallet?.publicKey) throw new Error('Wallet not connected')
+
+        notificationId = `billing-${Date.now()}`
+        const nid = notificationId
+        txNotifications.add(nid, {
+          status: 'pending',
+          message: 'Payment. Confirm the transaction in your wallet.',
           signature: null,
         })
+
+        const connectorId = getConnectorState().connectorId
+        const tx = buildBillingTransfer({
+          payer: wallet.publicKey,
+          amountUsdc: r.amountUsdc,
+          recipientAta: new PublicKey(r.recipientAta),
+          memo: r.memo,
+          connection: connection.value,
+          instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
+        })
+        const txSignature = await sendAndConfirmTransaction(
+          connection.value,
+          tx,
+          wallet,
+          wallet.publicKey,
+          {
+            onStatus: (s) => {
+              const label = TX_STATUS_LABELS[s] ?? s
+              txNotifications.update(nid, {
+                status: 'pending',
+                message: `Payment: ${label}`,
+              })
+            },
+          },
+        )
+
+        txNotifications.update(nid, {
+          status: 'success',
+          message: 'Payment confirmed.',
+          signature: txSignature,
+        })
+
+        try {
+          await confirmBillingFromTxSignature(r.paymentId, txSignature, slugToClaim)
+        } catch (confirmErr) {
+          txNotifications.update(notificationId, {
+            status: 'error',
+            message: confirmErr instanceof Error ? confirmErr.message : 'Confirm failed',
+            signature: null,
+          })
+          throw confirmErr
+        }
+
+        return true
+      } catch (e) {
+        if (notificationId) {
+          txNotifications.update(notificationId, {
+            status: 'error',
+            message: e instanceof Error ? e.message : 'Payment failed',
+            signature: null,
+          })
+        }
+        throw e
       }
-      throw e
+    })
+    if (!exclusive.ok) {
+      throw new Error('Please wait for the current payment or transaction to finish')
     }
+    return exclusive.value
   }
 
   async function deployModule(moduleId: string, billingPeriod: BillingPeriod, conditions?: ConditionSet) {

@@ -14,7 +14,7 @@ import {
   deriveRafflePda,
 } from '@decentraguild/web3'
 import { ComputeBudgetProgram, Transaction } from '@solana/web3.js'
-import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 
 const BILLING_PLUS_PROGRAM_CU = 400_000
@@ -64,6 +64,7 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
 
   const createSubmitting = ref(false)
   const createError = ref<string | null>(null)
+  const raffleCreateLock = useSubmitInFlightLock()
 
   const createForm = reactive({
     name: '',
@@ -147,76 +148,79 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
       return
     }
 
-    createSubmitting.value = true
-    createError.value = null
-    try {
-      const conditions: ConditionSet = {
-        raffleSlotsUsed: activeRaffleCount.value + 1,
-      }
-      const prepareFn = prepareBilling.value
-      const confirmFn = confirmBilling.value
-      if (!prepareFn || !confirmFn) throw new Error('Billing not configured')
+    const exclusive = await raffleCreateLock.runExclusive(async () => {
+      createSubmitting.value = true
+      createError.value = null
+      try {
+        const conditions: ConditionSet = {
+          raffleSlotsUsed: activeRaffleCount.value + 1,
+        }
+        const prepareFn = prepareBilling.value
+        const confirmFn = confirmBilling.value
+        if (!prepareFn || !confirmFn) throw new Error('Billing not configured')
 
-      const billingPrep = await prepareFn('raffles', 'monthly', undefined, conditions)
+        const billingPrep = await prepareFn('raffles', 'monthly', undefined, conditions)
 
-      const gate = resolveGateForTransaction(
-        effectiveRaffleGate.value ?? null,
-        createForm.gate,
-      )
-      const useWhitelist = Boolean(gate?.account?.trim())
-      const whitelist = useWhitelist && gate?.account ? gate.account : undefined
+        const gate = resolveGateForTransaction(
+          effectiveRaffleGate.value ?? null,
+          createForm.gate,
+        )
+        const useWhitelist = Boolean(gate?.account?.trim())
+        const whitelist = useWhitelist && gate?.account ? gate.account : undefined
 
-      const seed = crypto.getRandomValues(new Uint8Array(8))
-      const raffleTx = await buildInitializeRaffleTransaction({
-        name,
-        description: createForm.description.trim() || '',
-        seed,
-        ticketMint,
-        ticketPrice: ticketPriceRaw,
-        ticketDecimals: dec,
-        maxTickets,
-        useWhitelist,
-        whitelist: whitelist ?? null,
-        connection: connection.value,
-        wallet,
-      })
+        const seed = crypto.getRandomValues(new Uint8Array(8))
+        const raffleTx = await buildInitializeRaffleTransaction({
+          name,
+          description: createForm.description.trim() || '',
+          seed,
+          ticketMint,
+          ticketPrice: ticketPriceRaw,
+          ticketDecimals: dec,
+          maxTickets,
+          useWhitelist,
+          whitelist: whitelist ?? null,
+          connection: connection.value,
+          wallet,
+        })
 
-      const tx = new Transaction()
-      tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: BILLING_PLUS_PROGRAM_CU }))
-      if (billingPrep.kind === 'usdc') {
-        for (const ix of billingPrep.instructions) {
+        const tx = new Transaction()
+        tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: BILLING_PLUS_PROGRAM_CU }))
+        if (billingPrep.kind === 'usdc') {
+          for (const ix of billingPrep.instructions) {
+            tx.add(ix)
+          }
+        }
+        for (const ix of raffleTx.instructions) {
           tx.add(ix)
         }
+
+        const txSignature = await sendAndConfirmTransaction(
+          connection.value,
+          tx,
+          wallet,
+          wallet.publicKey,
+        )
+
+        if (billingPrep.kind === 'usdc') {
+          await confirmFn(billingPrep.paymentId, txSignature)
+        }
+
+        const rafflePda = deriveRafflePda(name, seed)
+        const supabase = useSupabase()
+        await invokeEdgeFunction(supabase, 'platform', { action: 'raffle-bind-tenant', tenantId: id, rafflePubkey: rafflePda.toBase58() }, { errorFallback: 'Failed to bind raffle' })
+
+        closeRaffleModal()
+        await fetchRaffles()
+        await fetchChainDataForRaffles()
+        refreshPricing()
+        onCreated()
+      } catch (e) {
+        createError.value = e instanceof Error ? e.message : 'Failed to create'
+      } finally {
+        createSubmitting.value = false
       }
-      for (const ix of raffleTx.instructions) {
-        tx.add(ix)
-      }
-
-      const txSignature = await sendAndConfirmTransaction(
-        connection.value,
-        tx,
-        wallet,
-        wallet.publicKey,
-      )
-
-      if (billingPrep.kind === 'usdc') {
-        await confirmFn(billingPrep.paymentId, txSignature)
-      }
-
-      const rafflePda = deriveRafflePda(name, seed)
-      const supabase = useSupabase()
-      await invokeEdgeFunction(supabase, 'platform', { action: 'raffle-bind-tenant', tenantId: id, rafflePubkey: rafflePda.toBase58() }, { errorFallback: 'Failed to bind raffle' })
-
-      closeRaffleModal()
-      await fetchRaffles()
-      await fetchChainDataForRaffles()
-      refreshPricing()
-      onCreated()
-    } catch (e) {
-      createError.value = e instanceof Error ? e.message : 'Failed to create'
-    } finally {
-      createSubmitting.value = false
-    }
+    })
+    if (!exclusive.ok) return
   }
 
   return {

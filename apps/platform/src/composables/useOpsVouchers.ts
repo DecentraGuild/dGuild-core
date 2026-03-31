@@ -9,13 +9,14 @@ import {
   getEscrowWalletFromConnector,
   createConnection,
 } from '@decentraguild/web3'
-import { useSupabase, invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { useSupabase, invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useRpc } from '~/composables/useRpc'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 
 export function useOpsVouchers() {
   const auth = useAuth()
   const toastStore = useTransactionNotificationsStore()
+  const opsVoucherTxLock = useSubmitInFlightLock()
 
   const voucherWallet = computed(() => {
     const w = auth.wallet.value
@@ -91,23 +92,26 @@ export function useOpsVouchers() {
     const supabase = useSupabase()
     const { rpcUrl } = useRpc()
     if (!wallet?.publicKey || !rpcUrl.value) { voucherMintError.value = 'Connect wallet and ensure RPC is configured'; return }
-    const toastId = `voucher-mint-${Date.now()}`
-    toastStore.add(toastId, { status: 'pending', message: 'Creating mint…' })
-    voucherMintLoading.value = true; voucherMintError.value = null; voucherMintSuccess.value = null
-    try {
-      const mintKeypair = Keypair.generate()
-      const mint = mintKeypair.publicKey.toBase58()
-      const connection = createConnection(rpcUrl.value)
-      const tx = await buildCreateMintOnlyTransaction({ mintKeypair, decimals: 0, payer: wallet.publicKey, connection })
-      const sig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey, { signers: [mintKeypair] })
-      await invokeEdgeFunction(supabase, 'platform', { action: 'voucher-register-draft', mint })
-      toastStore.add(toastId, { status: 'success', message: `Mint created: ${mint.slice(0, 8)}…`, signature: sig })
-      voucherMintSuccess.value = `Mint created: ${mint.slice(0, 8)}…`
-      await loadVoucherList()
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to create mint'
-      voucherMintError.value = msg; toastStore.add(toastId, { status: 'error', message: msg })
-    } finally { voucherMintLoading.value = false }
+    const exclusive = await opsVoucherTxLock.runExclusive(async () => {
+      const toastId = `voucher-mint-${Date.now()}`
+      toastStore.add(toastId, { status: 'pending', message: 'Creating mint…' })
+      voucherMintLoading.value = true; voucherMintError.value = null; voucherMintSuccess.value = null
+      try {
+        const mintKeypair = Keypair.generate()
+        const mint = mintKeypair.publicKey.toBase58()
+        const connection = createConnection(rpcUrl.value)
+        const tx = await buildCreateMintOnlyTransaction({ mintKeypair, decimals: 0, payer: wallet.publicKey, connection })
+        const sig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey, { signers: [mintKeypair] })
+        await invokeEdgeFunction(supabase, 'platform', { action: 'voucher-register-draft', mint })
+        toastStore.add(toastId, { status: 'success', message: `Mint created: ${mint.slice(0, 8)}…`, signature: sig })
+        voucherMintSuccess.value = `Mint created: ${mint.slice(0, 8)}…`
+        await loadVoucherList()
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to create mint'
+        voucherMintError.value = msg; toastStore.add(toastId, { status: 'error', message: msg })
+      } finally { voucherMintLoading.value = false }
+    })
+    if (!exclusive.ok) return
   }
 
   async function registerExistingMintAsDraft(mint: string) {
@@ -139,62 +143,65 @@ export function useOpsVouchers() {
     if (metadataForm.type === 'individual' && metadataForm.entitlements.length === 0) { metadataFormError.value = 'Add at least one entitlement'; return }
     if (metadataForm.type === 'bundle' && !metadataForm.bundleId?.trim()) { metadataFormError.value = 'Select a bundle'; return }
 
-    const toastId = `voucher-metadata-${mint}-${Date.now()}`
-    toastStore.add(toastId, { status: 'pending', message: 'Adding metadata & linking…' })
-    voucherMetadataLoading.value = mint; metadataFormError.value = null
-    try {
-      const connection = createConnection(rpcUrl.value)
-      const mintInfo = await connection.getAccountInfo(new PublicKey(mint))
-      if (!mintInfo) throw new Error('Mint account not found on chain. Ensure the mint was created and confirmed.')
+    const exclusive = await opsVoucherTxLock.runExclusive(async () => {
+      const toastId = `voucher-metadata-${mint}-${Date.now()}`
+      toastStore.add(toastId, { status: 'pending', message: 'Adding metadata & linking…' })
+      voucherMetadataLoading.value = mint; metadataFormError.value = null
+      try {
+        const connection = createConnection(rpcUrl.value)
+        const mintInfo = await connection.getAccountInfo(new PublicKey(mint))
+        if (!mintInfo) throw new Error('Mint account not found on chain. Ensure the mint was created and confirmed.')
 
-      const metaData = await invokeEdgeFunction<{ metadataUri?: string }>(supabase, 'platform', {
-        action: 'voucher-prepare-metadata',
-        name: metadataForm.name.trim(),
-        symbol: metadataForm.symbol.trim(),
-        imageUrl: metadataForm.imageUrl?.trim() || undefined,
-        sellerFeeBasisPoints: Math.max(0, Math.min(10000, metadataForm.sellerFeeBasisPoints ?? 0)),
-        voucherType: metadataForm.type,
-        bundleId: metadataForm.type === 'bundle' ? metadataForm.bundleId.trim() : undefined,
-      })
-      const metadataUri = metaData?.metadataUri
-      if (!metadataUri || typeof metadataUri !== 'string' || !metadataUri.trim()) throw new Error('No metadata URI returned from server')
-      const uri = metadataUri.trim()
-      if (uri.length > 200) throw new Error('Metadata URI too long (max 200 chars). Use a shorter storage path.')
-
-      const name = metadataForm.name.trim().slice(0, 32)
-      const symbol = metadataForm.symbol.trim().slice(0, 10)
-      const sellerFeeBasisPoints = Math.max(0, Math.min(10000, metadataForm.sellerFeeBasisPoints ?? 0))
-      const metadataOnChain = await hasMetaplexMetadataAccount(connection, mint)
-      const metaTx = metadataOnChain
-        ? buildUpdateMetadataTransaction({ mint, updateAuthority: wallet.publicKey, newName: name, newSymbol: symbol, newUri: uri, sellerFeeBasisPoints })
-        : buildCreateMetadataTransaction({ mint, name, symbol, uri, updateAuthority: wallet.publicKey, payer: wallet.publicKey, sellerFeeBasisPoints })
-      const metaSig = await sendAndConfirmTransaction(connection, metaTx, wallet, wallet.publicKey)
-
-      if (metadataForm.type === 'bundle') {
-        await invokeEdgeFunction(supabase, 'platform', {
-          action: 'voucher-create-bundle',
-          mint,
-          bundleId: metadataForm.bundleId.trim(),
-          tokensRequired: metadataForm.tokensRequired,
-          maxRedemptionsPerTenant: metadataForm.maxRedemptionsPerTenant ?? undefined,
+        const metaData = await invokeEdgeFunction<{ metadataUri?: string }>(supabase, 'platform', {
+          action: 'voucher-prepare-metadata',
+          name: metadataForm.name.trim(),
+          symbol: metadataForm.symbol.trim(),
+          imageUrl: metadataForm.imageUrl?.trim() || undefined,
+          sellerFeeBasisPoints: Math.max(0, Math.min(10000, metadataForm.sellerFeeBasisPoints ?? 0)),
+          voucherType: metadataForm.type,
+          bundleId: metadataForm.type === 'bundle' ? metadataForm.bundleId.trim() : undefined,
         })
-      } else {
-        await invokeEdgeFunction(supabase, 'platform', {
-          action: 'voucher-create-individual',
-          mint,
-          label: metadataForm.label?.trim() || undefined,
-          maxRedemptionsPerTenant: metadataForm.maxRedemptionsPerTenant ?? undefined,
-          entitlements: metadataForm.entitlements.filter((e) => e.meter_key?.trim()),
-        })
-      }
+        const metadataUri = metaData?.metadataUri
+        if (!metadataUri || typeof metadataUri !== 'string' || !metadataUri.trim()) throw new Error('No metadata URI returned from server')
+        const uri = metadataUri.trim()
+        if (uri.length > 200) throw new Error('Metadata URI too long (max 200 chars). Use a shorter storage path.')
 
-      toastStore.add(toastId, { status: 'success', message: `${metadataOnChain ? 'Metadata updated' : 'Metadata created'} & voucher linked: ${mint.slice(0, 8)}…`, signature: metaSig })
-      metadataModalMint.value = null
-      await loadVoucherList()
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to add metadata & link'
-      metadataFormError.value = msg; toastStore.add(toastId, { status: 'error', message: msg })
-    } finally { voucherMetadataLoading.value = false }
+        const name = metadataForm.name.trim().slice(0, 32)
+        const symbol = metadataForm.symbol.trim().slice(0, 10)
+        const sellerFeeBasisPoints = Math.max(0, Math.min(10000, metadataForm.sellerFeeBasisPoints ?? 0))
+        const metadataOnChain = await hasMetaplexMetadataAccount(connection, mint)
+        const metaTx = metadataOnChain
+          ? buildUpdateMetadataTransaction({ mint, updateAuthority: wallet.publicKey, newName: name, newSymbol: symbol, newUri: uri, sellerFeeBasisPoints })
+          : buildCreateMetadataTransaction({ mint, name, symbol, uri, updateAuthority: wallet.publicKey, payer: wallet.publicKey, sellerFeeBasisPoints })
+        const metaSig = await sendAndConfirmTransaction(connection, metaTx, wallet, wallet.publicKey)
+
+        if (metadataForm.type === 'bundle') {
+          await invokeEdgeFunction(supabase, 'platform', {
+            action: 'voucher-create-bundle',
+            mint,
+            bundleId: metadataForm.bundleId.trim(),
+            tokensRequired: metadataForm.tokensRequired,
+            maxRedemptionsPerTenant: metadataForm.maxRedemptionsPerTenant ?? undefined,
+          })
+        } else {
+          await invokeEdgeFunction(supabase, 'platform', {
+            action: 'voucher-create-individual',
+            mint,
+            label: metadataForm.label?.trim() || undefined,
+            maxRedemptionsPerTenant: metadataForm.maxRedemptionsPerTenant ?? undefined,
+            entitlements: metadataForm.entitlements.filter((e) => e.meter_key?.trim()),
+          })
+        }
+
+        toastStore.add(toastId, { status: 'success', message: `${metadataOnChain ? 'Metadata updated' : 'Metadata created'} & voucher linked: ${mint.slice(0, 8)}…`, signature: metaSig })
+        metadataModalMint.value = null
+        await loadVoucherList()
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to add metadata & link'
+        metadataFormError.value = msg; toastStore.add(toastId, { status: 'error', message: msg })
+      } finally { voucherMetadataLoading.value = false }
+    })
+    if (!exclusive.ok) return
   }
 
   return {
