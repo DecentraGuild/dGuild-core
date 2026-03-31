@@ -62,6 +62,14 @@
       <Button v-if="canRevealWinner" variant="default" class="raffle-slot-card__action" :disabled="isSubmitting" @click="$emit('reveal-winner')">
         {{ isSubmitting ? 'Pulling...' : 'Pull winner' }}
       </Button>
+      <Button
+        v-if="canBattleReveal"
+        variant="ghost"
+        class="raffle-slot-card__action"
+        @click="$emit('play-battle-reveal')"
+      >
+        Battle reveal
+      </Button>
       <Button v-if="canDistributeReward" variant="default" class="raffle-slot-card__action" :disabled="isSubmitting" @click="$emit('distribute-reward')">
         {{ isSubmitting ? 'Distributing...' : 'Distribute reward' }}
       </Button>
@@ -112,6 +120,7 @@ defineEmits<{
   resume: []
   edit: []
   'reveal-winner': []
+  'play-battle-reveal': []
   'distribute-reward': []
   'claim-proceeds': []
   close: []
@@ -128,6 +137,7 @@ const canPauseRaffle = computed(() => props.slotCard.chainData?.state === 'runni
 const canResumeRaffle = computed(() => props.slotCard.chainData?.state === 'paused')
 const canEditRaffle = computed(() => props.slotCard.chainData?.state === 'paused')
 const canRevealWinner = computed(() => props.slotCard.chainData?.state === 'full')
+const canBattleReveal = computed(() => Boolean(props.slotCard.chainData?.winner?.trim()))
 const canDistributeReward = computed(
   () => props.slotCard.chainData?.state === 'claimprize' && props.slotCard.chainData?.winner != null
 )

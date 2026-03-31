@@ -24,7 +24,8 @@
           @pause="$emit('pause', slot)"
           @resume="$emit('resume', slot)"
           @edit="$emit('edit', slot)"
-          @reveal-winner="$emit('revealWinner', slot)"
+            @reveal-winner="$emit('revealWinner', slot)"
+            @play-battle-reveal="$emit('playBattleReveal', slot)"
           @distribute-reward="$emit('distributeReward', slot)"
           @claim-proceeds="$emit('claimProceeds', slot)"
           @close="$emit('close', slot.raffle!)"
@@ -76,6 +77,7 @@ defineEmits<{
   resume: [slot: SlotCard]
   edit: [slot: SlotCard]
   revealWinner: [slot: SlotCard]
+  playBattleReveal: [slot: SlotCard]
   distributeReward: [slot: SlotCard]
   claimProceeds: [slot: SlotCard]
   close: [raffle: RaffleItem]

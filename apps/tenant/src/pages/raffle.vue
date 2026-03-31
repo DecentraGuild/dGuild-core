@@ -123,6 +123,8 @@
                 <p class="raffle-panel__total">
                   Total: {{ formatTotalCost }}
                 </p>
+                <p v-if="buyWhitelistChecking" class="raffle-panel__status">Checking whitelist…</p>
+                <p v-else-if="buyWhitelistMessage" class="raffle-panel__error">{{ buyWhitelistMessage }}</p>
                 <Button
                   :disabled="!canSubmitBuy || buySubmitting"
                   @click="onBuyTickets"
@@ -136,6 +138,40 @@
               <p v-else class="raffle-panel__hint">
                 {{ selectedRaffle.chainData?.state !== 'running' ? 'This raffle is not currently accepting ticket purchases.' : 'Connect your wallet to buy tickets.' }}
               </p>
+              <details
+                v-if="selectedRaffle.chainData && selectedRaffle.chainData.ticketsSold > 0"
+                class="raffle-panel__entries"
+              >
+                <summary class="raffle-panel__entries-summary">Entries and odds</summary>
+                <p class="raffle-panel__entries-note">
+                  Each row is one wallet’s tickets (fighters). Share is of sold tickets. Odds change while sales are open.
+                </p>
+                <p v-if="holdersLoading" class="raffle-panel__entries-status">Loading entries…</p>
+                <p v-else-if="holdersError" class="raffle-panel__error">{{ holdersError }}</p>
+                <template v-else>
+                  <p v-if="!holdersMatchSold" class="raffle-panel__entries-warn">
+                    Indexer totals do not match sold tickets yet; list may be incomplete.
+                  </p>
+                  <div class="raffle-panel__entries-table-wrap">
+                    <table class="raffle-panel__entries-table">
+                      <thead>
+                        <tr>
+                          <th>Wallet</th>
+                          <th>Fighters</th>
+                          <th>Share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="row in holderRows" :key="row.owner">
+                          <td>{{ resolveWallet(row.owner, 8, 4) }}</td>
+                          <td>{{ row.tickets }}</td>
+                          <td>{{ row.sharePercent.toFixed(1) }}%</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+              </details>
               <button type="button" class="raffle-panel__close" @click="selectedRaffle = null">
                 <Icon icon="lucide:x" />
               </button>
@@ -148,12 +184,14 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useExplorerLinks } from '@decentraguild/nuxt-composables'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import { useTenantStore } from '~/stores/tenant'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useRafflePublic } from '~/composables/raffle/useRafflePublic'
+import { useRaffleTicketHolders } from '~/composables/raffle/useRaffleTicketHolders'
 
 const tenantStore = useTenantStore()
 const tenantId = computed(() => tenantStore.tenantId)
@@ -162,10 +200,30 @@ const { accountUrl } = useExplorerLinks()
 
 const {
   loading, selectedRaffle, buyAmount, buySubmitting, buyTxStatus, buyError,
+  buyWhitelistChecking, buyWhitelistMessage,
   visibleRaffles, canBuyTickets, availableTickets, canSubmitBuy, formatTotalCost,
   prizeConfigured, mintCatalogLabel, mintCatalogLabelLong, formatPrizeLine, formatTicketPrice,
   selectRaffle, onBuyTickets, resolveWallet,
 } = useRafflePublic(tenantId, connection)
+
+const holderFetchContext = computed(() => {
+  const r = selectedRaffle.value
+  const d = r?.chainData
+  if (!r || !d || d.ticketsSold < 1) return null
+  return {
+    rafflePubkey: r.rafflePubkey,
+    ticketMint: d.ticketMint,
+    ticketsSold: d.ticketsSold,
+    ticketDecimals: d.ticketDecimals,
+  }
+})
+
+const {
+  loading: holdersLoading,
+  error: holdersError,
+  rows: holderRows,
+  matchesSold: holdersMatchSold,
+} = useRaffleTicketHolders(holderFetchContext)
 </script>
 
 <style scoped>
@@ -478,6 +536,62 @@ const {
 .raffle-panel__hint {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
+}
+
+.raffle-panel__entries {
+  margin-top: var(--theme-space-md);
+  padding-top: var(--theme-space-md);
+  border-top: var(--theme-border-thin) solid var(--theme-border);
+  font-size: var(--theme-font-sm);
+}
+
+.raffle-panel__entries-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.raffle-panel__entries-note {
+  margin: var(--theme-space-sm) 0;
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+}
+
+.raffle-panel__entries-status {
+  margin: var(--theme-space-xs) 0 0;
+  color: var(--theme-text-secondary);
+}
+
+.raffle-panel__entries-warn {
+  margin: var(--theme-space-xs) 0;
+  font-size: var(--theme-font-xs);
+  color: var(--theme-warning, #f5a623);
+}
+
+.raffle-panel__entries-table-wrap {
+  overflow: auto;
+  max-height: 220px;
+  border: var(--theme-border-thin) solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  margin-top: var(--theme-space-xs);
+}
+
+.raffle-panel__entries-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--theme-font-xs);
+}
+
+.raffle-panel__entries-table th,
+.raffle-panel__entries-table td {
+  padding: var(--theme-space-xs) var(--theme-space-sm);
+  text-align: left;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.raffle-panel__entries-table th {
+  color: var(--theme-text-secondary);
+  font-weight: 600;
 }
 
 .raffle-panel__close {

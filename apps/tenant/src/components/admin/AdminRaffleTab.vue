@@ -38,6 +38,7 @@
             @resume="onResumeRaffle"
             @edit="openEditRaffleModal"
             @reveal-winner="onRevealWinner"
+            @play-battle-reveal="openBattleReveal"
             @distribute-reward="onDistributeReward"
             @claim-proceeds="onClaimProceeds"
             @close="onCloseRaffle"
@@ -111,6 +112,18 @@
         @cancel="closeRaffleModal"
       />
     </SimpleModal>
+
+    <RaffleBattleRevealModal
+      v-model="battleOpen"
+      :raffle-name="battleRaffleTitle"
+      :winner-pubkey="battleWinnerPubkey"
+      :loading="battleHoldersLoading"
+      :load-error="battleHoldersError"
+      :matches-sold="battleHoldersMatchSold"
+      :display-rows="battleDisplayRows"
+      :raw-holder-rows="battleRawHolderRows"
+      :format-wallet="formatBattleWallet"
+    />
   </div>
 </template>
 
@@ -128,12 +141,16 @@ import RaffleStartConfirm from '~/components/admin/RaffleStartConfirm.vue'
 import RaffleEditForm from '~/components/admin/RaffleEditForm.vue'
 import RaffleCreateForm from '~/components/admin/RaffleCreateForm.vue'
 import RaffleUpgradeModal from '~/components/admin/RaffleUpgradeModal.vue'
+import RaffleBattleRevealModal from '~/components/raffle/RaffleBattleRevealModal.vue'
 import { useTenantStore, type RaffleSettings } from '~/stores/tenant'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useQuote } from '~/composables/core/useQuote'
 import { useAdminRaffleActions } from '~/composables/admin/useAdminRaffleActions'
 import { useAdminRaffleModals } from '~/composables/admin/useAdminRaffleModals'
 import { useRaffleSlots } from '~/composables/raffles/useRaffleSlots'
+import type { SlotCard } from '~/composables/raffles/useRaffleSlots'
+import { useRaffleTicketHolders } from '~/composables/raffle/useRaffleTicketHolders'
+import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 import { useEffectiveGate } from '~/composables/gates/useEffectiveGate'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useSupabase } from '~/composables/core/useSupabase'
@@ -252,6 +269,54 @@ const {
   fetchRaffles,
   fetchChainDataForRaffles,
 } = useRaffleSlots(tenantIdRef, connection, slotLimit)
+
+const battleOpen = ref(false)
+const battleRafflePubkey = ref<string | null>(null)
+
+const battleHolderContext = computed(() => {
+  if (!battleOpen.value || !battleRafflePubkey.value) return null
+  const card = slotCards.value.find((c) => c.raffle?.rafflePubkey === battleRafflePubkey.value)
+  const d = card?.chainData
+  if (!card?.raffle || !d || d.ticketsSold < 1) return null
+  return {
+    rafflePubkey: card.raffle.rafflePubkey,
+    ticketMint: d.ticketMint,
+    ticketsSold: d.ticketsSold,
+    ticketDecimals: d.ticketDecimals,
+  }
+})
+
+const {
+  loading: battleHoldersLoading,
+  error: battleHoldersError,
+  rows: battleDisplayRows,
+  rawRows: battleRawHolderRows,
+  matchesSold: battleHoldersMatchSold,
+} = useRaffleTicketHolders(battleHolderContext)
+
+const battleChainSlot = computed(() =>
+  slotCards.value.find((c) => c.raffle?.rafflePubkey === battleRafflePubkey.value) ?? null,
+)
+
+const battleWinnerPubkey = computed(() => battleChainSlot.value?.chainData?.winner?.trim() ?? '')
+const battleRaffleTitle = computed(() => battleChainSlot.value?.chainData?.name ?? '')
+
+const { resolveWallet } = useMemberProfiles()
+
+function formatBattleWallet(pubkey: string, head = 8, tail = 6) {
+  return resolveWallet(pubkey, head, tail)
+}
+
+function openBattleReveal(slot: SlotCard) {
+  const pk = slot.raffle?.rafflePubkey
+  if (!pk) return
+  battleRafflePubkey.value = pk
+  battleOpen.value = true
+}
+
+watch(battleOpen, (v) => {
+  if (!v) battleRafflePubkey.value = null
+})
 
 function openUpgradeModal() {
   upgradeConditionsOverride.value = null
