@@ -88,7 +88,7 @@ import { Card } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
 import { useTenantStore } from '~/stores/tenant'
-import { invokeEdgeFunction, useRpc } from '@decentraguild/nuxt-composables'
+import { invokeEdgeFunction, useRpc, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useAuth } from '@decentraguild/auth'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -111,6 +111,7 @@ const auth = useAuth()
 const { rpcUrl, hasRpc } = useRpc()
 const { connection } = useSolanaConnection()
 const txNotifications = useTransactionNotificationsStore()
+const voucherRedeemLock = useSubmitInFlightLock()
 
 const walletAddress = computed(() => auth.wallet.value ?? null)
 
@@ -262,114 +263,117 @@ async function redeem(v: RedeemableVoucher) {
   }
   if (!connection.value || !rpcUrl.value) return
 
-  redeemingMint.value = v.mint
-  const notificationId = `voucher-${Date.now()}`
-  try {
-    const quoteData = await invokeEdgeFunction<{
-      quoteId?: string
-      memo?: string
-      voucherRecipientAta?: string
-      voucherWallet?: string
-      tokensRequired?: number
-    }>(supabase, 'billing', {
-      action: 'voucher-quote',
-      tenantId: id,
-      voucherMint: v.mint,
-    }, { errorFallback: 'Quote failed' })
-    const quote = quoteData
-    if (!quote?.quoteId || !quote?.memo || !quote?.voucherRecipientAta) {
-      throw new Error('Invalid quote response')
-    }
-    const tokensRequired = quote.tokensRequired ?? v.tokensRequired
-    const voucherWallet = quote.voucherWallet ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
-
-    const chargeData = await invokeEdgeFunction<{ paymentId?: string }>(
-      supabase,
-      'billing',
-      {
-        action: 'charge',
-        quoteId: quote.quoteId,
-        payerWallet: wallet.publicKey.toBase58(),
-        paymentMethod: 'voucher',
+  const exclusive = await voucherRedeemLock.runExclusive(async () => {
+    redeemingMint.value = v.mint
+    const notificationId = `voucher-${Date.now()}`
+    try {
+      const quoteData = await invokeEdgeFunction<{
+        quoteId?: string
+        memo?: string
+        voucherRecipientAta?: string
+        voucherWallet?: string
+        tokensRequired?: number
+      }>(supabase, 'billing', {
+        action: 'voucher-quote',
+        tenantId: id,
         voucherMint: v.mint,
-      },
-      { errorFallback: 'Charge failed' },
-    )
-    const charge = chargeData
-    if (!charge?.paymentId) throw new Error('Invalid charge response')
+      }, { errorFallback: 'Quote failed' })
+      const quote = quoteData
+      if (!quote?.quoteId || !quote?.memo || !quote?.voucherRecipientAta) {
+        throw new Error('Invalid quote response')
+      }
+      const tokensRequired = quote.tokensRequired ?? v.tokensRequired
+      const voucherWallet = quote.voucherWallet ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
 
-    txNotifications.add(notificationId, {
-      status: 'pending',
-      message: 'Redeem voucher. Confirm the transaction in your wallet.',
-      signature: null,
-    })
-
-    const connectorId = getConnectorState().connectorId
-    const tx = await buildVoucherTransfer({
-      payer: wallet.publicKey,
-      mint: v.mint,
-      amount: tokensRequired,
-      decimals: 0,
-      recipientAta: quote.voucherRecipientAta,
-      recipientOwner: voucherWallet,
-      memo: quote.memo,
-      connection: connection.value,
-      instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
-    })
-
-    const txSignature = await sendAndConfirmTransaction(
-      connection.value,
-      tx,
-      wallet,
-      wallet.publicKey,
-      {
-        onStatus: (s) => {
-          const label = TX_STATUS_LABELS[s] ?? s
-          txNotifications.update(notificationId, {
-            status: 'pending',
-            message: `Redeem: ${label}`,
-          })
+      const chargeData = await invokeEdgeFunction<{ paymentId?: string }>(
+        supabase,
+        'billing',
+        {
+          action: 'charge',
+          quoteId: quote.quoteId,
+          payerWallet: wallet.publicKey.toBase58(),
+          paymentMethod: 'voucher',
+          voucherMint: v.mint,
         },
-      },
-    )
+        { errorFallback: 'Charge failed' },
+      )
+      const charge = chargeData
+      if (!charge?.paymentId) throw new Error('Invalid charge response')
 
-    txNotifications.update(notificationId, {
-      status: 'success',
-      message: 'Voucher redeemed',
-      signature: txSignature,
-    })
+      txNotifications.add(notificationId, {
+        status: 'pending',
+        message: 'Redeem voucher. Confirm the transaction in your wallet.',
+        signature: null,
+      })
 
-    const slugToClaim =
-      hasSlugEntitlement(v) && !tenantSlug.value && slugStatusByMint.value[v.mint] === 'available'
-        ? (desiredSlugByMint.value[v.mint] ?? '').trim().toLowerCase()
-        : undefined
+      const connectorId = getConnectorState().connectorId
+      const tx = await buildVoucherTransfer({
+        payer: wallet.publicKey,
+        mint: v.mint,
+        amount: tokensRequired,
+        decimals: 0,
+        recipientAta: quote.voucherRecipientAta,
+        recipientOwner: voucherWallet,
+        memo: quote.memo,
+        connection: connection.value,
+        instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
+      })
 
-    const confirmBody: Record<string, unknown> = {
-      action: 'confirm',
-      paymentId: charge.paymentId,
-      txSignature,
+      const txSignature = await sendAndConfirmTransaction(
+        connection.value,
+        tx,
+        wallet,
+        wallet.publicKey,
+        {
+          onStatus: (s) => {
+            const label = TX_STATUS_LABELS[s] ?? s
+            txNotifications.update(notificationId, {
+              status: 'pending',
+              message: `Redeem: ${label}`,
+            })
+          },
+        },
+      )
+
+      txNotifications.update(notificationId, {
+        status: 'success',
+        message: 'Voucher redeemed',
+        signature: txSignature,
+      })
+
+      const slugToClaim =
+        hasSlugEntitlement(v) && !tenantSlug.value && slugStatusByMint.value[v.mint] === 'available'
+          ? (desiredSlugByMint.value[v.mint] ?? '').trim().toLowerCase()
+          : undefined
+
+      const confirmBody: Record<string, unknown> = {
+        action: 'confirm',
+        paymentId: charge.paymentId,
+        txSignature,
+      }
+      if (slugToClaim) confirmBody.slugToClaim = slugToClaim
+
+      const confirmData = await invokeEdgeFunction<{ success?: boolean }>(supabase, 'billing', confirmBody, { errorFallback: 'Confirm failed' })
+      const confirm = confirmData
+      if (!confirm?.success) throw new Error('Confirmation failed')
+
+      if (slugToClaim) {
+        tenantStore.refetchTenantContext()
+        desiredSlugByMint.value = { ...desiredSlugByMint.value, [v.mint]: '' }
+        slugStatusByMint.value = { ...slugStatusByMint.value, [v.mint]: 'idle' }
+      }
+      await load()
+    } catch (e) {
+      txNotifications.update(notificationId, {
+        status: 'error',
+        message: e instanceof Error ? e.message : 'Redeem failed',
+      })
+      throw e
+    } finally {
+      redeemingMint.value = null
     }
-    if (slugToClaim) confirmBody.slugToClaim = slugToClaim
-
-    const confirmData = await invokeEdgeFunction<{ success?: boolean }>(supabase, 'billing', confirmBody, { errorFallback: 'Confirm failed' })
-    const confirm = confirmData
-    if (!confirm?.success) throw new Error('Confirmation failed')
-
-    if (slugToClaim) {
-      tenantStore.refetchTenantContext()
-      desiredSlugByMint.value = { ...desiredSlugByMint.value, [v.mint]: '' }
-      slugStatusByMint.value = { ...slugStatusByMint.value, [v.mint]: 'idle' }
-    }
-    await load()
-  } catch (e) {
-    txNotifications.update(notificationId, {
-      status: 'error',
-      message: e instanceof Error ? e.message : 'Redeem failed',
-    })
-    throw e
-  } finally {
-    redeemingMint.value = null
-  }
+  })
+  if (!exclusive.ok) return
 }
 
 watch(

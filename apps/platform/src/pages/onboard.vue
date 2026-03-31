@@ -66,7 +66,7 @@ import {
   sendAndConfirmTransaction,
   ensureSigningWalletForSession,
 } from '@decentraguild/web3'
-import { useSupabase, invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { useSupabase, invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { generateRandomNumericTenantId } from '@decentraguild/core'
 import { useRpc } from '~/composables/useRpc'
 
@@ -101,6 +101,7 @@ const form = reactive({
 
 const saving = ref(false)
 const error = ref<string | null>(null)
+const onboardSubmitLock = useSubmitInFlightLock()
 
 async function handleConnectAndSignIn(connectorId: string) {
   const ok = await auth.connectAndSignIn(connectorId as WalletConnectorId)
@@ -135,78 +136,81 @@ async function submit() {
     return
   }
 
-  saving.value = true
-  error.value = null
-  try {
-    const tenantId = generateRandomNumericTenantId()
+  const exclusive = await onboardSubmitLock.runExclusive(async () => {
+    saving.value = true
+    error.value = null
+    try {
+      const tenantId = generateRandomNumericTenantId()
 
-    const quoteData = await invokeEdgeFunction<{ quoteId?: string; priceUsdc?: number }>(supabase, 'billing', {
-      action: 'quote',
-      tenantId,
-      productKey: 'admin',
-      meterOverrides: { registration: 1 },
-      durationDays: 0,
-    })
-    const quote = quoteData
-    if (!quote?.quoteId) throw new Error('No quote returned')
+      const quoteData = await invokeEdgeFunction<{ quoteId?: string; priceUsdc?: number }>(supabase, 'billing', {
+        action: 'quote',
+        tenantId,
+        productKey: 'admin',
+        meterOverrides: { registration: 1 },
+        durationDays: 0,
+      })
+      const quote = quoteData
+      if (!quote?.quoteId) throw new Error('No quote returned')
 
-    if ((quote.priceUsdc ?? 0) <= 0) throw new Error('Registration pricing not configured')
+      if ((quote.priceUsdc ?? 0) <= 0) throw new Error('Registration pricing not configured')
 
-    const payerWallet = wallet.publicKey.toBase58()
-    const chargeData = await invokeEdgeFunction<{ paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }>(
-      supabase,
-      'billing',
-      {
-        action: 'charge',
-        quoteId: quote.quoteId,
-        payerWallet,
-        paymentMethod: 'usdc',
-      },
-    )
-    const charge = chargeData
-    if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
+      const payerWallet = wallet.publicKey.toBase58()
+      const chargeData = await invokeEdgeFunction<{ paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }>(
+        supabase,
+        'billing',
+        {
+          action: 'charge',
+          quoteId: quote.quoteId,
+          payerWallet,
+          paymentMethod: 'usdc',
+        },
+      )
+      const charge = chargeData
+      if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
-    const connection = createConnection(rpcUrl.value)
-    const connectorId = getConnectorState().connectorId
-    const tx = buildBillingTransfer({
-      payer: wallet.publicKey,
-      amountUsdc: charge.amountUsdc ?? 0,
-      recipientAta: new PublicKey(charge.recipientAta),
-      memo: charge.memo,
-      connection,
-      instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
-    })
-    const txSignature = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
+      const connection = createConnection(rpcUrl.value)
+      const connectorId = getConnectorState().connectorId
+      const tx = buildBillingTransfer({
+        payer: wallet.publicKey,
+        amountUsdc: charge.amountUsdc ?? 0,
+        recipientAta: new PublicKey(charge.recipientAta),
+        memo: charge.memo,
+        connection,
+        instructionOrder: isBackpackConnector(connectorId) ? 'memoFirst' : 'transferFirst',
+      })
+      const txSignature = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
 
-    await invokeEdgeFunction(supabase, 'billing', { action: 'confirm', paymentId: charge.paymentId, txSignature })
+      await invokeEdgeFunction(supabase, 'billing', { action: 'confirm', paymentId: charge.paymentId, txSignature })
 
-    const { data: session } = await supabase.auth.getSession()
-    const token = session?.session?.access_token
-    await invokeEdgeFunction(
-      supabase,
-      'billing',
-      {
-        action: 'register-create',
-        paymentId: charge.paymentId,
-        name: form.name.trim(),
-        description: form.description.trim() || null,
-        logo: form.logo.trim() || null,
-        discordInviteLink: form.discordInviteLink.trim() || null,
-      },
-      token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
-    )
+      const { data: session } = await supabase.auth.getSession()
+      const token = session?.session?.access_token
+      await invokeEdgeFunction(
+        supabase,
+        'billing',
+        {
+          action: 'register-create',
+          paymentId: charge.paymentId,
+          name: form.name.trim(),
+          description: form.description.trim() || null,
+          logo: form.logo.trim() || null,
+          discordInviteLink: form.discordInviteLink.trim() || null,
+        },
+        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+      )
 
-    const config = useRuntimeConfig()
-    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    const tenantAppUrl = isLocal
-      ? `http://localhost:3002/?tenant=${encodeURIComponent(tenantId)}`
-      : `https://${(config.public.tenantAppHost as string) || 'dapp.dguild.org'}/?tenant=${encodeURIComponent(tenantId)}`
-    await navigateTo(tenantAppUrl, { external: true })
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to create organisation'
-  } finally {
-    saving.value = false
-  }
+      const config = useRuntimeConfig()
+      const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      const tenantAppUrl = isLocal
+        ? `http://localhost:3002/?tenant=${encodeURIComponent(tenantId)}`
+        : `https://${(config.public.tenantAppHost as string) || 'dapp.dguild.org'}/?tenant=${encodeURIComponent(tenantId)}`
+      await navigateTo(tenantAppUrl, { external: true })
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to create organisation'
+    } finally {
+      saving.value = false
+    }
+  })
+  if (!exclusive.ok) return
 }
 </script>
 

@@ -23,7 +23,7 @@ import {
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
 } from '@decentraguild/web3'
-import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -67,6 +67,9 @@ export function useCrafter() {
   const createSubmitting = ref(false)
   const createError = ref<string | null>(null)
   const createTxStatus = ref<string | null>(null)
+  const crafterTxLock = useSubmitInFlightLock()
+
+  const TX_BUSY = 'Please wait for the current transaction to finish'
 
   async function getAuthHeaders(): Promise<Record<string, string> | null> {
     const { data: { session } } = await supabase.auth.getSession()
@@ -115,107 +118,111 @@ export function useCrafter() {
       return { success: false, error: 'Connect your wallet and ensure you are signed in' }
     }
 
-    createSubmitting.value = true
-    createError.value = null
-    createTxStatus.value = 'Getting quote...'
+    const exclusive = await crafterTxLock.runExclusive(async () => {
+      createSubmitting.value = true
+      createError.value = null
+      createTxStatus.value = 'Getting quote...'
 
-    try {
-      const currentCount = tokens.value.length
-      const quoteData = await invokeEdgeFunction<{ quoteId?: string; priceUsdc?: number }>(
-        supabase,
-        'billing',
-        {
-          action: 'quote',
-          tenantId: id,
-          productKey: 'crafter',
-          meterOverrides: { crafter_tokens: currentCount + 1 },
-          durationDays: 30,
-        },
-        { errorFallback: 'Quote failed' },
-      )
-      const quote = quoteData
-      if (!quote?.quoteId) throw new Error('No quote returned')
+      try {
+        const currentCount = tokens.value.length
+        const quoteData = await invokeEdgeFunction<{ quoteId?: string; priceUsdc?: number }>(
+          supabase,
+          'billing',
+          {
+            action: 'quote',
+            tenantId: id,
+            productKey: 'crafter',
+            meterOverrides: { crafter_tokens: currentCount + 1 },
+            durationDays: 30,
+          },
+          { errorFallback: 'Quote failed' },
+        )
+        const quote = quoteData
+        if (!quote?.quoteId) throw new Error('No quote returned')
 
-      createTxStatus.value = 'Charging...'
-      const payerWallet = wallet.publicKey.toBase58()
-      const chargeData = await invokeEdgeFunction<{ paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }>(
-        supabase,
-        'billing',
-        {
-          action: 'charge',
-          quoteId: quote.quoteId,
-          payerWallet,
-          paymentMethod: 'usdc',
-        },
-        { errorFallback: 'Charge failed' },
-      )
-      const charge = chargeData
-      if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
+        createTxStatus.value = 'Charging...'
+        const payerWallet = wallet.publicKey.toBase58()
+        const chargeData = await invokeEdgeFunction<{ paymentId?: string; amountUsdc?: number; memo?: string; recipientAta?: string }>(
+          supabase,
+          'billing',
+          {
+            action: 'charge',
+            quoteId: quote.quoteId,
+            payerWallet,
+            paymentMethod: 'usdc',
+          },
+          { errorFallback: 'Charge failed' },
+        )
+        const charge = chargeData
+        if (!charge?.paymentId || !charge?.memo || !charge?.recipientAta) throw new Error('Invalid charge response')
 
-      const mintKeypair = Keypair.generate()
-      const decimals = typeof form.decimals === 'number' ? form.decimals : parseInt(String(form.decimals), 10) || 6
-      const headers = await getAuthHeaders()
-      if (!headers) throw new Error('Sign in required')
+        const mintKeypair = Keypair.generate()
+        const decimals = typeof form.decimals === 'number' ? form.decimals : parseInt(String(form.decimals), 10) || 6
+        const headers = await getAuthHeaders()
+        if (!headers) throw new Error('Sign in required')
 
-      createTxStatus.value = 'Creating pending...'
-      await invokeEdgeFunction(
-        supabase,
-        'crafter',
-        {
-          action: 'create',
-          tenantId: id,
-          mint: mintKeypair.publicKey.toBase58(),
+        createTxStatus.value = 'Creating pending...'
+        await invokeEdgeFunction(
+          supabase,
+          'crafter',
+          {
+            action: 'create',
+            tenantId: id,
+            mint: mintKeypair.publicKey.toBase58(),
+            decimals,
+            memo: charge.memo,
+          },
+          { headers, errorFallback: 'Create pending failed' },
+        )
+
+        createTxStatus.value = 'Sending transaction...'
+        const tx = await buildCreateMintAndBillingTransaction({
+          mintKeypair,
           decimals,
           memo: charge.memo,
-        },
-        { headers, errorFallback: 'Create pending failed' },
-      )
+          amountUsdc: charge.amountUsdc ?? 0,
+          recipientAta: new PublicKey(charge.recipientAta),
+          payer: wallet.publicKey,
+          connection: conn,
+        })
+        const txSignature = await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey, {
+          signers: [mintKeypair],
+        })
 
-      createTxStatus.value = 'Sending transaction...'
-      const tx = await buildCreateMintAndBillingTransaction({
-        mintKeypair,
-        decimals,
-        memo: charge.memo,
-        amountUsdc: charge.amountUsdc ?? 0,
-        recipientAta: new PublicKey(charge.recipientAta),
-        payer: wallet.publicKey,
-        connection: conn,
-      })
-      const txSignature = await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey, {
-        signers: [mintKeypair],
-      })
+        createTxStatus.value = 'Confirming payment...'
+        await invokeEdgeFunction(
+          supabase,
+          'billing',
+          { action: 'confirm', paymentId: charge.paymentId, txSignature },
+          { errorFallback: 'Confirm failed' },
+        )
 
-      createTxStatus.value = 'Confirming payment...'
-      await invokeEdgeFunction(
-        supabase,
-        'billing',
-        { action: 'confirm', paymentId: charge.paymentId, txSignature },
-        { errorFallback: 'Confirm failed' },
-      )
+        createTxStatus.value = 'Confirming token...'
+        await invokeEdgeFunction(
+          supabase,
+          'crafter',
+          {
+            action: 'confirm',
+            tenantId: id,
+            mint: mintKeypair.publicKey.toBase58(),
+            txSignature,
+            memo: charge.memo,
+          },
+          { headers, errorFallback: 'Token confirm failed' },
+        )
 
-      createTxStatus.value = 'Confirming token...'
-      await invokeEdgeFunction(
-        supabase,
-        'crafter',
-        {
-          action: 'confirm',
-          tenantId: id,
-          mint: mintKeypair.publicKey.toBase58(),
-          txSignature,
-          memo: charge.memo,
-        },
-        { headers, errorFallback: 'Token confirm failed' },
-      )
-
-      await list()
-      return { success: true, mint: mintKeypair.publicKey.toBase58() }
-    } catch (e) {
-      createError.value = e instanceof Error ? e.message : 'Create failed'
-      return { success: false, error: createError.value }
-    } finally {
-      createSubmitting.value = false
-      createTxStatus.value = null
-    }
+        await list()
+        return { success: true, mint: mintKeypair.publicKey.toBase58() } as const
+      } catch (e) {
+        createError.value = e instanceof Error ? e.message : 'Create failed'
+        return { success: false, error: createError.value }
+      } finally {
+        createSubmitting.value = false
+        createTxStatus.value = null
+      }
+    })
+    if (!exclusive.ok) return { success: false, error: TX_BUSY }
+    return exclusive.value
   }
 
   async function publishMetadata(
@@ -232,48 +239,52 @@ export function useCrafter() {
     const token = tokens.value.find((t) => t.mint === mint)
     if (!token) return { success: false, error: 'Token not found' }
 
-    try {
-      const name = (form.name?.trim() || token.name) || 'Token'
-      const symbol = (form.symbol?.trim() || token.symbol) || 'TKN'
-      const tx = buildCreateMetadataTransaction({
-        mint,
-        name,
-        symbol,
-        uri: form.metadataUri.trim(),
-        updateAuthority: wallet.publicKey,
-        payer: wallet.publicKey,
-        sellerFeeBasisPoints: form.sellerFeeBasisPoints,
-      })
-      await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
-
-      const headers = await getAuthHeaders()
-      if (!headers) throw new Error('Sign in required')
-      const data = await invokeEdgeFunction<{ success?: boolean }>(
-        supabase,
-        'crafter',
-        {
-          action: 'publish-metadata',
-          tenantId: id,
+    const exclusive = await crafterTxLock.runExclusive(async () => {
+      try {
+        const name = (form.name?.trim() || token.name) || 'Token'
+        const symbol = (form.symbol?.trim() || token.symbol) || 'TKN'
+        const tx = buildCreateMetadataTransaction({
           mint,
-          metadataUri: form.metadataUri.trim(),
-          name: form.name?.trim() || null,
-          symbol: form.symbol?.trim() || null,
-          description: form.description?.trim() || null,
-          imageUrl: form.imageUrl?.trim() || null,
+          name,
+          symbol,
+          uri: form.metadataUri.trim(),
+          updateAuthority: wallet.publicKey,
+          payer: wallet.publicKey,
           sellerFeeBasisPoints: form.sellerFeeBasisPoints,
-        },
-        { headers },
-      )
-      if (!data?.success) throw new Error('Publish failed')
+        })
+        await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
 
-      await list()
-      return { success: true }
-    } catch (e) {
-      return {
-        success: false,
-        error: e instanceof Error ? e.message : 'Publish metadata failed',
+        const headers = await getAuthHeaders()
+        if (!headers) throw new Error('Sign in required')
+        const data = await invokeEdgeFunction<{ success?: boolean }>(
+          supabase,
+          'crafter',
+          {
+            action: 'publish-metadata',
+            tenantId: id,
+            mint,
+            metadataUri: form.metadataUri.trim(),
+            name: form.name?.trim() || null,
+            symbol: form.symbol?.trim() || null,
+            description: form.description?.trim() || null,
+            imageUrl: form.imageUrl?.trim() || null,
+            sellerFeeBasisPoints: form.sellerFeeBasisPoints,
+          },
+          { headers },
+        )
+        if (!data?.success) throw new Error('Publish failed')
+
+        await list()
+        return { success: true } as const
+      } catch (e) {
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : 'Publish metadata failed',
+        }
       }
-    }
+    })
+    if (!exclusive.ok) return { success: false, error: TX_BUSY }
+    return exclusive.value
   }
 
   async function prepareMetadata(form: {
@@ -354,38 +365,42 @@ export function useCrafter() {
     if (!conn || !wallet?.publicKey) {
       return { success: false, error: 'Connect your wallet' }
     }
-    try {
-      const mintPk = new PublicKey(mint)
-      const destPk = new PublicKey(destinationWallet)
-      const ata = getAssociatedTokenAddressSync(mintPk, destPk)
-      const instructions = []
+    const exclusive = await crafterTxLock.runExclusive(async () => {
       try {
-        await getAccount(conn, ata)
-      } catch {
-        instructions.push(
-          createAssociatedTokenAccountInstruction(
-            wallet.publicKey,
-            ata,
-            destPk,
-            mintPk,
-            TOKEN_PROGRAM_ID,
-            ASSOCIATED_TOKEN_PROGRAM_ID
+        const mintPk = new PublicKey(mint)
+        const destPk = new PublicKey(destinationWallet)
+        const ata = getAssociatedTokenAddressSync(mintPk, destPk)
+        const instructions = []
+        try {
+          await getAccount(conn, ata)
+        } catch {
+          instructions.push(
+            createAssociatedTokenAccountInstruction(
+              wallet.publicKey,
+              ata,
+              destPk,
+              mintPk,
+              TOKEN_PROGRAM_ID,
+              ASSOCIATED_TOKEN_PROGRAM_ID
+            )
           )
-        )
+        }
+        const mintTx = buildMintTransaction({
+          mint,
+          destination: ata,
+          authority: wallet.publicKey,
+          amount: amountRaw,
+        })
+        const tx = new Transaction()
+        tx.add(...instructions, ...mintTx.instructions)
+        await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
+        return { success: true } as const
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Mint failed' }
       }
-      const mintTx = buildMintTransaction({
-        mint,
-        destination: ata,
-        authority: wallet.publicKey,
-        amount: amountRaw,
-      })
-      const tx = new Transaction()
-      tx.add(...instructions, ...mintTx.instructions)
-      await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
-      return { success: true }
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : 'Mint failed' }
-    }
+    })
+    if (!exclusive.ok) return { success: false, error: TX_BUSY }
+    return exclusive.value
   }
 
   async function burn(mint: string, amountRaw: bigint): Promise<{ success: boolean; error?: string }> {
@@ -394,19 +409,23 @@ export function useCrafter() {
     if (!conn || !wallet?.publicKey) {
       return { success: false, error: 'Connect your wallet' }
     }
-    try {
-      const ata = getAssociatedTokenAddressSync(new PublicKey(mint), wallet.publicKey)
-      const tx = buildBurnTransaction({
-        mint,
-        account: ata,
-        authority: wallet.publicKey,
-        amount: amountRaw,
-      })
-      await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
-      return { success: true }
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : 'Burn failed' }
-    }
+    const exclusive = await crafterTxLock.runExclusive(async () => {
+      try {
+        const ata = getAssociatedTokenAddressSync(new PublicKey(mint), wallet.publicKey)
+        const tx = buildBurnTransaction({
+          mint,
+          account: ata,
+          authority: wallet.publicKey,
+          amount: amountRaw,
+        })
+        await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
+        return { success: true } as const
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Burn failed' }
+      }
+    })
+    if (!exclusive.ok) return { success: false, error: TX_BUSY }
+    return exclusive.value
   }
 
   async function editMetadata(
@@ -432,40 +451,44 @@ export function useCrafter() {
     if (!name || !symbol || !uri) {
       return { success: false, error: 'Name, symbol, and metadata URI required' }
     }
-    try {
-      const tx = buildUpdateMetadataTransaction({
-        mint,
-        updateAuthority: wallet.publicKey,
-        newName: name,
-        newSymbol: symbol,
-        newUri: uri,
-        sellerFeeBasisPoints: form.sellerFeeBasisPoints,
-      })
-      await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
-      const headers = await getAuthHeaders()
-      if (headers) {
-        await invokeEdgeFunction(
-          supabase,
-          'crafter',
-          {
-            action: 'update-metadata',
-            tenantId: id,
-            mint,
-            name,
-            symbol,
-            description: form.description?.trim() || null,
-            imageUrl: form.imageUrl?.trim() || null,
-            sellerFeeBasisPoints: form.sellerFeeBasisPoints ?? 0,
-            metadataUri: uri,
-          },
-          { headers },
-        )
+    const exclusive = await crafterTxLock.runExclusive(async () => {
+      try {
+        const tx = buildUpdateMetadataTransaction({
+          mint,
+          updateAuthority: wallet.publicKey,
+          newName: name,
+          newSymbol: symbol,
+          newUri: uri,
+          sellerFeeBasisPoints: form.sellerFeeBasisPoints,
+        })
+        await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
+        const headers = await getAuthHeaders()
+        if (headers) {
+          await invokeEdgeFunction(
+            supabase,
+            'crafter',
+            {
+              action: 'update-metadata',
+              tenantId: id,
+              mint,
+              name,
+              symbol,
+              description: form.description?.trim() || null,
+              imageUrl: form.imageUrl?.trim() || null,
+              sellerFeeBasisPoints: form.sellerFeeBasisPoints ?? 0,
+              metadataUri: uri,
+            },
+            { headers },
+          )
+        }
+        await list()
+        return { success: true } as const
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Edit failed' }
       }
-      await list()
-      return { success: true }
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : 'Edit failed' }
-    }
+    })
+    if (!exclusive.ok) return { success: false, error: TX_BUSY }
+    return exclusive.value
   }
 
   async function closeAccount(
@@ -478,18 +501,22 @@ export function useCrafter() {
     if (!conn || !wallet?.publicKey) {
       return { success: false, error: 'Connect your wallet' }
     }
-    try {
-      const tx = buildCloseMintTransaction({
-        mint,
-        authority: wallet.publicKey,
-        accountToClose,
-        destination,
-      })
-      await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
-      return { success: true }
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : 'Close failed' }
-    }
+    const exclusive = await crafterTxLock.runExclusive(async () => {
+      try {
+        const tx = buildCloseMintTransaction({
+          mint,
+          authority: wallet.publicKey,
+          accountToClose,
+          destination,
+        })
+        await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey)
+        return { success: true } as const
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Close failed' }
+      }
+    })
+    if (!exclusive.ok) return { success: false, error: TX_BUSY }
+    return exclusive.value
   }
 
   async function remove(mint: string): Promise<{ success: boolean; error?: string }> {

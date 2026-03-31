@@ -12,6 +12,7 @@ import { useMintLabels } from '~/composables/mint/useMintLabels'
 import { useMintMetadata } from '~/composables/mint/useMintMetadata'
 import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 import { useSupabase } from '~/composables/core/useSupabase'
+import { useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import type { Connection } from '@solana/web3.js'
 
 const DEFAULT_MINT = PublicKey.default.toBase58()
@@ -39,6 +40,7 @@ export function useRafflePublic(
   const buySubmitting = ref(false)
   const buyTxStatus = ref<string | null>(null)
   const buyError = ref<string | null>(null)
+  const raffleBuyLock = useSubmitInFlightLock()
 
   const visibleRaffles = computed((): RaffleWithChainData[] => {
     const active = raffles.value.filter((r) => !r.closedAt)
@@ -195,31 +197,34 @@ export function useRafflePublic(
     if (!r?.chainData || !conn || !wallet?.publicKey || r.chainData.state !== 'running') return
     if (!canSubmitBuy.value) return
 
-    buySubmitting.value = true; buyError.value = null; buyTxStatus.value = null
-    try {
-      const amount = Math.floor(buyAmount.value)
-      const fresh = await fetchRaffleChainData(conn, r.rafflePubkey)
-      if (!fresh || fresh.state !== 'running') { buyError.value = 'Raffle is no longer available'; return }
-      const available = fresh.ticketsTotal - fresh.ticketsSold
-      if (amount > available) { buyError.value = `Only ${available} ticket(s) left. Please reduce your amount.`; return }
+    const exclusive = await raffleBuyLock.runExclusive(async () => {
+      buySubmitting.value = true; buyError.value = null; buyTxStatus.value = null
+      try {
+        const amount = Math.floor(buyAmount.value)
+        const fresh = await fetchRaffleChainData(conn, r.rafflePubkey)
+        if (!fresh || fresh.state !== 'running') { buyError.value = 'Raffle is no longer available'; return }
+        const available = fresh.ticketsTotal - fresh.ticketsSold
+        if (amount > available) { buyError.value = `Only ${available} ticket(s) left. Please reduce your amount.`; return }
 
-      const tx = await buildBuyTicketsTransaction({
-        rafflePubkey: r.rafflePubkey,
-        ticketAmount: amount,
-        chainData: { ticketMint: fresh.ticketMint, useWhitelist: fresh.useWhitelist, whitelist: fresh.whitelist },
-        connection: conn,
-        wallet,
-      })
-      const TX_LABELS: Record<string, string> = { signing: 'Signing...', sending: 'Sending...', confirming: 'Confirming...' }
-      await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey, {
-        onStatus: (s) => { buyTxStatus.value = TX_LABELS[s] ?? s },
-      })
-      buyTxStatus.value = 'Success'; buyError.value = null
-      await fetchChainData()
-      selectedRaffle.value = visibleRaffles.value.find((x) => x.rafflePubkey === r.rafflePubkey) ?? null
-    } catch (e) {
-      buyError.value = e instanceof Error ? e.message : 'Transaction failed'
-    } finally { buySubmitting.value = false; buyTxStatus.value = null }
+        const tx = await buildBuyTicketsTransaction({
+          rafflePubkey: r.rafflePubkey,
+          ticketAmount: amount,
+          chainData: { ticketMint: fresh.ticketMint, useWhitelist: fresh.useWhitelist, whitelist: fresh.whitelist },
+          connection: conn,
+          wallet,
+        })
+        const TX_LABELS: Record<string, string> = { signing: 'Signing...', sending: 'Sending...', confirming: 'Confirming...' }
+        await sendAndConfirmTransaction(conn, tx, wallet, wallet.publicKey, {
+          onStatus: (s) => { buyTxStatus.value = TX_LABELS[s] ?? s },
+        })
+        buyTxStatus.value = 'Success'; buyError.value = null
+        await fetchChainData()
+        selectedRaffle.value = visibleRaffles.value.find((x) => x.rafflePubkey === r.rafflePubkey) ?? null
+      } catch (e) {
+        buyError.value = e instanceof Error ? e.message : 'Transaction failed'
+      } finally { buySubmitting.value = false; buyTxStatus.value = null }
+    })
+    if (!exclusive.ok) return
   }
 
   onMounted(() => { loadRaffles() })

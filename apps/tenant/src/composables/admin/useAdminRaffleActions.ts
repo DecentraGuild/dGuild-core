@@ -1,4 +1,5 @@
 import type { Ref } from 'vue'
+import { useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { getEscrowWalletFromConnector, sendAndConfirmTransaction } from '@decentraguild/web3'
 import type { Connection } from '@solana/web3.js'
 import type { Transaction } from '@solana/web3.js'
@@ -27,6 +28,7 @@ export interface AdminRaffleActionsOptions {
  */
 export function useAdminRaffleActions(options: AdminRaffleActionsOptions) {
   const { connection, onSuccess } = options
+  const raffleAdminTxLock = useSubmitInFlightLock()
 
   const actionSubmitting = ref<string | null>(null)
   const actionTxStatus = ref<string | null>(null)
@@ -95,21 +97,24 @@ export function useAdminRaffleActions(options: AdminRaffleActionsOptions) {
     const wallet = getEscrowWalletFromConnector()
     if (!wallet?.publicKey) return
 
-    actionSubmitting.value = rafflePubkey
-    actionTxStatus.value = null
-    clearActionError()
-    try {
-      await fn()
-      clearActionError(rafflePubkey)
-      await (afterSuccess ?? onSuccess)?.()
-    } catch (e) {
-      const raw = e instanceof Error ? e.message : errMsg
-      actionError.value = humanizeRaffleChainError(raw)
-      actionErrorRaffle.value = rafflePubkey
-    } finally {
-      actionSubmitting.value = null
+    const exclusive = await raffleAdminTxLock.runExclusive(async () => {
+      actionSubmitting.value = rafflePubkey
       actionTxStatus.value = null
-    }
+      clearActionError()
+      try {
+        await fn()
+        clearActionError(rafflePubkey)
+        await (afterSuccess ?? onSuccess)?.()
+      } catch (e) {
+        const raw = e instanceof Error ? e.message : errMsg
+        actionError.value = humanizeRaffleChainError(raw)
+        actionErrorRaffle.value = rafflePubkey
+      } finally {
+        actionSubmitting.value = null
+        actionTxStatus.value = null
+      }
+    })
+    if (!exclusive.ok) return
   }
 
   return {

@@ -123,6 +123,7 @@ import { PublicKey } from '@solana/web3.js'
 import BN from 'bn.js'
 import { fetchWalletTokenBalances, type TokenBalance } from '~/composables/core/useWalletTokenBalances'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
+import { useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useMintMetadata } from '~/composables/mint/useMintMetadata'
 import { useMintLabels } from '~/composables/mint/useMintLabels'
 import { useStoreMints } from '~/composables/core/useStoreMints'
@@ -179,6 +180,7 @@ const depositAmount = ref('')
 const requestAmount = ref('')
 const creating = ref(false)
 const createError = ref<string | null>(null)
+const escrowCreateLock = useSubmitInFlightLock()
 
 const settingsExpanded = ref(true)
 const settingsDirect = ref(false)
@@ -418,79 +420,82 @@ async function create() {
     }
   }
 
-  creating.value = true
-  createError.value = null
-  try {
-    const [depMeta, reqMeta] = await Promise.all([fetchMetadata(dm), fetchMetadata(rm)])
-    const depDecimals = depMeta?.decimals ?? 0
-    const reqDecimals = reqMeta?.decimals ?? 0
-    const daNum = parseFloat(da)
-    const raNum = parseFloat(ra)
-    if (!Number.isFinite(daNum) || daNum <= 0 || !Number.isFinite(raNum) || raNum <= 0) {
-      createError.value = 'Invalid amounts'
+  const exclusive = await escrowCreateLock.runExclusive(async () => {
+    creating.value = true
+    createError.value = null
+    try {
+      const [depMeta, reqMeta] = await Promise.all([fetchMetadata(dm), fetchMetadata(rm)])
+      const depDecimals = depMeta?.decimals ?? 0
+      const reqDecimals = reqMeta?.decimals ?? 0
+      const daNum = parseFloat(da)
+      const raNum = parseFloat(ra)
+      if (!Number.isFinite(daNum) || daNum <= 0 || !Number.isFinite(raNum) || raNum <= 0) {
+        createError.value = 'Invalid amounts'
+        creating.value = false
+        return
+      }
+      const depositRaw = toRawUnits(daNum, depDecimals)
+      const requestRaw = toRawUnits(raNum, reqDecimals)
+
+      if (!connection.value) {
+        createError.value = 'Solana RPC not configured'
+        creating.value = false
+        return
+      }
+
+      const resolvedGate = resolveGateForTransaction(effectiveModuleGate.value, settingsGate.value)
+      const hasGate = Boolean(resolvedGate?.account?.trim())
+
+      let recipientAddr: string | null = null
+      if (settingsDirect.value && settingsDirectAddress.value.trim()) {
+        const v = validateRecipientAddress(settingsDirectAddress.value)
+        if (v.valid && v.pubkey) recipientAddr = v.pubkey.toBase58()
+      }
+
+      const expireTimestamp =
+        settingsExpire.value && settingsExpireDate.value
+          ? Math.floor(new Date(settingsExpireDate.value).getTime() / 1000)
+          : 0
+
+      const slippageDecimal = (settingsSlippage.value ?? 5000) / SLIPPAGE_DIVISOR
+      const shopFee = tenantStore.marketplaceSettings?.shopFee
+      const seed = new BN(Date.now())
+
+      const tx = await buildInitializeTransaction({
+        maker: wallet.publicKey,
+        depositTokenMint: dm,
+        requestTokenMint: rm,
+        depositAmount: new BN(depositRaw),
+        requestAmount: new BN(requestRaw),
+        seed,
+        expireTimestamp,
+        allowPartialFill: settingsPartialFill.value,
+        onlyWhitelist: hasGate,
+        slippage: slippageDecimal,
+        recipient: recipientAddr,
+        connection: connection.value,
+        wallet,
+        shopFee: shopFee ?? null,
+        whitelistProgram: hasGate && resolvedGate?.programId ? resolvedGate.programId : null,
+        whitelist: hasGate && resolvedGate?.account ? resolvedGate.account : null,
+      })
+
+      await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
+
+      const programId = new PublicKey(ESCROW_PROGRAM_ID)
+      const { escrow } = deriveEscrowAccounts(wallet.publicKey, seed, programId)
+      const { shouldAppendTenantToLinks } = useTenantInLinks()
+      const query: Record<string, string> = { tab: 'open-trades', escrow: escrow.toBase58() }
+      if (tenantStore.slug && shouldAppendTenantToLinks.value) query.tenant = tenantStore.slug
+      await router.replace({ path: '/market', query })
+      emit('success')
+    } catch (e) {
+      createError.value = e instanceof Error ? e.message : 'Failed to create escrow'
+    } finally {
       creating.value = false
-      return
     }
-    const depositRaw = toRawUnits(daNum, depDecimals)
-    const requestRaw = toRawUnits(raNum, reqDecimals)
-
-    if (!connection.value) {
-      createError.value = 'Solana RPC not configured'
-      creating.value = false
-      return
-    }
-
-    const resolvedGate = resolveGateForTransaction(effectiveModuleGate.value, settingsGate.value)
-    const hasGate = Boolean(resolvedGate?.account?.trim())
-
-    let recipientAddr: string | null = null
-    if (settingsDirect.value && settingsDirectAddress.value.trim()) {
-      const v = validateRecipientAddress(settingsDirectAddress.value)
-      if (v.valid && v.pubkey) recipientAddr = v.pubkey.toBase58()
-    }
-
-    const expireTimestamp =
-      settingsExpire.value && settingsExpireDate.value
-        ? Math.floor(new Date(settingsExpireDate.value).getTime() / 1000)
-        : 0
-
-    const slippageDecimal = (settingsSlippage.value ?? 5000) / SLIPPAGE_DIVISOR
-    const shopFee = tenantStore.marketplaceSettings?.shopFee
-    const seed = new BN(Date.now())
-
-    const tx = await buildInitializeTransaction({
-      maker: wallet.publicKey,
-      depositTokenMint: dm,
-      requestTokenMint: rm,
-      depositAmount: new BN(depositRaw),
-      requestAmount: new BN(requestRaw),
-      seed,
-      expireTimestamp,
-      allowPartialFill: settingsPartialFill.value,
-      onlyWhitelist: hasGate,
-      slippage: slippageDecimal,
-      recipient: recipientAddr,
-      connection: connection.value,
-      wallet,
-      shopFee: shopFee ?? null,
-      whitelistProgram: hasGate && resolvedGate?.programId ? resolvedGate.programId : null,
-      whitelist: hasGate && resolvedGate?.account ? resolvedGate.account : null,
-    })
-
-    await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
-
-    const programId = new PublicKey(ESCROW_PROGRAM_ID)
-    const { escrow } = deriveEscrowAccounts(wallet.publicKey, seed, programId)
-    const { shouldAppendTenantToLinks } = useTenantInLinks()
-    const query: Record<string, string> = { tab: 'open-trades', escrow: escrow.toBase58() }
-    if (tenantStore.slug && shouldAppendTenantToLinks.value) query.tenant = tenantStore.slug
-    await router.replace({ path: '/market', query })
-    emit('success')
-  } catch (e) {
-    createError.value = e instanceof Error ? e.message : 'Failed to create escrow'
-  } finally {
-    creating.value = false
-  }
+  })
+  if (!exclusive.ok) return
 }
 </script>
 

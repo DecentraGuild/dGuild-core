@@ -137,7 +137,7 @@ import MintLabel from './MintLabel.vue'
 import { useTenantStore } from '~/stores/tenant'
 import { useMarketplaceEscrowLinks } from '~/composables/marketplace/useMarketplaceEscrowLinks'
 import { useMarketplaceScope } from '~/composables/marketplace/useMarketplaceScope'
-import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useAuth } from '@decentraguild/auth'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -161,6 +161,7 @@ const tenantStore = useTenantStore()
 const auth = useAuth()
 const { connection } = useSolanaConnection()
 const txNotifications = useTransactionNotificationsStore()
+const quickCancelLock = useSubmitInFlightLock()
 
 const tenantId = computed(() => tenantStore.tenantId)
 const { escrowLink } = useMarketplaceEscrowLinks(
@@ -351,31 +352,34 @@ async function handleQuickCancel(escrow: EscrowWithAddress) {
   const wallet = getEscrowWalletFromConnector()
   if (!wallet || !escrow) return
   const id = escrow.publicKey.toBase58()
-  cancellingId.value = id
-  const txId = `cancel-${id}-${Date.now()}`
-  txNotifications.add(txId, { status: 'pending', message: 'Cancelling escrow...' })
-  try {
-    if (!connection.value) return
-    const tx = await buildCancelTransaction({
-      maker: escrow.account.maker,
-      depositTokenMint: escrow.account.depositToken,
-      requestTokenMint: escrow.account.requestToken,
-      seed: escrow.account.seed,
-      connection: connection.value,
-      wallet,
-    })
-    const sig = await sendAndConfirmTransaction(connection.value, tx, wallet, escrow.account.maker)
-    txNotifications.update(txId, { status: 'success', message: 'Escrow cancelled', signature: sig })
-    escrows.value = escrows.value.filter((e) => e.publicKey.toBase58() !== id)
-    externalEscrows.value = externalEscrows.value.filter((e) => e.publicKey.toBase58() !== id)
-  } catch (e) {
-    txNotifications.update(txId, {
-      status: 'error',
-      message: e instanceof Error ? e.message : 'Cancel failed',
-    })
-  } finally {
-    cancellingId.value = null
-  }
+  const exclusive = await quickCancelLock.runExclusive(async () => {
+    cancellingId.value = id
+    const txId = `cancel-${id}-${Date.now()}`
+    txNotifications.add(txId, { status: 'pending', message: 'Cancelling escrow...' })
+    try {
+      if (!connection.value) return
+      const tx = await buildCancelTransaction({
+        maker: escrow.account.maker,
+        depositTokenMint: escrow.account.depositToken,
+        requestTokenMint: escrow.account.requestToken,
+        seed: escrow.account.seed,
+        connection: connection.value,
+        wallet,
+      })
+      const sig = await sendAndConfirmTransaction(connection.value, tx, wallet, escrow.account.maker)
+      txNotifications.update(txId, { status: 'success', message: 'Escrow cancelled', signature: sig })
+      escrows.value = escrows.value.filter((e) => e.publicKey.toBase58() !== id)
+      externalEscrows.value = externalEscrows.value.filter((e) => e.publicKey.toBase58() !== id)
+    } catch (e) {
+      txNotifications.update(txId, {
+        status: 'error',
+        message: e instanceof Error ? e.message : 'Cancel failed',
+      })
+    } finally {
+      cancellingId.value = null
+    }
+  })
+  if (!exclusive.ok) return
 }
 </script>
 

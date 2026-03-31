@@ -18,7 +18,7 @@ import {
   fetchMintMetadataFromChain,
 } from '@decentraguild/web3'
 import { useAuth } from '@decentraguild/auth'
-import { useSupabase, invokeEdgeFunction } from '@decentraguild/nuxt-composables'
+import { useSupabase, invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useRpc } from '~/composables/useRpc'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 
@@ -49,6 +49,7 @@ interface VoucherDetail {
 export function useOpsVoucherDetail(mint: Ref<string>) {
   const auth = useAuth()
   const toastStore = useTransactionNotificationsStore()
+  const opsVoucherDetailTxLock = useSubmitInFlightLock()
 
   const detail = ref<VoucherDetail | null>(null)
   const loading = ref(true)
@@ -132,29 +133,33 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
       toastStore.add(`voucher-mint-${Date.now()}`, { status: 'error', message: 'Connect wallet and ensure RPC is configured' })
       return
     }
-    mintDialogOpen.value = false; mintLoading.value = true
-    const toastId = `voucher-mint-${mint.value}-${Date.now()}`
-    toastStore.add(toastId, { status: 'pending', message: 'Minting…' })
-    try {
-      const connection = createConnection(rpcUrl)
-      const mintPk = new PublicKey(mint.value)
-      const destOwner = new PublicKey(VOUCHER_WALLET)
-      const destAta = getAssociatedTokenAddressSync(mintPk, destOwner)
-      const instructions: Parameters<Transaction['add']>[0][] = []
-      try { await getAccount(connection, destAta) } catch {
-        instructions.push(createAssociatedTokenAccountInstruction(
-          wallet.publicKey, destAta, destOwner, mintPk, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
-        ))
-      }
-      const mintTx = buildMintTransaction({ mint: mintPk, destination: destAta, authority: wallet.publicKey, amount: BigInt(amount) })
-      const tx = new Transaction()
-      tx.add(...instructions, ...mintTx.instructions)
-      const sig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
-      toastStore.add(toastId, { status: 'success', message: `Minted ${amount} token${amount > 1 ? 's' : ''} to voucher wallet`, signature: sig })
-      await Promise.all([loadOurBalance(), loadHolders()])
-    } catch (e) {
-      toastStore.add(toastId, { status: 'error', message: e instanceof Error ? e.message : 'Mint failed' })
-    } finally { mintLoading.value = false }
+    mintDialogOpen.value = false
+    const exclusive = await opsVoucherDetailTxLock.runExclusive(async () => {
+      mintLoading.value = true
+      const toastId = `voucher-mint-${mint.value}-${Date.now()}`
+      toastStore.add(toastId, { status: 'pending', message: 'Minting…' })
+      try {
+        const connection = createConnection(rpcUrl)
+        const mintPk = new PublicKey(mint.value)
+        const destOwner = new PublicKey(VOUCHER_WALLET)
+        const destAta = getAssociatedTokenAddressSync(mintPk, destOwner)
+        const instructions: Parameters<Transaction['add']>[0][] = []
+        try { await getAccount(connection, destAta) } catch {
+          instructions.push(createAssociatedTokenAccountInstruction(
+            wallet.publicKey, destAta, destOwner, mintPk, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
+          ))
+        }
+        const mintTx = buildMintTransaction({ mint: mintPk, destination: destAta, authority: wallet.publicKey, amount: BigInt(amount) })
+        const tx = new Transaction()
+        tx.add(...instructions, ...mintTx.instructions)
+        const sig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
+        toastStore.add(toastId, { status: 'success', message: `Minted ${amount} token${amount > 1 ? 's' : ''} to voucher wallet`, signature: sig })
+        await Promise.all([loadOurBalance(), loadHolders()])
+      } catch (e) {
+        toastStore.add(toastId, { status: 'error', message: e instanceof Error ? e.message : 'Mint failed' })
+      } finally { mintLoading.value = false }
+    })
+    if (!exclusive.ok) return
   }
 
   async function confirmBurn() {
@@ -168,19 +173,23 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
     const bal = BigInt(ourBalanceRaw.value)
     if (bal === 0n) { toastStore.add(`voucher-burn-${Date.now()}`, { status: 'error', message: 'No balance to burn' }); return }
     if (BigInt(amount) > bal) { toastStore.add(`voucher-burn-${Date.now()}`, { status: 'error', message: 'Amount exceeds balance' }); return }
-    burnDialogOpen.value = false; burnLoading.value = true
-    const toastId = `voucher-burn-${mint.value}-${Date.now()}`
-    toastStore.add(toastId, { status: 'pending', message: 'Burning…' })
-    try {
-      const connection = createConnection(rpcUrl)
-      const ata = getAssociatedTokenAddressSync(new PublicKey(mint.value), wallet.publicKey)
-      const tx = buildBurnTransaction({ mint: mint.value, account: ata, authority: wallet.publicKey, amount: BigInt(amount) })
-      const sig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
-      toastStore.add(toastId, { status: 'success', message: `Burned ${amount} token${amount > 1 ? 's' : ''}`, signature: sig })
-      await Promise.all([loadOurBalance(), loadHolders()])
-    } catch (e) {
-      toastStore.add(toastId, { status: 'error', message: e instanceof Error ? e.message : 'Burn failed' })
-    } finally { burnLoading.value = false }
+    burnDialogOpen.value = false
+    const exclusive = await opsVoucherDetailTxLock.runExclusive(async () => {
+      burnLoading.value = true
+      const toastId = `voucher-burn-${mint.value}-${Date.now()}`
+      toastStore.add(toastId, { status: 'pending', message: 'Burning…' })
+      try {
+        const connection = createConnection(rpcUrl)
+        const ata = getAssociatedTokenAddressSync(new PublicKey(mint.value), wallet.publicKey)
+        const tx = buildBurnTransaction({ mint: mint.value, account: ata, authority: wallet.publicKey, amount: BigInt(amount) })
+        const sig = await sendAndConfirmTransaction(connection, tx, wallet, wallet.publicKey)
+        toastStore.add(toastId, { status: 'success', message: `Burned ${amount} token${amount > 1 ? 's' : ''}`, signature: sig })
+        await Promise.all([loadOurBalance(), loadHolders()])
+      } catch (e) {
+        toastStore.add(toastId, { status: 'error', message: e instanceof Error ? e.message : 'Burn failed' })
+      } finally { burnLoading.value = false }
+    })
+    if (!exclusive.ok) return
   }
 
   async function saveEdit(payload: {
@@ -189,71 +198,74 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
     entitlements?: Array<{ meter_key: string; quantity: number; duration_days: number }>
   }) {
     if (!detail.value?.voucher?.mint) return
-    editSaving.value = true; editError.value = null
-    try {
-      const mintAddr = detail.value.voucher.mint
-      const wallet = getEscrowWalletFromConnector()
-      const rpcUrl = useRpc().rpcUrl.value
-      const supabase = useSupabase()
+    const exclusive = await opsVoucherDetailTxLock.runExclusive(async () => {
+      editSaving.value = true; editError.value = null
+      try {
+        const mintAddr = detail.value!.voucher.mint
+        const wallet = getEscrowWalletFromConnector()
+        const rpcUrl = useRpc().rpcUrl.value
+        const supabase = useSupabase()
 
-      const metadataChanged =
-        (payload.name !== undefined && payload.name !== (editMetadata.value?.name ?? '')) ||
-        (payload.symbol !== undefined && payload.symbol !== (editMetadata.value?.symbol ?? '')) ||
-        (payload.imageUrl !== undefined && payload.imageUrl !== (editMetadata.value?.image ?? ''))
+        const metadataChanged =
+          (payload.name !== undefined && payload.name !== (editMetadata.value?.name ?? '')) ||
+          (payload.symbol !== undefined && payload.symbol !== (editMetadata.value?.symbol ?? '')) ||
+          (payload.imageUrl !== undefined && payload.imageUrl !== (editMetadata.value?.image ?? ''))
 
-      const resolvedName = (payload.name ?? editMetadata.value?.name ?? '').trim()
-      const resolvedSymbol = (payload.symbol ?? editMetadata.value?.symbol ?? '').trim()
-      if (metadataChanged && resolvedName && resolvedSymbol && wallet?.publicKey && rpcUrl) {
-        const sellerFeeBasisPoints = Math.max(0, Math.min(10000, payload.sellerFeeBasisPoints ?? editMetadata.value?.sellerFeeBasisPoints ?? 0))
-        const metaData = await invokeEdgeFunction<{ metadataUri?: string }>(supabase, 'platform', {
-          action: 'voucher-prepare-metadata',
-          name: resolvedName,
-          symbol: resolvedSymbol,
-          imageUrl: payload.imageUrl?.trim() || undefined,
-          sellerFeeBasisPoints,
-          voucherType: detail.value.type,
-          bundleId: detail.value.type === 'bundle' ? detail.value?.bundle?.id ?? detail.value.voucher?.bundle_id : undefined,
-        })
-        const metadataUri = metaData?.metadataUri
-        if (!metadataUri?.trim()) throw new Error('No metadata URI returned')
-        const connection = createConnection(rpcUrl)
-        const uri = metadataUri.trim()
-        const onChainMeta = await hasMetaplexMetadataAccount(connection, mintAddr)
-        const metaTx = onChainMeta
-          ? buildUpdateMetadataTransaction({ mint: mintAddr, updateAuthority: wallet.publicKey, newName: resolvedName.slice(0, 32), newSymbol: resolvedSymbol.slice(0, 10), newUri: uri, sellerFeeBasisPoints })
-          : buildCreateMetadataTransaction({ mint: mintAddr, name: resolvedName.slice(0, 32), symbol: resolvedSymbol.slice(0, 10), uri, updateAuthority: wallet.publicKey, payer: wallet.publicKey, sellerFeeBasisPoints })
-        await sendAndConfirmTransaction(connection, metaTx, wallet, wallet.publicKey)
-        const imageForSync = (payload.imageUrl !== undefined ? payload.imageUrl.trim() : (editMetadata.value?.image ?? '')) || null
-        await invokeEdgeFunction(supabase, 'platform', {
-          action: 'voucher-sync-mint-metadata',
-          mint: mintAddr,
-          name: resolvedName,
-          symbol: resolvedSymbol,
-          image: imageForSync,
-        })
-      }
+        const resolvedName = (payload.name ?? editMetadata.value?.name ?? '').trim()
+        const resolvedSymbol = (payload.symbol ?? editMetadata.value?.symbol ?? '').trim()
+        if (metadataChanged && resolvedName && resolvedSymbol && wallet?.publicKey && rpcUrl) {
+          const sellerFeeBasisPoints = Math.max(0, Math.min(10000, payload.sellerFeeBasisPoints ?? editMetadata.value?.sellerFeeBasisPoints ?? 0))
+          const metaData = await invokeEdgeFunction<{ metadataUri?: string }>(supabase, 'platform', {
+            action: 'voucher-prepare-metadata',
+            name: resolvedName,
+            symbol: resolvedSymbol,
+            imageUrl: payload.imageUrl?.trim() || undefined,
+            sellerFeeBasisPoints,
+            voucherType: detail.value!.type,
+            bundleId: detail.value!.type === 'bundle' ? detail.value!.bundle?.id ?? detail.value!.voucher?.bundle_id : undefined,
+          })
+          const metadataUri = metaData?.metadataUri
+          if (!metadataUri?.trim()) throw new Error('No metadata URI returned')
+          const connection = createConnection(rpcUrl)
+          const uri = metadataUri.trim()
+          const onChainMeta = await hasMetaplexMetadataAccount(connection, mintAddr)
+          const metaTx = onChainMeta
+            ? buildUpdateMetadataTransaction({ mint: mintAddr, updateAuthority: wallet.publicKey, newName: resolvedName.slice(0, 32), newSymbol: resolvedSymbol.slice(0, 10), newUri: uri, sellerFeeBasisPoints })
+            : buildCreateMetadataTransaction({ mint: mintAddr, name: resolvedName.slice(0, 32), symbol: resolvedSymbol.slice(0, 10), uri, updateAuthority: wallet.publicKey, payer: wallet.publicKey, sellerFeeBasisPoints })
+          await sendAndConfirmTransaction(connection, metaTx, wallet, wallet.publicKey)
+          const imageForSync = (payload.imageUrl !== undefined ? payload.imageUrl.trim() : (editMetadata.value?.image ?? '')) || null
+          await invokeEdgeFunction(supabase, 'platform', {
+            action: 'voucher-sync-mint-metadata',
+            mint: mintAddr,
+            name: resolvedName,
+            symbol: resolvedSymbol,
+            image: imageForSync,
+          })
+        }
 
-      if (detail.value.type === 'bundle') {
-        await invokeEdgeFunction(supabase, 'platform', {
-          action: 'bundle-voucher-update',
-          mint: mintAddr,
-          tokensRequired: payload.tokensRequired,
-          maxRedemptionsPerTenant: payload.maxRedemptionsPerTenant ?? undefined,
-        })
-      } else {
-        await invokeEdgeFunction(supabase, 'platform', {
-          action: 'individual-voucher-update',
-          mint: mintAddr,
-          label: payload.label,
-          maxRedemptionsPerTenant: payload.maxRedemptionsPerTenant ?? undefined,
-          entitlements: payload.entitlements,
-        })
-      }
-      editExpanded.value = false; editMetadata.value = null
-      await loadDetail()
-    } catch (e) {
-      editError.value = e instanceof Error ? e.message : 'Failed to save'
-    } finally { editSaving.value = false }
+        if (detail.value!.type === 'bundle') {
+          await invokeEdgeFunction(supabase, 'platform', {
+            action: 'bundle-voucher-update',
+            mint: mintAddr,
+            tokensRequired: payload.tokensRequired,
+            maxRedemptionsPerTenant: payload.maxRedemptionsPerTenant ?? undefined,
+          })
+        } else {
+          await invokeEdgeFunction(supabase, 'platform', {
+            action: 'individual-voucher-update',
+            mint: mintAddr,
+            label: payload.label,
+            maxRedemptionsPerTenant: payload.maxRedemptionsPerTenant ?? undefined,
+            entitlements: payload.entitlements,
+          })
+        }
+        editExpanded.value = false; editMetadata.value = null
+        await loadDetail()
+      } catch (e) {
+        editError.value = e instanceof Error ? e.message : 'Failed to save'
+      } finally { editSaving.value = false }
+    })
+    if (!exclusive.ok) return
   }
 
   watch(
