@@ -17,7 +17,22 @@
           <p>No active raffles yet.</p>
         </div>
         <div v-else class="raffle-page__layout layout-split">
-          <div class="raffle-page__grid layout-split__main admin__card-grid--auto-comfortable">
+          <div class="raffle-page__main-col layout-split__main">
+            <div v-if="anyPublicWinner" class="raffle-page__outcomes-bar">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="raffle-page__outcomes-toggle"
+                :title="revealPublicOutcomes ? 'Hide winner' : 'Show winner'"
+                :aria-pressed="revealPublicOutcomes"
+                @click="revealPublicOutcomes = !revealPublicOutcomes"
+              >
+                <Icon :icon="revealPublicOutcomes ? 'lucide:eye-off' : 'lucide:eye'" />
+                <span>{{ revealPublicOutcomes ? 'Hide winner' : 'Show winner' }}</span>
+              </Button>
+            </div>
+            <div class="raffle-page__grid admin__card-grid--auto-comfortable">
             <button
               v-for="r in visibleRaffles"
               :key="r.rafflePubkey"
@@ -50,8 +65,11 @@
                 >
                   {{ r.chainData.stateDisplay }}
                 </span>
-                <p v-if="r.chainData?.winner" class="raffle-card__winner">
+                <p v-if="r.chainData?.winner && revealPublicOutcomes" class="raffle-card__winner">
                   Winner: {{ resolveWallet(r.chainData.winner, 8, 4) }}
+                </p>
+                <p v-else-if="r.chainData?.winner && !revealPublicOutcomes" class="raffle-card__winner raffle-card__winner--masked">
+                  Winner decided — use Show winner above to reveal.
                 </p>
                 <div v-if="r.chainData" class="raffle-card__footer">
                   <span
@@ -70,6 +88,7 @@
                 </div>
               </div>
             </button>
+            </div>
           </div>
           <aside v-if="selectedRaffle" class="raffle-page__panel layout-split__sidebar">
             <div class="raffle-panel">
@@ -77,9 +96,29 @@
               <p v-if="selectedRaffle.chainData?.description" class="raffle-panel__desc">
                 {{ selectedRaffle.chainData.description }}
               </p>
-              <p v-if="selectedRaffle.chainData" class="raffle-panel__meta">
-                {{ selectedRaffle.chainData.ticketsSold }} / {{ selectedRaffle.chainData.ticketsTotal }} tickets sold
-              </p>
+              <div v-if="selectedRaffle.chainData" class="raffle-panel__meta-row">
+                <p class="raffle-panel__meta">
+                  {{ selectedRaffle.chainData.ticketsSold }} / {{ selectedRaffle.chainData.ticketsTotal }} tickets sold
+                  <span v-if="selectedRaffle.chainData.state === 'running'" class="raffle-panel__meta-avail">
+                    ({{ availableTickets }} left)
+                  </span>
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  class="raffle-panel__refresh"
+                  :disabled="chainRefreshLoading || !connection"
+                  @click="refreshRaffleAvailability"
+                >
+                  <Icon
+                    icon="lucide:refresh-cw"
+                    class="raffle-panel__refresh-icon"
+                    :class="{ 'raffle-panel__refresh-icon--spin': chainRefreshLoading }"
+                  />
+                  Refresh
+                </Button>
+              </div>
               <p v-if="selectedRaffle.chainData" class="raffle-panel__price">
                 {{ formatTicketPrice(selectedRaffle.chainData) }} per ticket
               </p>
@@ -94,18 +133,42 @@
                 <p class="raffle-panel__reward-value">{{ formatPrizeLine(selectedRaffle.chainData) }}</p>
               </div>
               <div v-if="selectedRaffle.chainData?.winner" class="raffle-panel__winner">
-                <h4 class="raffle-panel__winner-title">Winner</h4>
-                <p class="raffle-panel__winner-row">
-                  <span class="raffle-panel__winner-value">{{ resolveWallet(selectedRaffle.chainData.winner, 8, 6) }}</span>
-                  <a
-                    :href="accountUrl(selectedRaffle.chainData.winner)"
-                    target="_blank"
-                    rel="noopener"
-                    class="raffle-panel__winner-link"
-                    title="View on explorer"
+                <div class="raffle-panel__winner-head">
+                  <h4 class="raffle-panel__winner-title">Winner</h4>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    class="raffle-panel__winner-eye"
+                    :title="revealPublicOutcomes ? 'Hide winner' : 'Show winner'"
+                    :aria-pressed="revealPublicOutcomes"
+                    @click="revealPublicOutcomes = !revealPublicOutcomes"
                   >
-                    <Icon icon="lucide:external-link" />
-                  </a>
+                    <Icon :icon="revealPublicOutcomes ? 'lucide:eye-off' : 'lucide:eye'" />
+                  </Button>
+                </div>
+                <template v-if="revealPublicOutcomes">
+                  <p class="raffle-panel__winner-row">
+                    <span class="raffle-panel__winner-value">{{ resolveWallet(selectedRaffle.chainData.winner, 8, 6) }}</span>
+                    <a
+                      :href="accountUrl(selectedRaffle.chainData.winner)"
+                      target="_blank"
+                      rel="noopener"
+                      class="raffle-panel__winner-link"
+                      title="View on explorer"
+                    >
+                      <Icon icon="lucide:external-link" />
+                    </a>
+                  </p>
+                </template>
+                <p v-else class="raffle-panel__winner-masked">Hidden — tap the eye to reveal.</p>
+              </div>
+              <div v-if="canPublicBattleReveal" class="raffle-panel__battle">
+                <Button type="button" variant="outline" size="sm" @click="openPublicBattleReveal">
+                  Battle reveal
+                </Button>
+                <p class="raffle-panel__battle-hint">
+                  Watch a fun draw replay. Available until this raffle is closed on-chain.
                 </p>
               </div>
               <template v-if="canBuyTickets">
@@ -140,24 +203,26 @@
               </p>
               <details
                 v-if="selectedRaffle.chainData && selectedRaffle.chainData.ticketsSold > 0"
+                :key="selectedRaffle.rafflePubkey"
                 class="raffle-panel__entries"
+                @toggle="onEntriesToggle"
               >
                 <summary class="raffle-panel__entries-summary">Entries and odds</summary>
                 <p class="raffle-panel__entries-note">
-                  Each row is one wallet’s tickets (fighters). Share is of sold tickets. Odds change while sales are open.
+                  Each row is tickets bought in successful Buy transactions for this raffle (not everyone who holds the payment mint). Share is of sold tickets on-chain.
                 </p>
                 <p v-if="holdersLoading" class="raffle-panel__entries-status">Loading entries…</p>
                 <p v-else-if="holdersError" class="raffle-panel__error">{{ holdersError }}</p>
                 <template v-else>
                   <p v-if="!holdersMatchSold" class="raffle-panel__entries-warn">
-                    Indexer totals do not match sold tickets yet; list may be incomplete.
+                    Entrant data on the Tickets account does not match the sold count; refresh the page or try again shortly.
                   </p>
                   <div class="raffle-panel__entries-table-wrap">
                     <table class="raffle-panel__entries-table">
                       <thead>
                         <tr>
                           <th>Wallet</th>
-                          <th>Fighters</th>
+                          <th>Tickets</th>
                           <th>Share</th>
                         </tr>
                       </thead>
@@ -180,11 +245,23 @@
         </div>
       </template>
     </div>
+
+    <RaffleBattleRevealModal
+      v-model="publicBattleOpen"
+      :raffle-name="publicBattleRaffleTitle"
+      :winner-pubkey="publicBattleWinnerPubkey"
+      :loading="publicBattleHoldersLoading"
+      :load-error="publicBattleHoldersError"
+      :matches-sold="publicBattleHoldersMatchSold"
+      :display-rows="publicBattleDisplayRows"
+      :raw-holder-rows="publicBattleRawHolderRows"
+      :format-wallet="formatPublicBattleWallet"
+    />
   </PageSection>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useExplorerLinks } from '@decentraguild/nuxt-composables'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
@@ -192,6 +269,7 @@ import { useTenantStore } from '~/stores/tenant'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
 import { useRafflePublic } from '~/composables/raffle/useRafflePublic'
 import { useRaffleTicketHolders } from '~/composables/raffle/useRaffleTicketHolders'
+import RaffleBattleRevealModal from '~/components/raffle/RaffleBattleRevealModal.vue'
 
 const tenantStore = useTenantStore()
 const tenantId = computed(() => tenantStore.tenantId)
@@ -201,20 +279,92 @@ const { accountUrl } = useExplorerLinks()
 const {
   loading, selectedRaffle, buyAmount, buySubmitting, buyTxStatus, buyError,
   buyWhitelistChecking, buyWhitelistMessage,
+  chainRefreshLoading, refreshRaffleAvailability,
   visibleRaffles, canBuyTickets, availableTickets, canSubmitBuy, formatTotalCost,
   prizeConfigured, mintCatalogLabel, mintCatalogLabelLong, formatPrizeLine, formatTicketPrice,
   selectRaffle, onBuyTickets, resolveWallet,
 } = useRafflePublic(tenantId, connection)
 
+const publicBattleOpen = ref(false)
+const publicBattleRafflePubkey = ref<string | null>(null)
+
+const canPublicBattleReveal = computed(() => {
+  const d = selectedRaffle.value?.chainData
+  if (!d) return false
+  if (!d.winner?.trim()) return false
+  if (d.state === 'done') return false
+  return d.ticketsSold >= 1
+})
+
+const publicBattleHolderContext = computed(() => {
+  if (!publicBattleOpen.value || !publicBattleRafflePubkey.value) return null
+  const r = selectedRaffle.value
+  if (r?.rafflePubkey !== publicBattleRafflePubkey.value) return null
+  const d = r.chainData
+  if (!d || d.ticketsSold < 1) return null
+  return { rafflePubkey: r.rafflePubkey, ticketsSold: d.ticketsSold }
+})
+
+const {
+  loading: publicBattleHoldersLoading,
+  error: publicBattleHoldersError,
+  rows: publicBattleDisplayRows,
+  rawRows: publicBattleRawHolderRows,
+  matchesSold: publicBattleHoldersMatchSold,
+} = useRaffleTicketHolders(connection, publicBattleHolderContext)
+
+const publicBattleChainData = computed(() => {
+  if (!publicBattleRafflePubkey.value) return null
+  const r = selectedRaffle.value
+  if (r?.rafflePubkey !== publicBattleRafflePubkey.value) return null
+  return r.chainData ?? null
+})
+
+const publicBattleWinnerPubkey = computed(() => publicBattleChainData.value?.winner?.trim() ?? '')
+const publicBattleRaffleTitle = computed(() => publicBattleChainData.value?.name ?? '')
+
+function formatPublicBattleWallet(pubkey: string, head = 8, tail = 6) {
+  return resolveWallet(pubkey, head, tail)
+}
+
+function openPublicBattleReveal() {
+  const pk = selectedRaffle.value?.rafflePubkey
+  if (!pk) return
+  publicBattleRafflePubkey.value = pk
+  publicBattleOpen.value = true
+}
+
+watch(publicBattleOpen, (v) => {
+  if (!v) publicBattleRafflePubkey.value = null
+})
+
+watch(selectedRaffle, (r) => {
+  if (!publicBattleOpen.value || !publicBattleRafflePubkey.value) return
+  if (!r || r.rafflePubkey !== publicBattleRafflePubkey.value) {
+    publicBattleOpen.value = false
+    publicBattleRafflePubkey.value = null
+  }
+})
+
+const entriesSectionOpen = ref(false)
+const revealPublicOutcomes = ref(false)
+
+const anyPublicWinner = computed(() =>
+  visibleRaffles.value.some((r) => Boolean(r.chainData?.winner?.trim())),
+)
+
+function onEntriesToggle(ev: Event) {
+  const el = ev.target
+  if (el instanceof HTMLDetailsElement) entriesSectionOpen.value = el.open
+}
+
 const holderFetchContext = computed(() => {
   const r = selectedRaffle.value
   const d = r?.chainData
-  if (!r || !d || d.ticketsSold < 1) return null
+  if (!entriesSectionOpen.value || !r || !d || d.ticketsSold < 1) return null
   return {
     rafflePubkey: r.rafflePubkey,
-    ticketMint: d.ticketMint,
     ticketsSold: d.ticketsSold,
-    ticketDecimals: d.ticketDecimals,
   }
 })
 
@@ -223,7 +373,7 @@ const {
   error: holdersError,
   rows: holderRows,
   matchesSold: holdersMatchSold,
-} = useRaffleTicketHolders(holderFetchContext)
+} = useRaffleTicketHolders(connection, holderFetchContext)
 </script>
 
 <style scoped>
@@ -265,6 +415,13 @@ const {
 .raffle-page__layout {
   position: relative;
   z-index: 1;
+}
+
+.raffle-page__main-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-sm);
+  min-width: 0;
 }
 
 .raffle-card {
@@ -420,6 +577,34 @@ const {
   margin: 0 0 var(--theme-space-xs);
 }
 
+.raffle-panel__meta-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--theme-space-sm);
+  margin: 0 0 var(--theme-space-xs);
+  flex-wrap: wrap;
+}
+
+.raffle-panel__meta-row .raffle-panel__meta {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.raffle-panel__meta-avail {
+  color: var(--theme-text-secondary);
+  font-weight: 400;
+}
+
+.raffle-panel__refresh {
+  flex-shrink: 0;
+}
+
+.raffle-panel__refresh-icon--spin {
+  animation: raffle-spin 0.9s linear infinite;
+}
+
 .raffle-panel__price {
   font-size: var(--theme-font-sm);
   font-weight: 500;
@@ -454,10 +639,36 @@ const {
   color: var(--theme-text-primary);
 }
 
+.raffle-page__outcomes-bar {
+  margin-bottom: var(--theme-space-sm);
+}
+
+.raffle-page__outcomes-toggle {
+  color: var(--theme-text-secondary);
+}
+
+.raffle-card__winner--masked {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+  font-style: italic;
+}
+
 .raffle-panel__winner {
   margin: 0 0 var(--theme-space-md);
   padding-top: var(--theme-space-sm);
   border-top: var(--theme-border-thin) solid var(--theme-border);
+}
+
+.raffle-panel__winner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-xs);
+  margin-bottom: var(--theme-space-xs);
+}
+
+.raffle-panel__winner-head .raffle-panel__winner-title {
+  margin: 0;
 }
 
 .raffle-panel__winner-title {
@@ -467,6 +678,13 @@ const {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--theme-text-secondary);
+}
+
+.raffle-panel__winner-masked {
+  margin: 0;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+  font-style: italic;
 }
 
 .raffle-panel__winner-row {
@@ -536,6 +754,24 @@ const {
 .raffle-panel__hint {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
+}
+
+.raffle-panel__battle {
+  margin: 0 0 var(--theme-space-md);
+  padding-top: var(--theme-space-sm);
+  border-top: var(--theme-border-thin) solid var(--theme-border);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--theme-space-xs);
+}
+
+.raffle-panel__battle-hint {
+  margin: 0;
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+  max-width: 22rem;
+  line-height: 1.35;
 }
 
 .raffle-panel__entries {

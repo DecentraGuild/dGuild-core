@@ -30,17 +30,23 @@
       Tickets: {{ slotCard.chainData.ticketsSold }} / {{ slotCard.chainData.ticketsTotal }}
     </p>
     <div v-if="slotCard.chainData?.winner" class="raffle-slot-card__winner">
-      <span class="raffle-slot-card__winner-label">Winner</span>
-      <code class="raffle-slot-card__winner-wallet">{{ resolveWallet(slotCard.chainData.winner, 8, 4) }}</code>
-      <a
-        :href="accountUrl(slotCard.chainData.winner)"
-        target="_blank"
-        rel="noopener"
-        class="raffle-slot-card__link"
-        title="View winner on explorer"
-      >
-        <Icon icon="lucide:external-link" />
-      </a>
+      <template v-if="revealOutcomes">
+        <span class="raffle-slot-card__winner-label">Winner</span>
+        <code class="raffle-slot-card__winner-wallet">{{ resolveWallet(slotCard.chainData.winner, 8, 4) }}</code>
+        <a
+          :href="accountUrl(slotCard.chainData.winner)"
+          target="_blank"
+          rel="noopener"
+          class="raffle-slot-card__link"
+          title="View winner on explorer"
+        >
+          <Icon icon="lucide:external-link" />
+        </a>
+      </template>
+      <template v-else>
+        <span class="raffle-slot-card__winner-label">Winner</span>
+        <span class="raffle-slot-card__winner-hidden">Hidden — use the eye next to “Raffle slots” to show.</span>
+      </template>
     </div>
     <p v-if="actionError && slotCard.raffle?.rafflePubkey === actionErrorRaffle" class="raffle-slot-card__error">{{ actionError }}</p>
     <div class="raffle-slot-card__actions">
@@ -107,6 +113,7 @@ interface SlotCard {
 
 const props = defineProps<{
   slotCard: SlotCard
+  revealOutcomes: boolean
   actionSubmitting: string | null
   actionError: string | null
   actionErrorRaffle: string | null
@@ -288,6 +295,11 @@ function ticketMintShort(chainData: RaffleChainData): string {
   font-size: var(--theme-font-xs);
   color: var(--theme-text-primary);
   word-break: break-all;
+}
+.raffle-slot-card__winner-hidden {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+  font-style: italic;
 }
 .raffle-slot-card__error {
   margin: 0 0 var(--theme-space-xs);

@@ -9,9 +9,15 @@ import {
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token'
 import BN from 'bn.js'
 import { getRaffleProgram } from './provider.js'
-import { deriveRafflePda, deriveTicketsPda, deriveTicketVaultPda, derivePrizeVaultPda } from './accounts.js'
+import {
+  deriveRafflePda,
+  deriveTicketsPda,
+  deriveTicketVaultPda,
+  derivePrizeVaultPda,
+  deriveEntrantPda,
+} from './accounts.js'
 import { deriveWhitelistEntryPda } from '../escrow/accounts.js'
-import { RAFFLE_FEE_ACCOUNT, RAFFLE_PROGRAM_ID } from '@decentraguild/contracts'
+import { RAFFLE_FEE_ACCOUNT, RAFFLE_PROGRAM_ID, WHITELIST_PROGRAM_ID } from '@decentraguild/contracts'
 import type { Wallet } from '../escrow/types.js'
 
 /** Anchor instruction discriminators (sha256("global:<name>")[0..8]). */
@@ -23,6 +29,7 @@ const DISCRIMINATOR_EDIT = Buffer.from([15, 183, 33, 86, 87, 28, 151, 145])
 const DISCRIMINATOR_REVEAL_WINNERS = Buffer.from([24, 167, 123, 197, 91, 200, 146, 3])
 const DISCRIMINATOR_CLAIM_PRIZE = Buffer.from([157, 233, 139, 121, 246, 62, 234, 235])
 const DISCRIMINATOR_CLAIM_TICKETS = Buffer.from([115, 177, 141, 142, 7, 255, 105, 60])
+const DISCRIMINATOR_BUY_TICKETS = Buffer.from([48, 16, 122, 137, 24, 214, 198, 58])
 
 function toPublicKey(v: string | PublicKey): PublicKey {
   return typeof v === 'string' ? new PublicKey(v) : v
@@ -310,49 +317,65 @@ export interface BuildBuyTicketsParams {
   ticketMint: PublicKey | string
   useWhitelist: boolean
   whitelist: string | null
-  connection: import('@solana/web3.js').Connection
   wallet: Wallet
 }
 
-export async function buildBuyTicketsTransaction(params: BuildBuyTicketsParams): Promise<Transaction> {
-  const { rafflePubkey, ticketAmount, ticketMint, useWhitelist, whitelist, connection, wallet } = params
+/** BuyTickets accounts match on-chain v0.2.0 IDL (e.g. Solscan export), not `packages/contracts` raffle.json. */
+export function buildBuyTicketsTransaction(params: BuildBuyTicketsParams): Transaction {
+  const { rafflePubkey, ticketAmount, ticketMint, useWhitelist, whitelist, wallet } = params
   const buyer = wallet.publicKey
   const rafflePk = toPublicKey(rafflePubkey)
   const ticketMintPk = toPublicKey(ticketMint)
+  const raffleProgramId = new PublicKey(RAFFLE_PROGRAM_ID)
+  const whitelistProgramPk = toPublicKey(WHITELIST_PROGRAM_ID)
 
   const ticketsPda = deriveTicketsPda(rafflePk)
   const ticketsAtaPda = deriveTicketVaultPda(rafflePk)
+  const entrantPda = deriveEntrantPda(rafflePk, buyer)
   const buyerAta = getAssociatedTokenAddressSync(ticketMintPk, buyer)
 
-  const program = getRaffleProgram(connection, wallet)
-  const programId = program.programId
-
-  const accounts: Record<string, PublicKey> = {
-    raffle: rafflePk,
-    tickets: ticketsPda,
-    ticketVault: ticketsAtaPda,
-    buyer,
-    buyerAta,
-    feeAccount: new PublicKey(RAFFLE_FEE_ACCOUNT),
-    tokenProgram: TOKEN_PROGRAM_ID,
-  }
+  const keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [
+    { pubkey: buyer, isSigner: true, isWritable: true },
+    { pubkey: entrantPda, isSigner: false, isWritable: true },
+    { pubkey: rafflePk, isSigner: false, isWritable: true },
+    { pubkey: ticketsPda, isSigner: false, isWritable: true },
+    { pubkey: ticketsAtaPda, isSigner: false, isWritable: true },
+    { pubkey: ticketMintPk, isSigner: false, isWritable: false },
+    { pubkey: buyerAta, isSigner: false, isWritable: true },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ]
 
   if (useWhitelist) {
     if (!whitelist?.trim()) {
       throw new Error('This raffle requires a whitelist but no whitelist account is set on-chain')
     }
     const whitelistPk = toPublicKey(whitelist)
-    accounts.whitelist = whitelistPk
-    accounts.whitelistEntry = deriveWhitelistEntryPda(buyer, whitelistPk)
+    const whitelistEntryPda = deriveWhitelistEntryPda(buyer, whitelistPk, WHITELIST_PROGRAM_ID)
+    keys.push(
+      { pubkey: whitelistPk, isSigner: false, isWritable: true },
+      { pubkey: whitelistEntryPda, isSigner: false, isWritable: true },
+      { pubkey: whitelistProgramPk, isSigner: false, isWritable: false },
+    )
   } else {
-    accounts.whitelist = programId
-    accounts.whitelistEntry = programId
+    keys.push(
+      { pubkey: raffleProgramId, isSigner: false, isWritable: false },
+      { pubkey: raffleProgramId, isSigner: false, isWritable: false },
+      { pubkey: whitelistProgramPk, isSigner: false, isWritable: false },
+    )
   }
 
-  const ix = await program.methods
-    .buyTickets(ticketAmount)
-    .accounts(accounts)
-    .instruction()
+  keys.push({ pubkey: new PublicKey(RAFFLE_FEE_ACCOUNT), isSigner: false, isWritable: true })
+
+  const amt = Buffer.alloc(4)
+  amt.writeUInt32LE(ticketAmount >>> 0, 0)
+  const data = Buffer.concat([DISCRIMINATOR_BUY_TICKETS, amt])
+
+  const ix = new TransactionInstruction({
+    programId: raffleProgramId,
+    keys,
+    data,
+  })
 
   return new Transaction().add(ix)
 }

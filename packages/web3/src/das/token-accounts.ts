@@ -3,8 +3,8 @@ import { dasRequestAtUrl } from './client.js'
 export interface DasTokenAccountEntry {
   address: string
   mint: string
-  owner: string
-  amount: number | string
+  owner?: string
+  amount?: number | string
 }
 
 export interface GetTokenAccountsDasResult {
@@ -18,7 +18,8 @@ export interface GetTokenAccountsDasResult {
 const DEFAULT_PAGE_SIZE = 1000
 const MAX_PAGES = 25
 
-function toBigIntAmount(amount: number | string): bigint {
+function toBigIntAmount(amount: number | string | undefined | null): bigint {
+  if (amount == null) return 0n
   if (typeof amount === 'number') {
     if (!Number.isFinite(amount) || amount < 0) return 0n
     return BigInt(Math.floor(amount))

@@ -1,6 +1,20 @@
 <template>
   <div class="raffle-slots">
-    <h3>Raffle slots</h3>
+    <div class="raffle-slots__head">
+      <h3 class="raffle-slots__title">Raffle slots</h3>
+      <Button
+        v-if="hasAnyWinner"
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        class="raffle-slots__outcomes-toggle"
+        :title="revealOutcomes ? 'Hide winner addresses' : 'Show winner addresses'"
+        :aria-pressed="revealOutcomes"
+        @click="revealOutcomes = !revealOutcomes"
+      >
+        <Icon :icon="revealOutcomes ? 'lucide:eye-off' : 'lucide:eye'" />
+      </Button>
+    </div>
     <p class="admin__hint raffle-slots__hint">Each slot holds one raffle. Click the plus to create a new raffle in that slot.</p>
     <p v-if="actionTxStatus" class="raffle-slots__tx-status">
       <Icon icon="lucide:loader-2" class="raffle-slots__tx-spinner" />
@@ -15,6 +29,7 @@
         <RaffleSlotCard
           v-if="slot.raffle"
           :slot-card="slot"
+          :reveal-outcomes="revealOutcomes"
           :action-submitting="actionSubmitting"
           :action-error="actionError"
           :action-error-raffle="actionErrorRaffle"
@@ -55,11 +70,13 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
+import { Button } from '~/components/ui/button'
 import RaffleSlotCard from './RaffleSlotCard.vue'
 import type { SlotCard, RaffleItem } from '~/composables/raffles/useRaffleSlots'
 
-defineProps<{
+const props = defineProps<{
   slotCards: SlotCard[]
   slotsLoading: boolean
   canCreateMore: boolean
@@ -69,6 +86,12 @@ defineProps<{
   actionErrorRaffle: string | null
   mintMetadataByTicketMint: Record<string, { symbol: string; name: string }>
 }>()
+
+const revealOutcomes = ref(false)
+
+const hasAnyWinner = computed(() =>
+  props.slotCards.some((s) => Boolean(s.chainData?.winner?.trim())),
+)
 
 defineEmits<{
   addReward: [raffle: RaffleItem]
@@ -85,3 +108,20 @@ defineEmits<{
   upgrade: []
 }>()
 </script>
+
+<style scoped>
+.raffle-slots__head {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
+  margin-bottom: var(--theme-space-xs);
+}
+
+.raffle-slots__title {
+  margin: 0;
+}
+
+.raffle-slots__outcomes-toggle {
+  flex-shrink: 0;
+}
+</style>
