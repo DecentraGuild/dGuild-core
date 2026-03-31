@@ -174,14 +174,6 @@ export async function syncGuildRoles(
     })),
     botRolePosition,
   })
-
-  if (typeof botRolePosition === 'number') {
-    const client = getClient()
-    await client
-      .from('discord_servers')
-      .update({ bot_role_position: botRolePosition, updated_at: new Date().toISOString() })
-      .eq('discord_guild_id', discordGuildId)
-  }
 }
 
 export interface EligibleRoleItem {

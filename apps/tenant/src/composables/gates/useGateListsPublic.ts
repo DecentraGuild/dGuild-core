@@ -26,13 +26,16 @@ export function useGateLists(opts: {
   const lists = ref<GateListPublic[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  let fetchSeq = 0
 
   async function fetchLists() {
     const id = tenantId.value
     if (!id) {
       lists.value = []
+      loading.value = false
       return
     }
+    const seq = ++fetchSeq
     loading.value = true
     error.value = null
     try {
@@ -43,6 +46,7 @@ export function useGateLists(opts: {
           .select('address, name, image_url')
           .eq('tenant_id', id)
         if (qError) throw qError
+        if (seq !== fetchSeq) return
         lists.value = (data ?? []).map((row) => ({
           address: row.address as string,
           name: (row.name as string) ?? '',
@@ -50,13 +54,15 @@ export function useGateLists(opts: {
         }))
       } else {
         const data = await invokeEdgeFunction<{ lists: GateListPublic[] }>(supabase, 'gates', { action: 'lists-public', tenantId: id })
+        if (seq !== fetchSeq) return
         lists.value = data.lists ?? []
       }
     } catch (e) {
+      if (seq !== fetchSeq) return
       error.value = e instanceof Error ? e.message : 'Failed to load lists'
       lists.value = []
     } finally {
-      loading.value = false
+      if (seq === fetchSeq) loading.value = false
     }
   }
 

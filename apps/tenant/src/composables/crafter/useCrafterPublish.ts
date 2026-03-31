@@ -1,3 +1,4 @@
+import { metaplexTokenSymbolValidationError, sanitizeMetaplexTokenSymbolInput } from '@decentraguild/web3'
 import { useTenantStore } from '~/stores/tenant'
 import type { CrafterToken } from './useCrafter'
 
@@ -34,11 +35,20 @@ export function useCrafterPublish(
 
   const canPublishMedia = computed(() => Boolean(publishToken.value))
   const publishJsonPreview = computed(() => generatedPublishJson.value ? JSON.stringify(generatedPublishJson.value, null, 2) : '')
-  const canPublish = computed(() => publishForm.value.metadataUri.trim().length > 0)
+  const resolvedPublishSymbol = computed(() => {
+    const t = publishToken.value
+    if (!t) return ''
+    return publishForm.value.symbol.trim() || t.symbol || 'TKN'
+  })
+  const canPublish = computed(
+    () =>
+      publishForm.value.metadataUri.trim().length > 0
+      && metaplexTokenSymbolValidationError(resolvedPublishSymbol.value) === null,
+  )
 
   function openPublishModal(t: CrafterToken) {
     publishToken.value = t
-    publishForm.value = { name: t.name || '', symbol: t.symbol || '', metadataUri: '', description: '', imageUrl: '', sellerFeeBasisPoints: '0', storageBackend: 'api' }
+    publishForm.value = { name: t.name || '', symbol: sanitizeMetaplexTokenSymbolInput(t.symbol || ''), metadataUri: '', description: '', imageUrl: '', sellerFeeBasisPoints: '0', storageBackend: 'api' }
     generatedPublishJson.value = null
     publishError.value = null
     showPublishModal.value = true

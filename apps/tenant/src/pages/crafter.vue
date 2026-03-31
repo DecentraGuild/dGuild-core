@@ -130,7 +130,14 @@
               Publish metadata on-chain. Edit name/symbol if needed (e.g. for ops-imported tokens).
             </p>
             <FormInput v-model="publishForm.name" label="Name" placeholder="Token name" />
-            <FormInput v-model="publishForm.symbol" label="Symbol" placeholder="e.g. TKN" />
+            <FormInput
+              :model-value="publishForm.symbol"
+              label="Symbol"
+              placeholder="e.g. TKN"
+              :maxlength="METAPLEX_TOKEN_SYMBOL_MAX_LEN"
+              @update:model-value="publishForm.symbol = sanitizeMetaplexTokenSymbolInput($event)"
+            />
+            <p class="crafter-create-form__hint">Symbol: up to {{ METAPLEX_TOKEN_SYMBOL_MAX_LEN }} characters (letters, numbers, - or _).</p>
             <FormInput v-model="publishForm.description" label="Description" placeholder="Optional" />
             <FormInput v-model="publishForm.imageUrl" label="Image URL" placeholder="Optional" />
             <FormInput v-model="publishForm.sellerFeeBasisPoints" type="number" label="Royalty (basis points)" placeholder="0" />
@@ -189,7 +196,14 @@
             <template v-else-if="actionType === 'edit'">
               <p class="crafter-create-form__hint">Update on-chain metadata. Edit any field, then upload or paste URI.</p>
               <FormInput v-model="editForm.name" label="Name" required />
-              <FormInput v-model="editForm.symbol" label="Symbol" required />
+              <FormInput
+                :model-value="editForm.symbol"
+                label="Symbol"
+                required
+                :maxlength="METAPLEX_TOKEN_SYMBOL_MAX_LEN"
+                @update:model-value="editForm.symbol = sanitizeMetaplexTokenSymbolInput($event)"
+              />
+              <p class="crafter-create-form__hint">Symbol: up to {{ METAPLEX_TOKEN_SYMBOL_MAX_LEN }} characters (letters, numbers, - or _).</p>
               <FormInput v-model="editForm.description" label="Description" placeholder="Optional" />
               <FormInput v-model="editForm.imageUrl" label="Image URL" placeholder="Optional" />
               <FormInput v-model="editForm.sellerFeeBasisPoints" type="number" label="Royalty (basis points)" placeholder="0" />
@@ -235,6 +249,7 @@
 </template>
 
 <script setup lang="ts">
+import { METAPLEX_TOKEN_SYMBOL_MAX_LEN, sanitizeMetaplexTokenSymbolInput } from '@decentraguild/web3'
 import { truncateAddress, formatRawTokenAmount } from '@decentraguild/display'
 import { useExplorerLinks } from '@decentraguild/nuxt-composables'
 import { Icon } from '@iconify/vue'

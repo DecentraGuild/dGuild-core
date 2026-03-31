@@ -93,12 +93,16 @@ export type {
 
 export {
   buildCreateMintAndBillingTransaction,
+  buildCreateMintWithMemoTransaction,
   buildCreateMintOnlyTransaction,
   buildCreateMetadataTransaction,
   buildMintTransaction,
   buildBurnTransaction,
   buildUpdateMetadataTransaction,
   buildCloseMintTransaction,
+  METAPLEX_TOKEN_SYMBOL_MAX_LEN,
+  sanitizeMetaplexTokenSymbolInput,
+  metaplexTokenSymbolValidationError,
 } from './crafter/index.js'
 export type {
   BuildCreateMintAndBillingParams,

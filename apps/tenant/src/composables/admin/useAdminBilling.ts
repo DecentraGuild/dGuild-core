@@ -35,7 +35,6 @@ const BILLING_CONFIRM_RESUME_MAX_MS = 24 * 60 * 60 * 1000
 type BillingConfirmResumePayload = {
   paymentId: string
   txSignature: string
-  slugToClaim?: string | null
   ts: number
 }
 
@@ -106,15 +105,19 @@ export function useAdminBilling(opts: {
     if (!wallet?.publicKey) throw new Error('Wallet not connected')
     const payerWallet = wallet.publicKey.toBase58()
 
+    const chargeBody: Record<string, unknown> = {
+      action: 'charge',
+      quoteId: quote.quoteId,
+      payerWallet,
+      paymentMethod: 'usdc',
+    }
+    const s = slugToClaim?.trim().toLowerCase()
+    if (s) chargeBody.slugToClaim = s
+
     const chargeData = await invokeEdgeFunction<{ paymentId: string; amountUsdc: number; memo: string; recipientAta: string }>(
       supabase,
       'billing',
-      {
-        action: 'charge',
-        quoteId: quote.quoteId,
-        payerWallet,
-        paymentMethod: 'usdc',
-      },
+      chargeBody,
       { errorFallback: 'Charge failed' },
     )
     const charge = chargeData
@@ -151,19 +154,13 @@ export function useAdminBilling(opts: {
     return { kind: 'usdc', paymentId: r.paymentId, instructions }
   }
 
-  async function confirmBillingFromTxSignature(
-    paymentId: string,
-    txSignature: string,
-    slugToClaim?: string,
-  ): Promise<void> {
-    const confirmBody: Record<string, unknown> = {
-      action: 'confirm',
-      paymentId,
-      txSignature,
-    }
-    if (slugToClaim) confirmBody.slugToClaim = slugToClaim
-
-    await invokeEdgeFunction(supabase, 'billing', confirmBody, { errorFallback: 'Confirm failed' })
+  async function confirmBillingFromTxSignature(paymentId: string, txSignature: string): Promise<void> {
+    await invokeEdgeFunction(
+      supabase,
+      'billing',
+      { action: 'confirm', paymentId, txSignature },
+      { errorFallback: 'Confirm failed' },
+    )
   }
 
   async function resumeBillingConfirmIfNeeded(): Promise<void> {
@@ -186,11 +183,7 @@ export function useAdminBilling(opts: {
       return
     }
     try {
-      await confirmBillingFromTxSignature(
-        payload.paymentId,
-        payload.txSignature,
-        payload.slugToClaim ?? undefined,
-      )
+      await confirmBillingFromTxSignature(payload.paymentId, payload.txSignature)
       sessionStorage.removeItem(BILLING_CONFIRM_RESUME_KEY)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -260,7 +253,6 @@ export function useAdminBilling(opts: {
             JSON.stringify({
               paymentId: r.paymentId,
               txSignature,
-              slugToClaim: slugToClaim ?? null,
               ts: Date.now(),
             } satisfies BillingConfirmResumePayload),
           )
@@ -275,7 +267,7 @@ export function useAdminBilling(opts: {
         })
 
         try {
-          await confirmBillingFromTxSignature(r.paymentId, txSignature, slugToClaim)
+          await confirmBillingFromTxSignature(r.paymentId, txSignature)
           try {
             sessionStorage.removeItem(BILLING_CONFIRM_RESUME_KEY)
           } catch {

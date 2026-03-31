@@ -118,6 +118,9 @@ export async function resolveQuote(
     const adapter = getAdapter(params.productKey)
     if (!adapter) throw new Error(`Unknown product: ${params.productKey}`)
 
+    const durationForQuote =
+      getProductDisplayType(params.productKey) === 'one_time_per_unit' ? 0 : durationDays
+
     const usage = await adapter.resolveUsage({ tenantId: params.tenantId, db })
     const { data: limitsRows } = await db
       .from('tenant_meter_limits')
@@ -137,9 +140,9 @@ export async function resolveQuote(
     const { data: durationRows } = await db
       .from('duration_rules')
       .select('duration_days, price_multiplier')
-      .eq('duration_days', durationDays)
+      .eq('duration_days', durationForQuote)
     const durationRule = (durationRows as DurationRow[] | null)?.[0]
-    if (!durationRule) throw new Error(`No duration rule for ${durationDays} days`)
+    if (!durationRule) throw new Error(`No duration rule for ${durationForQuote} days`)
     // `price_multiplier` is one value per quote (from `duration_rules` for `durationDays`), not per meter.
     // Per-meter overrides would need a tier_rules flag or similar; slug stays unit_price × mult today.
 
@@ -176,7 +179,7 @@ export async function resolveQuote(
           source: 'tier',
           meter_key: meterKey,
           quantity: target,
-          duration_days: durationDays,
+          duration_days: durationForQuote,
           price_usdc: itemPrice,
           label: quotedMeterTiers[meterKey]?.label ?? undefined,
           price_multiplier: durationRule.price_multiplier,
@@ -237,7 +240,7 @@ export async function resolveQuote(
         source: 'tier',
         meter_key: meterKey,
         quantity: grantQty,
-        duration_days: durationDays,
+        duration_days: durationForQuote,
         price_usdc: itemPrice,
         label: tier.label ?? undefined,
         unit_price: hasTierPrice ? undefined : tier.unit_price,

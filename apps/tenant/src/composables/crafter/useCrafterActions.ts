@@ -1,4 +1,5 @@
 import { toRawUnits } from '@decentraguild/display'
+import { metaplexTokenSymbolValidationError, sanitizeMetaplexTokenSymbolInput } from '@decentraguild/web3'
 import { useAuth } from '@decentraguild/auth'
 import { useTenantStore } from '~/stores/tenant'
 import type { CrafterToken } from './useCrafter'
@@ -46,7 +47,15 @@ export function useCrafterActions(
     switch (actionType.value) {
       case 'mint': return !!(actionForm.value.destination?.trim() && actionForm.value.amount?.trim())
       case 'burn': return !!actionForm.value.amount?.trim()
-      case 'edit': return !!(editForm.value.name?.trim() && editForm.value.symbol?.trim() && editForm.value.metadataUri?.trim())
+      case 'edit': {
+        const sym = editForm.value.symbol?.trim() ?? ''
+        return !!(
+          editForm.value.name?.trim()
+          && sym
+          && editForm.value.metadataUri?.trim()
+          && metaplexTokenSymbolValidationError(sym) === null
+        )
+      }
       default: return false
     }
   })
@@ -56,7 +65,7 @@ export function useCrafterActions(
     if (type === 'mint') actionForm.value = { destination: auth.wallet.value ?? '', amount: '' }
     else if (type === 'burn') actionForm.value = { amount: '' }
     else if (type === 'edit') {
-      editForm.value = { name: t.name || '', symbol: t.symbol || '', description: t.description || '', imageUrl: t.image_url || '', sellerFeeBasisPoints: String(t.seller_fee_basis_points ?? 0), storageBackend: t.storage_backend ?? 'api', metadataUri: t.metadata_uri || '' }
+      editForm.value = { name: t.name || '', symbol: sanitizeMetaplexTokenSymbolInput(t.symbol || ''), description: t.description || '', imageUrl: t.image_url || '', sellerFeeBasisPoints: String(t.seller_fee_basis_points ?? 0), storageBackend: t.storage_backend ?? 'api', metadataUri: t.metadata_uri || '' }
       generatedEditJson.value = null
     } else actionForm.value = {}
   }

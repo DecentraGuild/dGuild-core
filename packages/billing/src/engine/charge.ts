@@ -2,7 +2,14 @@
  * charge(): Create pending payment from quote.
  */
 import type { DbClient } from '../types.js'
-import type { ChargeParams, ChargeResult } from '../types.js'
+import type { ChargeParams, ChargeResult, OnboardingOrgPayload } from '../types.js'
+import {
+  normalizeSlugClaim,
+  quoteLineItemsIncludeRegistration,
+  quoteLineItemsNeedSlugMeter,
+  SLUG_CLAIM_REGEX,
+  validateOnboardingOrgPayload,
+} from './charge-intent.js'
 
 interface QuoteRow {
   id: string
@@ -13,7 +20,8 @@ interface QuoteRow {
 }
 
 export async function charge(params: ChargeParams, db: DbClient): Promise<ChargeResult> {
-  const { quoteId, paymentMethod, payerWallet, voucherMint } = params
+  const { quoteId, paymentMethod, payerWallet, voucherMint, slugToClaim: slugToClaimParam, onboardingOrg: onboardingOrgParam } =
+    params
 
   const { data: quote, error: quoteError } = await db
     .from('billing_quotes')
@@ -30,6 +38,35 @@ export async function charge(params: ChargeParams, db: DbClient): Promise<Charge
 
   if (!payerWallet) throw new Error('payerWallet required for charge')
 
+  const { data: tc } = await db.from('tenant_config').select('id, slug').eq('id', q.tenant_id).maybeSingle()
+  const tenantExists = !!tc
+  const existingSlug = ((tc as { slug?: string | null } | null)?.slug ?? '').trim()
+
+  const needSlug = await quoteLineItemsNeedSlugMeter(db, q.line_items)
+  let slugToClaimStored: string | null = null
+  if (needSlug && !existingSlug) {
+    const s = normalizeSlugClaim(slugToClaimParam)
+    if (!s || !SLUG_CLAIM_REGEX.test(s)) {
+      throw new Error(
+        'slugToClaim is required for this quote: 1–63 characters, lowercase letters, numbers, hyphens, no leading/trailing hyphen.',
+      )
+    }
+    slugToClaimStored = s
+  } else if (slugToClaimParam != null && String(slugToClaimParam).trim() !== '') {
+    throw new Error('slugToClaim must not be sent for this quote')
+  }
+
+  let onboardingStored: OnboardingOrgPayload | null = null
+  if (quoteLineItemsIncludeRegistration(q.line_items)) {
+    if (tenantExists) {
+      if (onboardingOrgParam != null) throw new Error('onboardingOrg is only allowed before the organisation exists')
+    } else {
+      onboardingStored = validateOnboardingOrgPayload(onboardingOrgParam)
+    }
+  } else if (onboardingOrgParam != null) {
+    throw new Error('onboardingOrg is not allowed for this quote')
+  }
+
   const { data: payment, error: payError } = await db
     .from('billing_payments')
     .insert({
@@ -42,6 +79,8 @@ export async function charge(params: ChargeParams, db: DbClient): Promise<Charge
       payment_method: paymentMethod,
       voucher_mint: voucherMint ?? null,
       quote_id: quoteId,
+      slug_to_claim: slugToClaimStored,
+      onboarding_org: onboardingStored,
     })
     .select('id')
     .single()

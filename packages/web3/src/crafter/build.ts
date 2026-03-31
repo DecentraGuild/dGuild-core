@@ -27,6 +27,7 @@ import {
   createUpdateMetadataAccountV2Instruction,
 } from '@metaplex-foundation/mpl-token-metadata'
 import { buildBillingTransfer } from '../billing/transfer.js'
+import { createMemoInstruction } from '../escrow/memo.js'
 const TOKEN_METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s')
 
 function getMetadataPda(mint: PublicKey, programId = TOKEN_METADATA_PROGRAM_ID): PublicKey {
@@ -88,6 +89,45 @@ export interface BuildCreateMintOnlyParams {
   decimals: number
   payer: PublicKey
   connection: Connection
+}
+
+export interface BuildCreateMintWithMemoParams {
+  mintKeypair: { publicKey: PublicKey }
+  decimals: number
+  memo: string
+  payer: PublicKey
+  connection: Connection
+}
+
+/**
+ * Create mint + memo (no USDC). For $0 quotes: prepaid entitlement / voucher-backed capacity.
+ */
+export async function buildCreateMintWithMemoTransaction(
+  params: BuildCreateMintWithMemoParams
+): Promise<Transaction> {
+  const { mintKeypair, decimals, memo, payer, connection } = params
+  const mint = mintKeypair.publicKey
+
+  const lamports = await getMinimumBalanceForRentExemptMint(connection)
+  const createAccountIx = SystemProgram.createAccount({
+    fromPubkey: payer,
+    newAccountPubkey: mint,
+    space: MINT_SIZE,
+    lamports,
+    programId: TOKEN_PROGRAM_ID,
+  })
+  const createMintIx = createInitializeMint2Instruction(mint, decimals, payer, null, TOKEN_PROGRAM_ID)
+  const memoIx = createMemoInstruction(memo)
+
+  const combined = new Transaction()
+  combined.feePayer = payer
+  combined.add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: CRAFTER_COMPUTE_UNIT_LIMIT }),
+    createAccountIx,
+    createMintIx,
+    memoIx,
+  )
+  return combined
 }
 
 /**
