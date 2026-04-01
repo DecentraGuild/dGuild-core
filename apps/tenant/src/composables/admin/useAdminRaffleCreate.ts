@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import { reactive, ref, toRef } from 'vue'
+import { computed, ref } from 'vue'
 import type { Connection } from '@solana/web3.js'
 import type { BillingPeriod, ConditionSet } from '@decentraguild/billing'
 import type { EffectiveGateResult, TransactionGateOverride } from '@decentraguild/core'
@@ -23,6 +23,15 @@ const BILLING_PLUS_PROGRAM_CU = 400_000
 type WhitelistFormValue = TransactionGateOverride | 'admin-only' | null
 
 type CreateFormGate = TransactionGateOverride | 'admin-only'
+
+export interface RaffleCreateFormState {
+  name: string
+  description: string
+  ticketMint: string
+  ticketPriceDisplay: string
+  maxTicketsDisplay: string
+  gate: CreateFormGate
+}
 
 export interface AdminRaffleCreateDeps {
   connection: Ref<Connection | null>
@@ -66,43 +75,48 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
   const createError = ref<string | null>(null)
   const raffleCreateLock = useSubmitInFlightLock()
 
-  const createForm = reactive({
+  const createForm = ref<RaffleCreateFormState>({
     name: '',
     description: '',
     ticketMint: '',
     ticketPriceDisplay: '',
     maxTicketsDisplay: '',
-    gate: null as CreateFormGate,
+    gate: null,
   })
 
   const ticketMintMeta = useMintMetadataForInput(
-    toRef(createForm, 'ticketMint'),
-    toRef(createForm, 'ticketPriceDisplay'),
+    computed(() => createForm.value.ticketMint),
+    computed(() => createForm.value.ticketPriceDisplay),
     { fieldLabel: 'Ticket price' },
   )
 
   const { ensureMint } = useEnsureCatalogMint()
 
   function openCreateModal(_slotIndex: number) {
-    createForm.name = ''
-    createForm.description = ''
-    createForm.ticketMint = ''
-    createForm.ticketPriceDisplay = ''
-    createForm.maxTicketsDisplay = ''
+    const f = createForm.value
+    f.name = ''
+    f.description = ''
+    f.ticketMint = ''
+    f.ticketPriceDisplay = ''
+    f.maxTicketsDisplay = ''
     if (isDefaultGatePublic.value) {
-      createForm.gate = null
+      f.gate = null
     } else {
       const wl = whitelistFormValue.value
-      createForm.gate = wl === 'use-default' ? 'use-default' : (wl as TransactionGateOverride)
+      if (wl === 'use-default') f.gate = 'use-default'
+      else if (wl === 'admin-only') f.gate = 'admin-only'
+      else if (wl && typeof wl === 'object' && wl.account) f.gate = wl
+      else f.gate = null
     }
     createError.value = null
     openCreateModalBase()
   }
 
   async function onCreateSubmit() {
-    const name = createForm.name.trim()
-    const ticketMint = createForm.ticketMint.trim()
-    const maxTicketsParsed = parseInt(createForm.maxTicketsDisplay, 10)
+    const f = createForm.value
+    const name = f.name.trim()
+    const ticketMint = f.ticketMint.trim()
+    const maxTicketsParsed = parseInt(f.maxTicketsDisplay, 10)
     const maxTickets = maxTicketsParsed > 0 ? maxTicketsParsed : 0
     if (!name || !ticketMint) {
       createError.value = 'Name and ticket mint are required'
@@ -131,7 +145,7 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
       createError.value = 'Ticket price is required'
       return
     }
-    const ticketPriceNum = parseFloat(createForm.ticketPriceDisplay) || 0
+    const ticketPriceNum = parseFloat(f.ticketPriceDisplay) || 0
     if (ticketPriceNum < 0) {
       createError.value = 'Ticket price must be zero or positive'
       return
@@ -167,7 +181,7 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
 
         const gate = resolveGateForTransaction(
           effectiveRaffleGate.value ?? null,
-          createForm.gate,
+          f.gate,
         )
         const useWhitelist = Boolean(gate?.account?.trim())
         const whitelist = useWhitelist && gate?.account ? gate.account : undefined
@@ -175,7 +189,7 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
         const seed = crypto.getRandomValues(new Uint8Array(8))
         const raffleTx = await buildInitializeRaffleTransaction({
           name,
-          description: createForm.description.trim() || '',
+          description: f.description.trim() || '',
           seed,
           ticketMint,
           ticketPrice: ticketPriceRaw,
