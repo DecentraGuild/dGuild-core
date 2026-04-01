@@ -35,7 +35,6 @@ export interface UseMarketBrowseDetailOptions {
 const SYSTEM_PROGRAM = '11111111111111111111111111111111'
 
 function isEscrowEligibleToFill(e: EscrowForEligibility, wallet: string | null): boolean {
-  if (e.account.onlyWhitelist) return false
   if (wallet !== null && e.account.maker.toBase58() === wallet) return false
   if (!e.account.onlyRecipient) return true
   const rec = e.account.recipient.toBase58()
