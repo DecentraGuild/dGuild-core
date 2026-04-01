@@ -9,7 +9,7 @@ import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { handleTenantsList, handleTenantGet, handleTenantSlugCheck, handleTenantAddAdmin, handleTenantCreate, handleTenantSlugSet, handleTenantModule } from './handlers/tenants.ts'
 import { handleBillingSummary, handleBillingExtend, handleBillingSetPeriodEnd, handleBillingSetWatchtowerTracks, handleBillingConfirm } from './handlers/billing.ts'
 import { handleGateFetchUnbound, handleGateBind, handleGateUnbind } from './handlers/gates.ts'
-import { handleRaffleFetchUnbound, handleRaffleBind, handleRaffleBindTenant, handleRaffleUnbind } from './handlers/raffles.ts'
+import { handleRaffleFetchUnbound, handleRaffleBind, handleRaffleBindTenant, handleRaffleCloseTenant, handleRaffleUnbind } from './handlers/raffles.ts'
 import { handleCrafterImportToken, handleCrafterRemoveToken } from './handlers/crafter.ts'
 import { handleBundleCreate, handleBundleGet, handleBundleUpdate, handleBundlesList } from './handlers/bundles.ts'
 import { handleVoucherPrepareMetadata, handleVoucherRegisterDraft, handleVoucherList, handleVoucherRemoveDraft, handleVoucherCreateBundle, handleVoucherCreateIndividual, handleIndividualVoucherGet, handleBundleVoucherGet, handleIndividualVoucherUpdate, handleBundleVoucherUpdate, handleVoucherDetail, handleVoucherSyncMintMetadata, handleVoucherHolders } from './handlers/vouchers.ts'
@@ -40,6 +40,7 @@ const ROUTES = new Map<string, Handler>([
   ['raffle-fetch-unbound', handleRaffleFetchUnbound],
   ['raffle-bind', handleRaffleBind],
   ['raffle-bind-tenant', handleRaffleBindTenant],
+  ['raffle-close-tenant', handleRaffleCloseTenant],
   ['raffle-unbind', handleRaffleUnbind],
   ['crafter-import-token', handleCrafterImportToken],
   ['crafter-remove-token', handleCrafterRemoveToken],

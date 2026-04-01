@@ -14,7 +14,6 @@ import {
   deriveTicketsPda,
   deriveTicketVaultPda,
   derivePrizeVaultPda,
-  deriveEntrantPda,
 } from './accounts.js'
 import { deriveWhitelistEntryPda } from '../escrow/accounts.js'
 import { RAFFLE_FEE_ACCOUNT, RAFFLE_PROGRAM_ID, WHITELIST_PROGRAM_ID } from '@decentraguild/contracts'
@@ -320,7 +319,7 @@ export interface BuildBuyTicketsParams {
   wallet: Wallet
 }
 
-/** BuyTickets accounts match on-chain v0.2.0 IDL (e.g. Solscan export), not `packages/contracts` raffle.json. */
+/** Buy tickets: `entrant` is the buyer wallet (matches skullnbones `RaffleBuyTicket.vue` + v0.2.0 IDL). */
 export function buildBuyTicketsTransaction(params: BuildBuyTicketsParams): Transaction {
   const { rafflePubkey, ticketAmount, ticketMint, useWhitelist, whitelist, wallet } = params
   const buyer = wallet.publicKey
@@ -331,12 +330,11 @@ export function buildBuyTicketsTransaction(params: BuildBuyTicketsParams): Trans
 
   const ticketsPda = deriveTicketsPda(rafflePk)
   const ticketsAtaPda = deriveTicketVaultPda(rafflePk)
-  const entrantPda = deriveEntrantPda(rafflePk, buyer)
   const buyerAta = getAssociatedTokenAddressSync(ticketMintPk, buyer)
 
   const keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [
     { pubkey: buyer, isSigner: true, isWritable: true },
-    { pubkey: entrantPda, isSigner: false, isWritable: true },
+    { pubkey: buyer, isSigner: false, isWritable: true },
     { pubkey: rafflePk, isSigner: false, isWritable: true },
     { pubkey: ticketsPda, isSigner: false, isWritable: true },
     { pubkey: ticketsAtaPda, isSigner: false, isWritable: true },
@@ -385,23 +383,29 @@ export async function buildCloseRaffleTransaction(params: {
   connection: import('@solana/web3.js').Connection
   wallet: Wallet
 }): Promise<Transaction> {
-  const { rafflePubkey, wallet } = params
+  const { rafflePubkey, wallet, connection } = params
   const creator = wallet.publicKey
   const rafflePk = toPublicKey(rafflePubkey)
   const ticketsPda = deriveTicketsPda(rafflePk)
   const ticketsVaultPda = deriveTicketVaultPda(rafflePk)
   const prizeVaultPda = derivePrizeVaultPda(rafflePk)
 
+  const prizeVaultInfo = await connection.getAccountInfo(prizeVaultPda, 'confirmed')
+
+  const keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [
+    { pubkey: creator, isSigner: true, isWritable: true },
+    { pubkey: rafflePk, isSigner: false, isWritable: true },
+    { pubkey: ticketsPda, isSigner: false, isWritable: true },
+    { pubkey: ticketsVaultPda, isSigner: false, isWritable: true },
+  ]
+  if (prizeVaultInfo) {
+    keys.push({ pubkey: prizeVaultPda, isSigner: false, isWritable: true })
+  }
+  keys.push({ pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false })
+
   const ix = new TransactionInstruction({
     programId: new PublicKey(RAFFLE_PROGRAM_ID),
-    keys: [
-      { pubkey: creator, isSigner: true, isWritable: true },
-      { pubkey: rafflePk, isSigner: false, isWritable: true },
-      { pubkey: ticketsPda, isSigner: false, isWritable: true },
-      { pubkey: ticketsVaultPda, isSigner: false, isWritable: true },
-      { pubkey: prizeVaultPda, isSigner: false, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-    ],
+    keys,
     data: Buffer.from(DISCRIMINATOR_CLOSE),
   })
 

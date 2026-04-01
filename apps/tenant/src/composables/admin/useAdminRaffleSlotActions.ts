@@ -21,6 +21,7 @@ import {
   buildClaimPrizeTransaction,
   buildClaimTicketsTransaction,
 } from '@decentraguild/web3'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useSupabase } from '~/composables/core/useSupabase'
 
 export interface AdminRaffleSlotActionsDeps {
@@ -223,13 +224,15 @@ export function useAdminRaffleSlotActions(deps: AdminRaffleSlotActionsDeps) {
         })
         const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
         if (!sig) throw new Error('Transaction failed')
+        const id = tenantId.value
+        if (!id) throw new Error('Tenant not set')
         const supabase = useSupabase()
-        const { error: closeError } = await supabase
-          .from('tenant_raffles')
-          .update({ closed_at: new Date().toISOString() })
-          .eq('tenant_id', tenantId.value)
-          .eq('raffle_pubkey', raffle.rafflePubkey)
-        if (closeError) throw new Error(closeError.message)
+        await invokeEdgeFunction(
+          supabase,
+          'platform',
+          { action: 'raffle-close-tenant', tenantId: id, rafflePubkey: raffle.rafflePubkey },
+          { errorFallback: 'Failed to record raffle closed' },
+        )
       },
       'Failed to close raffle',
       fetchRaffles,
