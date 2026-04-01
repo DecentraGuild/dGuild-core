@@ -3,18 +3,22 @@ import { RAFFLE_PROGRAM_ID } from '@decentraguild/contracts'
 
 /**
  * Derive the raffle account PDA.
- * Seeds: ["raffle", seed] per DDD_live and program (rafxXxjw9fkAuQhCJ1A4gmX1oqgvRrSeXyRPUE9K2Yx).
- * Program expects u64 seed as LE bytes. Our seed is 8 bytes LE from writeBigUInt64LE.
+ * Seeds match packaged IDL `initialize` / on-chain: ["raffle", name utf-8, seed as 8-byte u64 LE].
+ * Anchor resolves this when building instructions; this helper must use the same seeds so DB/UI
+ * addresses match the account that was actually created.
  */
 export function deriveRafflePda(
-  _name: string,
+  name: string,
   seed: Uint8Array | Buffer,
   programId: PublicKey | string = RAFFLE_PROGRAM_ID
 ): PublicKey {
   const progId = typeof programId === 'string' ? new PublicKey(programId) : programId
   const seedBuf = Buffer.isBuffer(seed) ? Buffer.from(seed) : Buffer.from(seed)
+  if (seedBuf.length !== 8) {
+    throw new Error('Raffle seed must be exactly 8 bytes (u64 LE)')
+  }
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from('raffle', 'utf8'), seedBuf],
+    [Buffer.from('raffle', 'utf8'), Buffer.from(name, 'utf8'), seedBuf],
     progId
   )
   return pda
