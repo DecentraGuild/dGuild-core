@@ -310,7 +310,7 @@ const {
   rows: battleDisplayRows,
   rawRows: battleRawHolderRows,
   matchesSold: battleHoldersMatchSold,
-} = useRaffleTicketHolders(battleHolderContext)
+} = useRaffleTicketHolders(connection, battleHolderContext)
 
 const battleChainSlot = computed(() =>
   slotCards.value.find((c) => c.raffle?.rafflePubkey === battleRafflePubkey.value) ?? null,

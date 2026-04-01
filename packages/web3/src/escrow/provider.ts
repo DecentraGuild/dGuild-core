@@ -17,8 +17,8 @@ export function getEscrowProgram(connection: Connection, wallet: Wallet): Progra
     commitment: 'confirmed',
     preflightCommitment: 'confirmed',
   })
-  const programId = new PublicKey(ESCROW_PROGRAM_ID)
-  return new Program(getIdlWithAddress() as Parameters<typeof Program.at>[0], programId, provider)
+  // Anchor 0.30+: constructor(idl, provider); program id is idl.address
+  return new Program(getIdlWithAddress() as Parameters<typeof Program.at>[0], provider)
 }
 
 export function getEscrowProgramReadOnly(connection: Connection): Program {
@@ -31,6 +31,5 @@ export function getEscrowProgramReadOnly(connection: Connection): Program {
     commitment: 'confirmed',
     preflightCommitment: 'confirmed',
   })
-  const programId = new PublicKey(ESCROW_PROGRAM_ID)
-  return new Program(getIdlWithAddress() as Parameters<typeof Program.at>[0], programId, provider)
+  return new Program(getIdlWithAddress() as Parameters<typeof Program.at>[0], provider)
 }

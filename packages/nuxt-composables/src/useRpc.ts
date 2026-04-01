@@ -3,6 +3,8 @@
  * Public mainnet RPC returns 403; we do not fall back to it for marketplace operations.
  * Shared by platform and tenant apps.
  */
+import { computed } from 'vue'
+
 export function useRpc() {
   const config = useRuntimeConfig()
   const heliusRpc = (config.public.heliusRpc as string)?.trim() ?? ''
