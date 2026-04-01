@@ -211,6 +211,51 @@ export function useAdminRaffleSlotActions(deps: AdminRaffleSlotActionsDeps) {
     }, 'Failed to claim proceeds')
   }
 
+  async function onRefundPrizeBeforeStart(slot: SlotCard) {
+    if (!slot.raffle || !slot.chainData || !connection.value) return
+    const d = slot.chainData
+    if (d.ticketsSold !== 0) return
+    if (d.state !== 'ready' && d.state !== 'paused') return
+    if (d.prizeAmount === 0n) return
+    const wallet = getEscrowWalletFromConnector()
+    if (!wallet?.publicKey) return
+    const prizeMintPk = new PublicKey(d.prizeMint)
+    const creatorAta = getAssociatedTokenAddressSync(
+      prizeMintPk,
+      wallet.publicKey,
+      false,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    )
+    await runRaffleAction(slot.raffle.rafflePubkey, async () => {
+      const conn = connection.value!
+      const claimTx = await buildClaimPrizeTransaction({
+        rafflePubkey: slot.raffle!.rafflePubkey,
+        prizeMint: d.prizeMint,
+        winnerAta: creatorAta,
+        connection: conn,
+        wallet,
+      })
+      const tx = new Transaction()
+      const creatorAtaInfo = await conn.getAccountInfo(creatorAta)
+      if (!creatorAtaInfo) {
+        tx.add(
+          createAssociatedTokenAccountInstruction(
+            wallet.publicKey,
+            creatorAta,
+            wallet.publicKey,
+            prizeMintPk,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID,
+          ),
+        )
+      }
+      tx.add(...claimTx.instructions)
+      const sig = await sendWithTxStatus(conn, tx, wallet, wallet.publicKey)
+      if (!sig) throw new Error('Transaction failed')
+    }, 'Failed to refund prize')
+  }
+
   async function onCloseRaffle(raffle: RaffleItem) {
     await runRaffleAction(
       raffle.rafflePubkey,
@@ -314,6 +359,7 @@ export function useAdminRaffleSlotActions(deps: AdminRaffleSlotActionsDeps) {
     onRevealWinner,
     onDistributeReward,
     onClaimProceeds,
+    onRefundPrizeBeforeStart,
     onCloseRaffle,
     openAddRewardModal,
     onAddRewardSubmit,

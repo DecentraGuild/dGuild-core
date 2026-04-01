@@ -82,6 +82,15 @@
       <Button v-if="canClaimProceeds" variant="ghost" class="raffle-slot-card__action" :disabled="isSubmitting" @click="$emit('claim-proceeds')">
         {{ isSubmitting ? 'Claiming...' : 'Claim proceeds' }}
       </Button>
+      <Button
+        v-if="canRefundPrizeBeforeStart"
+        variant="ghost"
+        class="raffle-slot-card__action"
+        :disabled="isSubmitting"
+        @click="$emit('refund-prize-before-start')"
+      >
+        {{ isSubmitting ? 'Refunding...' : 'Refund prize' }}
+      </Button>
       <Button v-if="canCloseRaffle" variant="ghost" class="raffle-slot-card__action raffle-slot-card__action--close" :disabled="isSubmitting" @click="$emit('close')">
         {{ isSubmitting ? 'Closing...' : 'Close raffle' }}
       </Button>
@@ -130,6 +139,7 @@ defineEmits<{
   'play-battle-reveal': []
   'distribute-reward': []
   'claim-proceeds': []
+  'refund-prize-before-start': []
   close: []
 }>()
 
@@ -152,12 +162,23 @@ const canClaimProceeds = computed(() => props.slotCard.chainData?.state === 'cla
 
 const DEFAULT_PUBKEY_BASE58 = '11111111111111111111111111111111'
 
-/** On-chain close: `done` only for teardown, or `created` with no rewards and no tickets sold. Never after Add rewards (`ready`+ or prize vault / prize mint set). */
+const canRefundPrizeBeforeStart = computed(() => {
+  const d = props.slotCard.chainData
+  if (!d) return false
+  if (d.ticketsSold !== 0) return false
+  if (d.state !== 'ready' && d.state !== 'paused') return false
+  if (d.prizeMint === DEFAULT_PUBKEY_BASE58 || d.prizeVaultCount === 0) return false
+  if (d.prizeAmount === 0n) return false
+  return true
+})
+
 const canCloseRaffle = computed(() => {
   const d = props.slotCard.chainData
   if (!d) return false
   if (d.state === 'done') return true
-  if (d.state === 'ready') return false
+  if ((d.state === 'ready' || d.state === 'paused') && d.ticketsSold === 0 && d.prizeAmount === 0n) {
+    return true
+  }
   if (d.state !== 'created') return false
   if (d.ticketsSold !== 0) return false
   if (d.prizeVaultCount !== 0) return false

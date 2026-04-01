@@ -43,6 +43,7 @@
             @play-battle-reveal="$emit('playBattleReveal', slot)"
           @distribute-reward="$emit('distributeReward', slot)"
           @claim-proceeds="$emit('claimProceeds', slot)"
+          @refund-prize-before-start="$emit('refundPrizeBeforeStart', slot)"
           @close="$emit('close', slot.raffle!)"
         />
         <button
@@ -103,6 +104,7 @@ defineEmits<{
   playBattleReveal: [slot: SlotCard]
   distributeReward: [slot: SlotCard]
   claimProceeds: [slot: SlotCard]
+  refundPrizeBeforeStart: [slot: SlotCard]
   close: [raffle: RaffleItem]
   create: [slotIndex: number]
   upgrade: []
