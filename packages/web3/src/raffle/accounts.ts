@@ -2,13 +2,12 @@ import { PublicKey } from '@solana/web3.js'
 import { RAFFLE_PROGRAM_ID } from '@decentraguild/contracts'
 
 /**
- * Derive the raffle account PDA.
- * Seeds match packaged IDL `initialize` / on-chain: ["raffle", name utf-8, seed as 8-byte u64 LE].
- * Anchor resolves this when building instructions; this helper must use the same seeds so DB/UI
- * addresses match the account that was actually created.
+ * Derive the raffle account PDA for program rafxXx… (deployed build).
+ * On-chain seeds: ["raffle", seed u64 LE] only — raffle display name is stored in account data, not in seeds.
+ * `name` is kept on the signature for call-site clarity; it does not affect the address.
  */
 export function deriveRafflePda(
-  name: string,
+  _name: string,
   seed: Uint8Array | Buffer,
   programId: PublicKey | string = RAFFLE_PROGRAM_ID
 ): PublicKey {
@@ -17,10 +16,7 @@ export function deriveRafflePda(
   if (seedBuf.length !== 8) {
     throw new Error('Raffle seed must be exactly 8 bytes (u64 LE)')
   }
-  const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from('raffle', 'utf8'), Buffer.from(name, 'utf8'), seedBuf],
-    progId
-  )
+  const [pda] = PublicKey.findProgramAddressSync([Buffer.from('raffle', 'utf8'), seedBuf], progId)
   return pda
 }
 

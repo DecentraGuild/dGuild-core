@@ -16,7 +16,7 @@ export {
   type EscrowAccount,
   type EscrowWithAddress,
 } from './fetch.js'
-export { deriveEscrowAccounts, deriveWhitelistEntryPda } from './accounts.js'
+export { resolveEscrowPdasForSeed, type ResolveEscrowPdasParams } from './pda.js'
 export {
   addMakerFeeInstructions,
   calculateTakerFee,

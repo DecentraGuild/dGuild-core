@@ -1,10 +1,24 @@
 import { PublicKey, type Connection } from '@solana/web3.js'
 import { getWhitelistProgramReadOnly } from './provider.js'
-import { deriveWhitelistEntryPda } from './accounts.js'
-import { WHITELIST_PROGRAM_ID } from '@decentraguild/contracts'
+import { resolveWhitelistEntryPubkey } from './pda.js'
 
 function toPublicKey(v: string | PublicKey): PublicKey {
   return typeof v === 'string' ? new PublicKey(v) : v
+}
+
+type WhitelistProgramAccountNs = {
+  whitelist: {
+    fetch: (a: PublicKey) => Promise<unknown>
+    all: (filters?: unknown[]) => Promise<Array<{ publicKey: PublicKey; account: unknown }>>
+  }
+  whitelistEntry: {
+    fetch: (a: PublicKey) => Promise<unknown>
+    all: (filters?: unknown[]) => Promise<Array<{ publicKey: PublicKey; account: unknown }>>
+  }
+}
+
+function whitelistAccounts(program: ReturnType<typeof getWhitelistProgramReadOnly>): WhitelistProgramAccountNs {
+  return program.account as unknown as WhitelistProgramAccountNs
 }
 
 export interface WhitelistAccount {
@@ -35,9 +49,9 @@ export async function fetchWhitelist(
 ): Promise<WhitelistWithAddress | null> {
   const program = getWhitelistProgramReadOnly(connection)
   const pubkey = toPublicKey(address)
-  const accounts = program.account as Record<string, { fetch: (addr: PublicKey) => Promise<unknown> }>
   try {
-    const account = (await accounts.whitelist.fetch(pubkey)) as {
+    const account = await whitelistAccounts(program).whitelist.fetch(pubkey)
+    const a = account as {
       authority: PublicKey
       name: string
       hasChilds: boolean
@@ -46,10 +60,10 @@ export async function fetchWhitelist(
     return {
       publicKey: pubkey,
       account: {
-        authority: account.authority,
-        name: account.name,
-        hasChilds: account.hasChilds,
-        accessCount: account.accessCount,
+        authority: a.authority,
+        name: a.name,
+        hasChilds: a.hasChilds,
+        accessCount: a.accessCount,
       },
     }
   } catch {
@@ -63,12 +77,16 @@ export async function fetchAllWhitelistsByAuthority(
 ): Promise<WhitelistWithAddress[]> {
   const program = getWhitelistProgramReadOnly(connection)
   const authorityPubkey = toPublicKey(authority)
-  const accountNs = program.account as Record<string, { all: (filters: unknown[]) => Promise<Array<{ publicKey: PublicKey; account: unknown }>> }>
-  const accounts = await accountNs.whitelist.all([
+  const accounts = await whitelistAccounts(program).whitelist.all([
     { memcmp: { offset: 8, bytes: authorityPubkey.toBase58() } },
   ])
-  return accounts.map(({ publicKey, account }) => {
-    const a = account as { authority: PublicKey; name: string; hasChilds: boolean; accessCount: number }
+  return accounts.map(({ publicKey, account }: { publicKey: PublicKey; account: unknown }) => {
+    const a = account as {
+      authority: PublicKey
+      name: string
+      hasChilds: boolean
+      accessCount: number
+    }
     return {
       publicKey,
       account: { authority: a.authority, name: a.name, hasChilds: a.hasChilds, accessCount: a.accessCount },
@@ -78,10 +96,14 @@ export async function fetchAllWhitelistsByAuthority(
 
 export async function fetchAllWhitelists(connection: Connection): Promise<WhitelistWithAddress[]> {
   const program = getWhitelistProgramReadOnly(connection)
-  const accountNs = program.account as Record<string, { all: (filters: unknown[]) => Promise<Array<{ publicKey: PublicKey; account: unknown }>> }>
-  const accounts = await accountNs.whitelist.all([])
-  return accounts.map(({ publicKey, account }) => {
-    const a = account as { authority: PublicKey; name: string; hasChilds: boolean; accessCount: number }
+  const accounts = await whitelistAccounts(program).whitelist.all([])
+  return accounts.map(({ publicKey, account }: { publicKey: PublicKey; account: unknown }) => {
+    const a = account as {
+      authority: PublicKey
+      name: string
+      hasChilds: boolean
+      accessCount: number
+    }
     return {
       publicKey,
       account: { authority: a.authority, name: a.name, hasChilds: a.hasChilds, accessCount: a.accessCount },
@@ -95,11 +117,10 @@ export async function fetchWhitelistEntries(
 ): Promise<WhitelistEntryWithAddress[]> {
   const program = getWhitelistProgramReadOnly(connection)
   const whitelistPubkey = toPublicKey(whitelistAddress)
-  const accountNs = program.account as Record<string, { all: (filters: unknown[]) => Promise<Array<{ publicKey: PublicKey; account: unknown }>> }>
-  const accounts = await accountNs.whitelistEntry.all([
+  const accounts = await whitelistAccounts(program).whitelistEntry.all([
     { memcmp: { offset: 8, bytes: whitelistPubkey.toBase58() } },
   ])
-  return accounts.map(({ publicKey, account }) => {
+  return accounts.map(({ publicKey, account }: { publicKey: PublicKey; account: unknown }) => {
     const a = account as { parent: PublicKey; whitelisted: PublicKey }
     return { publicKey, account: { parent: a.parent, whitelisted: a.whitelisted } }
   })
@@ -112,15 +133,10 @@ export async function isWalletOnWhitelist(
 ): Promise<boolean> {
   const walletPubkey = toPublicKey(wallet)
   const whitelistPubkey = toPublicKey(whitelistAddress)
-  const entryPda = deriveWhitelistEntryPda(
-    walletPubkey,
-    whitelistPubkey,
-    WHITELIST_PROGRAM_ID
-  )
+  const program = getWhitelistProgramReadOnly(connection)
+  const entryPda = await resolveWhitelistEntryPubkey(program, walletPubkey, whitelistPubkey)
   try {
-    const program = getWhitelistProgramReadOnly(connection)
-    const accounts = program.account as Record<string, { fetch: (addr: PublicKey) => Promise<unknown> }>
-    await accounts.whitelistEntry.fetch(entryPda)
+    await whitelistAccounts(program).whitelistEntry.fetch(entryPda)
     return true
   } catch {
     return false

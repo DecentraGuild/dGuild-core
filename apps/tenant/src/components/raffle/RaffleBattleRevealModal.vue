@@ -69,8 +69,10 @@
           <div v-show="phase === 'battle' || phase === 'done'" class="raffle-battle-reveal__canvas-wrap">
             <canvas ref="canvasRef" class="raffle-battle-reveal__canvas" />
             <div v-if="phase === 'done'" class="raffle-battle-reveal__victory">
-              <p class="raffle-battle-reveal__victory-label">Winner</p>
-              <p class="raffle-battle-reveal__victory-wallet">{{ formatWallet(winnerWalletLabel) }}</p>
+              <div class="raffle-battle-reveal__victory-panel">
+                <p class="raffle-battle-reveal__victory-label">Winner</p>
+                <p class="raffle-battle-reveal__victory-wallet">{{ formatWallet(winnerWalletLabel) }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -551,13 +553,27 @@ function onKeydown(e: KeyboardEvent) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--theme-space-sm);
-  background: rgba(0, 0, 0, 0.55);
+  padding: var(--theme-space-md);
+  background: rgba(0, 0, 0, 0.62);
   pointer-events: none;
 }
 
+.raffle-battle-reveal__victory-panel {
+  pointer-events: auto;
+  max-width: min(100%, 26rem);
+  padding: var(--theme-space-lg) var(--theme-space-xl);
+  border-radius: var(--theme-radius-lg);
+  background: var(--theme-bg-card, var(--theme-background));
+  color: var(--theme-text-primary);
+  border: var(--theme-border-thin) solid var(--theme-border);
+  box-shadow:
+    var(--theme-shadow-card, 0 16px 48px rgba(0, 0, 0, 0.4)),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+
 .raffle-battle-reveal__victory-label {
-  margin: 0;
+  margin: 0 0 var(--theme-space-sm);
   font-size: var(--theme-font-sm);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -566,13 +582,15 @@ function onKeydown(e: KeyboardEvent) {
 
 .raffle-battle-reveal__victory-wallet {
   margin: 0;
+  padding-top: var(--theme-space-sm);
+  border-top: 3px solid var(--theme-primary);
   font-size: var(--theme-font-lg);
-  font-weight: 600;
-  color: var(--theme-primary);
+  font-weight: 700;
+  color: var(--theme-text-primary);
   font-family: var(--theme-font-mono, monospace);
   text-align: center;
-  padding: 0 var(--theme-space-md);
   word-break: break-all;
+  line-height: 1.45;
 }
 </style>
 

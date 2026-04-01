@@ -18,7 +18,7 @@ export {
   sendAndConfirmTransaction,
   fetchEscrowByAddress,
   fetchAllEscrows,
-  deriveEscrowAccounts,
+  resolveEscrowPdasForSeed,
   addMakerFeeInstructions,
   calculateTakerFee,
   isWrappedSol,
@@ -36,6 +36,7 @@ export type {
   Wallet as EscrowWallet,
   EscrowAccount,
   EscrowWithAddress,
+  ResolveEscrowPdasParams,
 } from './escrow/index.js'
 
 export { createConnection } from './connection.js'
@@ -73,11 +74,12 @@ export { buildVoucherTransfer } from './billing/voucher-transfer.js'
 export type { BuildVoucherTransferParams } from './billing/voucher-transfer.js'
 
 export {
-  deriveWhitelistPda,
-  deriveWhitelistEntryPda,
+  resolveWhitelistListPubkey,
+  resolveWhitelistEntryPubkey,
   getWhitelistProgram,
   getWhitelistProgramReadOnly,
   fetchWhitelist,
+  fetchAllWhitelists,
   fetchAllWhitelistsByAuthority,
   fetchWhitelistEntries,
   isWalletOnWhitelist,

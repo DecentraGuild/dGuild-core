@@ -107,11 +107,6 @@
               },
               {
                 "kind": "account",
-                "path": "raffle.name",
-                "account": "Raffle"
-              },
-              {
-                "kind": "account",
                 "path": "raffle.seed",
                 "account": "Raffle"
               }
@@ -156,11 +151,6 @@
               {
                 "kind": "const",
                 "value": [114, 97, 102, 102, 108, 101]
-              },
-              {
-                "kind": "account",
-                "path": "raffle.name",
-                "account": "Raffle"
               },
               {
                 "kind": "account",
@@ -222,11 +212,6 @@
               },
               {
                 "kind": "account",
-                "path": "raffle.name",
-                "account": "Raffle"
-              },
-              {
-                "kind": "account",
                 "path": "raffle.seed",
                 "account": "Raffle"
               }
@@ -270,11 +255,6 @@
               {
                 "kind": "const",
                 "value": [114, 97, 102, 102, 108, 101]
-              },
-              {
-                "kind": "account",
-                "path": "raffle.name",
-                "account": "Raffle"
               },
               {
                 "kind": "account",
@@ -324,11 +304,6 @@
               },
               {
                 "kind": "account",
-                "path": "raffle.name",
-                "account": "Raffle"
-              },
-              {
-                "kind": "account",
                 "path": "raffle.seed",
                 "account": "Raffle"
               }
@@ -362,11 +337,6 @@
               },
               {
                 "kind": "account",
-                "path": "raffle.name",
-                "account": "Raffle"
-              },
-              {
-                "kind": "account",
                 "path": "raffle.seed",
                 "account": "Raffle"
               }
@@ -397,10 +367,6 @@
               {
                 "kind": "const",
                 "value": [114, 97, 102, 102, 108, 101]
-              },
-              {
-                "kind": "arg",
-                "path": "name"
               },
               {
                 "kind": "arg",
@@ -506,11 +472,6 @@
               },
               {
                 "kind": "account",
-                "path": "raffle.name",
-                "account": "Raffle"
-              },
-              {
-                "kind": "account",
                 "path": "raffle.seed",
                 "account": "Raffle"
               }
@@ -564,7 +525,7 @@
           "type": "u64"
         },
         {
-          "name": "image_url",
+          "name": "url",
           "type": "string"
         }
       ]

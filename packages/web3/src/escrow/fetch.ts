@@ -35,7 +35,10 @@ export async function fetchEscrowByAddress(
   try {
     const program = getEscrowProgramReadOnly(connection)
     const escrowPubkey = toPublicKey(escrowAddress)
-    const account = await (program.account as unknown as { escrow: { fetch: (a: PublicKey) => Promise<EscrowAccount> } }).escrow.fetch(escrowPubkey)
+    const escrowNs = program.account as unknown as {
+      escrow: { fetch: (a: PublicKey) => Promise<EscrowAccount> }
+    }
+    const account = await escrowNs.escrow.fetch(escrowPubkey)
     return { publicKey: escrowPubkey, account }
   } catch (err) {
     const msg = (err as Error).message
@@ -51,10 +54,13 @@ export async function fetchAllEscrows(
   const timeoutMs = RPC_ESCROW_FETCH_TIMEOUT_MS
   const fetchPromise = (async () => {
     const program = getEscrowProgramReadOnly(connection)
-    const escrows = await (program.account as unknown as { escrow: { all: () => Promise<EscrowWithAddress[]> } }).escrow.all()
+    const escrowNs = program.account as unknown as {
+      escrow: { all: () => Promise<EscrowWithAddress[]> }
+    }
+    const escrows = await escrowNs.escrow.all()
     if (makerFilter) {
       const makerPubkey = makerFilter instanceof PublicKey ? makerFilter : new PublicKey(makerFilter)
-      return escrows.filter((e) => e.account.maker.toString() === makerPubkey.toString())
+      return escrows.filter((e: EscrowWithAddress) => e.account.maker.toString() === makerPubkey.toString())
     }
     return escrows
   })()

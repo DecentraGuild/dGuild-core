@@ -115,9 +115,8 @@ import {
   buildInitializeTransaction,
   sendAndConfirmTransaction,
   getEscrowWalletFromConnector,
-  deriveEscrowAccounts,
 } from '@decentraguild/web3'
-import { ESCROW_PROGRAM_ID, SLIPPAGE_DIVISOR } from '@decentraguild/contracts'
+import { SLIPPAGE_DIVISOR } from '@decentraguild/contracts'
 import { toRawUnits, sanitizeTokenLabel } from '@decentraguild/display'
 import { PublicKey } from '@solana/web3.js'
 import BN from 'bn.js'
@@ -461,7 +460,7 @@ async function create() {
       const shopFee = tenantStore.marketplaceSettings?.shopFee
       const seed = new BN(Date.now())
 
-      const tx = await buildInitializeTransaction({
+      const { transaction: tx, escrow } = await buildInitializeTransaction({
         maker: wallet.publicKey,
         depositTokenMint: dm,
         requestTokenMint: rm,
@@ -481,9 +480,6 @@ async function create() {
       })
 
       await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
-
-      const programId = new PublicKey(ESCROW_PROGRAM_ID)
-      const { escrow } = deriveEscrowAccounts(wallet.publicKey, seed, programId)
       const { shouldAppendTenantToLinks } = useTenantInLinks()
       const query: Record<string, string> = { tab: 'open-trades', escrow: escrow.toBase58() }
       if (tenantStore.slug && shouldAppendTenantToLinks.value) query.tenant = tenantStore.slug

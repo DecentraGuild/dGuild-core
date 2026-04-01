@@ -181,7 +181,8 @@
                     v-model.number="buyAmount"
                     type="number"
                     min="1"
-                    :max="availableTickets"
+                    :max="availableTickets >= 1 ? availableTickets : 1"
+                    step="1"
                     class="raffle-panel__input"
                     placeholder="1"
                   />

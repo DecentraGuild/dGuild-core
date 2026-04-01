@@ -1,4 +1,4 @@
-export { deriveWhitelistPda, deriveWhitelistEntryPda } from './accounts.js'
+export { resolveWhitelistListPubkey, resolveWhitelistEntryPubkey } from './pda.js'
 export { getWhitelistProgram, getWhitelistProgramReadOnly } from './provider.js'
 export {
   fetchWhitelist,

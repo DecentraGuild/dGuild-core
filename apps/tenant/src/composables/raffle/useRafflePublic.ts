@@ -176,6 +176,18 @@ export function useRafflePublic(
     return Math.max(0, r.ticketsTotal - r.ticketsSold)
   })
 
+  function clampBuyAmountToAvailability() {
+    const max = availableTickets.value
+    if (max < 1) return
+    let n = Math.floor(Number(buyAmount.value))
+    if (!Number.isFinite(n)) n = 1
+    n = Math.min(Math.max(1, n), max)
+    if (buyAmount.value !== n) buyAmount.value = n
+  }
+
+  watch(availableTickets, clampBuyAmountToAvailability)
+  watch(buyAmount, clampBuyAmountToAvailability)
+
   const canSubmitBuy = computed(() => {
     const n = buyAmount.value
     return (
@@ -238,10 +250,7 @@ export function useRafflePublic(
       const pk = sel.rafflePubkey
       chainDataByRaffle.value = { ...chainDataByRaffle.value, [pk]: data ?? null }
       selectedRaffle.value = { ...sel, chainData: data ?? null }
-      if (data) {
-        const max = Math.max(0, data.ticketsTotal - data.ticketsSold)
-        if (buyAmount.value > max) buyAmount.value = Math.max(1, max || 1)
-      }
+      if (data) clampBuyAmountToAvailability()
       void refreshBuyWhitelistEligibility()
     } finally {
       chainRefreshLoading.value = false
