@@ -22,6 +22,8 @@ const BILLING_PLUS_PROGRAM_CU = 400_000
 
 type WhitelistFormValue = TransactionGateOverride | 'admin-only' | null
 
+type CreateFormGate = TransactionGateOverride | 'admin-only'
+
 export interface AdminRaffleCreateDeps {
   connection: Ref<Connection | null>
   tenantId: Ref<string | null | undefined>
@@ -70,7 +72,7 @@ export function useAdminRaffleCreate(deps: AdminRaffleCreateDeps) {
     ticketMint: '',
     ticketPriceDisplay: '',
     maxTicketsDisplay: '',
-    gate: null as TransactionGateOverride,
+    gate: null as CreateFormGate,
   })
 
   const ticketMintMeta = useMintMetadataForInput(

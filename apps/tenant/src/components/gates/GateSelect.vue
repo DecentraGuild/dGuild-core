@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useId } from 'vue'
+import { computed, toRef, useId } from 'vue'
 import { truncateAddress } from '@decentraguild/display'
 import { getGateLabel } from '@decentraguild/catalog'
 import type { MarketplaceGateSettings } from '@decentraguild/core'

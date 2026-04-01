@@ -109,7 +109,6 @@
         v-else-if="raffleModalMode === 'create'"
         v-model:form="createForm"
         :slug="slug"
-        :show-gate-select="isDefaultGatePublic"
         :submitting="createSubmitting"
         :error="createError"
         @submit="onCreateSubmit"
@@ -352,10 +351,9 @@ function selectUpgradeTier(tier: 'grow' | 'pro') {
   })
 }
 
-const canCreateMore = computed(() => {
-  const used = (conditions.value?.raffleSlotsUsed as number) ?? activeRaffles.value.length
-  return used < slotLimit.value
-})
+const canCreateMore = computed(
+  () => activeRaffles.value.length < slotLimit.value,
+)
 
 const raffleSettings = computed(() => tenantStore.raffleSettings)
 
