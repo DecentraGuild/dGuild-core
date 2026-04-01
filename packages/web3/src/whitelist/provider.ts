@@ -17,9 +17,9 @@ export function getWhitelistProgram(connection: Connection, wallet: Wallet): Pro
     commitment: 'confirmed',
     preflightCommitment: 'confirmed',
   })
-  const programId = new PublicKey(WHITELIST_PROGRAM_ID)
+  // Anchor 0.30+: constructor(idl, provider); program id is idl.address
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new Program(getIdlWithAddress() as any, programId, provider)
+  return new Program(getIdlWithAddress() as any, provider)
 }
 
 export function getWhitelistProgramReadOnly(connection: Connection): Program {
@@ -32,7 +32,6 @@ export function getWhitelistProgramReadOnly(connection: Connection): Program {
     commitment: 'confirmed',
     preflightCommitment: 'confirmed',
   })
-  const programId = new PublicKey(WHITELIST_PROGRAM_ID)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new Program(getIdlWithAddress() as any, programId, provider)
+  return new Program(getIdlWithAddress() as any, provider)
 }
