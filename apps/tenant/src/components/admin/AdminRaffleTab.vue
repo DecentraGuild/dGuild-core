@@ -107,7 +107,7 @@
       />
       <RaffleCreateForm
         v-else-if="raffleModalMode === 'create'"
-        v-model:form="createForm"
+        :form="createForm"
         :slug="slug"
         :submitting="createSubmitting"
         :error="createError"

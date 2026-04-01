@@ -1,13 +1,13 @@
 <template>
   <form class="raffle-create-form" @submit.prevent="$emit('submit')">
     <FormInput
-      v-model="form.name"
+      v-model="formState.name"
       label="Name"
       placeholder="Raffle name"
       required
     />
     <FormInput
-      v-model="form.description"
+      v-model="formState.description"
       label="Description"
       placeholder="Brief description"
     />
@@ -16,12 +16,12 @@
       <div class="raffle-create-form__input-wrap">
         <input
           id="raffle-ticket-mint"
-          :value="form.ticketMint"
+          :value="formState.ticketMint"
           type="text"
           class="raffle-create-form__input"
           placeholder="e.g. USDC, SOL or any SPL token"
           required
-          @input="form.ticketMint = ($event.target as HTMLInputElement).value"
+          @input="formState.ticketMint = ($event.target as HTMLInputElement).value"
         />
         <button
           type="button"
@@ -44,12 +44,12 @@
           inputmode="decimal"
           class="raffle-create-form__input raffle-create-form__input--full"
           placeholder="e.g. 0.25"
-          @input="form.ticketPriceDisplay = ($event.target as HTMLInputElement).value"
+          @input="formState.ticketPriceDisplay = ($event.target as HTMLInputElement).value"
         />
       </div>
     </div>
     <FormInput
-      v-model="form.maxTicketsDisplay"
+      v-model="formState.maxTicketsDisplay"
       type="number"
       label="Total tickets"
       placeholder="e.g. 10"
@@ -58,10 +58,10 @@
     <p class="raffle-create-form__max-hint">Maximum {{ raffleMaxTickets }} tickets per raffle.</p>
     <GateSelect
       :slug="slug"
-      :model-value="form.gate"
+      :model-value="formState.gate"
       :label="`${gateLabel} (this raffle)`"
       show-use-default
-      @update:model-value="form.gate = $event"
+      @update:model-value="formState.gate = $event"
     />
     <p v-if="error" class="raffle-create-form__error">{{ error }}</p>
     <div class="raffle-create-form__actions">
@@ -80,14 +80,15 @@
     v-if="addressBookModalOpen"
     v-model="addressBookModalOpen"
     kind="SPL"
-    @select="(m) => (form.ticketMint = m)"
+    @select="(m) => (formState.ticketMint = m)"
   />
 </template>
 
 <script setup lang="ts">
-import { computed, ref, unref } from 'vue'
+import { computed, ref, toRef } from 'vue'
 import { RAFFLE_MAX_TICKETS_TOTAL } from '@decentraguild/web3'
 import { getGateLabel } from '@decentraguild/catalog'
+import type { RaffleCreateFormState } from '~/composables/admin/useAdminRaffleCreate'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import { Button } from '~/components/ui/button'
 import { Icon } from '@iconify/vue'
@@ -99,25 +100,18 @@ const raffleMaxTickets = RAFFLE_MAX_TICKETS_TOTAL
 
 const addressBookModalOpen = ref(false)
 
-const form = defineModel<{
-  name: string
-  description: string
-  ticketMint: string
-  ticketPriceDisplay: string
-  maxTicketsDisplay: string
-  gate: { programId: string; account: string } | null | 'use-default' | 'admin-only'
-}>('form', { required: true })
-
-defineProps<{
+const props = defineProps<{
+  form: RaffleCreateFormState
   slug: string
   submitting: boolean
   error: string | null
 }>()
 
+/** Stable reference to nested form object (parent holds it inside a ref). */
+const formState = toRef(props, 'form')
+
 const ticketPriceDisplaySafe = computed(() => {
-  const inner = unref(form)
-  if (inner == null || typeof inner !== 'object') return ''
-  const v = inner.ticketPriceDisplay
+  const v = formState.value.ticketPriceDisplay
   return typeof v === 'string' ? v : ''
 })
 
