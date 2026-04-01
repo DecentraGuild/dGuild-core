@@ -104,6 +104,38 @@ export async function handleRaffleBindTenant(
   return jsonResponse({ ok: true }, req)
 }
 
+export async function handleRaffleCloseTenant(
+  body: Record<string, unknown>,
+  db: Db,
+  authHeader: string | null,
+  req: Request,
+): Promise<Response> {
+  const tenantId = body.tenantId as string
+  const rafflePubkey = (body.rafflePubkey as string)?.trim()
+  if (!tenantId || !rafflePubkey) return errorResponse('tenantId and rafflePubkey required', req)
+
+  const check = await requireTenantAdmin(authHeader, tenantId, db)
+  if (!check.ok) return check.response
+
+  const { data: row, error: selErr } = await db
+    .from('tenant_raffles')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('raffle_pubkey', rafflePubkey)
+    .maybeSingle()
+  if (selErr) return errorResponse(selErr.message, req, 500)
+  if (!row) return errorResponse('Raffle not found for this tenant', req, 404)
+
+  const { error } = await db
+    .from('tenant_raffles')
+    .update({ closed_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId)
+    .eq('raffle_pubkey', rafflePubkey)
+  if (error) return errorResponse(error.message, req, 500)
+
+  return jsonResponse({ ok: true }, req)
+}
+
 export async function handleRaffleUnbind(
   body: Record<string, unknown>,
   db: Db,

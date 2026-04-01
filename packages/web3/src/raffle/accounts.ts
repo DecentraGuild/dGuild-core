@@ -52,7 +52,7 @@ export function deriveTicketVaultPda(
   return pda
 }
 
-/** BuyTickets entrant PDA: seeds `entrant` + raffle + signer (v0.2.0 on-chain IDL). */
+/** Legacy entrant PDA from buys that used PDA as `entrant`; still used to match on-chain `winner` to a wallet. */
 export function deriveEntrantPda(
   raffle: PublicKey,
   signer: PublicKey,
