@@ -40,10 +40,6 @@ export function useRaffleTicketHolders(
     try {
       const res = await fetchRaffleTicketHoldersAggregated(conn, c.rafflePubkey, c.ticketsSold)
       if (gen !== fetchGen) return
-      if (!res) {
-        error.value = 'Could not load ticket entries. Try again later.'
-        return
-      }
       rawRows.value = res.rows
       matchesSold.value = res.matchesSold
       const sold = Math.max(1, res.ticketsSoldOnChain)
