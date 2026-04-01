@@ -41,6 +41,7 @@
             @play-battle-reveal="openBattleReveal"
             @distribute-reward="onDistributeReward"
             @claim-proceeds="onClaimProceeds"
+            @refund-prize-before-start="onRefundPrizeBeforeStart"
             @close="onCloseRaffle"
             @create="openCreateModal"
             @upgrade="openUpgradeModal"
@@ -483,6 +484,7 @@ const {
   onRevealWinner,
   onDistributeReward,
   onClaimProceeds,
+  onRefundPrizeBeforeStart,
   onCloseRaffle,
   openAddRewardModal,
   onAddRewardSubmit,
