@@ -25,6 +25,7 @@ import {
 import {
   createCreateMetadataAccountV3Instruction,
   createUpdateMetadataAccountV2Instruction,
+  createSetTokenStandardInstruction,
 } from '@metaplex-foundation/mpl-token-metadata'
 import { buildBillingTransfer } from '../billing/transfer.js'
 import { createMemoInstruction } from '../escrow/memo.js'
@@ -36,6 +37,20 @@ function getMetadataPda(mint: PublicKey, programId = TOKEN_METADATA_PROGRAM_ID):
     programId
   )
   return pda
+}
+
+function appendSetTokenStandardInstruction(
+  tx: Transaction,
+  mint: PublicKey,
+  updateAuthority: PublicKey,
+): void {
+  const metadata = getMetadataPda(mint)
+  tx.add(
+    createSetTokenStandardInstruction(
+      { metadata, mint, updateAuthority },
+      TOKEN_METADATA_PROGRAM_ID,
+    ),
+  )
 }
 
 const CRAFTER_COMPUTE_UNIT_LIMIT = 400_000
@@ -204,7 +219,9 @@ export function buildCreateMetadataTransaction(params: BuildCreateMetadataParams
     },
     TOKEN_METADATA_PROGRAM_ID
   )
-  return new Transaction().add(ix)
+  const tx = new Transaction().add(ix)
+  appendSetTokenStandardInstruction(tx, mint, updateAuthority)
+  return tx
 }
 
 export interface BuildMintTransactionParams {
@@ -286,7 +303,9 @@ export function buildUpdateMetadataTransaction(params: BuildUpdateMetadataTransa
     TOKEN_METADATA_PROGRAM_ID
   )
 
-  return new Transaction().add(ix)
+  const tx = new Transaction().add(ix)
+  appendSetTokenStandardInstruction(tx, mint, updateAuthority)
+  return tx
 }
 
 export interface BuildCloseMintTransactionParams {

@@ -217,6 +217,7 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
           const sellerFeeBasisPoints = Math.max(0, Math.min(10000, payload.sellerFeeBasisPoints ?? editMetadata.value?.sellerFeeBasisPoints ?? 0))
           const metaData = await invokeEdgeFunction<{ metadataUri?: string }>(supabase, 'platform', {
             action: 'voucher-prepare-metadata',
+            mint: mintAddr,
             name: resolvedName,
             symbol: resolvedSymbol,
             imageUrl: payload.imageUrl?.trim() || undefined,

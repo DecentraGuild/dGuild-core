@@ -44,6 +44,7 @@ export function classifyDasAssetKind(asset: Record<string, unknown>): 'SPL' | 'N
   if (/NonFungible|ProgrammableNonFungible|NonFungibleEdition|V1_NFT/i.test(iface)) return 'NFT'
   if (/FungibleAsset/i.test(iface)) return 'SPL'
   if (tokenStandard === 'fungible') return 'SPL'
+  if (tokenStandard === 'fungibleasset') return 'SPL'
   if (tokenStandard.includes('non-fungible') || tokenStandard === 'nonfungible') return 'NFT'
   if (decimals != null && decimals > 0) return 'SPL'
   if (decimals === 0) {

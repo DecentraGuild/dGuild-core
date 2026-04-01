@@ -154,6 +154,7 @@ export function useOpsVouchers() {
 
         const metaData = await invokeEdgeFunction<{ metadataUri?: string }>(supabase, 'platform', {
           action: 'voucher-prepare-metadata',
+          mint,
           name: metadataForm.name.trim(),
           symbol: metadataForm.symbol.trim(),
           imageUrl: metadataForm.imageUrl?.trim() || undefined,
@@ -192,6 +193,14 @@ export function useOpsVouchers() {
             entitlements: metadataForm.entitlements.filter((e) => e.meter_key?.trim()),
           })
         }
+
+        await invokeEdgeFunction(supabase, 'platform', {
+          action: 'voucher-sync-mint-metadata',
+          mint,
+          name: metadataForm.name.trim(),
+          symbol: metadataForm.symbol.trim(),
+          image: metadataForm.imageUrl?.trim() || null,
+        })
 
         toastStore.add(toastId, { status: 'success', message: `${metadataOnChain ? 'Metadata updated' : 'Metadata created'} & voucher linked: ${mint.slice(0, 8)}…`, signature: metaSig })
         metadataModalMint.value = null
