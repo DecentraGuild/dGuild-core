@@ -30,16 +30,39 @@ export async function handleVoucherPrepareMetadata(
         : 0
   const voucherType = (body.voucherType as 'bundle' | 'individual') ?? 'individual'
   const bundleId = (body.bundleId as string)?.trim() || undefined
+  const mintOpt = (body.mint as string)?.trim() || undefined
 
   if (!name || !symbol) return errorResponse('name and symbol required', req)
+
+  let decimals = 0
+  if (mintOpt) {
+    try {
+      const connection = getSolanaConnection()
+      const accountInfo = await connection.getAccountInfo(new PublicKey(mintOpt))
+      if (accountInfo?.data && accountInfo.data.length >= 45) {
+        decimals = accountInfo.data[44]
+      }
+    } catch {
+      decimals = 0
+    }
+  }
+  const tokenStandardLabel = decimals > 0 ? 'Fungible' : 'FungibleAsset'
 
   const decentraguild: Record<string, unknown> = { createdVia: 'voucher', type: voucherType, version: 1 }
   if (voucherType === 'bundle' && bundleId) decentraguild.bundleId = bundleId
 
   const metadataJson = {
-    name, symbol, description: '', image: imageUrl ?? undefined,
+    name,
+    symbol,
+    decimals,
+    token_standard: tokenStandardLabel,
+    description: '',
+    image: imageUrl ?? undefined,
     seller_fee_basis_points: sellerFeeBasisPoints,
-    external_url: '', attributes: [], properties: { files: [], category: 'token' }, decentraguild,
+    external_url: '',
+    attributes: [],
+    properties: { files: [], category: 'token' },
+    decentraguild,
   }
 
   const uuid = crypto.randomUUID()
@@ -462,13 +485,31 @@ export async function handleVoucherSyncMintMetadata(
   const symbol = symbolIn && symbolIn.length > 0 ? symbolIn : ((ex.symbol as string | null | undefined) ?? null)
   const imageMerged = image ?? ((ex.image as string | null | undefined) ?? null)
 
+  let chainDecimals: number | null = null
+  try {
+    const connection = getSolanaConnection()
+    const accountInfo = await connection.getAccountInfo(new PublicKey(mint))
+    if (accountInfo?.data && accountInfo.data.length >= 45) {
+      chainDecimals = accountInfo.data[44]
+    }
+  } catch {
+    chainDecimals = null
+  }
+  const decimals =
+    typeof chainDecimals === 'number'
+      ? chainDecimals
+      : typeof ex.decimals === 'number'
+        ? ex.decimals
+        : 0
+  const tokenStandardLabel = decimals > 0 ? 'Fungible' : 'FungibleAsset'
+
   await db.from('mint_metadata').upsert(
     {
       mint,
       name,
       symbol,
       image: imageMerged,
-      decimals: typeof ex.decimals === 'number' ? ex.decimals : 0,
+      decimals,
       traits: ex.traits ?? null,
       trait_index: ex.trait_index ?? null,
       seller_fee_basis_points: ex.seller_fee_basis_points ?? null,
@@ -477,7 +518,7 @@ export async function handleVoucherSyncMintMetadata(
       primary_sale_happened: ex.primary_sale_happened ?? null,
       is_mutable: ex.is_mutable ?? null,
       edition_nonce: ex.edition_nonce ?? null,
-      token_standard: (ex.token_standard as string | null | undefined) ?? null,
+      token_standard: tokenStandardLabel,
       updated_at: now,
     },
     { onConflict: 'mint' },

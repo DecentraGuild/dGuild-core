@@ -17,17 +17,19 @@ export interface TokenBalance {
   uiAmount: number | null
 }
 
+type BalanceCacheMode = 'scoped' | 'all'
+
 const balanceCache = new Map<
   string,
   { balances: TokenBalance[]; fetchedAt: number }
 >()
 
-function getCacheKey(rpcUrl: string, owner: string): string {
-  return `${rpcUrl}:${owner}`
+function getCacheKey(rpcUrl: string, owner: string, mode: BalanceCacheMode): string {
+  return `${rpcUrl}:${owner}:${mode}`
 }
 
-function getCached(rpcUrl: string, owner: string): TokenBalance[] | null {
-  const key = getCacheKey(rpcUrl, owner)
+function getCached(rpcUrl: string, owner: string, mode: BalanceCacheMode): TokenBalance[] | null {
+  const key = getCacheKey(rpcUrl, owner, mode)
   const hit = balanceCache.get(key)
   if (!hit) return null
   if (Date.now() - hit.fetchedAt > BALANCE_CACHE_TTL_MS) {
@@ -37,23 +39,36 @@ function getCached(rpcUrl: string, owner: string): TokenBalance[] | null {
   return hit.balances
 }
 
-function setCache(rpcUrl: string, owner: string, balances: TokenBalance[]) {
-  balanceCache.set(getCacheKey(rpcUrl, owner), {
+function setCache(rpcUrl: string, owner: string, balances: TokenBalance[], mode: BalanceCacheMode) {
+  balanceCache.set(getCacheKey(rpcUrl, owner, mode), {
     balances,
     fetchedAt: Date.now(),
   })
+}
+
+export interface FetchWalletTokenBalancesOptions {
+  forceRefresh?: boolean
+  skipCache?: boolean
+  /**
+   * Return every SPL / Token-2022 account with non-zero balance (no mint allowlist).
+   * Use for raffle prizes, vouchers, etc. Cache is separate from scoped fetches.
+   */
+  allHeldMints?: boolean
 }
 
 export async function fetchWalletTokenBalances(
   rpcUrl: string,
   ownerAddress: string,
   allowedMints: Set<string>,
-  options?: { forceRefresh?: boolean; skipCache?: boolean }
+  options?: FetchWalletTokenBalancesOptions
 ): Promise<TokenBalance[]> {
-  if (allowedMints.size === 0) return []
+  const allHeld = options?.allHeldMints === true
+  const cacheMode: BalanceCacheMode = allHeld ? 'all' : 'scoped'
+
+  if (!allHeld && allowedMints.size === 0) return []
 
   if (!options?.forceRefresh && !options?.skipCache) {
-    const cached = getCached(rpcUrl, ownerAddress)
+    const cached = getCached(rpcUrl, ownerAddress, cacheMode)
     if (cached) return cached
   }
 
@@ -78,9 +93,17 @@ export async function fetchWalletTokenBalances(
   const seenMints = new Set<string>()
   for (const acc of allAccounts) {
     const mint = acc.account.data.parsed?.info?.mint
-    if (!mint || !allowedMints.has(mint) || seenMints.has(mint)) continue
+    if (!mint || seenMints.has(mint)) continue
+    if (!allHeld && !allowedMints.has(mint)) continue
     const amount = acc.account.data.parsed?.info?.tokenAmount
     if (!amount) continue
+    let raw: bigint
+    try {
+      raw = BigInt(amount.amount)
+    } catch {
+      continue
+    }
+    if (raw === 0n) continue
     seenMints.add(mint)
     result.push({
       mint,
@@ -90,7 +113,22 @@ export async function fetchWalletTokenBalances(
     })
   }
 
-  if (allowedMints.has(NATIVE_SOL_MINT)) {
+  if (allHeld) {
+    try {
+      const lamports = await connection.getBalance(owner)
+      if (lamports > 0 && !seenMints.has(NATIVE_SOL_MINT)) {
+        const solBalance = lamports / 1e9
+        result.push({
+          mint: NATIVE_SOL_MINT,
+          amount: lamports.toString(),
+          decimals: 9,
+          uiAmount: solBalance,
+        })
+      }
+    } catch {
+      // ignore
+    }
+  } else if (allowedMints.has(NATIVE_SOL_MINT)) {
     try {
       const lamports = await connection.getBalance(owner)
       const solBalance = lamports / 1e9
@@ -108,7 +146,7 @@ export async function fetchWalletTokenBalances(
   }
 
   if (!options?.skipCache) {
-    setCache(rpcUrl, ownerAddress, result)
+    setCache(rpcUrl, ownerAddress, result, cacheMode)
   }
   return result
 }

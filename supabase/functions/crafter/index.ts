@@ -57,9 +57,12 @@ Deno.serve(async (req: Request) => {
     const symErr = metaplexTokenSymbolValidationError(symbol)
     if (symErr) return errorResponse(symErr, req, 400)
 
+    const tokenStandardLabel = decimals > 0 ? 'Fungible' : 'FungibleAsset'
     const metadataJson = {
       name,
       symbol,
+      decimals,
+      token_standard: tokenStandardLabel,
       description,
       image: imageUrl || undefined,
       seller_fee_basis_points: sellerFeeBasisPoints,
@@ -225,7 +228,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: token, error: fetchErr } = await db
       .from('crafter_tokens')
-      .select('name, symbol')
+      .select('name, symbol, decimals')
       .eq('tenant_id', tenantId)
       .eq('mint', mint)
       .maybeSingle()
@@ -234,6 +237,11 @@ Deno.serve(async (req: Request) => {
 
     const name = nameOverride ?? (token as { name: string }).name ?? ''
     const symbol = symbolOverride ?? (token as { symbol: string }).symbol ?? ''
+    const dec =
+      typeof (token as { decimals?: number | null }).decimals === 'number'
+        ? (token as { decimals: number }).decimals
+        : 0
+    const tokenStandardLabel = dec > 0 ? 'Fungible' : 'FungibleAsset'
 
     const updatePayload: Record<string, unknown> = {
       metadata_uri: metadataUri,
@@ -254,7 +262,15 @@ Deno.serve(async (req: Request) => {
     if (updateErr) return errorResponse(updateErr.message, req, 500)
 
     await db.from('mint_metadata').upsert(
-      { mint, name, symbol, image: imageUrl, updated_at: nowIso },
+      {
+        mint,
+        name,
+        symbol,
+        image: imageUrl,
+        decimals: dec,
+        token_standard: tokenStandardLabel,
+        updated_at: nowIso,
+      },
       { onConflict: 'mint' },
     )
 
@@ -315,6 +331,11 @@ Deno.serve(async (req: Request) => {
     const finalName = (updates.name as string) ?? (token as { name: string }).name
     const finalSymbol = (updates.symbol as string) ?? (token as { symbol: string }).symbol
     const finalImage = (updates.image_url as string) ?? (token as { image_url: string }).image_url
+    const dec =
+      typeof (token as { decimals?: number | null }).decimals === 'number'
+        ? (token as { decimals: number }).decimals
+        : 0
+    const tokenStandardLabel = dec > 0 ? 'Fungible' : 'FungibleAsset'
 
     await db.from('mint_metadata').upsert(
       {
@@ -322,6 +343,8 @@ Deno.serve(async (req: Request) => {
         name: finalName,
         symbol: finalSymbol,
         image: finalImage,
+        decimals: dec,
+        token_standard: tokenStandardLabel,
         updated_at: nowIso,
       },
       { onConflict: 'mint' },

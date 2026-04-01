@@ -81,6 +81,7 @@
       />
       <RaffleAddRewardForm
         v-else-if="raffleModalMode === 'addReward' && selectedRaffleForReward"
+        :key="selectedRaffleForReward.rafflePubkey"
         v-model:form="addRewardForm"
         :prize-mint-meta="prizeMintMeta"
         :submitting="addRewardSubmitting"
