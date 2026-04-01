@@ -1,6 +1,5 @@
 /**
- * Composable for EscrowDetailModal: escrow fetch, display, fill/cancel logic.
- * Extracted from EscrowDetailModal to reduce component size.
+ * Escrow detail: fetch, display, fill/cancel. Used by EscrowDetailModal and EscrowDetailPanel (deep-link page).
  */
 import { computed, ref, watch, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -414,7 +413,8 @@ export function useEscrowDetail(props: {
     () => props.modelValue,
     (open) => {
       if (open) auth.refreshConnectorState()
-    }
+    },
+    { immediate: true }
   )
   watchEffect(() => {
     const id = props.escrowId.value
