@@ -8,55 +8,26 @@
       <div class="raffle-add-reward-form__field">
         <span class="raffle-add-reward-form__label">Prize token</span>
         <p class="raffle-add-reward-form__hint raffle-add-reward-form__hint--tight">
-          Choose a token you hold; you deposit this prize on-chain when adding the reward.
+          Only tokens you hold in this wallet — you deposit the prize on-chain when adding the reward.
         </p>
-        <template v-if="!useCustomMint">
-          <OptionsSelect
-            v-model="selectedWalletMint"
-            :option-groups="prizeOptionGroups"
-            placeholder="Select from your wallet balances..."
-            :disabled="loadingBalances || !walletAddress || !hasRpc"
-            content-class="z-[9999]"
-          />
-          <p v-if="loadingBalances" class="raffle-add-reward-form__field-hint">Loading wallet balances…</p>
-          <p v-else-if="!hasRpc" class="raffle-add-reward-form__field-hint">RPC not configured.</p>
-          <p v-else-if="!walletAddress" class="raffle-add-reward-form__field-hint">
-            Connect the wallet that will pay the prize to see balances.
-          </p>
-          <p
-            v-else-if="prizeOptionCount === 0 && !loadingBalances"
-            class="raffle-add-reward-form__field-hint"
-          >
-            No SPL tokens with balance in this wallet. Use a custom mint or fund the wallet first.
-          </p>
-        </template>
-        <template v-else>
-          <FormInput
-            v-model="form.prizeMint"
-            label="Prize token mint"
-            placeholder="SPL token mint address"
-            required
-          />
-          <div class="raffle-add-reward-form__manual-actions">
-            <Button type="button" variant="outline" size="sm" @click="addressBookModalOpen = true">
-              <Icon icon="lucide:book-open" class="raffle-add-reward-form__btn-icon" />
-              Address book
-            </Button>
-          </div>
-          <AddressBookModal
-            v-if="addressBookModalOpen"
-            v-model="addressBookModalOpen"
-            kind="SPL"
-            @select="(m) => (form.prizeMint = m)"
-          />
-        </template>
-        <button
-          type="button"
-          class="raffle-add-reward-form__toggle"
-          @click="toggleCustomMint"
+        <OptionsSelect
+          v-model="selectedWalletMint"
+          :option-groups="prizeOptionGroups"
+          placeholder="Select from your wallet balances..."
+          :disabled="loadingBalances || !walletAddress || !hasRpc"
+          content-class="z-[9999]"
+        />
+        <p v-if="loadingBalances" class="raffle-add-reward-form__field-hint">Loading wallet balances…</p>
+        <p v-else-if="!hasRpc" class="raffle-add-reward-form__field-hint">RPC not configured.</p>
+        <p v-else-if="!walletAddress" class="raffle-add-reward-form__field-hint">
+          Connect the wallet that will pay the prize to see balances.
+        </p>
+        <p
+          v-else-if="prizeOptionCount === 0 && !loadingBalances"
+          class="raffle-add-reward-form__field-hint"
         >
-          {{ useCustomMint ? '← Choose from wallet balances' : 'Enter custom mint address' }}
-        </button>
+          No SPL tokens with balance in this wallet. Fund it with the prize token, then try again.
+        </p>
       </div>
     </template>
     <FormInput
@@ -77,7 +48,11 @@
       <Button variant="secondary" type="button" @click="$emit('cancel')">
         Cancel
       </Button>
-      <Button variant="default" type="submit" :disabled="submitting">
+      <Button
+        variant="default"
+        type="submit"
+        :disabled="submitting || !canSubmitPrize"
+      >
         {{ submitting ? 'Adding...' : 'Add reward' }}
       </Button>
     </div>
@@ -93,8 +68,6 @@ import {
 import { useAuth } from '@decentraguild/auth'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
 import { Button } from '~/components/ui/button'
-import { Icon } from '@iconify/vue'
-import AddressBookModal from '~/components/shared/AddressBookModal.vue'
 import OptionsSelect from '~/components/ui/options-select/OptionsSelect.vue'
 import { fetchWalletTokenBalances, type TokenBalance } from '~/composables/core/useWalletTokenBalances'
 import { useSolanaConnection } from '~/composables/core/useSolanaConnection'
@@ -121,9 +94,7 @@ const { rpcUrl, hasRpc, rpcError } = useSolanaConnection()
 const walletAddress = computed(() => auth.connectorState.value?.account ?? null)
 const walletBalances = ref<TokenBalance[]>([])
 const loadingBalances = ref(false)
-const useCustomMint = ref(false)
 const selectedWalletMint = ref('')
-const addressBookModalOpen = ref(false)
 
 const offerMints = computed(() => new Set(walletBalances.value.map((b) => b.mint)))
 const { labelByMint } = useMintLabels(offerMints)
@@ -148,28 +119,14 @@ const prizeOptionCount = computed(() =>
   prizeOptionGroups.value.reduce((n, g) => n + g.options.length, 0),
 )
 
-function toggleCustomMint() {
-  useCustomMint.value = !useCustomMint.value
-}
-
-watch(useCustomMint, (custom) => {
-  if (custom) {
-    selectedWalletMint.value = ''
-  } else {
-    const m = form.value.prizeMint.trim()
-    if (walletBalances.value.some((b) => b.mint === m)) {
-      selectedWalletMint.value = m
-    } else {
-      selectedWalletMint.value = ''
-      form.value.prizeMint = ''
-    }
-  }
+const canSubmitPrize = computed(() => {
+  if (rpcError.value) return false
+  if (!hasRpc || !walletAddress.value) return false
+  return Boolean(selectedWalletMint.value.trim())
 })
 
 watch(selectedWalletMint, (mint) => {
-  if (!useCustomMint.value) {
-    form.value.prizeMint = mint
-  }
+  form.value.prizeMint = mint
 })
 
 watch(
@@ -182,13 +139,10 @@ watch(
 )
 
 watch(
-  [walletAddress, rpcUrl, hasRpc, useCustomMint],
+  [walletAddress, rpcUrl, hasRpc],
   async () => {
     if (!hasRpc || !rpcUrl.value || !walletAddress.value) {
       walletBalances.value = []
-      return
-    }
-    if (useCustomMint.value) {
       return
     }
     loadingBalances.value = true
@@ -209,7 +163,6 @@ watch(
 )
 
 watch(walletBalances, (balances) => {
-  if (useCustomMint.value) return
   const m = form.value.prizeMint.trim()
   if (m && balances.some((b) => b.mint === m)) {
     selectedWalletMint.value = m
@@ -271,32 +224,5 @@ watch(walletBalances, (balances) => {
   font-size: var(--theme-font-sm);
   font-weight: 600;
   color: var(--theme-text-primary);
-}
-
-.raffle-add-reward-form__toggle {
-  align-self: flex-start;
-  margin-top: var(--theme-space-xs);
-  padding: 0;
-  font-size: var(--theme-font-sm);
-  color: var(--theme-primary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.raffle-add-reward-form__toggle:hover {
-  color: var(--theme-primary-hover, var(--theme-primary));
-}
-
-.raffle-add-reward-form__manual-actions {
-  display: flex;
-  gap: var(--theme-space-sm);
-  margin-top: var(--theme-space-xs);
-}
-
-.raffle-add-reward-form__btn-icon {
-  margin-right: 4px;
-  vertical-align: middle;
 }
 </style>
