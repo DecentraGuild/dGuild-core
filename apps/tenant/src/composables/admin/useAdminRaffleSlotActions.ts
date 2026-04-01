@@ -164,7 +164,7 @@ export function useAdminRaffleSlotActions(deps: AdminRaffleSlotActionsDeps) {
     if (!wallet?.publicKey) return
     const prizeMintPk = new PublicKey(slot.chainData.prizeMint)
     const winnerPk = new PublicKey(slot.chainData.winner)
-    const winnerAta = getAssociatedTokenAddressSync(prizeMintPk, winnerPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+    const winnerAta = getAssociatedTokenAddressSync(prizeMintPk, winnerPk, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
     await runRaffleAction(slot.raffle.rafflePubkey, async () => {
       const conn = connection.value!
       const claimTx = await buildClaimPrizeTransaction({

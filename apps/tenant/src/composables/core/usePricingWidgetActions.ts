@@ -43,7 +43,9 @@ export function usePricingWidgetActions(options: UsePricingWidgetActionsOptions)
     marginalUnitLabel,
   } = options
 
-  const periodLocked = computed(() => hasActiveSubscription.value)
+  const periodLocked = computed(
+    () => hasActiveSubscription.value && !isTieredWithOneTime.value,
+  )
 
   const showPeriodToggle = computed(() => {
     if (periodLocked.value || yearlyOnly || isAddUnit.value) return false

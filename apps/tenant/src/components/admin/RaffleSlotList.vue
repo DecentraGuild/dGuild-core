@@ -24,7 +24,7 @@
       <Icon icon="lucide:loader-2" class="raffle-slots__spinner" />
       <span>Loading...</span>
     </div>
-    <div v-else class="raffle-slots__grid admin__card-grid--auto-dense">
+    <div v-else class="raffle-slots__grid raffle-slots__grid--wider admin__card-grid--auto-dense">
       <template v-for="(slot, idx) in slotCards" :key="slot.key">
         <RaffleSlotCard
           v-if="slot.raffle"
@@ -123,5 +123,10 @@ defineEmits<{
 
 .raffle-slots__outcomes-toggle {
   flex-shrink: 0;
+}
+
+/* ~+40% vs admin__card-grid--auto-dense (200px → 280px) for raffle slot cards */
+.raffle-slots__grid--wider {
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
 }
 </style>
