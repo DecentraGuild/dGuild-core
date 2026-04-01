@@ -10,13 +10,11 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from '@solana/spl-token'
 import BN from 'bn.js'
-import {
-  ESCROW_PROGRAM_ID,
-  WHITELIST_PROGRAM_ID,
-  CONTRACT_FEE_ACCOUNT,
-} from '@decentraguild/contracts'
+import { WHITELIST_PROGRAM_ID, CONTRACT_FEE_ACCOUNT } from '@decentraguild/contracts'
 import { getEscrowProgram } from './provider.js'
-import { deriveEscrowAccounts, deriveWhitelistEntryPda } from './accounts.js'
+import { getWhitelistProgramReadOnly } from '../whitelist/provider.js'
+import { resolveEscrowPdasForSeed } from './pda.js'
+import { resolveWhitelistEntryPubkey } from '../whitelist/pda.js'
 import { toPublicKey, toBN } from './utils.js'
 import { checkAtaExists, makeAtaInstruction } from './ata.js'
 import type { ShopFee } from './fees.js'
@@ -55,7 +53,9 @@ export interface BuildInitializeParams {
   wallet: Wallet
 }
 
-export async function buildInitializeTransaction(params: BuildInitializeParams): Promise<Transaction> {
+export async function buildInitializeTransaction(
+  params: BuildInitializeParams
+): Promise<{ transaction: Transaction; escrow: PublicKey }> {
   const {
     maker,
     depositTokenMint,
@@ -82,10 +82,8 @@ export async function buildInitializeTransaction(params: BuildInitializeParams):
   const transaction = new Transaction()
   if (memo?.trim()) transaction.add(createMemoInstruction(memo.trim()))
 
-  const programId = toPublicKey(ESCROW_PROGRAM_ID)
   const makerPubkey = toPublicKey(maker)
   const seedBN = toBN(seed)
-  const { auth, vault, escrow } = deriveEscrowAccounts(makerPubkey, seedBN, programId)
 
   const depositTokenPubkey = toPublicKey(depositTokenMint)
   const requestTokenPubkey = toPublicKey(requestTokenMint)
@@ -109,8 +107,11 @@ export async function buildInitializeTransaction(params: BuildInitializeParams):
     ? toPublicKey(whitelistProgram ?? WHITELIST_PROGRAM_ID)
     : program.programId
   const whitelistPubkey = hasWhitelist ? toPublicKey(whitelist!) : program.programId
+  const whitelistProgRead = getWhitelistProgramReadOnly(connection)
   const entryPubkey = hasWhitelist
-    ? deriveWhitelistEntryPda(makerPubkey, whitelistPubkey, whitelistProgramPubkey)
+    ? entry
+      ? toPublicKey(entry)
+      : await resolveWhitelistEntryPubkey(whitelistProgRead, makerPubkey, whitelistPubkey)
     : program.programId
 
   const recipientPubkey: PublicKey = recipient
@@ -132,23 +133,18 @@ export async function buildInitializeTransaction(params: BuildInitializeParams):
   const requestAmountBN = toBN(requestAmount)
   const expireTimestampBN = toBN(expireTimestamp ?? 0)
 
-  const accounts = {
+  const { escrow: escrowPk } = await resolveEscrowPdasForSeed(program, {
     maker: makerPubkey,
+    seed: seedBN,
     makerAta,
-    recipient: recipientPubkey,
     depositToken: depositTokenPubkey,
     requestToken: requestTokenPubkey,
-    auth,
-    vault,
-    escrow,
-    tokenProgram: TOKEN_PROGRAM_ID,
-    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-    systemProgram: SystemProgram.programId,
+    recipient: recipientPubkey,
     fee: feeAccount,
     whitelistProgram: whitelistProgramPubkey,
     whitelist: whitelistPubkey,
-    entry: (entry ? toPublicKey(entry) : entryPubkey) as PublicKey,
-  }
+    entry: entryPubkey,
+  })
 
   const initIx = await program.methods
     .initialize(
@@ -160,12 +156,22 @@ export async function buildInitializeTransaction(params: BuildInitializeParams):
       onlyWhitelist,
       slippage
     )
-    .accounts(accounts as never)
+    .accountsPartial({
+      maker: makerPubkey,
+      makerAta,
+      recipient: recipientPubkey,
+      depositToken: depositTokenPubkey,
+      requestToken: requestTokenPubkey,
+      fee: feeAccount,
+      whitelistProgram: whitelistProgramPubkey,
+      whitelist: whitelistPubkey,
+      entry: entryPubkey,
+    })
     .instruction()
 
   transaction.add(initIx)
   await setTransactionBlockhashAndFeePayer(connection, transaction, makerPubkey)
-  return transaction
+  return { transaction, escrow: escrowPk }
 }
 
 async function setTransactionBlockhashAndFeePayer(
@@ -196,10 +202,8 @@ export async function buildCancelTransaction(params: BuildCancelParams): Promise
   const { maker, depositTokenMint, requestTokenMint, seed, memo, connection, wallet } = params
   const transaction = new Transaction()
   if (memo?.trim()) transaction.add(createMemoInstruction(memo.trim()))
-  const programId = toPublicKey(ESCROW_PROGRAM_ID)
   const seedBN = toBN(seed)
   const makerPubkey = toPublicKey(maker)
-  const { auth, vault, escrow } = deriveEscrowAccounts(makerPubkey, seedBN, programId)
 
   const depositTokenPubkey = toPublicKey(depositTokenMint)
   const requestTokenPubkey = toPublicKey(requestTokenMint)
@@ -220,20 +224,29 @@ export async function buildCancelTransaction(params: BuildCancelParams): Promise
   )
 
   const program = getEscrowProgram(connection, wallet)
+  const feeStub = toPublicKey(CONTRACT_FEE_ACCOUNT)
+  const { escrow } = await resolveEscrowPdasForSeed(program, {
+    maker: makerPubkey,
+    seed: seedBN,
+    makerAta,
+    depositToken: depositTokenPubkey,
+    requestToken: requestTokenPubkey,
+    recipient: program.programId,
+    fee: feeStub,
+    whitelistProgram: program.programId,
+    whitelist: program.programId,
+    entry: program.programId,
+  })
+
   const cancelIx = await program.methods
     .cancel()
-    .accounts({
+    .accountsPartial({
       maker: makerPubkey,
       makerAta,
       depositToken: depositTokenPubkey,
       makerAtaRequest,
       makerTokenRequest: requestTokenPubkey,
-      auth,
-      vault,
       escrow,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
     })
     .instruction()
 
@@ -279,11 +292,9 @@ export async function buildExchangeTransaction(params: BuildExchangeParams): Pro
 
   const transaction = new Transaction()
   if (memo?.trim()) transaction.add(createMemoInstruction(memo.trim()))
-  const programId = toPublicKey(ESCROW_PROGRAM_ID)
   const takerPubkey = toPublicKey(taker)
   const seedBN = toBN(seed)
   const makerPubkey = toPublicKey(maker)
-  const { auth, vault, escrow } = deriveEscrowAccounts(makerPubkey, seedBN, programId)
 
   const { makerReceiveAta, takerAta, takerReceiveAta } = getExchangeATAs({
     maker: makerPubkey,
@@ -296,6 +307,14 @@ export async function buildExchangeTransaction(params: BuildExchangeParams): Pro
   const requestTokenPubkey = toPublicKey(requestTokenMint)
   const feeAccount = toPublicKey(contractFeeAccount ?? CONTRACT_FEE_ACCOUNT)
 
+  const makerDepositAta = getAssociatedTokenAddressSync(
+    depositTokenPubkey,
+    makerPubkey,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  )
+
   /* Add create-ATA instructions only when missing (C2C order: request then deposit). */
   const { takerAtaExists } = await prepareTakerATAs({
     transaction,
@@ -305,13 +324,41 @@ export async function buildExchangeTransaction(params: BuildExchangeParams): Pro
     connection,
   })
 
+  const program = getEscrowProgram(connection, wallet)
+  const hasWhitelist = Boolean(whitelist?.trim())
+  const whitelistProgramPubkey = hasWhitelist
+    ? toPublicKey(whitelistProgram ?? WHITELIST_PROGRAM_ID)
+    : program.programId
+  const whitelistPubkey = hasWhitelist ? toPublicKey(whitelist!) : program.programId
+  const whitelistProgRead = getWhitelistProgramReadOnly(connection)
+  const entryPubkey = hasWhitelist
+    ? entry
+      ? toPublicKey(entry)
+      : await resolveWhitelistEntryPubkey(whitelistProgRead, takerPubkey, whitelistPubkey)
+    : program.programId
+
+  const { escrow } = await resolveEscrowPdasForSeed(program, {
+    maker: makerPubkey,
+    seed: seedBN,
+    makerAta: makerDepositAta,
+    depositToken: depositTokenPubkey,
+    requestToken: requestTokenPubkey,
+    recipient: program.programId,
+    fee: feeAccount,
+    whitelistProgram: whitelistProgramPubkey,
+    whitelist: whitelistPubkey,
+    entry: entryPubkey,
+  })
+
   if (isWrappedSol(requestTokenMint)) {
     const wrappedSolAccount = getWrappedSolAccount(takerPubkey)
     const requestAmountLamports = await getRequestAmountLamports({
       requestAmount: requestAmount ?? undefined,
       fetchEscrowAccount: async () => {
-        const program = getEscrowProgram(connection, wallet)
-        return (program.account as unknown as { escrow: { fetch: (a: PublicKey) => Promise<{ price: number }> } }).escrow.fetch(escrow)
+        const ns = program.account as unknown as {
+          escrow: { fetch: (a: PublicKey) => Promise<{ price: number }> }
+        }
+        return ns.escrow.fetch(escrow)
       },
       amountBN: toBN(amount),
     })
@@ -330,40 +377,25 @@ export async function buildExchangeTransaction(params: BuildExchangeParams): Pro
     })
   }
 
-  const program = getEscrowProgram(connection, wallet)
   const amountBN = toBN(amount)
 
-  /* When no whitelist: use escrow program ID for all three optional accounts (Anchor convention for unused optionals). */
-  const hasWhitelist = Boolean(whitelist?.trim())
-  const whitelistProgramPubkey = hasWhitelist
-    ? toPublicKey(whitelistProgram ?? WHITELIST_PROGRAM_ID)
-    : program.programId
-  const whitelistPubkey = hasWhitelist ? toPublicKey(whitelist!) : program.programId
-  const entryPubkey = hasWhitelist
-    ? deriveWhitelistEntryPda(takerPubkey, toPublicKey(whitelist!), whitelistProgramPubkey)
-    : program.programId
-
-  const accounts = {
-    maker: makerPubkey,
-    makerReceiveAta,
-    depositToken: depositTokenPubkey,
-    taker: takerPubkey,
-    takerAta,
-    takerReceiveAta,
-    requestToken: requestTokenPubkey,
-    auth,
-    vault,
-    escrow,
-    tokenProgram: TOKEN_PROGRAM_ID,
-    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-    systemProgram: SystemProgram.programId,
-    fee: feeAccount,
-    whitelistProgram: whitelistProgramPubkey,
-    whitelist: whitelistPubkey,
-    entry: entry ? toPublicKey(entry) : entryPubkey,
-  }
-
-  const exchangeIx = await program.methods.exchange(amountBN).accounts(accounts).instruction()
+  const exchangeIx = await program.methods
+    .exchange(amountBN)
+    .accountsPartial({
+      maker: makerPubkey,
+      makerReceiveAta,
+      depositToken: depositTokenPubkey,
+      taker: takerPubkey,
+      takerAta,
+      takerReceiveAta,
+      requestToken: requestTokenPubkey,
+      escrow,
+      fee: feeAccount,
+      whitelistProgram: whitelistProgramPubkey,
+      whitelist: whitelistPubkey,
+      entry: entryPubkey,
+    })
+    .instruction()
   transaction.add(exchangeIx)
   await setTransactionBlockhashAndFeePayer(connection, transaction, takerPubkey)
   return transaction

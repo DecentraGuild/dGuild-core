@@ -1,11 +1,5 @@
-import {
-  PublicKey,
-  SystemProgram,
-  Transaction,
-  type Connection,
-} from '@solana/web3.js'
+import { PublicKey, Transaction, type Connection } from '@solana/web3.js'
 import { getWhitelistProgram } from './provider.js'
-import { deriveWhitelistPda, deriveWhitelistEntryPda } from './accounts.js'
 import type { Wallet } from '../escrow/types.js'
 
 function toPublicKey(v: string | PublicKey): PublicKey {
@@ -24,15 +18,12 @@ export async function buildInitializeWhitelistTransaction(
 ): Promise<Transaction> {
   const { name, authority, connection, wallet } = params
   const authorityPubkey = toPublicKey(authority)
-  const whitelistPda = deriveWhitelistPda(authorityPubkey, name)
 
   const program = getWhitelistProgram(connection, wallet)
   const ix = await program.methods
     .initialize(name)
-    .accounts({
-      whitelist: whitelistPda,
+    .accountsPartial({
       signer: authorityPubkey,
-      systemProgram: SystemProgram.programId,
     })
     .instruction()
 
@@ -56,16 +47,12 @@ export async function buildAddToWhitelistTransaction(
   const accountToAddPubkey = toPublicKey(accountToAdd)
   const authorityPubkey = toPublicKey(authority)
 
-  const entryPda = deriveWhitelistEntryPda(accountToAddPubkey, whitelistPubkey)
-
   const program = getWhitelistProgram(connection, wallet)
   const ix = await program.methods
     .addToWhitelist(accountToAddPubkey)
-    .accounts({
-      entry: entryPda,
+    .accountsPartial({
       whitelist: whitelistPubkey,
       authority: authorityPubkey,
-      systemProgram: SystemProgram.programId,
     })
     .instruction()
 
@@ -88,13 +75,10 @@ export async function buildRemoveFromWhitelistTransaction(
   const accountToDeletePubkey = toPublicKey(accountToDelete)
   const authorityPubkey = toPublicKey(authority)
 
-  const entryPda = deriveWhitelistEntryPda(accountToDeletePubkey, whitelistPubkey)
-
   const program = getWhitelistProgram(connection, wallet)
   const ix = await program.methods
     .removeFromWhitelist(accountToDeletePubkey)
-    .accounts({
-      entry: entryPda,
+    .accountsPartial({
       whitelist: whitelistPubkey,
       authority: authorityPubkey,
     })
@@ -115,13 +99,11 @@ export async function buildDeleteWhitelistTransaction(
 ): Promise<Transaction> {
   const { name, authority, connection, wallet } = params
   const authorityPubkey = toPublicKey(authority)
-  const whitelistPda = deriveWhitelistPda(authorityPubkey, name)
 
   const program = getWhitelistProgram(connection, wallet)
   const ix = await program.methods
     .deleteWhitelist(name)
-    .accounts({
-      whitelist: whitelistPda,
+    .accountsPartial({
       authority: authorityPubkey,
     })
     .instruction()

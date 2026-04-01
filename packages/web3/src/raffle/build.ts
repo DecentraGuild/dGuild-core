@@ -14,7 +14,8 @@ import {
   deriveTicketVaultPda,
   derivePrizeVaultPda,
 } from './accounts.js'
-import { deriveWhitelistEntryPda } from '../escrow/accounts.js'
+import { getWhitelistProgramReadOnly } from '../whitelist/provider.js'
+import { resolveWhitelistEntryPubkey } from '../whitelist/pda.js'
 import { RAFFLE_FEE_ACCOUNT, RAFFLE_PROGRAM_ID, WHITELIST_PROGRAM_ID } from '@decentraguild/contracts'
 import type { Wallet } from '../escrow/types.js'
 
@@ -304,7 +305,11 @@ export async function buildBuyTicketsTransaction(params: BuildBuyTicketsParams):
       throw new Error('This raffle requires a whitelist but no whitelist account is set on-chain')
     }
     whitelistPk = toPublicKey(whitelist)
-    whitelistEntryPk = deriveWhitelistEntryPda(buyer, whitelistPk, WHITELIST_PROGRAM_ID)
+    whitelistEntryPk = await resolveWhitelistEntryPubkey(
+      getWhitelistProgramReadOnly(connection),
+      buyer,
+      whitelistPk
+    )
   }
 
   const accounts = {
@@ -343,22 +348,23 @@ export async function buildCloseRaffleTransaction(params: {
   const ticketsVaultPda = deriveTicketVaultPda(rafflePk)
   const prizeVaultPda = derivePrizeVaultPda(rafflePk)
 
-  const prizeVaultInfo = await connection.getAccountInfo(prizeVaultPda, 'confirmed')
   const program = getRaffleProgram(connection, wallet)
+  const prizeVaultInfo = await connection.getAccountInfo(prizeVaultPda, 'confirmed')
+  // IDL marks prize_vault optional; Anchor still requires the key. After distribute/claim the vault
+  // ATA may be closed — use program id as sentinel (same as optional whitelist on initialize).
+  const prizeVault = prizeVaultInfo ? prizeVaultPda : program.programId
 
-  const baseAccounts = {
-    creator,
-    raffle: rafflePk,
-    tickets: ticketsPda,
-    ticketsVault: ticketsVaultPda,
-    tokenProgram: TOKEN_PROGRAM_ID,
-  }
-  const ix = prizeVaultInfo
-    ? await program.methods
-        .close()
-        .accounts({ ...baseAccounts, prizeVault: prizeVaultPda })
-        .instruction()
-    : await program.methods.close().accounts(baseAccounts).instruction()
+  const ix = await program.methods
+    .close()
+    .accounts({
+      creator,
+      raffle: rafflePk,
+      tickets: ticketsPda,
+      ticketsVault: ticketsVaultPda,
+      prizeVault,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .instruction()
 
   return new Transaction().add(ix)
 }

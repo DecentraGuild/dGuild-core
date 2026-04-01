@@ -17,8 +17,8 @@ export function getEscrowProgram(connection: Connection, wallet: Wallet): Progra
     commitment: 'confirmed',
     preflightCommitment: 'confirmed',
   })
-  // Anchor 0.30+: constructor(idl, provider); program id is idl.address
-  return new Program(getIdlWithAddress() as Parameters<typeof Program.at>[0], provider)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new Program(getIdlWithAddress() as any, provider)
 }
 
 export function getEscrowProgramReadOnly(connection: Connection): Program {
@@ -31,5 +31,6 @@ export function getEscrowProgramReadOnly(connection: Connection): Program {
     commitment: 'confirmed',
     preflightCommitment: 'confirmed',
   })
-  return new Program(getIdlWithAddress() as Parameters<typeof Program.at>[0], provider)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new Program(getIdlWithAddress() as any, provider)
 }

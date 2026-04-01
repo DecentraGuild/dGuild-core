@@ -1,75 +1,285 @@
 {
-  "version": "0.1.0",
+  "version": "0.30.1",
   "name": "whitelist",
+  "address": "whi5uDPWK4rAE9Sus6hdxdHwsG1hjDBn6kXM6pyqwTn",
+  "metadata": {
+    "name": "whitelist",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "DecentraGuild whitelist (IDL upgraded for Anchor 0.30 client)"
+  },
   "instructions": [
     {
       "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
       "accounts": [
-        { "name": "whitelist", "isMut": true, "isSigner": false },
-        { "name": "signer", "isMut": true, "isSigner": true },
         {
-          "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false,
-          "docs": ["the account sending (and signing) this transaction"]
+          "name": "whitelist",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "signer"
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
-      "args": [{ "name": "name", "type": "string" }]
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
     },
     {
-      "name": "addToWhitelist",
-      "accounts": [
-        { "name": "entry", "isMut": true, "isSigner": false },
-        { "name": "whitelist", "isMut": true, "isSigner": false },
-        { "name": "authority", "isMut": true, "isSigner": true },
-        { "name": "systemProgram", "isMut": false, "isSigner": false }
+      "name": "add_to_whitelist",
+      "discriminator": [
+        157,
+        211,
+        52,
+        54,
+        144,
+        81,
+        5,
+        55
       ],
-      "args": [{ "name": "accountToAdd", "type": "publicKey" }]
+      "accounts": [
+        {
+          "name": "entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "arg",
+                "path": "account_to_add"
+              },
+              {
+                "kind": "account",
+                "path": "whitelist"
+              }
+            ]
+          }
+        },
+        {
+          "name": "whitelist",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "account_to_add",
+          "type": "pubkey"
+        }
+      ]
     },
     {
-      "name": "removeFromWhitelist",
-      "accounts": [
-        { "name": "entry", "isMut": true, "isSigner": false },
-        { "name": "whitelist", "isMut": true, "isSigner": false },
-        { "name": "authority", "isMut": true, "isSigner": true }
+      "name": "remove_from_whitelist",
+      "discriminator": [
+        7,
+        144,
+        216,
+        239,
+        243,
+        236,
+        193,
+        235
       ],
-      "args": [{ "name": "accountToDelete", "type": "publicKey" }]
+      "accounts": [
+        {
+          "name": "entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "arg",
+                "path": "account_to_delete"
+              },
+              {
+                "kind": "account",
+                "path": "whitelist"
+              }
+            ]
+          }
+        },
+        {
+          "name": "whitelist",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "account_to_delete",
+          "type": "pubkey"
+        }
+      ]
     },
     {
-      "name": "deleteWhitelist",
-      "accounts": [
-        { "name": "whitelist", "isMut": true, "isSigner": false },
-        { "name": "authority", "isMut": true, "isSigner": true }
+      "name": "delete_whitelist",
+      "discriminator": [
+        229,
+        26,
+        200,
+        168,
+        119,
+        177,
+        128,
+        19
       ],
-      "args": [{ "name": "name", "type": "string" }]
+      "accounts": [
+        {
+          "name": "whitelist",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
     }
   ],
   "accounts": [
     {
-      "name": "whitelist",
+      "name": "Whitelist",
+      "discriminator": [
+        204,
+        176,
+        52,
+        79,
+        146,
+        121,
+        54,
+        247
+      ]
+    },
+    {
+      "name": "WhitelistEntry",
+      "discriminator": [
+        51,
+        70,
+        173,
+        81,
+        219,
+        192,
+        234,
+        62
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "Whitelist",
+      "docs": [
+        "Account: Whitelist"
+      ],
       "type": {
         "kind": "struct",
         "fields": [
-          { "name": "authority", "type": "publicKey" },
-          { "name": "name", "type": "string" },
-          { "name": "hasChilds", "type": "bool" },
-          { "name": "accessCount", "type": "u32" }
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "has_childs",
+            "type": "bool"
+          },
+          {
+            "name": "access_count",
+            "type": "u32"
+          }
         ]
       }
     },
     {
-      "name": "whitelistEntry",
+      "name": "WhitelistEntry",
+      "docs": [
+        "Account: WhitelistEntry"
+      ],
       "type": {
         "kind": "struct",
         "fields": [
-          { "name": "parent", "type": "publicKey" },
-          { "name": "whitelisted", "type": "publicKey" }
+          {
+            "name": "parent",
+            "type": "pubkey"
+          },
+          {
+            "name": "whitelisted",
+            "type": "pubkey"
+          }
         ]
       }
     }
   ],
   "errors": [
-    { "code": 6000, "name": "WhitelistStillHasChilds", "msg": "The whitelist still has childs" },
-    { "code": 6001, "name": "AccountsNoRemovable", "msg": "Can not remove the specified account" }
+    {
+      "code": 6000,
+      "name": "WhitelistStillHasChilds",
+      "msg": "The whitelist still has childs"
+    },
+    {
+      "code": 6001,
+      "name": "AccountsNoRemovable",
+      "msg": "Can not remove the specified account"
+    }
   ]
 }

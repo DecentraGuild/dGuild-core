@@ -1,1 +1,552 @@
-{"version":"0.1.0","name":"escrow_service","instructions":[{"name":"initialize","accounts":[{"name":"maker","isMut":true,"isSigner":true},{"name":"makerAta","isMut":true,"isSigner":false},{"name":"recipient","isMut":false,"isSigner":false,"isOptional":true},{"name":"depositToken","isMut":false,"isSigner":false},{"name":"requestToken","isMut":false,"isSigner":false},{"name":"auth","isMut":false,"isSigner":false},{"name":"vault","isMut":true,"isSigner":false},{"name":"escrow","isMut":true,"isSigner":false},{"name":"tokenProgram","isMut":false,"isSigner":false},{"name":"associatedTokenProgram","isMut":false,"isSigner":false},{"name":"systemProgram","isMut":false,"isSigner":false},{"name":"fee","isMut":true,"isSigner":false},{"name":"whitelistProgram","isMut":false,"isSigner":false,"isOptional":true},{"name":"whitelist","isMut":false,"isSigner":false,"isOptional":true},{"name":"entry","isMut":false,"isSigner":false,"isOptional":true}],"args":[{"name":"seed","type":"u64"},{"name":"depositAmount","type":"u64"},{"name":"requestAmount","type":"u64"},{"name":"expireTimestamp","type":"i64"},{"name":"allowPartialFill","type":"bool"},{"name":"onlyWhitelist","type":"bool"},{"name":"slippage","type":"f32"}]},{"name":"cancel","accounts":[{"name":"maker","isMut":true,"isSigner":true},{"name":"makerAta","isMut":true,"isSigner":false},{"name":"depositToken","isMut":false,"isSigner":false},{"name":"makerAtaRequest","isMut":false,"isSigner":false},{"name":"makerTokenRequest","isMut":false,"isSigner":false},{"name":"auth","isMut":false,"isSigner":false},{"name":"vault","isMut":true,"isSigner":false},{"name":"escrow","isMut":true,"isSigner":false},{"name":"tokenProgram","isMut":false,"isSigner":false},{"name":"associatedTokenProgram","isMut":false,"isSigner":false},{"name":"systemProgram","isMut":false,"isSigner":false}],"args":[]},{"name":"exchange","accounts":[{"name":"maker","isMut":true,"isSigner":false},{"name":"makerReceiveAta","isMut":true,"isSigner":false},{"name":"depositToken","isMut":false,"isSigner":false},{"name":"taker","isMut":true,"isSigner":true},{"name":"takerAta","isMut":true,"isSigner":false},{"name":"takerReceiveAta","isMut":true,"isSigner":false},{"name":"requestToken","isMut":false,"isSigner":false},{"name":"auth","isMut":false,"isSigner":false},{"name":"vault","isMut":true,"isSigner":false},{"name":"escrow","isMut":true,"isSigner":false},{"name":"tokenProgram","isMut":false,"isSigner":false},{"name":"associatedTokenProgram","isMut":false,"isSigner":false},{"name":"systemProgram","isMut":false,"isSigner":false},{"name":"fee","isMut":true,"isSigner":false},{"name":"whitelistProgram","isMut":false,"isSigner":false,"isOptional":true},{"name":"whitelist","isMut":false,"isSigner":false,"isOptional":true},{"name":"entry","isMut":false,"isSigner":false,"isOptional":true}],"args":[{"name":"amount","type":"u64"}]}],"accounts":[{"name":"Escrow","type":{"kind":"struct","fields":[{"name":"maker","type":"publicKey"},{"name":"depositToken","type":"publicKey"},{"name":"requestToken","type":"publicKey"},{"name":"tokensDepositInit","type":"u64"},{"name":"tokensDepositRemaining","type":"u64"},{"name":"price","type":"f64"},{"name":"decimals","type":"i16"},{"name":"slippage","type":"f32"},{"name":"seed","type":"u64"},{"name":"authBump","type":"u8"},{"name":"vaultBump","type":"u8"},{"name":"escrowBump","type":"u8"},{"name":"expireTimestamp","type":"i64"},{"name":"recipient","type":"publicKey"},{"name":"onlyRecipient","type":"bool"},{"name":"onlyWhitelist","type":"bool"},{"name":"allowPartialFill","type":"bool"},{"name":"whitelist","type":"publicKey"}]}}],"errors":[{"code":6000,"name":"AuthBumpError","msg":"Unable to get auth bump"},{"code":6001,"name":"VaultBumpError","msg":"Unable to get vault bump"},{"code":6002,"name":"EscrowBumpError","msg":"Unable to get escrow bump"},{"code":6003,"name":"EscrowNotEnoughRemaining","msg":"Escrow has not enough funds reamining"},{"code":6004,"name":"EscrowRecipientError","msg":"Wrong recipient input"},{"code":6005,"name":"EscrowFeeError","msg":"Wrong fee account input"},{"code":6006,"name":"EscrowMinimumError","msg":"Wrong minimum"},{"code":6007,"name":"EscrowPartialFillNotAllowed","msg":"Partial fill is not allowed"},{"code":6008,"name":"EscrowTimestampExpired","msg":"Timestamp expired"},{"code":6009,"name":"WrongWhitelistProvided","msg":"Wrong whitelist is provided"},{"code":6010,"name":"DecimalPrecisionLoss","msg":"Decimal precision loss"},{"code":6011,"name":"SlippageLimitExceeded","msg":"Slippage limit exceeded"},{"code":6012,"name":"ConvertToFloat","msg":"Error converting to float"}]}
+{
+  "version": "0.30.1",
+  "name": "escrow_service",
+  "address": "esccxeEDYUXQaeMwq1ZwWAvJaHVYfsXNva13JYb2Chs",
+  "metadata": {
+    "name": "escrow_service",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "DecentraGuild escrow (IDL upgraded for Anchor 0.30 client)"
+  },
+  "instructions": [
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "maker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "maker_ata",
+          "writable": true
+        },
+        {
+          "name": "recipient",
+          "optional": true
+        },
+        {
+          "name": "deposit_token"
+        },
+        {
+          "name": "request_token"
+        },
+        {
+          "name": "auth",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "maker"
+              },
+              {
+                "kind": "arg",
+                "path": "seed"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "fee",
+          "writable": true
+        },
+        {
+          "name": "whitelist_program",
+          "optional": true
+        },
+        {
+          "name": "whitelist",
+          "optional": true
+        },
+        {
+          "name": "entry",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "seed",
+          "type": "u64"
+        },
+        {
+          "name": "deposit_amount",
+          "type": "u64"
+        },
+        {
+          "name": "request_amount",
+          "type": "u64"
+        },
+        {
+          "name": "expire_timestamp",
+          "type": "i64"
+        },
+        {
+          "name": "allow_partial_fill",
+          "type": "bool"
+        },
+        {
+          "name": "only_whitelist",
+          "type": "bool"
+        },
+        {
+          "name": "slippage",
+          "type": "f32"
+        }
+      ]
+    },
+    {
+      "name": "cancel",
+      "discriminator": [
+        232,
+        219,
+        223,
+        41,
+        219,
+        236,
+        220,
+        190
+      ],
+      "accounts": [
+        {
+          "name": "maker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "maker_ata",
+          "writable": true
+        },
+        {
+          "name": "deposit_token"
+        },
+        {
+          "name": "maker_ata_request"
+        },
+        {
+          "name": "maker_token_request"
+        },
+        {
+          "name": "auth",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "exchange",
+      "discriminator": [
+        47,
+        3,
+        27,
+        97,
+        215,
+        236,
+        219,
+        144
+      ],
+      "accounts": [
+        {
+          "name": "maker",
+          "writable": true
+        },
+        {
+          "name": "maker_receive_ata",
+          "writable": true
+        },
+        {
+          "name": "deposit_token"
+        },
+        {
+          "name": "taker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "taker_ata",
+          "writable": true
+        },
+        {
+          "name": "taker_receive_ata",
+          "writable": true
+        },
+        {
+          "name": "request_token"
+        },
+        {
+          "name": "auth",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "fee",
+          "writable": true
+        },
+        {
+          "name": "whitelist_program",
+          "optional": true
+        },
+        {
+          "name": "whitelist",
+          "optional": true
+        },
+        {
+          "name": "entry",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Escrow",
+      "discriminator": [
+        31,
+        213,
+        123,
+        187,
+        186,
+        22,
+        218,
+        155
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "Escrow",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "deposit_token",
+            "type": "pubkey"
+          },
+          {
+            "name": "request_token",
+            "type": "pubkey"
+          },
+          {
+            "name": "tokens_deposit_init",
+            "type": "u64"
+          },
+          {
+            "name": "tokens_deposit_remaining",
+            "type": "u64"
+          },
+          {
+            "name": "price",
+            "type": "f64"
+          },
+          {
+            "name": "decimals",
+            "type": "i16"
+          },
+          {
+            "name": "slippage",
+            "type": "f32"
+          },
+          {
+            "name": "seed",
+            "type": "u64"
+          },
+          {
+            "name": "auth_bump",
+            "type": "u8"
+          },
+          {
+            "name": "vault_bump",
+            "type": "u8"
+          },
+          {
+            "name": "escrow_bump",
+            "type": "u8"
+          },
+          {
+            "name": "expire_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "only_recipient",
+            "type": "bool"
+          },
+          {
+            "name": "only_whitelist",
+            "type": "bool"
+          },
+          {
+            "name": "allow_partial_fill",
+            "type": "bool"
+          },
+          {
+            "name": "whitelist",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "AuthBumpError",
+      "msg": "Unable to get auth bump"
+    },
+    {
+      "code": 6001,
+      "name": "VaultBumpError",
+      "msg": "Unable to get vault bump"
+    },
+    {
+      "code": 6002,
+      "name": "EscrowBumpError",
+      "msg": "Unable to get escrow bump"
+    },
+    {
+      "code": 6003,
+      "name": "EscrowNotEnoughRemaining",
+      "msg": "Escrow has not enough funds reamining"
+    },
+    {
+      "code": 6004,
+      "name": "EscrowRecipientError",
+      "msg": "Wrong recipient input"
+    },
+    {
+      "code": 6005,
+      "name": "EscrowFeeError",
+      "msg": "Wrong fee account input"
+    },
+    {
+      "code": 6006,
+      "name": "EscrowMinimumError",
+      "msg": "Wrong minimum"
+    },
+    {
+      "code": 6007,
+      "name": "EscrowPartialFillNotAllowed",
+      "msg": "Partial fill is not allowed"
+    },
+    {
+      "code": 6008,
+      "name": "EscrowTimestampExpired",
+      "msg": "Timestamp expired"
+    },
+    {
+      "code": 6009,
+      "name": "WrongWhitelistProvided",
+      "msg": "Wrong whitelist is provided"
+    },
+    {
+      "code": 6010,
+      "name": "DecimalPrecisionLoss",
+      "msg": "Decimal precision loss"
+    },
+    {
+      "code": 6011,
+      "name": "SlippageLimitExceeded",
+      "msg": "Slippage limit exceeded"
+    },
+    {
+      "code": 6012,
+      "name": "ConvertToFloat",
+      "msg": "Error converting to float"
+    }
+  ]
+}

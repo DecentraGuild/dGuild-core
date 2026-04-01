@@ -374,7 +374,8 @@ import GateSelectRow from '~/components/gates/GateSelectRow.vue'
 import type { BillingPeriod } from '@decentraguild/billing'
 import { Switch } from '~/components/ui/switch'
 import {
-  deriveWhitelistPda,
+  resolveWhitelistListPubkey,
+  getWhitelistProgramReadOnly,
   buildInitializeWhitelistTransaction,
   buildAddToWhitelistTransaction,
   buildRemoveFromWhitelistTransaction,
@@ -600,7 +601,8 @@ async function createList() {
         await props.confirmBillingFromTxSignature(billingPrep.paymentId, txSignature)
       }
 
-      const address = deriveWhitelistPda(wallet.publicKey, name).toBase58()
+      const wlProgram = getWhitelistProgramReadOnly(connection.value)
+      const address = (await resolveWhitelistListPubkey(wlProgram, wallet.publicKey, name)).toBase58()
       await invokeEdgeFunction(supabase, 'gates', {
         action: 'list-create',
         tenantId: tenantId.value,
