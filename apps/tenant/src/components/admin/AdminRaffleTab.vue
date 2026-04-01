@@ -117,6 +117,7 @@
     <RaffleBattleRevealModal
       v-model="battleOpen"
       :raffle-name="battleRaffleTitle"
+      :raffle-pubkey="battleRafflePubkey ?? ''"
       :winner-pubkey="battleWinnerPubkey"
       :loading="battleHoldersLoading"
       :load-error="battleHoldersError"

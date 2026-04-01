@@ -50,6 +50,7 @@ function parseEntrantsFromTicketsAccount(data: Buffer): {
     const start = TICKETS_HEADER + 32 * i
     const pk = new PublicKey(data.subarray(start, start + 32))
     if (pk.equals(DEFAULT_PUBKEY)) continue
+    if (!PublicKey.isOnCurve(pk.toBytes())) return null
     const owner = pk.toBase58()
     totals.set(owner, (totals.get(owner) ?? 0n) + 1n)
   }
