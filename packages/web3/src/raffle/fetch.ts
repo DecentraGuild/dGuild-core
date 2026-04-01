@@ -1,6 +1,8 @@
 import type { Connection } from '@solana/web3.js'
 import { PublicKey } from '@solana/web3.js'
+import type { Program } from '@coral-xyz/anchor'
 import { derivePrizeVaultPda, deriveTicketsPda } from './accounts.js'
+import { getRaffleProgramReadOnly } from './provider.js'
 
 const DEFAULT_PUBKEY_BASE58 = '11111111111111111111111111111111'
 
@@ -51,13 +53,50 @@ function toStateDisplay(state: RaffleState): string {
   return STATE_DISPLAY[state] ?? state
 }
 
-function readBorshString(data: Buffer, offset: number): { value: string; bytesRead: number } {
-  const len = data.readUInt32LE(offset)
-  const value = data.subarray(offset + 4, offset + 4 + len).toString('utf8')
-  return { value, bytesRead: 4 + len }
+/** Map Anchor enum object (e.g. `{ running: {} }`) to our lowercase state union. */
+function raffleStateFromAnchor(state: unknown): RaffleState {
+  if (!state || typeof state !== 'object') return 'created'
+  const key = Object.keys(state as Record<string, unknown>)[0]
+  if (!key) return 'created'
+  const norm = key.toLowerCase()
+  if ((STATE_NAMES as readonly string[]).includes(norm)) return norm as RaffleState
+  return 'created'
 }
 
-function parseRaffleRaw(data: Buffer): {
+function pickRecord(obj: unknown): Record<string, unknown> {
+  return obj && typeof obj === 'object' ? (obj as Record<string, unknown>) : {}
+}
+
+function pickField(obj: Record<string, unknown>, camel: string, snake: string): unknown {
+  if (camel in obj) return obj[camel]
+  if (snake in obj) return obj[snake]
+  return undefined
+}
+
+function bnLikeToBigint(v: unknown): bigint {
+  if (v == null) return 0n
+  if (typeof v === 'bigint') return v
+  if (typeof v === 'number' && Number.isFinite(v)) return BigInt(Math.trunc(v))
+  if (typeof v === 'object' && v !== null && 'toString' in v) {
+    return BigInt(String((v as { toString: () => string }).toString()))
+  }
+  return 0n
+}
+
+function bnLikeToNumber(v: unknown): number {
+  const b = bnLikeToBigint(v)
+  return Number(b)
+}
+
+function pubkeyToBase58OrNull(pk: unknown): string | null {
+  if (!(pk instanceof PublicKey)) return null
+  if (pk.equals(PublicKey.default)) return null
+  const s = pk.toBase58()
+  return s === DEFAULT_PUBKEY_BASE58 ? null : s
+}
+
+/** Decode on-chain Raffle account bytes using the packaged IDL (Anchor account coder). */
+function decodeRaffleAccount(program: Program, data: Buffer): {
   state: RaffleState
   name: string
   description: string
@@ -67,84 +106,56 @@ function parseRaffleRaw(data: Buffer): {
   ticketDecimals: number
   prizeMint: string
   prizeVaultCount: number
-  prizeAmount: bigint
   prizeDecimals: number
   winner: string | null
   useWhitelist: boolean
   whitelist: string | null
 } | null {
-  if (data.length < 8) return null
-  let o = 8 // skip discriminator
-  if (o + 8 + 1 + 32 + 1 > data.length) return null
-  o += 8 // seed
-  o += 1 // bump
-  o += 32 // creator
-  const stateIdx = data[o]
-  o += 1
-  const state = (STATE_NAMES[stateIdx] ?? 'created') as RaffleState
-  const nameRes = readBorshString(data, o)
-  o += nameRes.bytesRead
-  const descRes = readBorshString(data, o)
-  o += descRes.bytesRead
-  const urlRes = readBorshString(data, o)
-  o += urlRes.bytesRead
-  if (o + 32 + 8 + 1 + 32 + 8 + 1 + 32 + 32 > data.length) return null
-  const ticketMint = new PublicKey(data.subarray(o, o + 32)).toBase58()
-  o += 32
-  const ticketPrice = data.readBigUInt64LE(o)
-  o += 8
-  const ticketDecimals = data[o]
-  o += 1
-  const prizeMint = new PublicKey(data.subarray(o, o + 32)).toBase58()
-  o += 32
-  const prizeVaultCountBn = data.readBigUInt64LE(o)
-  o += 8
-  const prizeVaultCount = Number(prizeVaultCountBn)
-  const prizeDecimals = data[o]
-  o += 1
-  o += 32 // tickets (pubkey)
-  const winnerBytes = data.subarray(o, o + 32)
-  const winner = winnerBytes.every((b) => b === 0) ? null : new PublicKey(winnerBytes).toBase58()
-  o += 32
-  if (o + 1 + 1 + 32 > data.length)
+  try {
+    const raw = program.coder.accounts.decode('Raffle', data) as unknown
+    const d = pickRecord(raw)
+
+    const ticketMintPk = pickField(d, 'ticketMint', 'ticket_mint')
+    const prizeMintPk = pickField(d, 'prizeMint', 'prize_mint')
+    const winnerPk = d.winner
+    const whitelistPk = d.whitelist
+
+    const ticketMint =
+      ticketMintPk instanceof PublicKey ? ticketMintPk.toBase58() : DEFAULT_PUBKEY_BASE58
+    const prizeMint =
+      prizeMintPk instanceof PublicKey ? prizeMintPk.toBase58() : DEFAULT_PUBKEY_BASE58
+
     return {
-      state,
-      name: nameRes.value,
-      description: descRes.value,
-      url: urlRes.value,
+      state: raffleStateFromAnchor(d.state),
+      name: String(d.name ?? ''),
+      description: String(d.description ?? ''),
+      url: String(d.url ?? ''),
       ticketMint,
-      ticketPrice,
-      ticketDecimals,
+      ticketPrice: bnLikeToBigint(pickField(d, 'ticketPrice', 'ticket_price')),
+      ticketDecimals: Number(pickField(d, 'ticketDecimals', 'ticket_decimals') ?? 0),
       prizeMint,
-      prizeVaultCount,
-      prizeAmount: 0n,
-      prizeDecimals,
-      winner,
-      useWhitelist: false,
-      whitelist: null,
+      prizeVaultCount: bnLikeToNumber(pickField(d, 'prizeVaultCount', 'prize_vault_count')),
+      prizeDecimals: Number(pickField(d, 'prizeDecimals', 'prize_decimals') ?? 0),
+      winner: pubkeyToBase58OrNull(winnerPk),
+      useWhitelist: Boolean(pickField(d, 'useWhitelist', 'use_whitelist')),
+      whitelist: pubkeyToBase58OrNull(whitelistPk),
     }
-  const randomnessOpt = data[o]
-  o += 1
-  if (randomnessOpt !== 0) o += 32
-  const useWhitelist = data[o] !== 0
-  o += 1
-  const whitelistBytes = data.subarray(o, o + 32)
-  const whitelist = whitelistBytes.every((b) => b === 0) ? null : new PublicKey(whitelistBytes).toBase58()
-  return {
-    state,
-    name: nameRes.value,
-    description: descRes.value,
-    url: urlRes.value,
-    ticketMint,
-    ticketPrice,
-    ticketDecimals,
-    prizeMint,
-    prizeVaultCount,
-    prizeAmount: 0n,
-    prizeDecimals,
-    winner,
-    useWhitelist,
-    whitelist,
+  } catch {
+    return null
+  }
+}
+
+function decodeTicketsAccount(program: Program, data: Buffer | undefined): { sold: number; total: number } {
+  if (!data?.length) return { sold: 0, total: 0 }
+  try {
+    const raw = program.coder.accounts.decode('Tickets', Buffer.from(data)) as unknown
+    const t = pickRecord(raw)
+    return {
+      sold: Number(t.sold ?? 0),
+      total: Number(t.total ?? 0),
+    }
+  } catch {
+    return { sold: 0, total: 0 }
   }
 }
 
@@ -154,24 +165,20 @@ export async function fetchRaffleChainData(
 ): Promise<RaffleChainData | null> {
   const pubkey = typeof rafflePubkey === 'string' ? new PublicKey(rafflePubkey) : rafflePubkey
   try {
+    const program = getRaffleProgramReadOnly(connection)
     const [raffleInfo, ticketsInfo] = await Promise.all([
       connection.getAccountInfo(pubkey),
       connection.getAccountInfo(deriveTicketsPda(pubkey)),
     ])
     if (!raffleInfo?.data) return null
-    const parsed = parseRaffleRaw(Buffer.from(raffleInfo.data))
+    const parsed = decodeRaffleAccount(program, Buffer.from(raffleInfo.data))
     if (!parsed) return null
-    let ticketsSold = 0
-    let ticketsTotal = 0
-    if (ticketsInfo?.data && ticketsInfo.data.length >= 12) {
-      ticketsSold = ticketsInfo.data.readUInt32LE(8)
-      ticketsTotal = ticketsInfo.data.readUInt32LE(12)
-    }
+    const { sold: ticketsSold, total: ticketsTotal } = decodeTicketsAccount(
+      program,
+      ticketsInfo?.data ? Buffer.from(ticketsInfo.data) : undefined
+    )
     let prizeAmount = 0n
-    if (
-      parsed.prizeMint !== DEFAULT_PUBKEY_BASE58 &&
-      parsed.prizeVaultCount > 0
-    ) {
+    if (parsed.prizeMint !== DEFAULT_PUBKEY_BASE58 && parsed.prizeVaultCount > 0) {
       try {
         const vaultPk = derivePrizeVaultPda(pubkey)
         const vaultInfo = await connection.getParsedAccountInfo(vaultPk)
@@ -216,19 +223,21 @@ export interface RaffleWithAddress {
 }
 
 export async function fetchAllRaffles(connection: Connection): Promise<RaffleWithAddress[]> {
-  const { getRaffleProgramReadOnly } = await import('./provider.js')
   const program = getRaffleProgramReadOnly(connection)
-  const accountNs = program.account as Record<string, { all: (filters: unknown[]) => Promise<Array<{ publicKey: PublicKey; account: unknown }>> }>
+  const accountNs = program.account as Record<
+    string,
+    { all: (filters: unknown[]) => Promise<Array<{ publicKey: PublicKey; account: unknown }>> }
+  >
   const raffleAccount = accountNs.raffle ?? accountNs.Raffle
   if (!raffleAccount) throw new Error('Raffle account not found in program')
   const accounts = await raffleAccount.all([])
   return accounts.map(({ publicKey, account }) => {
-    const a = account as { name: string; state: Record<string, unknown> }
-    const stateKey = Object.keys(a.state ?? {})[0] ?? 'created'
-    const state = (STATE_NAMES.includes(stateKey as (typeof STATE_NAMES)[number]) ? stateKey : 'created') as RaffleState
+    const a = pickRecord(account)
+    const name = String(a.name ?? '')
+    const state = raffleStateFromAnchor(a.state)
     return {
       publicKey: publicKey.toBase58(),
-      name: a.name ?? '',
+      name,
       state,
     }
   })

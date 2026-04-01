@@ -57,7 +57,6 @@
     />
     <p class="raffle-create-form__max-hint">Maximum {{ raffleMaxTickets }} tickets per raffle.</p>
     <GateSelect
-      v-if="showGateSelect"
       :slug="slug"
       :model-value="form.gate"
       :label="`${gateLabel} (this raffle)`"
@@ -86,6 +85,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref, unref } from 'vue'
 import { RAFFLE_MAX_TICKETS_TOTAL } from '@decentraguild/web3'
 import { getGateLabel } from '@decentraguild/catalog'
 import FormInput from '~/components/ui/form-input/FormInput.vue'
@@ -105,18 +105,19 @@ const form = defineModel<{
   ticketMint: string
   ticketPriceDisplay: string
   maxTicketsDisplay: string
-  gate: { programId: string; account: string } | null | 'use-default'
+  gate: { programId: string; account: string } | null | 'use-default' | 'admin-only'
 }>('form', { required: true })
 
 defineProps<{
   slug: string
-  showGateSelect: boolean
   submitting: boolean
   error: string | null
 }>()
 
 const ticketPriceDisplaySafe = computed(() => {
-  const v = form.value.ticketPriceDisplay
+  const inner = unref(form)
+  if (inner == null || typeof inner !== 'object') return ''
+  const v = inner.ticketPriceDisplay
   return typeof v === 'string' ? v : ''
 })
 
