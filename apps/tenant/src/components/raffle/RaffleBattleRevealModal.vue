@@ -70,7 +70,7 @@
             <canvas ref="canvasRef" class="raffle-battle-reveal__canvas" />
             <div v-if="phase === 'done'" class="raffle-battle-reveal__victory">
               <p class="raffle-battle-reveal__victory-label">Winner</p>
-              <p class="raffle-battle-reveal__victory-wallet">{{ formatWallet(winnerPubkey) }}</p>
+              <p class="raffle-battle-reveal__victory-wallet">{{ formatWallet(winnerWalletLabel) }}</p>
             </div>
           </div>
         </div>
@@ -86,6 +86,7 @@ import {
   assignSquadColors,
   buildSoldierSeedsFromHolders,
   createRaffleBattleSimulator,
+  holderRowMatchesChainWinner,
   type RaffleBattleSimulator,
   type SlashEffect,
 } from '~/composables/raffle/raffleBattleEngine'
@@ -100,6 +101,7 @@ export interface HolderDisplayRow {
 const props = defineProps<{
   modelValue: boolean
   raffleName?: string
+  rafflePubkey?: string
   winnerPubkey: string
   loading: boolean
   loadError: string | null
@@ -133,9 +135,20 @@ const winnerMissingFromHolders = computed(
     Boolean(
       props.winnerPubkey &&
         props.rawHolderRows.length > 0 &&
-        !props.rawHolderRows.some((r) => r.owner === props.winnerPubkey),
+        !props.rawHolderRows.some((r) =>
+          holderRowMatchesChainWinner(r.owner, props.winnerPubkey, props.rafflePubkey),
+        ),
     ),
 )
+
+const winnerWalletLabel = computed(() => {
+  const w = props.winnerPubkey?.trim() ?? ''
+  if (!w) return w
+  const row = props.rawHolderRows.find((r) =>
+    holderRowMatchesChainWinner(r.owner, w, props.rafflePubkey),
+  )
+  return row?.owner ?? w
+})
 
 const battleColorSalt = computed(() => `${props.winnerPubkey}|${props.raffleName ?? ''}`)
 
@@ -356,7 +369,11 @@ function loop(t: number) {
 }
 
 function startBattle() {
-  const seeds = buildSoldierSeedsFromHolders(props.rawHolderRows, props.winnerPubkey)
+  const seeds = buildSoldierSeedsFromHolders(
+    props.rawHolderRows,
+    props.winnerPubkey,
+    props.rafflePubkey,
+  )
   if (seeds.length === 0) return
   phase.value = 'battle'
   nextTick(() => {

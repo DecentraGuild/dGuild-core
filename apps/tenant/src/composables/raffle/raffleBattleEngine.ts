@@ -1,3 +1,6 @@
+import { PublicKey } from '@solana/web3.js'
+import { deriveEntrantPda } from '@decentraguild/web3'
+
 export interface BattleSoldierSeed {
   id: string
   owner: string
@@ -120,10 +123,27 @@ function spawnXY(index: number, total: number): { x: number; y: number } {
   }
 }
 
+export function holderRowMatchesChainWinner(
+  rowOwner: string,
+  winnerPubkey: string,
+  rafflePubkey: string | undefined,
+): boolean {
+  if (!winnerPubkey.trim()) return false
+  if (rowOwner === winnerPubkey) return true
+  if (!rafflePubkey?.trim()) return false
+  try {
+    const entrant = deriveEntrantPda(new PublicKey(rafflePubkey), new PublicKey(rowOwner))
+    return entrant.toBase58() === winnerPubkey
+  } catch {
+    return false
+  }
+}
+
 /** One squad per wallet so tickets add durability instead of many 1-shot pawns. */
 export function buildSoldierSeedsFromHolders(
   rows: { owner: string; tickets: bigint }[],
   winnerPubkey: string,
+  rafflePubkey?: string,
 ): BattleSoldierSeed[] {
   const out: BattleSoldierSeed[] = []
   let seq = 0
@@ -133,7 +153,7 @@ export function buildSoldierSeedsFromHolders(
     out.push({
       id: `squad-${seq++}`,
       owner: r.owner,
-      isWinnerSide: r.owner === winnerPubkey,
+      isWinnerSide: holderRowMatchesChainWinner(r.owner, winnerPubkey, rafflePubkey),
       tickets: Math.floor(n),
     })
   }
