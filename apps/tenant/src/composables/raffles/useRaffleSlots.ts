@@ -65,10 +65,11 @@ export function useRaffleSlots(
     chainDataByRaffle.value = next
   }
 
-  async function fetchRaffles() {
+  async function fetchRaffles(options?: { silent?: boolean }) {
+    const silent = options?.silent === true
     const id = tenantId.value
     if (!id) return
-    slotsLoading.value = true
+    if (!silent) slotsLoading.value = true
     try {
       const supabase = useSupabase()
       const { data, error } = await supabase
@@ -91,7 +92,7 @@ export function useRaffleSlots(
     } catch {
       raffles.value = []
     } finally {
-      slotsLoading.value = false
+      if (!silent) slotsLoading.value = false
     }
   }
 

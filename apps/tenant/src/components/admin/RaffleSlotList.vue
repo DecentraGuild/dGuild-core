@@ -2,18 +2,35 @@
   <div class="raffle-slots">
     <div class="raffle-slots__head">
       <h3 class="raffle-slots__title">Raffle slots</h3>
-      <Button
-        v-if="hasAnyWinner"
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        class="raffle-slots__outcomes-toggle"
+      <div class="raffle-slots__head-actions">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          class="raffle-slots__refresh"
+          :disabled="slotsLoading || refreshLoading"
+          :title="refreshLoading ? 'Refreshing…' : 'Refresh raffles from server and chain'"
+          @click="$emit('refresh')"
+        >
+          <Icon
+            icon="lucide:refresh-cw"
+            class="raffle-slots__refresh-icon"
+            :class="{ 'raffle-slots__refresh-icon--spin': refreshLoading }"
+          />
+        </Button>
+        <Button
+          v-if="hasAnyWinner"
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          class="raffle-slots__outcomes-toggle"
         :title="revealOutcomes ? 'Hide winner addresses' : 'Show winner addresses'"
         :aria-pressed="revealOutcomes"
         @click="revealOutcomes = !revealOutcomes"
       >
         <Icon :icon="revealOutcomes ? 'lucide:eye-off' : 'lucide:eye'" />
       </Button>
+      </div>
     </div>
     <p class="admin__hint raffle-slots__hint">Each slot holds one raffle. Click the plus to create a new raffle in that slot.</p>
     <p v-if="actionTxStatus" class="raffle-slots__tx-status">
@@ -80,6 +97,7 @@ import type { SlotCard, RaffleItem } from '~/composables/raffles/useRaffleSlots'
 const props = defineProps<{
   slotCards: SlotCard[]
   slotsLoading: boolean
+  refreshLoading?: boolean
   canCreateMore: boolean
   actionTxStatus: string | null
   actionSubmitting: string | null
@@ -95,6 +113,7 @@ const hasAnyWinner = computed(() =>
 )
 
 defineEmits<{
+  refresh: []
   addReward: [raffle: RaffleItem]
   start: [slot: SlotCard]
   pause: [slot: SlotCard]
@@ -117,6 +136,23 @@ defineEmits<{
   align-items: center;
   gap: var(--theme-space-xs);
   margin-bottom: var(--theme-space-xs);
+}
+
+.raffle-slots__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.raffle-slots__refresh-icon--spin {
+  animation: raffle-slots-spin 0.85s linear infinite;
+}
+
+@keyframes raffle-slots-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .raffle-slots__title {

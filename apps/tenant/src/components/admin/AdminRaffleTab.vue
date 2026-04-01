@@ -26,12 +26,14 @@
           <RaffleSlotList
             :slot-cards="slotCards"
             :slots-loading="slotsLoading"
+            :refresh-loading="raffleRefreshLoading"
             :can-create-more="canCreateMore"
             :action-tx-status="actionTxStatus"
             :action-submitting="actionSubmitting"
             :action-error="actionError"
             :action-error-raffle="actionErrorRaffle"
             :mint-metadata-by-ticket-mint="mintMetadataByTicketMint"
+            @refresh="onRefreshRaffles"
             @add-reward="openAddRewardModal"
             @start="openStartRaffleModal"
             @pause="onPauseRaffle"
@@ -272,6 +274,20 @@ const {
   fetchRaffles,
   fetchChainDataForRaffles,
 } = useRaffleSlots(tenantIdRef, connection, slotLimit)
+
+const raffleRefreshLoading = ref(false)
+
+async function onRefreshRaffles() {
+  if (raffleRefreshLoading.value || slotsLoading.value) return
+  raffleRefreshLoading.value = true
+  try {
+    await fetchRaffles({ silent: true })
+    fetchQuote()
+    await pricingRef.value?.refresh?.()
+  } finally {
+    raffleRefreshLoading.value = false
+  }
+}
 
 const battleOpen = ref(false)
 const battleRafflePubkey = ref<string | null>(null)
