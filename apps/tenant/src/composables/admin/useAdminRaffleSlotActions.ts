@@ -93,7 +93,11 @@ export function useAdminRaffleSlotActions(deps: AdminRaffleSlotActionsDeps) {
     if (!wallet?.publicKey) return
     closeRaffleModal()
     await runRaffleAction(slot.raffle.rafflePubkey, async () => {
-      const tx = await buildEnableRaffleTransaction({ rafflePubkey: slot.raffle!.rafflePubkey, wallet })
+      const tx = await buildEnableRaffleTransaction({
+        rafflePubkey: slot.raffle!.rafflePubkey,
+        connection: connection.value!,
+        wallet,
+      })
       const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
       if (!sig) throw new Error('Transaction failed')
     }, 'Failed to start raffle')
@@ -104,20 +108,28 @@ export function useAdminRaffleSlotActions(deps: AdminRaffleSlotActionsDeps) {
   }
 
   async function onPauseRaffle(slot: SlotCard) {
-    if (!slot.raffle) return
+    if (!slot.raffle || !connection.value) return
     await runRaffleAction(slot.raffle.rafflePubkey, async () => {
       const wallet = getEscrowWalletFromConnector()!
-      const tx = await buildDisableRaffleTransaction({ rafflePubkey: slot.raffle!.rafflePubkey, wallet })
+      const tx = await buildDisableRaffleTransaction({
+        rafflePubkey: slot.raffle!.rafflePubkey,
+        connection: connection.value!,
+        wallet,
+      })
       const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
       if (!sig) throw new Error('Transaction failed')
     }, 'Failed to pause raffle')
   }
 
   async function onResumeRaffle(slot: SlotCard) {
-    if (!slot.raffle) return
+    if (!slot.raffle || !connection.value) return
     await runRaffleAction(slot.raffle.rafflePubkey, async () => {
       const wallet = getEscrowWalletFromConnector()!
-      const tx = await buildEnableRaffleTransaction({ rafflePubkey: slot.raffle!.rafflePubkey, wallet })
+      const tx = await buildEnableRaffleTransaction({
+        rafflePubkey: slot.raffle!.rafflePubkey,
+        connection: connection.value!,
+        wallet,
+      })
       const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
       if (!sig) throw new Error('Transaction failed')
     }, 'Failed to resume raffle')
@@ -142,6 +154,7 @@ export function useAdminRaffleSlotActions(deps: AdminRaffleSlotActionsDeps) {
         name: editForm.name.trim(),
         description: editForm.description.trim(),
         url: editForm.url.trim(),
+        connection: connection.value!,
         wallet,
       })
       const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
@@ -150,10 +163,14 @@ export function useAdminRaffleSlotActions(deps: AdminRaffleSlotActionsDeps) {
   }
 
   async function onRevealWinner(slot: SlotCard) {
-    if (!slot.raffle) return
+    if (!slot.raffle || !connection.value) return
     await runRaffleAction(slot.raffle.rafflePubkey, async () => {
       const wallet = getEscrowWalletFromConnector()!
-      const tx = await buildRevealWinnersTransaction({ rafflePubkey: slot.raffle!.rafflePubkey, wallet })
+      const tx = await buildRevealWinnersTransaction({
+        rafflePubkey: slot.raffle!.rafflePubkey,
+        connection: connection.value!,
+        wallet,
+      })
       const sig = await sendWithTxStatus(connection.value!, tx, wallet, wallet.publicKey)
       if (!sig) throw new Error('Transaction failed')
     }, 'Failed to reveal winner')
@@ -198,6 +215,7 @@ export function useAdminRaffleSlotActions(deps: AdminRaffleSlotActionsDeps) {
         rafflePubkey: slot.raffle!.rafflePubkey,
         ticketMint: slot.chainData!.ticketMint,
         creatorAta,
+        connection: conn,
         wallet,
       })
       const tx = new Transaction()

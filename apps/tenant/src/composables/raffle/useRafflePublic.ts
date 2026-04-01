@@ -301,12 +301,13 @@ export function useRafflePublic(
           }
         }
 
-        const tx = buildBuyTicketsTransaction({
+        const tx = await buildBuyTicketsTransaction({
           rafflePubkey: r.rafflePubkey,
           ticketAmount: amount,
           ticketMint: fresh.ticketMint,
           useWhitelist: fresh.useWhitelist,
           whitelist: fresh.whitelist,
+          connection: conn,
           wallet,
         })
         const TX_LABELS: Record<string, string> = { signing: 'Signing...', sending: 'Sending...', confirming: 'Confirming...' }
