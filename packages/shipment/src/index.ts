@@ -4,8 +4,9 @@
  * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + selectSplInterfaceInfo,
  * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo.
  * Decompress: selectSplInterfaceInfosForDecompression + tokenPoolInfos on CompressedTokenProgram.decompress.
- * Validity proof: use getValidityProofV0({ hash, tree, queue } per account) so proofs match the leaf's state tree;
- * getValidityProof(hashes only) can target the wrong tree on multi-tree mainnet and fails on-chain with 0x1900.
+ * Validity proof: stateless.js 0.23 defaults to V2 state trees (see zkcompression migration v1→v2).
+ * For StateV2 leaves use getValidityProofV2(merkle contexts); V1 leaves use getValidityProofV0(hash+tree+queue).
+ * Wrong proof version / wrong tree disambiguation surfaces as custom program error 0x1900 on decompress.
  */
 
 import {
@@ -29,7 +30,10 @@ import {
   bn,
   selectStateTreeInfo,
   defaultStateTreeLookupTables,
+  TreeType,
+  DerivationMode,
 } from '@lightprotocol/stateless.js'
+import type { CompressedAccount, ValidityProofWithContext } from '@lightprotocol/stateless.js'
 import { ComputeBudgetProgram } from '@solana/web3.js'
 import {
   CompressedTokenProgram,
@@ -443,6 +447,35 @@ function u8eq(a: Uint8Array, b: Uint8Array): boolean {
 
 type BnInput = Parameters<typeof bn>[0]
 
+/**
+ * Decompress proofs must match the state tree version (V1 vs V2).
+ * @see https://www.zkcompression.com/resources/migration-v1-to-v2
+ */
+async function fetchValidityProofForDecompress(
+  rpc: ReturnType<typeof createRpc>,
+  inputAccounts: Array<{ compressedAccount: CompressedAccount }>
+): Promise<ValidityProofWithContext> {
+  const stateV2 = inputAccounts.some(
+    (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV2
+  )
+  if (stateV2) {
+    return rpc.getValidityProofV2(
+      inputAccounts.map((a) => a.compressedAccount),
+      [],
+      DerivationMode.standard
+    )
+  }
+  const hashesWithTree = inputAccounts.map((account) => {
+    const { hash, treeInfo } = account.compressedAccount
+    return {
+      hash,
+      tree: treeInfo.tree,
+      queue: treeInfo.queue,
+    }
+  })
+  return rpc.getValidityProofV0(hashesWithTree, [])
+}
+
 function compressedLeafHashMatches(h: unknown, needle: string): boolean {
   const n = needle.trim()
   if (!n || h == null) return false
@@ -578,15 +611,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       ? sumParsed
       : requestedBn
 
-  const hashesWithTree = inputAccounts.map((account) => {
-    const { hash, treeInfo } = account.compressedAccount
-    return {
-      hash,
-      tree: treeInfo.tree,
-      queue: treeInfo.queue,
-    }
-  })
-  const proof = await rpc.getValidityProofV0(hashesWithTree, [])
+  const proof = await fetchValidityProofForDecompress(rpc, inputAccounts)
 
   const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
   const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
