@@ -399,16 +399,15 @@ async function signVersionedTransactionWalletStandard(
   if (signedTx === undefined && result instanceof Uint8Array) {
     signedTx = result
   }
+  let bytes: Uint8Array
   if (
     signedTx &&
     typeof signedTx === 'object' &&
     'serialize' in signedTx &&
     typeof (signedTx as { serialize: unknown }).serialize === 'function'
   ) {
-    return signedTx as VersionedTransaction
-  }
-  let bytes: Uint8Array
-  if (
+    bytes = (signedTx as VersionedTransaction).serialize()
+  } else if (
     signedTx &&
     typeof signedTx === 'object' &&
     'signedTransaction' in signedTx &&
@@ -424,11 +423,15 @@ async function signVersionedTransactionWalletStandard(
   const requestedMessage = tx.message.serialize()
   const signedMessage = signed.message.serialize()
   if (!uint8ArrayEqual(requestedMessage, signedMessage)) {
+    const wname = typeof wallet.name === 'string' ? wallet.name : ''
+    const phantomHint =
+      /phantom/i.test(wname) ?
+        ' Phantom often prepends assertion instructions to v0 transactions; Solflare/Backpack usually sign the exact message. '
+      : ' '
     throw new Error(
-      'Wallet returned a different transaction than the one sent for signing (message bytes changed). ' +
-        'Extensions or wallet features that inject instructions—before your real instructions run—cause this; ' +
-        'simulation then fails in injected code and never reaches the app transaction. ' +
-        'Disable transaction guards / simulation add-ons for this site, or try another wallet or browser profile.',
+      'Wallet returned a different transaction than the one sent for signing (message bytes changed).' +
+        phantomHint +
+        'Disable browser extensions that modify Solana transactions, or use a wallet that signs the app-built message unchanged.',
     )
   }
   return signed
