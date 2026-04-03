@@ -3,8 +3,9 @@
  * Uses @lightprotocol/compressed-token + @lightprotocol/stateless.js 0.23.x.
  * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + selectSplInterfaceInfo,
  * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo.
- * Decompress: same as SDK `decompress()` — getValidityProofV0(hash+tree+queue), selectSplInterfaceInfosForDecompression,
- * CompressedTokenProgram.decompress, then a v0 VersionedTransaction (TransactionMessage.compileToV0Message), not legacy Transaction.
+ * Decompress: validity proof V0 for StateV1-only inputs, else getValidityProofV2; token pools via
+ * selectSplInterfaceInfosForDecompression; same default state-tree LUTs as compress in compileToV0Message;
+ * v0 VersionedTransaction (not legacy Transaction — avoids Light CPI account packing failures).
  * Legacy txs break Light Token / system CPI account packing for this instruction path (persistent 0x1900-style failures).
  */
 
@@ -30,6 +31,8 @@ import {
   bn,
   selectStateTreeInfo,
   defaultStateTreeLookupTables,
+  TreeType,
+  DerivationMode,
 } from '@lightprotocol/stateless.js'
 import type { CompressedAccount } from '@lightprotocol/stateless.js'
 import { ComputeBudgetProgram } from '@solana/web3.js'
@@ -186,14 +189,23 @@ function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
   })
 }
 
-async function fetchMainnetStateTreeLookupTableAccounts(
-  rpc: ReturnType<typeof createRpc>
-): Promise<import('@solana/web3.js').AddressLookupTableAccount[]> {
-  const pairs = defaultStateTreeLookupTables().mainnet
+function stateTreeLookupTablePairsForRpcUrl(rpcUrl: string) {
+  const devnet = /devnet/i.test(rpcUrl)
+  const pairs = devnet
+    ? defaultStateTreeLookupTables().devnet
+    : defaultStateTreeLookupTables().mainnet
   if (!pairs?.length) {
-    throw new Error('No mainnet state tree LUT pair in defaultStateTreeLookupTables')
+    throw new Error('No state tree LUT pair in defaultStateTreeLookupTables')
   }
-  const { stateTreeLookupTable, nullifyLookupTable } = pairs[0]
+  return pairs[0]
+}
+
+async function fetchStateTreeLookupTableAccounts(
+  rpc: ReturnType<typeof createRpc>,
+  rpcUrl: string
+): Promise<import('@solana/web3.js').AddressLookupTableAccount[]> {
+  const { stateTreeLookupTable, nullifyLookupTable } =
+    stateTreeLookupTablePairsForRpcUrl(rpcUrl)
   const [stateRes, nullifyRes] = await Promise.all([
     rpc.getAddressLookupTable(stateTreeLookupTable),
     rpc.getAddressLookupTable(nullifyLookupTable),
@@ -202,7 +214,7 @@ async function fetchMainnetStateTreeLookupTableAccounts(
   if (stateRes.value) out.push(stateRes.value)
   if (nullifyRes.value) out.push(nullifyRes.value)
   if (out.length === 0) {
-    throw new Error('Mainnet state tree lookup tables not found')
+    throw new Error('State tree lookup tables not found on this cluster')
   }
   return out
 }
@@ -338,7 +350,10 @@ export async function compressAndSend(
   }
   const tokenPoolInfo = poolCandidates[0]
 
-  const lookupTableAccounts = await fetchMainnetStateTreeLookupTableAccounts(rpc)
+  const lookupTableAccounts = await fetchStateTreeLookupTableAccounts(
+    rpc,
+    rpcEndpoint
+  )
 
   const toAddresses = recipients.map((r) => new PublicKey(r.address))
   const amountsRaw = recipients.map((r) => Math.round(r.amount * multiplier))
@@ -603,14 +618,34 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       ? sumParsed
       : requestedBn
 
-  const proof = await rpc.getValidityProofV0(
-    inputAccounts.map((account) => ({
-      hash: account.compressedAccount.hash,
-      tree: account.compressedAccount.treeInfo.tree,
-      queue: account.compressedAccount.treeInfo.queue,
-    })),
-    [],
+  const v1Only = inputAccounts.every(
+    (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV1
   )
+  const proof = v1Only
+    ? await rpc.getValidityProofV0(
+        inputAccounts.map((account) => ({
+          hash: account.compressedAccount.hash,
+          tree: account.compressedAccount.treeInfo.tree,
+          queue: account.compressedAccount.treeInfo.queue,
+        })),
+        [],
+      )
+    : await (async () => {
+        const contexts = inputAccounts.map((a) => a.compressedAccount)
+        try {
+          return await rpc.getValidityProofV2(
+            contexts,
+            [],
+            DerivationMode.standard
+          )
+        } catch {
+          return rpc.getValidityProofV2(
+            contexts,
+            [],
+            DerivationMode.compressible
+          )
+        }
+      })()
 
   const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
   const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
@@ -630,7 +665,12 @@ export async function decompressToken(params: DecompressParams): Promise<string>
 
   const ataInfo = await rpc.getAccountInfo(splAta)
   const needsAta = !ataInfo
-  const DECOMPRESS_CU_LIMIT = 400_000
+  const DECOMPRESS_CU_LIMIT = 550_000
+
+  const lookupTableAccounts = await fetchStateTreeLookupTableAccounts(
+    rpc,
+    rpcEndpoint
+  )
 
   let blockhashCtx = (await rpc.getLatestBlockhashAndContext()).value
 
@@ -684,7 +724,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       ComputeBudgetProgram.setComputeUnitLimit({ units: DECOMPRESS_CU_LIMIT }),
       decompressIx,
     ],
-  }).compileToV0Message([])
+  }).compileToV0Message(lookupTableAccounts)
 
   const vtx = new VersionedTransaction(messageV0)
   const signedTx = await wallet.signTransaction(vtx)
