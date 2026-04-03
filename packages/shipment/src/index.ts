@@ -58,6 +58,8 @@ const VALIDITY_PROOF_MAX_ATTEMPTS = 5
 const VALIDITY_PROOF_BASE_DELAY_MS = 750
 /** Pause after a confirmed decompress so roots/indexer catch up before the next proof. */
 const POST_DECOMPRESS_INDEXER_SETTLE_MS = 1800
+/** After creating the SPL ATA, the compression indexer often lags before the first validity proof. */
+const POST_CREATE_ATA_SETTLE_MS = 2500
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -270,31 +272,6 @@ function pickSingleLargestCompressedTokenAccount<T extends CompressedTokenItemWi
   if (items.length === 0) return null
   return items.reduce((best, cur) =>
     bn(cur.parsed.amount).gt(bn(best.parsed.amount)) ? cur : best
-  )
-}
-
-async function fetchValidityProofForDecompressWithRetry(
-  rpc: ReturnType<typeof createRpc>,
-  inputAccounts: Array<{ compressedAccount: CompressedAccount }>
-): Promise<ValidityProofWithContext> {
-  let lastErr: unknown
-  for (let attempt = 0; attempt < VALIDITY_PROOF_MAX_ATTEMPTS; attempt++) {
-    if (attempt > 0) {
-      await sleep(VALIDITY_PROOF_BASE_DELAY_MS * 2 ** (attempt - 1))
-    }
-    try {
-      const proof = await fetchValidityProofForDecompress(rpc, inputAccounts)
-      if (proof.compressedProof != null) {
-        return proof
-      }
-    } catch (e) {
-      lastErr = e
-    }
-  }
-  const suffix =
-    lastErr instanceof Error ? ` Last error: ${lastErr.message}` : ''
-  throw new Error(
-    `Validity proof unavailable from the compression RPC after ${VALIDITY_PROOF_MAX_ATTEMPTS} attempts.${suffix} Wait a minute, refresh the page, and try again.`
   )
 }
 
@@ -662,6 +639,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       }
       throw e
     }
+    await sleep(POST_CREATE_ATA_SETTLE_MS)
   }
 
   const signatures: string[] = []
@@ -770,6 +748,21 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       )
     }
 
+    const refetchThisLeaf = async (
+      hash: ReturnType<typeof bn>
+    ): Promise<typeof sole | null> => {
+      const res = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
+      const rows = (res.items ?? []).filter((account) =>
+        bn(account.parsed.amount).gt(bn(0))
+      )
+      for (const account of rows) {
+        if (bn(account.compressedAccount.hash).eq(hash)) {
+          return account as typeof sole
+        }
+      }
+      return null
+    }
+
     const selectedRaw = [sole]
     const amountForInstruction = bn(sole.parsed.amount)
 
@@ -793,25 +786,69 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       )
     }
 
-    for (const a of inputAccounts) {
-      const bal = await rpc.getCompressedTokenAccountBalance(bn(a.compressedAccount.hash))
-      if (!bal.amount.eq(bn(a.parsed.amount))) {
-        throw new Error(
-          'On-chain balance does not match this claim row. Refresh the page and try again.',
+    const leafHash = bn(sole.compressedAccount.hash)
+
+    let proofInputs = inputAccounts
+    let proofAmount = amountForInstruction
+    let proof: ValidityProofWithContext | null = null
+    let lastProofErr: unknown
+    for (let attempt = 0; attempt < VALIDITY_PROOF_MAX_ATTEMPTS; attempt++) {
+      if (attempt > 0) {
+        await sleep(VALIDITY_PROOF_BASE_DELAY_MS * 2 ** (attempt - 1))
+        const fresh = await refetchThisLeaf(leafHash)
+        if (!fresh) {
+          throw new Error(
+            'This compressed token leaf was not found after refresh. Reload the page; your balance display may be stale.',
+          )
+        }
+        proofInputs = [fresh]
+        proofAmount = bn(fresh.parsed.amount)
+        const bal = await rpc.getCompressedTokenAccountBalance(
+          bn(fresh.compressedAccount.hash)
         )
+        if (!bal.amount.eq(bn(fresh.parsed.amount))) {
+          throw new Error(
+            'On-chain balance does not match this claim row. Refresh the page and try again.',
+          )
+        }
+      } else {
+        for (const a of proofInputs) {
+          const bal = await rpc.getCompressedTokenAccountBalance(bn(a.compressedAccount.hash))
+          if (!bal.amount.eq(bn(a.parsed.amount))) {
+            throw new Error(
+              'On-chain balance does not match this claim row. Refresh the page and try again.',
+            )
+          }
+        }
+      }
+
+      try {
+        const p = await fetchValidityProofForDecompress(rpc, proofInputs)
+        if (p.compressedProof != null) {
+          proof = p
+          break
+        }
+      } catch (e) {
+        lastProofErr = e
       }
     }
 
-    const proof = await fetchValidityProofForDecompressWithRetry(rpc, inputAccounts)
+    if (!proof?.compressedProof) {
+      const suffix =
+        lastProofErr instanceof Error ? ` Last error: ${lastProofErr.message}` : ''
+      throw new Error(
+        `Validity proof unavailable from the compression RPC after ${VALIDITY_PROOF_MAX_ATTEMPTS} attempts.${suffix} Wait a minute, refresh the page, and try again. If your wallet already signed a transaction that only created your token account (no mint amount on Solscan), sign again to complete the decompress.`,
+      )
+    }
 
     const splRows = await getSplInterfaceInfos(rpc, mintPk)
     const tokenPoolInfos = [pickLowestInitializedSplInterfaceInfo(splRows)]
 
     const decompressIx = await CompressedTokenProgram.decompress({
       payer: owner,
-      inputCompressedTokenAccounts: inputAccounts,
+      inputCompressedTokenAccounts: proofInputs,
       toAddress: splAta,
-      amount: amountForInstruction,
+      amount: proofAmount,
       recentInputStateRootIndices: proof.rootIndices,
       recentValidityProof: proof.compressedProof,
       tokenPoolInfos,
