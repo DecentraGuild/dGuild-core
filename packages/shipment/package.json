@@ -20,8 +20,8 @@
   },
   "dependencies": {
     "@decentraguild/web3": "workspace:*",
-    "@lightprotocol/compressed-token": "0.20.3",
-    "@lightprotocol/stateless.js": "0.20.3",
+    "@lightprotocol/compressed-token": "0.23.1",
+    "@lightprotocol/stateless.js": "0.23.1",
     "@solana/spl-token": "^0.4.9",
     "@solana/web3.js": "^1.95.0"
   },

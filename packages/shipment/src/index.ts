@@ -1,7 +1,9 @@
 /**
  * Shipment package – thin layer on Light Protocol for compressed token airdrops.
- * Uses @lightprotocol/compressed-token + @lightprotocol/stateless.js 0.20.3.
- * Follows Helius AirShip pattern: createTokenPool, CompressedTokenProgram.compress with outputStateTree.
+ * Uses @lightprotocol/compressed-token + @lightprotocol/stateless.js 0.23.x.
+ * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + selectSplInterfaceInfo,
+ * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo.
+ * Decompress: selectSplInterfaceInfosForDecompression + tokenPoolInfos on CompressedTokenProgram.decompress.
  */
 
 import {
@@ -22,19 +24,19 @@ import {
 import {
   createRpc,
   buildAndSignTx,
-  pickRandomTreeAndQueue,
   bn,
+  selectStateTreeInfo,
+  defaultStateTreeLookupTables,
 } from '@lightprotocol/stateless.js'
 import { ComputeBudgetProgram } from '@solana/web3.js'
 import {
   CompressedTokenProgram,
   createTokenPool,
   selectMinCompressedTokenAccountsForTransfer,
+  getSplInterfaceInfos,
+  selectSplInterfaceInfo,
+  selectSplInterfaceInfosForDecompression,
 } from '@lightprotocol/compressed-token'
-
-const LOOKUP_TABLE_MAINNET = new PublicKey(
-  '9NYFyEqPkyXUhkerbGHXUXkvb4qpzeEdHuGpgbgpH1NJ'
-)
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
 const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
 const COMPUTE_UNIT_LIMIT = 550_000
@@ -101,8 +103,7 @@ export async function fetchCompressedTokenBalances(
   const rpc = getRpc(rpcUrl)
   const owner = new PublicKey(ownerAddress)
   const res = await rpc.getCompressedTokenBalancesByOwnerV2(owner, {})
-  const items = (res as { value?: { items?: Array<{ mint: PublicKey; balance: { toString: () => string } }> } })
-    .value?.items ?? []
+  const items = res.value?.items ?? []
   return items.map((item) => ({
     mint: item.mint.toBase58(),
     amount: item.balance.toString(),
@@ -182,6 +183,27 @@ function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
   })
 }
 
+async function fetchMainnetStateTreeLookupTableAccounts(
+  rpc: ReturnType<typeof createRpc>
+): Promise<import('@solana/web3.js').AddressLookupTableAccount[]> {
+  const pairs = defaultStateTreeLookupTables().mainnet
+  if (!pairs?.length) {
+    throw new Error('No mainnet state tree LUT pair in defaultStateTreeLookupTables')
+  }
+  const { stateTreeLookupTable, nullifyLookupTable } = pairs[0]
+  const [stateRes, nullifyRes] = await Promise.all([
+    rpc.getAddressLookupTable(stateTreeLookupTable),
+    rpc.getAddressLookupTable(nullifyLookupTable),
+  ])
+  const out: import('@solana/web3.js').AddressLookupTableAccount[] = []
+  if (stateRes.value) out.push(stateRes.value)
+  if (nullifyRes.value) out.push(nullifyRes.value)
+  if (out.length === 0) {
+    throw new Error('Mainnet state tree lookup tables not found')
+  }
+  return out
+}
+
 /**
  * Register an existing SPL mint with Light Protocol (create token pool).
  * Call this once per mint before compressAndSend. No mint authority required.
@@ -242,8 +264,9 @@ export async function registerMintForCompression(
 
 /**
  * Compress and send tokens to recipients. Ship wallet must hold the tokens in its ATA.
- * Uses AirShip flow: createTokenPool, getCachedActiveStateTreeInfo, pickRandomTreeAndQueue,
- * CompressedTokenProgram.compress with outputStateTree, buildAndSignTx.
+ * Uses createTokenPool, getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos +
+ * selectSplInterfaceInfo, CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo,
+ * buildAndSignTx with default state-tree LUT pair(s).
  * Large recipient lists are split across multiple transactions (v0 message size limit).
  * The payer keypair signs every partial tx in one batch (same blockhash) before any
  * send—no per-tx wallet popups; only the RPC submit/confirm steps are sequential.
@@ -297,14 +320,13 @@ export async function compressAndSend(
     programId
   )
 
-  const activeStateTrees = await rpc.getCachedActiveStateTreeInfo()
-  const { tree } = pickRandomTreeAndQueue(activeStateTrees)
+  const stateTreeInfos = await rpc.getStateTreeInfos()
+  const outputStateTreeInfo = selectStateTreeInfo(stateTreeInfos)
 
-  const lookupTableResult = await rpc.getAddressLookupTable(LOOKUP_TABLE_MAINNET)
-  const lookupTableAccount = lookupTableResult.value
-  if (!lookupTableAccount) {
-    throw new Error('Mainnet lookup table not found')
-  }
+  const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
+  const tokenPoolInfo = selectSplInterfaceInfo(splInterfaceInfos)
+
+  const lookupTableAccounts = await fetchMainnetStateTreeLookupTableAccounts(rpc)
 
   const toAddresses = recipients.map((r) => new PublicKey(r.address))
   const amountsRaw = recipients.map((r) => Math.round(r.amount * multiplier))
@@ -322,8 +344,8 @@ export async function compressAndSend(
       toAddress: batch,
       amount: batchAmounts,
       mint: mintPk,
-      tokenProgramId: programId,
-      outputStateTree: tree,
+      outputStateTreeInfo,
+      tokenPoolInfo,
     })
     compressInstructions.push(compressIx)
   }
@@ -350,7 +372,7 @@ export async function compressAndSend(
         payer,
         blockhash,
         undefined,
-        [lookupTableAccount]
+        lookupTableAccounts
       )
     )
   }
@@ -528,9 +550,9 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     inputAccounts = [fresh]
   }
 
-  const tree0 = inputAccounts[0].compressedAccount.merkleTree.toBase58()
+  const tree0 = inputAccounts[0].compressedAccount.treeInfo.tree.toBase58()
   for (let i = 1; i < inputAccounts.length; i++) {
-    if (inputAccounts[i].compressedAccount.merkleTree.toBase58() !== tree0) {
+    if (inputAccounts[i].compressedAccount.treeInfo.tree.toBase58() !== tree0) {
       throw new Error(
         'Compressed balances for this mint sit in different state trees. Merge those compressed accounts (Light Protocol) into one, then claim again.'
       )
@@ -555,10 +577,15 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       : requestedBn
 
   const proof = await rpc.getValidityProof(
-    inputAccounts.map((account) => bn(account.compressedAccount.hash)),
+    inputAccounts.map((account) => account.compressedAccount.hash),
+    [],
   )
 
-  const outputStateTree = inputAccounts[0].compressedAccount.merkleTree
+  const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
+  const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
+    splInterfaceInfos,
+    amountForInstruction,
+  )
 
   const decompressIx = await CompressedTokenProgram.decompress({
     payer: owner,
@@ -567,8 +594,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     amount: amountForInstruction,
     recentInputStateRootIndices: proof.rootIndices,
     recentValidityProof: proof.compressedProof,
-    outputStateTree,
-    tokenProgramId: programId,
+    tokenPoolInfos,
   })
 
   const ataInfo = await rpc.getAccountInfo(splAta)
