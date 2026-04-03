@@ -476,11 +476,15 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   const needsAta = !ataInfo
   const cuLimit = 1_000_000
 
-  const instructions = [
-    ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }),
-  ]
+  let blockhashCtx = (await rpc.getLatestBlockhashAndContext()).value
+
+  // Create the SPL ATA in its own transaction when missing. Bundling ATA idempotent + Light
+  // decompress in one legacy Transaction has triggered "writable privilege escalated" on the
+  // state tree for some wallets (outer ix passes the tree read-only after sign/serialize).
   if (needsAta) {
-    instructions.push(
+    const createAtaTx = new Transaction()
+    createAtaTx.add(
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
       createAssociatedTokenAccountIdempotentInstructionWithDerivation(
         owner,
         owner,
@@ -489,15 +493,36 @@ export async function decompressToken(params: DecompressParams): Promise<string>
         programId
       )
     )
+    createAtaTx.recentBlockhash = blockhashCtx.blockhash
+    createAtaTx.feePayer = owner
+    const signedCreate = await wallet.signTransaction(createAtaTx)
+    try {
+      const createSig = await rpc.sendRawTransaction(signedCreate.serialize(), {
+        skipPreflight: false,
+      })
+      await rpc.confirmTransaction(createSig, 'confirmed')
+    } catch (e) {
+      if (e instanceof SendTransactionError) {
+        const base = e.message
+        let logBlock = ''
+        try {
+          const fetched = await e.getLogs(connection)
+          if (Array.isArray(fetched) && fetched.length) {
+            logBlock = `\n\nFull logs:\n${fetched.join('\n')}`
+          }
+        } catch {
+          // simulation-only
+        }
+        throw new Error(`Create token account failed: ${base}${logBlock}`, { cause: e })
+      }
+      throw e
+    }
+    blockhashCtx = (await rpc.getLatestBlockhashAndContext()).value
   }
-  instructions.push(decompressIx)
-
-  const { value: blockhashCtx } = await rpc.getLatestBlockhashAndContext()
 
   const tx = new Transaction()
-  for (const ix of instructions) {
-    tx.add(ix)
-  }
+  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }))
+  tx.add(decompressIx)
   tx.recentBlockhash = blockhashCtx.blockhash
   tx.feePayer = owner
 
