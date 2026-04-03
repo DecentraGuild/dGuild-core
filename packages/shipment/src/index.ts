@@ -5,9 +5,10 @@
  * Decompress: `selectAccountsByPreferredTreeType` + `getValidityProofV0` / `getValidityProofV2` (see
  * {@link fetchValidityProofForDecompress}). SPL interface for ix matches **compress**: lowest initialized pool only.
  * Claim is **per mint**: `selectAccountsByPreferredTreeType` ensures each tx only uses StateV1 or StateV2 accounts,
- * never mixed (mixed batches break validity proofs → 0x1900). Items are then **split by state tree pubkey** so a
- * single decompress never mixes different trees; `selectMinCompressedTokenAccountsForTransferOrPartial` (up to 4
- * inputs per tx) runs per tree; multiple txs until all trees are drained.
+ * never mixed (mixed batches break validity proofs → 0x1900). Items are **split by state tree pubkey** so one
+ * decompress never mixes different trees. Within a tree we decompress **one compressed leaf per transaction**
+ * (simplest proof / fewest RPC edge cases); repeat until drained. Proof fetch uses retries + backoff; a short pause
+ * after each confirmed tx helps the compression indexer before the next proof.
  * Token pool for decompress is the **lowest initialized** SPL interface — same as `compressAndSend` — so we never
  * pass every pool when `selectSplInterfaceInfosForDecompression` would return them all (also implicated in 0x1900).
  * v0 VersionedTransaction (not legacy Transaction — avoids Light CPI account packing failures).
@@ -45,12 +46,22 @@ import {
   CompressedTokenProgram,
   createTokenPool,
   selectAccountsByPreferredTreeType,
-  selectMinCompressedTokenAccountsForTransferOrPartial,
   getSplInterfaceInfos,
 } from '@lightprotocol/compressed-token'
+
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
 const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
 const COMPUTE_UNIT_LIMIT = 550_000
+
+/** Retries when the compression RPC returns null proof or throws (indexer lag, transient errors). */
+const VALIDITY_PROOF_MAX_ATTEMPTS = 5
+const VALIDITY_PROOF_BASE_DELAY_MS = 750
+/** Pause after a confirmed decompress so roots/indexer catch up before the next proof. */
+const POST_DECOMPRESS_INDEXER_SETTLE_MS = 1800
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 export interface ShipmentRecipient {
   address: string
@@ -250,6 +261,41 @@ function pickLargestCompressedTokenGroupByTree<T extends CompressedTokenItemWith
     }
   }
   return best
+}
+
+/** One leaf per tx: pick the largest balance in this tree slice (fewer signatures for the same total). */
+function pickSingleLargestCompressedTokenAccount<T extends CompressedTokenItemWithTree>(
+  items: T[]
+): T | null {
+  if (items.length === 0) return null
+  return items.reduce((best, cur) =>
+    bn(cur.parsed.amount).gt(bn(best.parsed.amount)) ? cur : best
+  )
+}
+
+async function fetchValidityProofForDecompressWithRetry(
+  rpc: ReturnType<typeof createRpc>,
+  inputAccounts: Array<{ compressedAccount: CompressedAccount }>
+): Promise<ValidityProofWithContext> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt < VALIDITY_PROOF_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await sleep(VALIDITY_PROOF_BASE_DELAY_MS * 2 ** (attempt - 1))
+    }
+    try {
+      const proof = await fetchValidityProofForDecompress(rpc, inputAccounts)
+      if (proof.compressedProof != null) {
+        return proof
+      }
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  const suffix =
+    lastErr instanceof Error ? ` Last error: ${lastErr.message}` : ''
+  throw new Error(
+    `Validity proof unavailable from the compression RPC after ${VALIDITY_PROOF_MAX_ATTEMPTS} attempts.${suffix} Wait a minute, refresh the page, and try again.`
+  )
 }
 
 async function fetchValidityProofForDecompress(
@@ -715,13 +761,17 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       )
     }
 
-    const { items: itemsOneStateTree, total: totalGroupBn } = largestGroup
+    const { items: itemsOneStateTree } = largestGroup
 
-    const [selectedRaw, amountForInstruction] =
-      selectMinCompressedTokenAccountsForTransferOrPartial(
-        itemsOneStateTree,
-        totalGroupBn
+    const sole = pickSingleLargestCompressedTokenAccount(itemsOneStateTree)
+    if (!sole) {
+      throw new Error(
+        'No compressed token accounts match the active tree version for this network. Refresh the page and try again.'
       )
+    }
+
+    const selectedRaw = [sole]
+    const amountForInstruction = bn(sole.parsed.amount)
 
     for (const a of selectedRaw) {
       if (!a.parsed.owner.equals(owner)) {
@@ -752,13 +802,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       }
     }
 
-    const proof = await fetchValidityProofForDecompress(rpc, inputAccounts)
-
-    if (proof.compressedProof == null) {
-      throw new Error(
-        'Validity proof unavailable from the compression RPC. Wait a few seconds and try again.'
-      )
-    }
+    const proof = await fetchValidityProofForDecompressWithRetry(rpc, inputAccounts)
 
     const splRows = await getSplInterfaceInfos(rpc, mintPk)
     const tokenPoolInfos = [pickLowestInitializedSplInterfaceInfo(splRows)]
@@ -774,6 +818,12 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     })
 
     signatures.push(await sendDecompress(decompressIx))
+
+    const moreLeavesOnThisTree = itemsOneStateTree.length > 1
+    const moreStateTrees = byStateTree.size > 1
+    if (moreLeavesOnThisTree || moreStateTrees) {
+      await sleep(POST_DECOMPRESS_INDEXER_SETTLE_MS)
+    }
   }
 
   return signatures.join(',')
