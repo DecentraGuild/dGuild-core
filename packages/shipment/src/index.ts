@@ -4,6 +4,8 @@
  * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + selectSplInterfaceInfo,
  * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo.
  * Decompress: selectSplInterfaceInfosForDecompression + tokenPoolInfos on CompressedTokenProgram.decompress.
+ * Validity proof: use getValidityProofV0({ hash, tree, queue } per account) so proofs match the leaf's state tree;
+ * getValidityProof(hashes only) can target the wrong tree on multi-tree mainnet and fails on-chain with 0x1900.
  */
 
 import {
@@ -576,10 +578,15 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       ? sumParsed
       : requestedBn
 
-  const proof = await rpc.getValidityProof(
-    inputAccounts.map((account) => account.compressedAccount.hash),
-    [],
-  )
+  const hashesWithTree = inputAccounts.map((account) => {
+    const { hash, treeInfo } = account.compressedAccount
+    return {
+      hash,
+      tree: treeInfo.tree,
+      queue: treeInfo.queue,
+    }
+  })
+  const proof = await rpc.getValidityProofV0(hashesWithTree, [])
 
   const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
   const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
