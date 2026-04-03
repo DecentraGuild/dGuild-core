@@ -512,6 +512,22 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     inputAccounts = selected
   }
 
+  if (hashNeedle) {
+    const latest = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
+    const latestItems = (latest.items ?? []).filter((account) =>
+      bn(account.parsed.amount).gt(bn(0)),
+    )
+    const fresh = latestItems.find((account) =>
+      compressedLeafHashMatches(account.compressedAccount?.hash, hashNeedle),
+    )
+    if (!fresh) {
+      throw new Error(
+        'This compressed token account was not found. Refresh the page and try again.',
+      )
+    }
+    inputAccounts = [fresh]
+  }
+
   const tree0 = inputAccounts[0].compressedAccount.merkleTree.toBase58()
   for (let i = 1; i < inputAccounts.length; i++) {
     if (inputAccounts[i].compressedAccount.merkleTree.toBase58() !== tree0) {
@@ -521,16 +537,22 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     }
   }
 
-  const sumParsed = inputAccounts.reduce(
-    (s, a) => s.add(bn(a.parsed.amount)),
-    bn(0),
-  )
-  let amountForInstruction: ReturnType<typeof bn>
-  if (compressedAccountHash?.trim() || inputAccounts.length === 1) {
-    amountForInstruction = sumParsed
-  } else {
-    amountForInstruction = requestedBn
+  let sumParsed = bn(0)
+  for (const a of inputAccounts) {
+    sumParsed = sumParsed.add(bn(a.parsed.amount))
   }
+  for (const a of inputAccounts) {
+    const bal = await rpc.getCompressedTokenAccountBalance(bn(a.compressedAccount.hash))
+    if (!bal.amount.eq(bn(a.parsed.amount))) {
+      throw new Error(
+        'On-chain balance does not match this claim row. Refresh the page and try again.',
+      )
+    }
+  }
+  const amountForInstruction =
+    compressedAccountHash?.trim() || inputAccounts.length === 1
+      ? sumParsed
+      : requestedBn
 
   const proof = await rpc.getValidityProof(
     inputAccounts.map((account) => bn(account.compressedAccount.hash)),
