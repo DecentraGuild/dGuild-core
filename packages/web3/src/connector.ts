@@ -347,6 +347,27 @@ function uint8ArrayEqual(a: Uint8Array, b: Uint8Array): boolean {
   return true
 }
 
+/** Fee payer is always account index 0 (legacy Message or v0 static keys). */
+function versionedMessageFeePayer(
+  message: VersionedTransaction['message'],
+): PublicKey | null {
+  const m = message as {
+    staticAccountKeys?: PublicKey[]
+    accountKeys?: PublicKey[]
+  }
+  const k = m.staticAccountKeys?.[0] ?? m.accountKeys?.[0]
+  return k ?? null
+}
+
+function versionedTxHasNonEmptySignatureAt(tx: VersionedTransaction, index: number): boolean {
+  const s = tx.signatures[index]
+  if (!s || s.length < 64) return false
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== 0) return true
+  }
+  return false
+}
+
 /**
  * `@solana/connector` turns signed bytes back into web3.js txs using `(bytes[0] & 128) === 0` as
  * "legacy". On a full wire transaction the first byte is the signature-count prefix (shortvec),
@@ -422,19 +443,35 @@ async function signVersionedTransactionWalletStandard(
   const signed = VersionedTransaction.deserialize(bytes)
   const requestedMessage = tx.message.serialize()
   const signedMessage = signed.message.serialize()
-  if (!uint8ArrayEqual(requestedMessage, signedMessage)) {
-    const wname = typeof wallet.name === 'string' ? wallet.name : ''
-    const phantomHint =
-      /phantom/i.test(wname) ?
-        ' Phantom often prepends assertion instructions to v0 transactions; Solflare/Backpack usually sign the exact message. '
-      : ' '
-    throw new Error(
-      'Wallet returned a different transaction than the one sent for signing (message bytes changed).' +
-        phantomHint +
-        'Disable browser extensions that modify Solana transactions, or use a wallet that signs the app-built message unchanged.',
-    )
+  if (uint8ArrayEqual(requestedMessage, signedMessage)) {
+    return signed
   }
-  return signed
+
+  // Phantom and some wallets prepend instructions (e.g. assertions) to v0 txs, which changes
+  // serialized message bytes even though the user approved in the wallet UI. If fee payer
+  // is unchanged and the payer signature is present, use the wallet-built message — same
+  // trust model as sign-and-send.
+  const reqPayer = versionedMessageFeePayer(tx.message)
+  const sigPayer = versionedMessageFeePayer(signed.message)
+  if (
+    reqPayer &&
+    sigPayer &&
+    reqPayer.equals(sigPayer) &&
+    versionedTxHasNonEmptySignatureAt(signed, 0)
+  ) {
+    return signed
+  }
+
+  const wname = typeof wallet.name === 'string' ? wallet.name : ''
+  const phantomHint =
+    /phantom/i.test(wname) ?
+      ' Phantom often prepends assertion instructions to v0 transactions; Solflare/Backpack usually sign the exact message. '
+    : ' '
+  throw new Error(
+    'Wallet returned a different transaction than the one sent for signing (message bytes changed).' +
+      phantomHint +
+      'Disable browser extensions that modify Solana transactions, or use a wallet that signs the app-built message unchanged.',
+  )
 }
 
 /**
