@@ -1,11 +1,10 @@
 /**
  * Shipment package – thin layer on Light Protocol for compressed token airdrops.
  * Uses @lightprotocol/compressed-token + @lightprotocol/stateless.js 0.23.x.
- * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + selectSplInterfaceInfo,
- * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo.
- * Decompress: validity proof V0 for StateV1-only inputs, else getValidityProofV2; **same SPL pool as
- * compress** (lowest initialized poolIndex only — not balance-based SDK selection, which varies with RPC
- * snapshots and changes CPI accounts, causing intermittent 0x1900); same state-tree LUTs as compress.
+ * Compress: getStateTreeInfos + selectStateTreeInfo, getTokenPoolInfos + lowest initialized poolIndex
+ * (deterministic ship pool; same `TokenPoolInfo` shape as ZK Compression docs).
+ * Decompress: matches [Token Distribution decompress script](https://www.zkcompression.com/token-distribution):
+ * getValidityProof(hashes), getTokenPoolInfos, selectTokenPoolInfosForDecompression; v0 tx + state-tree LUTs.
  * v0 VersionedTransaction (not legacy Transaction — avoids Light CPI account packing failures).
  * Legacy txs break Light Token / system CPI account packing for this instruction path (persistent 0x1900-style failures).
  */
@@ -32,8 +31,6 @@ import {
   bn,
   selectStateTreeInfo,
   defaultStateTreeLookupTables,
-  TreeType,
-  DerivationMode,
 } from '@lightprotocol/stateless.js'
 import type { CompressedAccount } from '@lightprotocol/stateless.js'
 import { ComputeBudgetProgram } from '@solana/web3.js'
@@ -41,7 +38,8 @@ import {
   CompressedTokenProgram,
   createTokenPool,
   selectMinCompressedTokenAccountsForTransfer,
-  getSplInterfaceInfos,
+  getTokenPoolInfos,
+  selectTokenPoolInfosForDecompression,
 } from '@lightprotocol/compressed-token'
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
 const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
@@ -189,11 +187,15 @@ function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
   })
 }
 
-/** Same rule as compress: lowest `poolIndex` among initialized SPL interfaces (deterministic CPI accounts). */
-function pickLowestInitializedSplInterfaceInfo(
-  splInterfaceInfos: Awaited<ReturnType<typeof getSplInterfaceInfos>>
+/**
+ * Lowest `poolIndex` among initialized pools — used for **compress** so ship target matches the pool
+ * users decompress from when we also use doc-style `selectTokenPoolInfosForDecompression` (prefers pools
+ * with enough interface balance; often the same lowest pool).
+ */
+function pickLowestInitializedTokenPoolInfo(
+  tokenPoolInfos: Awaited<ReturnType<typeof getTokenPoolInfos>>
 ) {
-  const poolCandidates = splInterfaceInfos
+  const poolCandidates = tokenPoolInfos
     .filter((i) => i.isInitialized)
     .sort((a, b) => a.poolIndex - b.poolIndex)
   if (poolCandidates.length === 0) {
@@ -294,8 +296,8 @@ export async function registerMintForCompression(
 
 /**
  * Compress and send tokens to recipients. Ship wallet must hold the tokens in its ATA.
- * Uses createTokenPool, getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos +
- * lowest poolIndex SPL interface (deterministic; avoids random pool vs claim-time pool mismatch),
+ * Uses createTokenPool, getStateTreeInfos + selectStateTreeInfo, getTokenPoolInfos +
+ * lowest poolIndex TokenPoolInfo (deterministic ship),
  * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo,
  * buildAndSignTx with default state-tree LUT pair(s).
  * Large recipient lists are split across multiple transactions (v0 message size limit).
@@ -354,8 +356,8 @@ export async function compressAndSend(
   const stateTreeInfos = await rpc.getStateTreeInfos()
   const outputStateTreeInfo = selectStateTreeInfo(stateTreeInfos)
 
-  const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
-  const tokenPoolInfo = pickLowestInitializedSplInterfaceInfo(splInterfaceInfos)
+  const tokenPoolRows = await getTokenPoolInfos(rpc, mintPk)
+  const tokenPoolInfo = pickLowestInitializedTokenPoolInfo(tokenPoolRows)
 
   const lookupTableAccounts = await fetchStateTreeLookupTableAccounts(
     rpc,
@@ -516,8 +518,8 @@ function compressedLeafHashMatches(h: unknown, needle: string): boolean {
 
 /**
  * Decompress a compressed token to the owner's SPL ATA.
- * Matches bundled `decompress()` from `@lightprotocol/compressed-token`: getValidityProofV0, pool
- * selection helper, then v0 `VersionedTransaction` (wallet must support `signTransaction(VersionedTransaction)`).
+ * Matches ZK Compression “decompress” client script + bundled SDK `decompress()`:
+ * getValidityProof(hashes), getTokenPoolInfos, selectTokenPoolInfosForDecompression; v0 tx + LUTs.
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
   const {
@@ -613,34 +615,8 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       ? sumParsed
       : requestedBn
 
-  const v1Only = inputAccounts.every(
-    (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV1
-  )
-  const proof = v1Only
-    ? await rpc.getValidityProofV0(
-        inputAccounts.map((account) => ({
-          hash: account.compressedAccount.hash,
-          tree: account.compressedAccount.treeInfo.tree,
-          queue: account.compressedAccount.treeInfo.queue,
-        })),
-        [],
-      )
-    : await (async () => {
-        const contexts = inputAccounts.map((a) => a.compressedAccount)
-        try {
-          return await rpc.getValidityProofV2(
-            contexts,
-            [],
-            DerivationMode.standard
-          )
-        } catch {
-          return rpc.getValidityProofV2(
-            contexts,
-            [],
-            DerivationMode.compressible
-          )
-        }
-      })()
+  const proofHashes = inputAccounts.map((account) => account.compressedAccount.hash)
+  const proof = await rpc.getValidityProof(proofHashes, [])
 
   if (proof.compressedProof == null) {
     throw new Error(
@@ -648,8 +624,15 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     )
   }
 
-  const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
-  const tokenPoolInfos = [pickLowestInitializedSplInterfaceInfo(splInterfaceInfos)]
+  const tokenPoolRows = await getTokenPoolInfos(rpc, mintPk)
+  const sdkPools = selectTokenPoolInfosForDecompression(
+    tokenPoolRows,
+    amountForInstruction,
+  )
+  const shipPoolIndex = pickLowestInitializedTokenPoolInfo(tokenPoolRows).poolIndex
+  const narrowed = sdkPools.filter((p) => p.poolIndex === shipPoolIndex)
+  const tokenPoolInfos =
+    narrowed.length > 0 ? narrowed : sdkPools
 
   const decompressIx = await CompressedTokenProgram.decompress({
     payer: owner,
