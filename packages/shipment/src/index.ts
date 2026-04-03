@@ -400,6 +400,51 @@ function amountToBn(amount: bigint | number | string) {
   return bn(s)
 }
 
+async function resolveSplTokenProgramForMint(
+  connection: Connection,
+  mintPk: PublicKey
+): Promise<typeof TOKEN_PROGRAM_ID | typeof TOKEN_2022_PROGRAM_ID> {
+  const info = await connection.getAccountInfo(mintPk)
+  if (!info) throw new Error('Mint account not found')
+  if (info.owner.equals(TOKEN_2022_PROGRAM_ID)) return TOKEN_2022_PROGRAM_ID
+  if (info.owner.equals(TOKEN_PROGRAM_ID)) return TOKEN_PROGRAM_ID
+  throw new Error(`Unsupported mint owner program: ${info.owner.toBase58()}`)
+}
+
+function u8eq(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+type BnInput = Parameters<typeof bn>[0]
+
+function compressedLeafHashMatches(h: unknown, needle: string): boolean {
+  const n = needle.trim()
+  if (!n || h == null) return false
+  try {
+    if (bn(h as BnInput).eq(bn(n))) return true
+  } catch {
+    void 0
+  }
+  const hStr =
+    typeof h === 'object' && h !== null && 'toString' in h
+      ? String((h as { toString: () => string }).toString())
+      : String(h)
+  if (hStr === n) return true
+  try {
+    const nBytes = new PublicKey(n).toBytes()
+    const hBn = bn(h as BnInput)
+    const le32 = new Uint8Array(hBn.toArray('le', 32))
+    const be32 = new Uint8Array(hBn.toArray('be', 32))
+    if (u8eq(le32, nBytes)) return true
+    if (u8eq(be32, nBytes)) return true
+  } catch {
+    void 0
+  }
+  return false
+}
+
 /**
  * Decompress a compressed token to the owner's SPL ATA.
  * Mirrors `@lightprotocol/compressed-token` account selection, amount semantics, and proof fetch.
@@ -419,7 +464,8 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   const owner = wallet.publicKey
   const mintPk = new PublicKey(mint)
   const requestedBn = amountToBn(amount)
-  const programId = tokenProgramId ?? TOKEN_PROGRAM_ID
+  const programId =
+    tokenProgramId ?? (await resolveSplTokenProgramForMint(connection, mintPk))
   const splAta = getAssociatedTokenAddressSync(mintPk, owner, false, programId)
 
   const rpcEndpoint =
@@ -452,15 +498,9 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   let inputAccounts: (typeof items)[number][]
 
   if (hashNeedle) {
-    const found = items.find((account) => {
-      const h = account.compressedAccount?.hash
-      if (h == null) return false
-      try {
-        return bn(h).eq(bn(hashNeedle))
-      } catch {
-        return h.toString() === hashNeedle
-      }
-    })
+    const found = items.find((account) =>
+      compressedLeafHashMatches(account.compressedAccount?.hash, hashNeedle),
+    )
     if (!found) {
       throw new Error(
         'This compressed token account was not found. Refresh the page and try again.'
@@ -481,18 +521,13 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     }
   }
 
-  // Amount field must match the official SDK `decompress(rpc, payer, mint, amount, owner, toAddress, ...)`:
-  // `W(items, amount)` selects inputs, then the instruction uses that same `amount` (not necessarily sum(inputs)).
-  // Passing sum(inputs) while the program computes remainder vs that amount causes 0x1900 (Some(remainder)==Some(0)).
+  const sumParsed = inputAccounts.reduce(
+    (s, a) => s.add(bn(a.parsed.amount)),
+    bn(0),
+  )
   let amountForInstruction: ReturnType<typeof bn>
-  if (hashNeedle) {
-    const hashBn = bn(inputAccounts[0].compressedAccount.hash)
-    try {
-      const bal = await rpc.getCompressedTokenAccountBalance(hashBn)
-      amountForInstruction = bal.amount
-    } catch {
-      amountForInstruction = bn(inputAccounts[0].parsed.amount)
-    }
+  if (compressedAccountHash?.trim() || inputAccounts.length === 1) {
+    amountForInstruction = sumParsed
   } else {
     amountForInstruction = requestedBn
   }
