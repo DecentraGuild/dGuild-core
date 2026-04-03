@@ -4,9 +4,10 @@
  * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + lowest poolIndex (deterministic ship).
  * Decompress: `selectAccountsByPreferredTreeType` + `getValidityProofV0` / `getValidityProofV2` (see
  * {@link fetchValidityProofForDecompress}). SPL interface for ix matches **compress**: lowest initialized pool only.
- * Claim is **per mint**: `selectAccountsByPreferredTreeType` (same as bundled `decompress`) ensures each tx only
- * uses StateV1 or StateV2 accounts, never mixed (mixed batches break validity proofs → 0x1900). Then
- * `selectMinCompressedTokenAccountsForTransferOrPartial` (up to 4 inputs per tx); multiple txs until drained.
+ * Claim is **per mint**: `selectAccountsByPreferredTreeType` ensures each tx only uses StateV1 or StateV2 accounts,
+ * never mixed (mixed batches break validity proofs → 0x1900). Items are then **split by state tree pubkey** so a
+ * single decompress never mixes different trees; `selectMinCompressedTokenAccountsForTransferOrPartial` (up to 4
+ * inputs per tx) runs per tree; multiple txs until all trees are drained.
  * Token pool for decompress is the **lowest initialized** SPL interface — same as `compressAndSend` — so we never
  * pass every pool when `selectSplInterfaceInfosForDecompression` would return them all (also implicated in 0x1900).
  * v0 VersionedTransaction (not legacy Transaction — avoids Light CPI account packing failures).
@@ -220,6 +221,37 @@ function pickLowestInitializedSplInterfaceInfo(
  * StateV1 inputs → `getValidityProofV0` only (no silent V2 fallback — wrong proof class matches on-chain 0x1900-style failures).
  * Otherwise → `getValidityProofV2` (standard, then compressible).
  */
+type CompressedTokenItemWithTree = {
+  parsed: { amount: Parameters<typeof bn>[0]; owner: PublicKey }
+  compressedAccount: CompressedAccount
+}
+
+function groupCompressedTokenItemsByStateTree<T extends CompressedTokenItemWithTree>(
+  items: T[]
+): Map<string, T[]> {
+  const m = new Map<string, T[]>()
+  for (const item of items) {
+    const key = item.compressedAccount.treeInfo.tree.toBase58()
+    const arr = m.get(key)
+    if (arr) arr.push(item)
+    else m.set(key, [item])
+  }
+  return m
+}
+
+function pickLargestCompressedTokenGroupByTree<T extends CompressedTokenItemWithTree>(
+  byTree: Map<string, T[]>
+): { items: T[]; total: ReturnType<typeof bn> } | null {
+  let best: { items: T[]; total: ReturnType<typeof bn> } | null = null
+  for (const groupItems of byTree.values()) {
+    const total = groupItems.reduce((s, a) => s.add(bn(a.parsed.amount)), bn(0))
+    if (!best || total.gt(best.total)) {
+      best = { items: groupItems, total }
+    }
+  }
+  return best
+}
+
 async function fetchValidityProofForDecompress(
   rpc: ReturnType<typeof createRpc>,
   inputAccounts: Array<{ compressedAccount: CompressedAccount }>
@@ -675,10 +707,20 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       )
     }
 
+    const byStateTree = groupCompressedTokenItemsByStateTree(itemsOneTreeType)
+    const largestGroup = pickLargestCompressedTokenGroupByTree(byStateTree)
+    if (!largestGroup || largestGroup.items.length === 0) {
+      throw new Error(
+        'No compressed token accounts match the active tree version for this network. Refresh the page and try again.'
+      )
+    }
+
+    const { items: itemsOneStateTree, total: totalGroupBn } = largestGroup
+
     const [selectedRaw, amountForInstruction] =
       selectMinCompressedTokenAccountsForTransferOrPartial(
-        itemsOneTreeType,
-        totalAllBn
+        itemsOneStateTree,
+        totalGroupBn
       )
 
     for (const a of selectedRaw) {
@@ -691,12 +733,14 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     const inputAccounts = selectedRaw
 
     const tree0 = inputAccounts[0]!.compressedAccount.treeInfo.tree.toBase58()
-    for (let i = 1; i < inputAccounts.length; i++) {
-      if (inputAccounts[i]!.compressedAccount.treeInfo.tree.toBase58() !== tree0) {
-        throw new Error(
-          'Compressed balances for this mint sit in different state trees. Merge those compressed accounts (Light Protocol) into one, then claim again.'
-        )
-      }
+    if (
+      !inputAccounts.every(
+        (a) => a.compressedAccount.treeInfo.tree.toBase58() === tree0
+      )
+    ) {
+      throw new Error(
+        'Internal error: decompress batch mixed state trees. Please report this.'
+      )
     }
 
     for (const a of inputAccounts) {
