@@ -291,7 +291,14 @@ export function useConditionSet(catalogMints: Ref<CatalogMint[]>) {
     const beginSnapshotAt = getStr('begin_snapshot_at')
     const endSnapshotAt = getStr('end_snapshot_at')
     const isLast = i === total - 1
-    const decimals = mint ? getDecimalsForMint(mint) : 0
+    let decimals = 0
+    if (mint) {
+      try {
+        decimals = getDecimalsForMint(mint)
+      } catch {
+        decimals = 0
+      }
+    }
     const amountHuman =
       amountRaw != null && !Number.isNaN(amountRaw)
         ? fromRawUnits(amountRaw, decimals)

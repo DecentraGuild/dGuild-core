@@ -2,9 +2,14 @@
  * Composable for fetching and listing condition sets (rules catalog) for a tenant.
  */
 import type { Ref } from 'vue'
+import { computed, watch } from 'vue'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useTenantStore } from '~/stores/tenant'
-import { buildConditionSetSummary, type ConditionRow } from '~/composables/conditions/useConditionSummary'
+import {
+  buildConditionSetSummary,
+  normalizeConditionPayload,
+  type ConditionRow,
+} from '~/composables/conditions/useConditionSummary'
 import type { CatalogMint } from '~/types/mints'
 
 export interface ConditionSetItem {
@@ -74,7 +79,7 @@ export function useConditionSetCatalog(options?: UseConditionSetCatalogOptions) 
         const list = conditionsBySet.get(sid) ?? []
         list.push({
           type: c.type as string,
-          payload: (c.payload as Record<string, unknown>) ?? {},
+          payload: normalizeConditionPayload(c.payload),
           logic_to_next: c.logic_to_next as string | null,
         })
         conditionsBySet.set(sid, list)
@@ -138,6 +143,22 @@ export function useConditionSetCatalog(options?: UseConditionSetCatalogOptions) 
       loading.value = false
     }
   }
+
+  const catalogMintFingerprint = computed(() =>
+    (options?.catalogMints?.value ?? [])
+      .map((m) => `${m.asset_id}:${m.decimals ?? ''}:${m.kind ?? ''}`)
+      .join('|'),
+  )
+
+  watch(
+    catalogMintFingerprint,
+    (key, prev) => {
+      if (prev === undefined) return
+      if (key === prev) return
+      const id = tenantId.value
+      if (id && items.value.length > 0) void fetchCatalog()
+    },
+  )
 
   async function deleteConditionSet(setId: number) {
     const id = tenantId.value
