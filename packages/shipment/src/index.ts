@@ -455,7 +455,10 @@ type BnInput = Parameters<typeof bn>[0]
 
 /** Latest merkle context for a leaf; avoids stale treeInfo/hash vs list endpoints. */
 async function refreshTokenRowByHash<
-  T extends { compressedAccount: CompressedAccount; parsed: { mint: PublicKey } },
+  T extends {
+    compressedAccount: CompressedAccount
+    parsed: { mint: PublicKey; owner: PublicKey }
+  },
 >(rpc: ReturnType<typeof createRpc>, row: T, hashNeedle: string, expectedOwner: PublicKey, mintPk: PublicKey): Promise<T> {
   const h = bn(hashNeedle.trim())
   const fresh = await rpc.getCompressedAccount(undefined, h)
@@ -464,8 +467,15 @@ async function refreshTokenRowByHash<
       'Could not load this compressed account by hash. Refresh the page and try again.'
     )
   }
-  if (!fresh.owner.equals(expectedOwner)) {
+  // SPL token holder lives on `parsed.owner`. `compressedAccount.owner` is the on-chain program
+  // that owns the compressed account (typically the compressed-token program), not the wallet.
+  if (!row.parsed.owner.equals(expectedOwner)) {
     throw new Error('Compressed account owner does not match your wallet.')
+  }
+  if (!fresh.hash.eq(h)) {
+    throw new Error(
+      'Compressed account hash mismatch after refresh. Refresh the page and try again.'
+    )
   }
   if (!row.parsed.mint.equals(mintPk)) {
     throw new Error('Compressed account mint mismatch.')
