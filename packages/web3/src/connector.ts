@@ -339,6 +339,14 @@ function isUserRejectedSigningError(error: unknown): boolean {
 
 type ConnectorTransactionSigner = NonNullable<ReturnType<typeof createTransactionSigner>>
 
+function uint8ArrayEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
 /**
  * `@solana/connector` turns signed bytes back into web3.js txs using `(bytes[0] & 128) === 0` as
  * "legacy". On a full wire transaction the first byte is the signature-count prefix (shortvec),
@@ -412,7 +420,18 @@ async function signVersionedTransactionWalletStandard(
   } else {
     throw new Error('Unexpected wallet signTransaction response for versioned transaction')
   }
-  return VersionedTransaction.deserialize(bytes)
+  const signed = VersionedTransaction.deserialize(bytes)
+  const requestedMessage = tx.message.serialize()
+  const signedMessage = signed.message.serialize()
+  if (!uint8ArrayEqual(requestedMessage, signedMessage)) {
+    throw new Error(
+      'Wallet returned a different transaction than the one sent for signing (message bytes changed). ' +
+        'Extensions or wallet features that inject instructions—before your real instructions run—cause this; ' +
+        'simulation then fails in injected code and never reaches the app transaction. ' +
+        'Disable transaction guards / simulation add-ons for this site, or try another wallet or browser profile.',
+    )
+  }
+  return signed
 }
 
 /**

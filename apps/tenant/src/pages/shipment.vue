@@ -102,6 +102,7 @@ import ShipmentClaimCard from '~/components/shipment/ShipmentClaimCard.vue'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { useAuth } from '@decentraguild/auth'
+import { ensureSigningWalletForSession } from '@decentraguild/web3'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
@@ -376,6 +377,7 @@ async function claim(a: CompressedAsset) {
   try {
     const conn = connection.value
     if (!conn) throw new Error('RPC not configured')
+    await ensureSigningWalletForSession(auth.wallet.value)
     const { getEscrowWalletFromConnector } = await import('@decentraguild/web3')
     const { decompress: doDecompress } = await import('@decentraguild/shipment')
     const walletAdapter = getEscrowWalletFromConnector()
