@@ -340,6 +340,82 @@ function isUserRejectedSigningError(error: unknown): boolean {
 type ConnectorTransactionSigner = NonNullable<ReturnType<typeof createTransactionSigner>>
 
 /**
+ * `@solana/connector` turns signed bytes back into web3.js txs using `(bytes[0] & 128) === 0` as
+ * "legacy". On a full wire transaction the first byte is the signature-count prefix (shortvec),
+ * not the message version bit — so v0 txs are misclassified and `Transaction.from` throws
+ * "Versioned messages must be deserialized with VersionedMessage.deserialize()".
+ *
+ * Call Wallet Standard `solana:signTransaction` directly and deserialize with
+ * `VersionedTransaction.deserialize` (handles v0 and legacy-in-versioned wire format).
+ */
+async function signVersionedTransactionWalletStandard(
+  wallet: Wallet,
+  account: WalletAccount,
+  cluster: ReturnType<typeof clusterForSigner>,
+  tx: VersionedTransaction,
+): Promise<VersionedTransaction> {
+  const signFeature = wallet.features['solana:signTransaction'] as
+    | { signTransaction: (input: Record<string, unknown>) => Promise<unknown> }
+    | undefined
+  if (!signFeature?.signTransaction) {
+    throw new Error('Wallet does not support solana:signTransaction')
+  }
+  const serialized = tx.serialize()
+  const chainArg = { chain: cluster.id }
+  let result: unknown
+  try {
+    result = await signFeature.signTransaction({
+      account,
+      transactions: [serialized],
+      ...chainArg,
+    })
+  } catch {
+    result = await signFeature.signTransaction({
+      account,
+      transaction: serialized,
+      ...chainArg,
+    })
+  }
+  let signedTx: unknown
+  if (result && typeof result === 'object') {
+    const r = result as Record<string, unknown>
+    if (Array.isArray(r.signedTransactions) && r.signedTransactions[0] !== undefined) {
+      signedTx = r.signedTransactions[0]
+    } else if (r.signedTransaction !== undefined) {
+      signedTx = r.signedTransaction
+    }
+  }
+  if (signedTx === undefined && Array.isArray(result) && result[0] !== undefined) {
+    signedTx = result[0]
+  }
+  if (signedTx === undefined && result instanceof Uint8Array) {
+    signedTx = result
+  }
+  if (
+    signedTx &&
+    typeof signedTx === 'object' &&
+    'serialize' in signedTx &&
+    typeof (signedTx as { serialize: unknown }).serialize === 'function'
+  ) {
+    return signedTx as VersionedTransaction
+  }
+  let bytes: Uint8Array
+  if (
+    signedTx &&
+    typeof signedTx === 'object' &&
+    'signedTransaction' in signedTx &&
+    (signedTx as { signedTransaction: unknown }).signedTransaction instanceof Uint8Array
+  ) {
+    bytes = (signedTx as { signedTransaction: Uint8Array }).signedTransaction
+  } else if (signedTx instanceof Uint8Array) {
+    bytes = signedTx
+  } else {
+    throw new Error('Unexpected wallet signTransaction response for versioned transaction')
+  }
+  return VersionedTransaction.deserialize(bytes)
+}
+
+/**
  * ConnectorKit uses `solana:signAllTransactions` in one RPC when available. Ledger and many
  * hardware flows reject batch signing; fall back to one `signTransaction` per tx (without
  * re-prompting after an explicit user reject).
@@ -348,17 +424,18 @@ async function signAllTransactionsLedgerSafe<T extends Transaction | VersionedTr
   signer: ConnectorTransactionSigner,
   transactions: T[],
   preferSequential: boolean,
+  signOne: (tx: Transaction | VersionedTransaction) => Promise<Transaction | VersionedTransaction>,
 ): Promise<T[]> {
   if (transactions.length === 0) return []
   if (transactions.length === 1) {
-    const signed = await signer.signTransaction(transactions[0]!)
+    const signed = await signOne(transactions[0]!)
     return [signed as T]
   }
 
   const sequential = async (): Promise<T[]> => {
     const out: T[] = []
     for (const tx of transactions) {
-      out.push((await signer.signTransaction(tx)) as T)
+      out.push((await signOne(tx)) as T)
     }
     return out
   }
@@ -674,12 +751,21 @@ export function getEscrowWalletFromConnector(): EscrowWallet | null {
   // signing. Its internal _transact() reads wallet_uri_base from the in-memory _authorization
   // (set by connectWallet(silent:true) in ensureSigningWalletForSession), so Backpack is opened
   // directly via App Link without showing the Android app picker.
+  const cluster = clusterForSigner(client)
   const signTransaction = async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+    if (tx instanceof VersionedTransaction) {
+      return (await signVersionedTransactionWalletStandard(
+        pair.wallet,
+        pair.account,
+        cluster,
+        tx,
+      )) as T
+    }
     const signed = await signer.signTransaction(tx)
     return signed as T
   }
   const signAllTransactions = async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-    return signAllTransactionsLedgerSafe(signer, txs, hardwareSigningLikely)
+    return signAllTransactionsLedgerSafe(signer, txs, hardwareSigningLikely, signTransaction)
   }
   const canSend = signer.getCapabilities().canSend
   // Backpack extension: signAndSend + ConnectorKit's `transactions: [bytes]` looks like a batch in the UI.
