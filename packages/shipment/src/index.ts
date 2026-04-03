@@ -41,7 +41,6 @@ import {
   selectMinCompressedTokenAccountsForTransfer,
   getSplInterfaceInfos,
   selectSplInterfaceInfo,
-  selectSplInterfaceInfosForDecompression,
 } from '@lightprotocol/compressed-token'
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
 const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
@@ -449,31 +448,67 @@ type BnInput = Parameters<typeof bn>[0]
 
 /**
  * Decompress proofs must match the state tree version (V1 vs V2).
+ * Indexers sometimes omit or mis-tag treeType; 0.23 mainnet defaults to V2, so we only use V0
+ * when every input is explicitly StateV1. Otherwise V2 proof (+ compressible fallback).
  * @see https://www.zkcompression.com/resources/migration-v1-to-v2
  */
 async function fetchValidityProofForDecompress(
   rpc: ReturnType<typeof createRpc>,
   inputAccounts: Array<{ compressedAccount: CompressedAccount }>
 ): Promise<ValidityProofWithContext> {
-  const stateV2 = inputAccounts.some(
-    (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV2
+  const v1Only = inputAccounts.every(
+    (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV1
   )
-  if (stateV2) {
-    return rpc.getValidityProofV2(
-      inputAccounts.map((a) => a.compressedAccount),
-      [],
-      DerivationMode.standard
+  if (v1Only) {
+    const hashesWithTree = inputAccounts.map((account) => {
+      const { hash, treeInfo } = account.compressedAccount
+      return {
+        hash,
+        tree: treeInfo.tree,
+        queue: treeInfo.queue,
+      }
+    })
+    return rpc.getValidityProofV0(hashesWithTree, [])
+  }
+
+  const contexts = inputAccounts.map((a) => a.compressedAccount)
+  try {
+    return await rpc.getValidityProofV2(contexts, [], DerivationMode.standard)
+  } catch {
+    return rpc.getValidityProofV2(contexts, [], DerivationMode.compressible)
+  }
+}
+
+/** Latest merkle context for a leaf; avoids stale treeInfo/hash vs list endpoints. */
+async function refreshTokenRowByHash<
+  T extends { compressedAccount: CompressedAccount; parsed: { mint: PublicKey } },
+>(rpc: ReturnType<typeof createRpc>, row: T, hashNeedle: string, expectedOwner: PublicKey, mintPk: PublicKey): Promise<T> {
+  const h = bn(hashNeedle.trim())
+  const fresh = await rpc.getCompressedAccount(undefined, h)
+  if (!fresh) {
+    throw new Error(
+      'Could not load this compressed account by hash. Refresh the page and try again.'
     )
   }
-  const hashesWithTree = inputAccounts.map((account) => {
-    const { hash, treeInfo } = account.compressedAccount
-    return {
-      hash,
-      tree: treeInfo.tree,
-      queue: treeInfo.queue,
-    }
-  })
-  return rpc.getValidityProofV0(hashesWithTree, [])
+  if (!fresh.owner.equals(expectedOwner)) {
+    throw new Error('Compressed account owner does not match your wallet.')
+  }
+  if (!row.parsed.mint.equals(mintPk)) {
+    throw new Error('Compressed account mint mismatch.')
+  }
+  return { ...row, compressedAccount: fresh }
+}
+
+function allInitializedSplInterfaces(
+  infos: Awaited<ReturnType<typeof getSplInterfaceInfos>>
+): typeof infos {
+  const init = infos.filter((i) => i.isInitialized).sort((a, b) => a.poolIndex - b.poolIndex)
+  if (init.length === 0) {
+    throw new Error(
+      'No initialized SPL compression interface for this mint. Register the mint for compression first.'
+    )
+  }
+  return init
 }
 
 function compressedLeafHashMatches(h: unknown, needle: string): boolean {
@@ -563,26 +598,12 @@ export async function decompressToken(params: DecompressParams): Promise<string>
         'This compressed token account was not found. Refresh the page and try again.'
       )
     }
-    inputAccounts = [found]
+    inputAccounts = [
+      await refreshTokenRowByHash(rpc, found, hashNeedle, owner, mintPk),
+    ]
   } else {
     const [selected] = selectMinCompressedTokenAccountsForTransfer(items, requestedBn)
     inputAccounts = selected
-  }
-
-  if (hashNeedle) {
-    const latest = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
-    const latestItems = (latest.items ?? []).filter((account) =>
-      bn(account.parsed.amount).gt(bn(0)),
-    )
-    const fresh = latestItems.find((account) =>
-      compressedLeafHashMatches(account.compressedAccount?.hash, hashNeedle),
-    )
-    if (!fresh) {
-      throw new Error(
-        'This compressed token account was not found. Refresh the page and try again.',
-      )
-    }
-    inputAccounts = [fresh]
   }
 
   const tree0 = inputAccounts[0].compressedAccount.treeInfo.tree.toBase58()
@@ -614,10 +635,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   const proof = await fetchValidityProofForDecompress(rpc, inputAccounts)
 
   const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
-  const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
-    splInterfaceInfos,
-    amountForInstruction,
-  )
+  const tokenPoolInfos = allInitializedSplInterfaces(splInterfaceInfos)
 
   const decompressIx = await CompressedTokenProgram.decompress({
     payer: owner,
