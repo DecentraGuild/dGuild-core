@@ -4,12 +4,12 @@
  * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + lowest poolIndex (deterministic ship).
  * Decompress: matches **published** `@lightprotocol/compressed-token` `decompress()` (not the older web snippet):
  * `getValidityProofV0({hash,tree,queue})[]`, V2 proof fallback if V0 throws or inputs are not StateV1-only;
- * **all** initialized SPL interfaces sorted by poolIndex (lowest first) so ix `tokenPoolPda` + remaining
- * accounts match multi-pool CPI layout. v0 tx + state-tree LUTs.
+ * **Token pools for decompress** must come from {@link selectSplInterfaceInfosForDecompression}
+ * (same as bundled `decompress()`): either the single pool whose balance covers `amount * 10`, or all
+ * initialized pools sorted by `poolIndex`. Passing every pool unconditionally breaks CPI (0x1900).
  * Claim is **per mint**: all compressed leaves for that mint are drained using `selectMinCompressedTokenAccountsForTransferOrPartial`
  * (up to 4 inputs per tx); multiple transactions run until the mint’s compressed balance is zero.
  * v0 VersionedTransaction (not legacy Transaction — avoids Light CPI account packing failures).
- * Legacy txs break Light Token / system CPI account packing for this instruction path (persistent 0x1900-style failures).
  */
 
 import {
@@ -45,6 +45,7 @@ import {
   createTokenPool,
   selectMinCompressedTokenAccountsForTransferOrPartial,
   getSplInterfaceInfos,
+  selectSplInterfaceInfosForDecompression,
 } from '@lightprotocol/compressed-token'
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
 const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
@@ -212,21 +213,6 @@ function pickLowestInitializedSplInterfaceInfo(
     )
   }
   return poolCandidates[0]
-}
-
-/** All initialized SPL interfaces, lowest `poolIndex` first — matches decompress ix primary pool + remaining. */
-function allInitializedSplInterfacesSorted(
-  rows: Awaited<ReturnType<typeof getSplInterfaceInfos>>
-) {
-  const sorted = rows
-    .filter((i) => i.isInitialized)
-    .sort((a, b) => a.poolIndex - b.poolIndex)
-  if (sorted.length === 0) {
-    throw new Error(
-      'No initialized SPL compression interface for this mint. Register the mint for compression first.',
-    )
-  }
-  return sorted
 }
 
 /**
@@ -636,9 +622,6 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     }
   }
 
-  const splRows = await getSplInterfaceInfos(rpc, mintPk)
-  const tokenPoolInfos = allInitializedSplInterfacesSorted(splRows)
-
   const signatures: string[] = []
   let firstPass = true
 
@@ -759,6 +742,12 @@ export async function decompressToken(params: DecompressParams): Promise<string>
         'Validity proof unavailable from the compression RPC. Wait a few seconds and try again.'
       )
     }
+
+    const splRows = await getSplInterfaceInfos(rpc, mintPk)
+    const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
+      splRows,
+      amountForInstruction
+    )
 
     const decompressIx = await CompressedTokenProgram.decompress({
       payer: owner,
