@@ -3,8 +3,9 @@
  * Uses @lightprotocol/compressed-token + @lightprotocol/stateless.js 0.23.x.
  * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + selectSplInterfaceInfo,
  * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo.
- * Decompress: validity proof V0 for StateV1-only inputs, else getValidityProofV2; token pools via
- * selectSplInterfaceInfosForDecompression; same default state-tree LUTs as compress in compileToV0Message;
+ * Decompress: validity proof V0 for StateV1-only inputs, else getValidityProofV2; **same SPL pool as
+ * compress** (lowest initialized poolIndex only — not balance-based SDK selection, which varies with RPC
+ * snapshots and changes CPI accounts, causing intermittent 0x1900); same state-tree LUTs as compress.
  * v0 VersionedTransaction (not legacy Transaction — avoids Light CPI account packing failures).
  * Legacy txs break Light Token / system CPI account packing for this instruction path (persistent 0x1900-style failures).
  */
@@ -41,7 +42,6 @@ import {
   createTokenPool,
   selectMinCompressedTokenAccountsForTransfer,
   getSplInterfaceInfos,
-  selectSplInterfaceInfosForDecompression,
 } from '@lightprotocol/compressed-token'
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
 const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
@@ -187,6 +187,21 @@ function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
   return createRpc(rpcEndpoint, rpcEndpoint, undefined, {
     commitment: 'confirmed',
   })
+}
+
+/** Same rule as compress: lowest `poolIndex` among initialized SPL interfaces (deterministic CPI accounts). */
+function pickLowestInitializedSplInterfaceInfo(
+  splInterfaceInfos: Awaited<ReturnType<typeof getSplInterfaceInfos>>
+) {
+  const poolCandidates = splInterfaceInfos
+    .filter((i) => i.isInitialized)
+    .sort((a, b) => a.poolIndex - b.poolIndex)
+  if (poolCandidates.length === 0) {
+    throw new Error(
+      'No initialized SPL compression interface for this mint. Register the mint for compression first.',
+    )
+  }
+  return poolCandidates[0]
 }
 
 function stateTreeLookupTablePairsForRpcUrl(rpcUrl: string) {
@@ -340,15 +355,7 @@ export async function compressAndSend(
   const outputStateTreeInfo = selectStateTreeInfo(stateTreeInfos)
 
   const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
-  const poolCandidates = splInterfaceInfos
-    .filter((i) => i.isInitialized)
-    .sort((a, b) => a.poolIndex - b.poolIndex)
-  if (poolCandidates.length === 0) {
-    throw new Error(
-      'No initialized SPL compression interface for this mint. Register the mint for compression first.'
-    )
-  }
-  const tokenPoolInfo = poolCandidates[0]
+  const tokenPoolInfo = pickLowestInitializedSplInterfaceInfo(splInterfaceInfos)
 
   const lookupTableAccounts = await fetchStateTreeLookupTableAccounts(
     rpc,
@@ -460,12 +467,6 @@ async function resolveSplTokenProgramForMint(
   throw new Error(`Unsupported mint owner program: ${info.owner.toBase58()}`)
 }
 
-function u8eq(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
-  return true
-}
-
 type BnInput = Parameters<typeof bn>[0]
 
 /** Latest merkle context for a leaf; avoids stale treeInfo/hash vs list endpoints. */
@@ -510,18 +511,7 @@ function compressedLeafHashMatches(h: unknown, needle: string): boolean {
     typeof h === 'object' && h !== null && 'toString' in h
       ? String((h as { toString: () => string }).toString())
       : String(h)
-  if (hStr === n) return true
-  try {
-    const nBytes = new PublicKey(n).toBytes()
-    const hBn = bn(h as BnInput)
-    const le32 = new Uint8Array(hBn.toArray('le', 32))
-    const be32 = new Uint8Array(hBn.toArray('be', 32))
-    if (u8eq(le32, nBytes)) return true
-    if (u8eq(be32, nBytes)) return true
-  } catch {
-    void 0
-  }
-  return false
+  return hStr === n
 }
 
 /**
@@ -576,16 +566,21 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   let inputAccounts: (typeof items)[number][]
 
   if (hashNeedle) {
-    const found = items.find((account) =>
+    const matches = items.filter((account) =>
       compressedLeafHashMatches(account.compressedAccount?.hash, hashNeedle),
     )
-    if (!found) {
+    if (matches.length === 0) {
       throw new Error(
         'This compressed token account was not found. Refresh the page and try again.'
       )
     }
+    if (matches.length > 1) {
+      throw new Error(
+        'Multiple compressed accounts matched this hash. Refresh the page and try again.'
+      )
+    }
     inputAccounts = [
-      await refreshTokenRowByHash(rpc, found, hashNeedle, owner, mintPk),
+      await refreshTokenRowByHash(rpc, matches[0]!, hashNeedle, owner, mintPk),
     ]
   } else {
     const [selected] = selectMinCompressedTokenAccountsForTransfer(items, requestedBn)
@@ -647,11 +642,14 @@ export async function decompressToken(params: DecompressParams): Promise<string>
         }
       })()
 
+  if (proof.compressedProof == null) {
+    throw new Error(
+      'Validity proof unavailable from the compression RPC. Wait a few seconds and try again.'
+    )
+  }
+
   const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
-  const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
-    splInterfaceInfos,
-    amountForInstruction,
-  )
+  const tokenPoolInfos = [pickLowestInitializedSplInterfaceInfo(splInterfaceInfos)]
 
   const decompressIx = await CompressedTokenProgram.decompress({
     payer: owner,
