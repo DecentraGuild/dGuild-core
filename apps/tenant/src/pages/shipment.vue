@@ -19,11 +19,11 @@
           </p>
           <div v-else>
             <template v-if="primaryAssets.length > 0">
-              <h3 class="shipment-page__heading">From this dGuild</h3>
+              <h3 class="shipment-page__heading">Shipments from this dGuild</h3>
               <p class="shipment-page__intro">Claim to receive tokens in your wallet.</p>
             </template>
             <p v-else class="shipment-page__minimal">
-              No balances from this dGuild's listed tokens.
+              No compressed balances from this dGuild's recorded shipments.
             </p>
           </div>
         </div>
@@ -53,7 +53,7 @@
             <Icon icon="lucide:chevron-down" class="shipment-page__other-chevron" />
           </summary>
           <p class="shipment-page__other-hint">
-            Tokens not listed in this dGuild's catalog. You can still claim them to your wallet.
+            Compressed tokens for mints not in this dGuild's recorded shipments (full wallet scan). You can still claim them to your wallet.
           </p>
           <div class="shipment-page__list shipment-page__list--nested">
             <ShipmentClaimCard
@@ -139,6 +139,7 @@ interface DisplayInfo {
 }
 
 const assets = ref<CompressedAsset[]>([])
+const knownShipmentMints = ref<Set<string>>(new Set())
 const displayByMint = ref<Map<string, DisplayInfo>>(new Map())
 const loading = ref(true)
 const claiming = ref<string | null>(null)
@@ -174,11 +175,11 @@ function mintKey(a: CompressedAsset): string {
 }
 
 const primaryAssets = computed(() =>
-  assets.value.filter((a) => displayByMint.value.get(mintKey(a))?.inTenantCatalog === true),
+  assets.value.filter((a) => knownShipmentMints.value.has(mintKey(a))),
 )
 
 const secondaryAssets = computed(() =>
-  assets.value.filter((a) => displayByMint.value.get(mintKey(a))?.inTenantCatalog !== true),
+  assets.value.filter((a) => !knownShipmentMints.value.has(mintKey(a))),
 )
 
 const secondaryDetailsOpen = computed(() => primaryAssets.value.length === 0)
@@ -255,49 +256,97 @@ async function fetchDisplay(mints: string[]) {
   displayByMint.value = map
 }
 
+function mergeCompressedAssetsByKey(a: CompressedAsset[], b: CompressedAsset[]): CompressedAsset[] {
+  const seen = new Set<string>()
+  const out: CompressedAsset[] = []
+  for (const x of [...a, ...b]) {
+    const k = `${mintKey(x)}|${(x.accountHash ?? '').trim() || x.id}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(x)
+  }
+  return out
+}
+
+async function enrichCompressedRows(
+  accounts: Array<{ id: string; mint: string; amount: string; accountHash: string | null }>,
+): Promise<CompressedAsset[]> {
+  const { fetchMintMetadataFromChain } = await import('@decentraguild/web3')
+  const conn = connection.value
+  const withDecimals: CompressedAsset[] = []
+  for (const b of accounts) {
+    try {
+      if (BigInt(b.amount) <= 0n) continue
+    } catch {
+      continue
+    }
+    let decimals: number | null = null
+    if (conn) {
+      try {
+        const meta = await fetchMintMetadataFromChain(conn, b.mint)
+        decimals = meta?.decimals != null && Number.isFinite(meta.decimals) ? meta.decimals : null
+      } catch {
+        void 0
+      }
+    }
+    withDecimals.push({
+      id: b.id,
+      mint: b.mint,
+      amount: b.amount,
+      accountHash: b.accountHash,
+      decimals: decimals ?? undefined,
+      token_info: { decimals: decimals ?? undefined },
+      compression: { compressed: true },
+    })
+  }
+  return withDecimals
+}
+
 async function fetchAssets() {
   const w = wallet.value
   const url = rpcUrl.value
+  const tenantId = tenantStore.tenantId
   if (!w || !url) {
     assets.value = []
+    knownShipmentMints.value = new Set()
     displayByMint.value = new Map()
     loading.value = false
     return
   }
   loading.value = true
-  try {
-    const { fetchCompressedTokenAccounts } = await import('@decentraguild/shipment')
-    const { fetchMintMetadataFromChain } = await import('@decentraguild/web3')
-    const conn = connection.value
-    const accounts = await fetchCompressedTokenAccounts(url, w)
-    const withDecimals: CompressedAsset[] = []
-    for (const b of accounts) {
-      try {
-        if (BigInt(b.amount) <= 0n) continue
-      } catch {
-        continue
+  const supabase = useSupabase()
+  let mintsFromShipments: string[] = []
+  if (tenantId) {
+    const { data, error } = await supabase
+      .from('shipment_records')
+      .select('mint')
+      .eq('tenant_id', tenantId)
+    if (!error && data?.length) {
+      const s = new Set<string>()
+      for (const row of data as Array<{ mint: string }>) {
+        if (row.mint) s.add(row.mint)
       }
-      let decimals: number | null = null
-      if (conn) {
-        try {
-          const meta = await fetchMintMetadataFromChain(conn, b.mint)
-          decimals = meta?.decimals != null && Number.isFinite(meta.decimals) ? meta.decimals : null
-        } catch {
-          // leave null
-        }
-      }
-      withDecimals.push({
-        id: b.id,
-        mint: b.mint,
-        amount: b.amount,
-        accountHash: b.accountHash,
-        decimals: decimals ?? undefined,
-        token_info: { decimals: decimals ?? undefined },
-        compression: { compressed: true },
-      })
+      knownShipmentMints.value = s
+      mintsFromShipments = [...s]
+    } else {
+      knownShipmentMints.value = new Set()
     }
-    assets.value = withDecimals
-    const mints = [...new Set(withDecimals.map((a) => a.mint ?? a.id).filter(Boolean))]
+  } else {
+    knownShipmentMints.value = new Set()
+  }
+  try {
+    const shipment = await import('@decentraguild/shipment')
+    const fromMints = await shipment.fetchCompressedTokenAccountsForMints(url, w, mintsFromShipments)
+    let fromFull: Awaited<ReturnType<typeof shipment.fetchCompressedTokenAccounts>> = []
+    try {
+      fromFull = await shipment.fetchCompressedTokenAccounts(url, w)
+    } catch {
+      fromFull = []
+    }
+    const enrichedMints = await enrichCompressedRows(fromMints)
+    const enrichedFull = await enrichCompressedRows(fromFull)
+    assets.value = mergeCompressedAssetsByKey(enrichedMints, enrichedFull)
+    const mints = [...new Set(assets.value.map((a) => mintKey(a)).filter(Boolean))]
     await fetchDisplay(mints)
   } catch {
     assets.value = []

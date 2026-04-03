@@ -49,6 +49,9 @@
         <p class="plan-shipment-tab__wallet-copy">
           Create a ship wallet to carry your shipment. Fund it from your main wallet. Use it only for shipments – we never store or have access to your key.
         </p>
+        <p class="plan-shipment-tab__hint-sm">
+          The key is kept in this browser only (IndexedDB). Use Export for a backup. Other devices, profiles, or “clear site data” will not have it.
+        </p>
         <div v-if="shipWallet.loading.value" class="plan-shipment-tab__loading">
           <Icon icon="lucide:loader-2" class="plan-shipment-tab__spinner" />
           Loading...
@@ -79,7 +82,11 @@
         </template>
         <template v-else>
           <div class="plan-shipment-tab__create-row">
-            <Button variant="brand" :disabled="shipWallet.loading.value" @click="shipWallet.create()">
+            <Button
+              variant="brand"
+              :disabled="!shipWalletScoped || shipWallet.loading.value"
+              @click="shipWallet.create()"
+            >
               Create ship wallet
             </Button>
             <span class="plan-shipment-tab__or">or</span>
@@ -89,7 +96,11 @@
               type="password"
               class="plan-shipment-tab__import-input"
             />
-            <Button variant="brand" :disabled="!importKey.trim() || shipWallet.loading.value" @click="doImport">
+            <Button
+              variant="brand"
+              :disabled="!shipWalletScoped || !importKey.trim() || shipWallet.loading.value"
+              @click="doImport"
+            >
               Import
             </Button>
           </div>
@@ -295,6 +306,7 @@ const route = useRoute()
 const tenantStore = useTenantStore()
 const { tenantId } = storeToRefs(tenantStore)
 const shipWallet = useShipWallet()
+const shipWalletScoped = computed(() => shipWallet.scopedToTenant.value)
 const { connection, rpcUrl } = useSolanaConnection()
 const explorerLinks = useExplorerLinks()
 const { resolveWallet } = useMemberProfiles()
