@@ -216,8 +216,9 @@ function pickLowestInitializedSplInterfaceInfo(
 }
 
 /**
- * Same proof strategy as bundled `decompress()` in @lightprotocol/compressed-token@0.23.x: V0 hash+tree+queue.
- * If inputs are not StateV1-only, or V0 RPC fails, use getValidityProofV2 (standard → compressible).
+ * Proof path aligned with bundled `decompress()` in @lightprotocol/compressed-token@0.23.x:
+ * StateV1 inputs → `getValidityProofV0` only (no silent V2 fallback — wrong proof class matches on-chain 0x1900-style failures).
+ * Otherwise → `getValidityProofV2` (standard, then compressible).
  */
 async function fetchValidityProofForDecompress(
   rpc: ReturnType<typeof createRpc>,
@@ -227,18 +228,14 @@ async function fetchValidityProofForDecompress(
     (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV1
   )
   if (v1Only) {
-    try {
-      return await rpc.getValidityProofV0(
-        inputAccounts.map((account) => ({
-          hash: account.compressedAccount.hash,
-          tree: account.compressedAccount.treeInfo.tree,
-          queue: account.compressedAccount.treeInfo.queue,
-        })),
-        [],
-      )
-    } catch {
-      // V1 type tag but RPC/prover requires V2 proof path
-    }
+    return rpc.getValidityProofV0(
+      inputAccounts.map((account) => ({
+        hash: account.compressedAccount.hash,
+        tree: account.compressedAccount.treeInfo.tree,
+        queue: account.compressedAccount.treeInfo.queue,
+      })),
+      [],
+    )
   }
   const contexts = inputAccounts.map((a) => a.compressedAccount)
   try {
@@ -513,38 +510,6 @@ async function resolveSplTokenProgramForMint(
   throw new Error(`Unsupported mint owner program: ${info.owner.toBase58()}`)
 }
 
-/** Fresh merkle context per selected leaf before validity proof. */
-async function refreshCompressedTokenRowsForProof<
-  T extends {
-    compressedAccount: CompressedAccount
-    parsed: { mint: PublicKey; owner: PublicKey }
-  },
->(
-  rpc: ReturnType<typeof createRpc>,
-  rows: T[],
-  expectedOwner: PublicKey,
-  mintPk: PublicKey
-): Promise<T[]> {
-  return Promise.all(
-    rows.map(async (row) => {
-      const h = row.compressedAccount.hash
-      const fresh = await rpc.getCompressedAccount(undefined, h)
-      if (!fresh) {
-        throw new Error(
-          'Could not load a compressed account for this claim. Refresh the page and try again.'
-        )
-      }
-      if (!row.parsed.owner.equals(expectedOwner)) {
-        throw new Error('Compressed account owner does not match your wallet.')
-      }
-      if (!row.parsed.mint.equals(mintPk)) {
-        throw new Error('Compressed account mint mismatch.')
-      }
-      return { ...row, compressedAccount: fresh }
-    })
-  )
-}
-
 /**
  * Decompress a compressed token to the owner's SPL ATA.
  * Matches ZK Compression “decompress” client script + bundled SDK `decompress()`:
@@ -710,12 +675,8 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       }
     }
 
-    const inputAccounts = await refreshCompressedTokenRowsForProof(
-      rpc,
-      selectedRaw,
-      owner,
-      mintPk
-    )
+    /** Same as bundled `decompress()`: proof + ix use rows from `getCompressedTokenAccountsByOwner`, not a second `getCompressedAccount` refresh (avoids proof / leaf desync). */
+    const inputAccounts = selectedRaw
 
     const tree0 = inputAccounts[0]!.compressedAccount.treeInfo.tree.toBase58()
     for (let i = 1; i < inputAccounts.length; i++) {
