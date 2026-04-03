@@ -3,16 +3,16 @@
  * Uses @lightprotocol/compressed-token + @lightprotocol/stateless.js 0.23.x.
  * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + selectSplInterfaceInfo,
  * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo.
- * Decompress: selectSplInterfaceInfosForDecompression + tokenPoolInfos on CompressedTokenProgram.decompress.
- * Validity proof: stateless.js 0.23 defaults to V2 state trees (see zkcompression migration v1→v2).
- * For StateV2 leaves use getValidityProofV2(merkle contexts); V1 leaves use getValidityProofV0(hash+tree+queue).
- * Wrong proof version / wrong tree disambiguation surfaces as custom program error 0x1900 on decompress.
+ * Decompress: same as SDK `decompress()` — getValidityProofV0(hash+tree+queue), selectSplInterfaceInfosForDecompression,
+ * CompressedTokenProgram.decompress, then a v0 VersionedTransaction (TransactionMessage.compileToV0Message), not legacy Transaction.
+ * Legacy txs break Light Token / system CPI account packing for this instruction path (persistent 0x1900-style failures).
  */
 
 import {
   PublicKey,
   SendTransactionError,
   Transaction,
+  TransactionMessage,
   VersionedTransaction,
 } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
@@ -30,17 +30,15 @@ import {
   bn,
   selectStateTreeInfo,
   defaultStateTreeLookupTables,
-  TreeType,
-  DerivationMode,
 } from '@lightprotocol/stateless.js'
-import type { CompressedAccount, ValidityProofWithContext } from '@lightprotocol/stateless.js'
+import type { CompressedAccount } from '@lightprotocol/stateless.js'
 import { ComputeBudgetProgram } from '@solana/web3.js'
 import {
   CompressedTokenProgram,
   createTokenPool,
   selectMinCompressedTokenAccountsForTransfer,
   getSplInterfaceInfos,
-  selectSplInterfaceInfo,
+  selectSplInterfaceInfosForDecompression,
 } from '@lightprotocol/compressed-token'
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
 const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
@@ -139,7 +137,7 @@ function mapCompressedAccountsFromRpcResponse(res: unknown): CompressedTokenAcco
 
 /**
  * Fetch compressed token accounts per-account (one per airdrop). Matches AirShip: no aggregation.
- * Use this for decompress so each row = one account = smaller tx (avoids VersionedMessage deserialize issues).
+ * Use this for decompress so each row = one account; claim still uses a v0 VersionedTransaction per SDK.
  */
 export async function fetchCompressedTokenAccounts(
   rpcUrl: string,
@@ -270,7 +268,8 @@ export async function registerMintForCompression(
 /**
  * Compress and send tokens to recipients. Ship wallet must hold the tokens in its ATA.
  * Uses createTokenPool, getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos +
- * selectSplInterfaceInfo, CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo,
+ * lowest poolIndex SPL interface (deterministic; avoids random pool vs claim-time pool mismatch),
+ * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo,
  * buildAndSignTx with default state-tree LUT pair(s).
  * Large recipient lists are split across multiple transactions (v0 message size limit).
  * The payer keypair signs every partial tx in one batch (same blockhash) before any
@@ -329,7 +328,15 @@ export async function compressAndSend(
   const outputStateTreeInfo = selectStateTreeInfo(stateTreeInfos)
 
   const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
-  const tokenPoolInfo = selectSplInterfaceInfo(splInterfaceInfos)
+  const poolCandidates = splInterfaceInfos
+    .filter((i) => i.isInitialized)
+    .sort((a, b) => a.poolIndex - b.poolIndex)
+  if (poolCandidates.length === 0) {
+    throw new Error(
+      'No initialized SPL compression interface for this mint. Register the mint for compression first.'
+    )
+  }
+  const tokenPoolInfo = poolCandidates[0]
 
   const lookupTableAccounts = await fetchMainnetStateTreeLookupTableAccounts(rpc)
 
@@ -446,39 +453,6 @@ function u8eq(a: Uint8Array, b: Uint8Array): boolean {
 
 type BnInput = Parameters<typeof bn>[0]
 
-/**
- * Decompress proofs must match the state tree version (V1 vs V2).
- * Indexers sometimes omit or mis-tag treeType; 0.23 mainnet defaults to V2, so we only use V0
- * when every input is explicitly StateV1. Otherwise V2 proof (+ compressible fallback).
- * @see https://www.zkcompression.com/resources/migration-v1-to-v2
- */
-async function fetchValidityProofForDecompress(
-  rpc: ReturnType<typeof createRpc>,
-  inputAccounts: Array<{ compressedAccount: CompressedAccount }>
-): Promise<ValidityProofWithContext> {
-  const v1Only = inputAccounts.every(
-    (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV1
-  )
-  if (v1Only) {
-    const hashesWithTree = inputAccounts.map((account) => {
-      const { hash, treeInfo } = account.compressedAccount
-      return {
-        hash,
-        tree: treeInfo.tree,
-        queue: treeInfo.queue,
-      }
-    })
-    return rpc.getValidityProofV0(hashesWithTree, [])
-  }
-
-  const contexts = inputAccounts.map((a) => a.compressedAccount)
-  try {
-    return await rpc.getValidityProofV2(contexts, [], DerivationMode.standard)
-  } catch {
-    return rpc.getValidityProofV2(contexts, [], DerivationMode.compressible)
-  }
-}
-
 /** Latest merkle context for a leaf; avoids stale treeInfo/hash vs list endpoints. */
 async function refreshTokenRowByHash<
   T extends { compressedAccount: CompressedAccount; parsed: { mint: PublicKey } },
@@ -497,18 +471,6 @@ async function refreshTokenRowByHash<
     throw new Error('Compressed account mint mismatch.')
   }
   return { ...row, compressedAccount: fresh }
-}
-
-function allInitializedSplInterfaces(
-  infos: Awaited<ReturnType<typeof getSplInterfaceInfos>>
-): typeof infos {
-  const init = infos.filter((i) => i.isInitialized).sort((a, b) => a.poolIndex - b.poolIndex)
-  if (init.length === 0) {
-    throw new Error(
-      'No initialized SPL compression interface for this mint. Register the mint for compression first.'
-    )
-  }
-  return init
 }
 
 function compressedLeafHashMatches(h: unknown, needle: string): boolean {
@@ -539,9 +501,8 @@ function compressedLeafHashMatches(h: unknown, needle: string): boolean {
 
 /**
  * Decompress a compressed token to the owner's SPL ATA.
- * Mirrors `@lightprotocol/compressed-token` account selection, amount semantics, and proof fetch.
- * Uses legacy `Transaction` (not v0) so Solana Connector / embedded wallets can sign; v0 hits
- * "Versioned messages must be deserialized with VersionedMessage.deserialize()".
+ * Matches bundled `decompress()` from `@lightprotocol/compressed-token`: getValidityProofV0, pool
+ * selection helper, then v0 `VersionedTransaction` (wallet must support `signTransaction(VersionedTransaction)`).
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
   const {
@@ -632,10 +593,20 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       ? sumParsed
       : requestedBn
 
-  const proof = await fetchValidityProofForDecompress(rpc, inputAccounts)
+  const proof = await rpc.getValidityProofV0(
+    inputAccounts.map((account) => ({
+      hash: account.compressedAccount.hash,
+      tree: account.compressedAccount.treeInfo.tree,
+      queue: account.compressedAccount.treeInfo.queue,
+    })),
+    [],
+  )
 
   const splInterfaceInfos = await getSplInterfaceInfos(rpc, mintPk)
-  const tokenPoolInfos = allInitializedSplInterfaces(splInterfaceInfos)
+  const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
+    splInterfaceInfos,
+    amountForInstruction,
+  )
 
   const decompressIx = await CompressedTokenProgram.decompress({
     payer: owner,
@@ -649,7 +620,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
 
   const ataInfo = await rpc.getAccountInfo(splAta)
   const needsAta = !ataInfo
-  const cuLimit = 1_000_000
+  const DECOMPRESS_CU_LIMIT = 400_000
 
   let blockhashCtx = (await rpc.getLatestBlockhashAndContext()).value
 
@@ -695,18 +666,30 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     blockhashCtx = (await rpc.getLatestBlockhashAndContext()).value
   }
 
-  const tx = new Transaction()
-  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }))
-  tx.add(decompressIx)
-  tx.recentBlockhash = blockhashCtx.blockhash
-  tx.feePayer = owner
+  const latest = await rpc.getLatestBlockhash('confirmed')
+  const messageV0 = new TransactionMessage({
+    payerKey: owner,
+    recentBlockhash: latest.blockhash,
+    instructions: [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: DECOMPRESS_CU_LIMIT }),
+      decompressIx,
+    ],
+  }).compileToV0Message([])
 
-  const signedTx = await wallet.signTransaction(tx)
+  const vtx = new VersionedTransaction(messageV0)
+  const signedTx = await wallet.signTransaction(vtx)
   try {
     const sig = await rpc.sendRawTransaction(signedTx.serialize(), {
       skipPreflight: false,
     })
-    await rpc.confirmTransaction(sig, 'confirmed')
+    await rpc.confirmTransaction(
+      {
+        signature: sig,
+        blockhash: latest.blockhash,
+        lastValidBlockHeight: latest.lastValidBlockHeight,
+      },
+      'confirmed',
+    )
     return sig
   } catch (e) {
     if (e instanceof SendTransactionError) {
