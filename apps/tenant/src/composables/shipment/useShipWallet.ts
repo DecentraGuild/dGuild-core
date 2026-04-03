@@ -4,7 +4,7 @@ import { useTenantStore } from '~/stores/tenant'
 
 const STORE_NAME = 'ship-wallet'
 const DB_NAME = 'dguild-ship-wallet'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const LEGACY_KEY = 'secret'
 
 let _db: IDBDatabase | null = null
@@ -24,28 +24,42 @@ function openDb(): Promise<IDBDatabase> {
     }
     req.onupgradeneeded = (e) => {
       const db = (e.target as IDBOpenDBRequest).result
-      const oldVersion = e.oldVersion
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME)
-      }
-      if (oldVersion === 1) {
-        const tx = (e.target as IDBOpenDBRequest).transaction
-        if (tx) {
-          tx.objectStore(STORE_NAME).delete(LEGACY_KEY)
-        }
       }
     }
   })
 }
 
-async function getStored(tenantId: string): Promise<string | null> {
-  const db = await openDb()
+function readKey(db: IDBDatabase, key: string): Promise<string | null> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
     const store = tx.objectStore(STORE_NAME)
-    const req = store.get(tenantId)
+    const req = store.get(key)
     req.onerror = () => reject(req.error)
     req.onsuccess = () => resolve((req.result as string) ?? null)
+  })
+}
+
+async function getStored(tenantId: string): Promise<string | null> {
+  const db = await openDb()
+  const primary = await readKey(db, tenantId)
+  if (primary) return primary
+  const legacy = await readKey(db, LEGACY_KEY)
+  if (typeof legacy === 'string' && legacy.length > 0) {
+    await setStored(tenantId, legacy)
+    await clearStoredKey(db, LEGACY_KEY)
+    return legacy
+  }
+  return null
+}
+
+async function clearStoredKey(db: IDBDatabase, key: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.objectStore(STORE_NAME).delete(key)
   })
 }
 
@@ -53,10 +67,9 @@ async function setStored(tenantId: string, secretBase58: string): Promise<void> 
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    const req = store.put(secretBase58, tenantId)
-    req.onerror = () => reject(req.error)
-    req.onsuccess = () => resolve()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.objectStore(STORE_NAME).put(secretBase58, tenantId)
   })
 }
 
@@ -64,10 +77,9 @@ async function clearStored(tenantId: string): Promise<void> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    const req = store.delete(tenantId)
-    req.onerror = () => reject(req.error)
-    req.onsuccess = () => resolve()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.objectStore(STORE_NAME).delete(tenantId)
   })
 }
 
@@ -171,6 +183,8 @@ export function useShipWallet() {
     address.value = null
   }
 
+  const scopedToTenant = computed(() => Boolean(tenantStore.tenant?.id))
+
   watch(
     () => tenantStore.tenantId,
     () => {
@@ -184,6 +198,7 @@ export function useShipWallet() {
     address,
     loading,
     error,
+    scopedToTenant,
     load,
     create,
     importWallet,

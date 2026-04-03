@@ -109,6 +109,28 @@ export async function fetchCompressedTokenBalances(
   }))
 }
 
+type CompressedTokenAccountRpcItem = {
+  parsed: { mint: { toBase58: () => string }; amount: { toString: () => string } }
+  compressedAccount?: { hash?: { toString: () => string } }
+}
+
+function mapCompressedAccountsFromRpcResponse(res: unknown): CompressedTokenAccount[] {
+  const raw = res as {
+    items?: CompressedTokenAccountRpcItem[]
+    value?: { items?: CompressedTokenAccountRpcItem[] }
+  }
+  const items = raw.items ?? raw.value?.items ?? []
+  return items.map((item, i) => {
+    const hashStr = item.compressedAccount?.hash?.toString() ?? null
+    return {
+      id: hashStr ?? `${item.parsed.mint.toBase58()}-${i}`,
+      mint: item.parsed.mint.toBase58(),
+      amount: item.parsed.amount.toString(),
+      accountHash: hashStr,
+    }
+  })
+}
+
 /**
  * Fetch compressed token accounts per-account (one per airdrop). Matches AirShip: no aggregation.
  * Use this for decompress so each row = one account = smaller tx (avoids VersionedMessage deserialize issues).
@@ -120,18 +142,38 @@ export async function fetchCompressedTokenAccounts(
   const rpc = getRpc(rpcUrl)
   const owner = new PublicKey(ownerAddress)
   const res = await rpc.getCompressedTokenAccountsByOwner(owner, {})
-  type Item = { parsed: { mint: { toBase58: () => string }; amount: { toString: () => string } }; compressedAccount?: { hash?: { toString: () => string } } }
-  const raw = res as { items?: Item[]; value?: { items?: Item[] } }
-  const items = raw.items ?? raw.value?.items ?? []
-  return items.map((item, i) => {
-    const hashStr = item.compressedAccount?.hash?.toString() ?? null
-    return {
-      id: hashStr ?? `${item.parsed.mint.toBase58()}-${i}`,
-      mint: item.parsed.mint.toBase58(),
-      amount: item.parsed.amount.toString(),
-      accountHash: hashStr,
+  return mapCompressedAccountsFromRpcResponse(res)
+}
+
+/**
+ * Per-mint compressed token accounts (Helius/Light `getCompressedTokenAccountsByOwner` with `mint` filter).
+ * Avoids scanning the full wallet, which can throw for some owners when the SDK hits an unknown state tree.
+ */
+export async function fetchCompressedTokenAccountsForMints(
+  rpcUrl: string,
+  ownerAddress: string,
+  mints: string[]
+): Promise<CompressedTokenAccount[]> {
+  const rpc = getRpc(rpcUrl)
+  const owner = new PublicKey(ownerAddress)
+  const seen = new Set<string>()
+  const out: CompressedTokenAccount[] = []
+  const unique = [...new Set(mints.filter((m) => typeof m === 'string' && m.trim()))]
+  for (const mint of unique) {
+    try {
+      const mintPk = new PublicKey(mint)
+      const res = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
+      for (const acc of mapCompressedAccountsFromRpcResponse(res)) {
+        const key = `${acc.mint}|${acc.accountHash ?? acc.id}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(acc)
+      }
+    } catch {
+      void 0
     }
-  })
+  }
+  return out
 }
 
 function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
