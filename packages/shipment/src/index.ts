@@ -2,14 +2,19 @@
  * Shipment package – thin layer on Light Protocol for compressed token airdrops.
  * Uses @lightprotocol/compressed-token + @lightprotocol/stateless.js 0.23.x.
  * Compress: getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos + lowest poolIndex (deterministic ship).
- * Decompress: matches **published** `@lightprotocol/compressed-token` `decompress()` (not the older web snippet):
- * `getValidityProofV0({hash,tree,queue})[]`, V2 proof fallback if V0 throws or inputs are not StateV1-only;
- * **Token pools for decompress** must come from {@link selectSplInterfaceInfosForDecompression}
- * (same as bundled `decompress()`): either the single pool whose balance covers `amount * 10`, or all
- * initialized pools sorted by `poolIndex`. Passing every pool unconditionally breaks CPI (0x1900).
- * Claim is **per mint**: all compressed leaves for that mint are drained using `selectMinCompressedTokenAccountsForTransferOrPartial`
- * (up to 4 inputs per tx); multiple transactions run until the mint’s compressed balance is zero.
+ * Decompress: `selectAccountsByPreferredTreeType` + `getValidityProofV0` / `getValidityProofV2` (see
+ * {@link fetchValidityProofForDecompress}). SPL interface for ix matches **compress**: lowest initialized pool only.
+ * Claim is **per mint**: `selectAccountsByPreferredTreeType` (same as bundled `decompress`) ensures each tx only
+ * uses StateV1 or StateV2 accounts, never mixed (mixed batches break validity proofs → 0x1900). Then
+ * `selectMinCompressedTokenAccountsForTransferOrPartial` (up to 4 inputs per tx); multiple txs until drained.
+ * Token pool for decompress is the **lowest initialized** SPL interface — same as `compressAndSend` — so we never
+ * pass every pool when `selectSplInterfaceInfosForDecompression` would return them all (also implicated in 0x1900).
  * v0 VersionedTransaction (not legacy Transaction — avoids Light CPI account packing failures).
+ *
+ * **Wallet-injected Lighthouse:** The [Lighthouse](https://github.com/Jac0xb/lighthouse) program id is
+ * `L2TEx…` (assertion protocol, not Light’s Merkle trees). Some wallets prepend/append Lighthouse instructions
+ * when signing. We assert the signed tx contains no `L2TEx…` ix so users get a clear error instead of
+ * `0x1900` inside Lighthouse.
  */
 
 import {
@@ -43,13 +48,49 @@ import { ComputeBudgetProgram } from '@solana/web3.js'
 import {
   CompressedTokenProgram,
   createTokenPool,
+  selectAccountsByPreferredTreeType,
   selectMinCompressedTokenAccountsForTransferOrPartial,
   getSplInterfaceInfos,
-  selectSplInterfaceInfosForDecompression,
 } from '@lightprotocol/compressed-token'
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
 const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
 const COMPUTE_UNIT_LIMIT = 550_000
+
+/** [Lighthouse](https://github.com/Jac0xb/lighthouse) — mainnet & devnet; not Light `cTokenm…`. */
+const LIGHTHOUSE_ASSERTION_PROGRAM_ID = new PublicKey(
+  'L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95'
+)
+
+/**
+ * Wallets or browser extensions sometimes modify the serialized transaction during
+ * `signTransaction` by inserting Lighthouse assertion instructions. That is not from this package.
+ */
+function assertNoWalletInjectedLighthouse(
+  tx: Transaction | VersionedTransaction
+): void {
+  if (tx instanceof VersionedTransaction) {
+    const keys = tx.message.staticAccountKeys.map((k) => k.toBase58())
+    for (const ix of tx.message.compiledInstructions) {
+      if (keys[ix.programIdIndex] === LIGHTHOUSE_ASSERTION_PROGRAM_ID.toBase58()) {
+        throw new Error(
+          'Your wallet added Lighthouse security checks to this transaction (program L2TEx…). ' +
+            'Those extra instructions are not from dGuild and often make compressed-token claims fail. ' +
+            'Turn off transaction simulation guards / privacy wrapping for this site, or connect with a wallet that does not modify transactions before signing.'
+        )
+      }
+    }
+    return
+  }
+  for (const ix of tx.instructions) {
+    if (ix.programId.equals(LIGHTHOUSE_ASSERTION_PROGRAM_ID)) {
+      throw new Error(
+        'Your wallet added Lighthouse security checks to this transaction (program L2TEx…). ' +
+          'Those extra instructions are not from dGuild and often make compressed-token claims fail. ' +
+          'Turn off transaction simulation guards / privacy wrapping for this site, or connect with a wallet that does not modify transactions before signing.'
+      )
+    }
+  }
+}
 
 export interface ShipmentRecipient {
   address: string
@@ -511,9 +552,8 @@ async function resolveSplTokenProgramForMint(
 }
 
 /**
- * Decompress a compressed token to the owner's SPL ATA.
- * Matches ZK Compression “decompress” client script + bundled SDK `decompress()`:
- * getValidityProof(hashes), getTokenPoolInfos, selectTokenPoolInfosForDecompression; v0 tx + LUTs.
+ * Decompress compressed tokens for this mint to the owner's SPL ATA (multi-tx if needed).
+ * Uses {@link selectAccountsByPreferredTreeType}, {@link fetchValidityProofForDecompress}, lowest SPL pool + v0 tx + LUTs.
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
   const { connection, wallet, mint, amount, rpcUrl: rpcUrlParam, tokenProgramId } =
@@ -564,6 +604,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     createAtaTx.recentBlockhash = blockhash
     createAtaTx.feePayer = owner
     const signedCreate = await wallet.signTransaction(createAtaTx)
+    assertNoWalletInjectedLighthouse(signedCreate)
     try {
       const createSig = await rpc.sendRawTransaction(signedCreate.serialize(), {
         skipPreflight: false,
@@ -605,6 +646,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
 
     const vtx = new VersionedTransaction(messageV0)
     const signedTx = await wallet.signTransaction(vtx)
+    assertNoWalletInjectedLighthouse(signedTx)
     try {
       const sig = await rpc.sendRawTransaction(signedTx.serialize(), {
         skipPreflight: false,
@@ -666,8 +708,21 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     }
     firstPass = false
 
+    const { accounts: itemsOneTreeType } = selectAccountsByPreferredTreeType(
+      items,
+      totalAllBn
+    )
+    if (itemsOneTreeType.length === 0) {
+      throw new Error(
+        'No compressed token accounts match the active tree version for this network. Refresh the page and try again.'
+      )
+    }
+
     const [selectedRaw, amountForInstruction] =
-      selectMinCompressedTokenAccountsForTransferOrPartial(items, totalAllBn)
+      selectMinCompressedTokenAccountsForTransferOrPartial(
+        itemsOneTreeType,
+        totalAllBn
+      )
 
     for (const a of selectedRaw) {
       if (!a.parsed.owner.equals(owner)) {
@@ -705,10 +760,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     }
 
     const splRows = await getSplInterfaceInfos(rpc, mintPk)
-    const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
-      splRows,
-      amountForInstruction
-    )
+    const tokenPoolInfos = [pickLowestInitializedSplInterfaceInfo(splRows)]
 
     const decompressIx = await CompressedTokenProgram.decompress({
       payer: owner,
