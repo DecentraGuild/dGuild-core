@@ -125,8 +125,6 @@ interface CompressedAsset {
   mint?: string
   amount?: string
   decimals?: number
-  /** From fetch; pass to decompress when multiple compressed accounts share a mint. */
-  accountHash?: string | null
   token_info?: { symbol?: string; decimals?: number }
   compression?: { compressed?: boolean }
 }
@@ -256,20 +254,38 @@ async function fetchDisplay(mints: string[]) {
   displayByMint.value = map
 }
 
+/** One row per mint; if the same mint appears from shipment scan + full wallet, keep the larger total (should match on-chain). */
 function mergeCompressedAssetsByKey(a: CompressedAsset[], b: CompressedAsset[]): CompressedAsset[] {
-  const seen = new Set<string>()
-  const out: CompressedAsset[] = []
+  const map = new Map<string, CompressedAsset>()
   for (const x of [...a, ...b]) {
-    const k = `${mintKey(x)}|${(x.accountHash ?? '').trim() || x.id}`
-    if (seen.has(k)) continue
-    seen.add(k)
-    out.push(x)
+    const k = mintKey(x)
+    const prev = map.get(k)
+    if (!prev) {
+      map.set(k, { ...x, id: k, mint: x.mint ?? k })
+      continue
+    }
+    let pa = 0n
+    let xa = 0n
+    try {
+      pa = BigInt(prev.amount ?? '0')
+      xa = BigInt(x.amount ?? '0')
+    } catch {
+      map.set(k, prev)
+      continue
+    }
+    const maxAmt = pa > xa ? pa : xa
+    map.set(k, {
+      ...prev,
+      amount: maxAmt.toString(),
+      id: k,
+      mint: prev.mint ?? x.mint ?? k,
+    })
   }
-  return out
+  return [...map.values()]
 }
 
 async function enrichCompressedRows(
-  accounts: Array<{ id: string; mint: string; amount: string; accountHash: string | null }>,
+  accounts: Array<{ id: string; mint: string; amount: string }>,
 ): Promise<CompressedAsset[]> {
   const { fetchMintMetadataFromChain } = await import('@decentraguild/web3')
   const conn = connection.value
@@ -293,7 +309,6 @@ async function enrichCompressedRows(
       id: b.id,
       mint: b.mint,
       amount: b.amount,
-      accountHash: b.accountHash,
       decimals: decimals ?? undefined,
       token_info: { decimals: decimals ?? undefined },
       compression: { compressed: true },
@@ -370,12 +385,6 @@ async function claim(a: CompressedAsset) {
     if (!/^\d+$/.test(amountStr) || amountStr === '0') throw new Error('Invalid amount')
     const decimals = a.decimals ?? a.token_info?.decimals ?? null
     if (decimals == null || !Number.isFinite(decimals)) throw new Error('Token decimals not available')
-    const hash = a.accountHash?.trim()
-    if (!hash) {
-      throw new Error(
-        'Compressed account hash missing for this shipment. Refresh the page (Helius ZK / compression RPC required), then try again.',
-      )
-    }
     const sig = await doDecompress({
       connection: conn,
       wallet: walletAdapter,
@@ -383,7 +392,6 @@ async function claim(a: CompressedAsset) {
       amount: amountStr,
       decimals,
       rpcUrl: rpcUrl.value || undefined,
-      compressedAccountHash: hash,
     })
     if (sig) {
       fetchAssets()
