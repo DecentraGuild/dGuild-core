@@ -34,7 +34,6 @@
             :key="a.id"
             :title="displayName(a)"
             :amount="formatAmount(a)"
-            :claim-leaf-id="a.id"
             :claiming="claiming === a.id"
             :explorer-url="a.mint ? explorerLinks.tokenUrl(a.mint) : undefined"
             :has-banner="hasBanner(a)"
@@ -62,7 +61,6 @@
               :key="a.id"
               :title="displayName(a)"
               :amount="formatAmount(a)"
-              :claim-leaf-id="a.id"
               :claiming="claiming === a.id"
               :explorer-url="a.mint ? explorerLinks.tokenUrl(a.mint) : undefined"
               :has-banner="hasBanner(a)"
@@ -104,7 +102,6 @@ import ShipmentClaimCard from '~/components/shipment/ShipmentClaimCard.vue'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { useAuth } from '@decentraguild/auth'
-import { ensureSigningWalletForSession } from '@decentraguild/web3'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
@@ -124,11 +121,12 @@ const shipmentState = computed(() => getModuleState(tenant.value?.modules?.shipm
 const shipmentVisible = computed(() => isModuleVisibleToMembers(shipmentState.value))
 
 interface CompressedAsset {
-  /** Leaf hash (decimal); one card per compressed row. */
   id: string
   mint?: string
   amount?: string
   decimals?: number
+  /** From fetch; pass to decompress when multiple compressed accounts share a mint. */
+  accountHash?: string | null
   token_info?: { symbol?: string; decimals?: number }
   compression?: { compressed?: boolean }
 }
@@ -258,18 +256,20 @@ async function fetchDisplay(mints: string[]) {
   displayByMint.value = map
 }
 
-/** One row per compressed leaf id (hash); duplicate ids from mint scan + full wallet keep one row. */
-function mergeCompressedLeavesById(a: CompressedAsset[], b: CompressedAsset[]): CompressedAsset[] {
-  const map = new Map<string, CompressedAsset>()
+function mergeCompressedAssetsByKey(a: CompressedAsset[], b: CompressedAsset[]): CompressedAsset[] {
+  const seen = new Set<string>()
+  const out: CompressedAsset[] = []
   for (const x of [...a, ...b]) {
-    const k = x.id
-    if (!map.has(k)) map.set(k, x)
+    const k = `${mintKey(x)}|${(x.accountHash ?? '').trim() || x.id}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(x)
   }
-  return [...map.values()]
+  return out
 }
 
 async function enrichCompressedRows(
-  accounts: Array<{ id: string; mint: string; amount: string }>,
+  accounts: Array<{ id: string; mint: string; amount: string; accountHash: string | null }>,
 ): Promise<CompressedAsset[]> {
   const { fetchMintMetadataFromChain } = await import('@decentraguild/web3')
   const conn = connection.value
@@ -293,6 +293,7 @@ async function enrichCompressedRows(
       id: b.id,
       mint: b.mint,
       amount: b.amount,
+      accountHash: b.accountHash,
       decimals: decimals ?? undefined,
       token_info: { decimals: decimals ?? undefined },
       compression: { compressed: true },
@@ -335,16 +336,16 @@ async function fetchAssets() {
   }
   try {
     const shipment = await import('@decentraguild/shipment')
-    const fromMints = await shipment.fetchCompressedTokenLeavesForMints(url, w, mintsFromShipments)
-    let fromFull: Awaited<ReturnType<typeof shipment.fetchCompressedTokenLeaves>> = []
+    const fromMints = await shipment.fetchCompressedTokenAccountsForMints(url, w, mintsFromShipments)
+    let fromFull: Awaited<ReturnType<typeof shipment.fetchCompressedTokenAccounts>> = []
     try {
-      fromFull = await shipment.fetchCompressedTokenLeaves(url, w)
+      fromFull = await shipment.fetchCompressedTokenAccounts(url, w)
     } catch {
       fromFull = []
     }
     const enrichedMints = await enrichCompressedRows(fromMints)
     const enrichedFull = await enrichCompressedRows(fromFull)
-    assets.value = mergeCompressedLeavesById(enrichedMints, enrichedFull)
+    assets.value = mergeCompressedAssetsByKey(enrichedMints, enrichedFull)
     const mints = [...new Set(assets.value.map((a) => mintKey(a)).filter(Boolean))]
     await fetchDisplay(mints)
   } catch {
@@ -360,7 +361,6 @@ async function claim(a: CompressedAsset) {
   try {
     const conn = connection.value
     if (!conn) throw new Error('RPC not configured')
-    await ensureSigningWalletForSession(auth.wallet.value)
     const { getEscrowWalletFromConnector } = await import('@decentraguild/web3')
     const { decompress: doDecompress } = await import('@decentraguild/shipment')
     const walletAdapter = getEscrowWalletFromConnector()
@@ -370,14 +370,20 @@ async function claim(a: CompressedAsset) {
     if (!/^\d+$/.test(amountStr) || amountStr === '0') throw new Error('Invalid amount')
     const decimals = a.decimals ?? a.token_info?.decimals ?? null
     if (decimals == null || !Number.isFinite(decimals)) throw new Error('Token decimals not available')
+    const hash = a.accountHash?.trim()
+    if (!hash) {
+      throw new Error(
+        'Compressed account hash missing for this shipment. Refresh the page (Helius ZK / compression RPC required), then try again.',
+      )
+    }
     const sig = await doDecompress({
       connection: conn,
       wallet: walletAdapter,
       mint,
       amount: amountStr,
       decimals,
-      compressedLeafHash: a.id,
       rpcUrl: rpcUrl.value || undefined,
+      compressedAccountHash: hash,
     })
     if (sig) {
       fetchAssets()
@@ -387,13 +393,10 @@ async function claim(a: CompressedAsset) {
     const original = err.originalError ?? err.cause
     const originalMsg =
       original instanceof Error ? original.message : typeof original === 'string' ? original : null
-    let msg =
+    const msg =
       originalMsg && originalMsg !== err.message
         ? `${err.message}: ${originalMsg}`
         : err instanceof Error ? err.message : 'Claim failed'
-    const mintForSupport = a.mint ?? a.id
-    const ownerForSupport = wallet.value ?? '(unknown)'
-    msg += `\n\n---\nSupport context (include when reporting)\nowner: ${ownerForSupport}\nmint: ${mintForSupport}\nclaimLeafId: ${a.id}\namountRaw: ${String(a.amount ?? '')}`
     openClaimError(msg)
   } finally {
     claiming.value = null

@@ -1,17 +1,13 @@
 /**
  * Shipment package – thin layer on Light Protocol for compressed token airdrops.
- * Uses @lightprotocol/compressed-token + @lightprotocol/stateless.js 0.23.x.
- *
- * **Claims** are one compressed **leaf** at a time (matches indexer rows from `getCompressedTokenAccountsByOwner`):
- * `selectAccountsByPreferredTreeType` → `getValidityProofV0` / `getValidityProofV2` → `CompressedTokenProgram.decompress`,
- * lowest SPL pool only, v0 `VersionedTransaction` + state tree LUTs. No proof retries (avoids hammering RPC limits).
+ * Uses @lightprotocol/compressed-token + @lightprotocol/stateless.js 0.20.3.
+ * Follows Helius AirShip pattern: createTokenPool, CompressedTokenProgram.compress with outputStateTree.
  */
 
 import {
   PublicKey,
   SendTransactionError,
   Transaction,
-  TransactionMessage,
   VersionedTransaction,
 } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
@@ -26,23 +22,19 @@ import {
 import {
   createRpc,
   buildAndSignTx,
+  pickRandomTreeAndQueue,
   bn,
-  selectStateTreeInfo,
-  defaultStateTreeLookupTables,
-  TreeType,
-  DerivationMode,
 } from '@lightprotocol/stateless.js'
-import type { ValidityProofWithContext } from '@lightprotocol/stateless.js'
-import type { CompressedAccount } from '@lightprotocol/stateless.js'
 import { ComputeBudgetProgram } from '@solana/web3.js'
 import {
   CompressedTokenProgram,
   createTokenPool,
-  selectAccountsByPreferredTreeType,
-  selectSplInterfaceInfosForDecompression,
-  getSplInterfaceInfos,
+  selectMinCompressedTokenAccountsForTransfer,
 } from '@lightprotocol/compressed-token'
 
+const LOOKUP_TABLE_MAINNET = new PublicKey(
+  '9NYFyEqPkyXUhkerbGHXUXkvb4qpzeEdHuGpgbgpH1NJ'
+)
 const MAX_ADDRESSES_PER_INSTRUCTION = 5
 const MAX_COMPRESS_INSTRUCTIONS_PER_TX = 2
 const COMPUTE_UNIT_LIMIT = 550_000
@@ -62,20 +54,6 @@ export interface CompressAndSendParams {
   rpcUrl?: string
   /** SPL or Token-2022. Defaults to TOKEN_PROGRAM_ID. */
   tokenProgramId?: typeof TOKEN_PROGRAM_ID | typeof TOKEN_2022_PROGRAM_ID
-}
-
-/** One recipient row to persist after a successful compress (leaf hash = claim id). */
-export interface ShipmentCompressedLeafCapture {
-  recipientWallet: string
-  leafHashDecimal: string
-  amountRaw: string
-}
-
-export interface CompressAndSendResult {
-  txSignature: string
-  leaves: ShipmentCompressedLeafCapture[]
-  /** False when the indexer never returned a matching new leaf per recipient (retry window exhausted). */
-  leavesComplete: boolean
 }
 
 export interface RegisterMintParams {
@@ -99,19 +77,17 @@ export interface CompressedTokenBalance {
   decimals?: number
 }
 
-/** One row per mint: total compressed token amount for that mint (all leaves summed). */
+/** Per-account compressed token (one row per airdrop). Matches AirShip: no aggregation by mint. */
 export interface CompressedTokenAccount {
   id: string
   mint: string
   amount: string
   decimals?: number
-}
-
-/** One row per compressed token leaf (one claim / signature). `id` is the leaf hash (decimal string). */
-export interface CompressedTokenLeaf {
-  id: string
-  mint: string
-  amount: string
+  /**
+   * Merkle leaf hash for this compressed account when available.
+   * Pass to decompress as `compressedAccountHash` so the correct account is chosen when multiple exist for the same mint.
+   */
+  accountHash: string | null
 }
 
 /**
@@ -125,7 +101,8 @@ export async function fetchCompressedTokenBalances(
   const rpc = getRpc(rpcUrl)
   const owner = new PublicKey(ownerAddress)
   const res = await rpc.getCompressedTokenBalancesByOwnerV2(owner, {})
-  const items = res.value?.items ?? []
+  const items = (res as { value?: { items?: Array<{ mint: PublicKey; balance: { toString: () => string } }> } })
+    .value?.items ?? []
   return items.map((item) => ({
     mint: item.mint.toBase58(),
     amount: item.balance.toString(),
@@ -133,42 +110,30 @@ export async function fetchCompressedTokenBalances(
 }
 
 type CompressedTokenAccountRpcItem = {
-  parsed: {
-    mint: { toBase58: () => string }
-    amount: { toString: () => string }
-    owner: PublicKey
-  }
-  compressedAccount: CompressedAccount
+  parsed: { mint: { toBase58: () => string }; amount: { toString: () => string } }
+  compressedAccount?: { hash?: { toString: () => string } }
 }
 
-function aggregateCompressedItemsByMint(
-  items: CompressedTokenAccountRpcItem[]
-): CompressedTokenAccount[] {
-  const sums = new Map<string, ReturnType<typeof bn>>()
-  for (const item of items) {
-    const amt = bn(item.parsed.amount.toString())
-    if (amt.lte(bn(0))) continue
-    const mint = item.parsed.mint.toBase58()
-    const prev = sums.get(mint) ?? bn(0)
-    sums.set(mint, prev.add(amt))
-  }
-  return [...sums.entries()].map(([mint, total]) => ({
-    id: mint,
-    mint,
-    amount: total.toString(),
-  }))
-}
-
-function compressedTokenItemsFromRpcResponse(res: unknown): CompressedTokenAccountRpcItem[] {
+function mapCompressedAccountsFromRpcResponse(res: unknown): CompressedTokenAccount[] {
   const raw = res as {
     items?: CompressedTokenAccountRpcItem[]
     value?: { items?: CompressedTokenAccountRpcItem[] }
   }
-  return raw.items ?? raw.value?.items ?? []
+  const items = raw.items ?? raw.value?.items ?? []
+  return items.map((item, i) => {
+    const hashStr = item.compressedAccount?.hash?.toString() ?? null
+    return {
+      id: hashStr ?? `${item.parsed.mint.toBase58()}-${i}`,
+      mint: item.parsed.mint.toBase58(),
+      amount: item.parsed.amount.toString(),
+      accountHash: hashStr,
+    }
+  })
 }
 
 /**
- * Fetch compressed token balances aggregated by mint (sums all compressed leaves per mint).
+ * Fetch compressed token accounts per-account (one per airdrop). Matches AirShip: no aggregation.
+ * Use this for decompress so each row = one account = smaller tx (avoids VersionedMessage deserialize issues).
  */
 export async function fetchCompressedTokenAccounts(
   rpcUrl: string,
@@ -177,7 +142,7 @@ export async function fetchCompressedTokenAccounts(
   const rpc = getRpc(rpcUrl)
   const owner = new PublicKey(ownerAddress)
   const res = await rpc.getCompressedTokenAccountsByOwner(owner, {})
-  return aggregateCompressedItemsByMint(compressedTokenItemsFromRpcResponse(res))
+  return mapCompressedAccountsFromRpcResponse(res)
 }
 
 /**
@@ -191,262 +156,30 @@ export async function fetchCompressedTokenAccountsForMints(
 ): Promise<CompressedTokenAccount[]> {
   const rpc = getRpc(rpcUrl)
   const owner = new PublicKey(ownerAddress)
-  const sums = new Map<string, ReturnType<typeof bn>>()
+  const seen = new Set<string>()
+  const out: CompressedTokenAccount[] = []
   const unique = [...new Set(mints.filter((m) => typeof m === 'string' && m.trim()))]
   for (const mint of unique) {
     try {
       const mintPk = new PublicKey(mint)
       const res = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
-      const items = compressedTokenItemsFromRpcResponse(res)
-      for (const item of items) {
-        const amt = bn(item.parsed.amount.toString())
-        if (amt.lte(bn(0))) continue
-        const m = item.parsed.mint.toBase58()
-        const prev = sums.get(m) ?? bn(0)
-        sums.set(m, prev.add(amt))
+      for (const acc of mapCompressedAccountsFromRpcResponse(res)) {
+        const key = `${acc.mint}|${acc.accountHash ?? acc.id}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(acc)
       }
     } catch {
       void 0
     }
-  }
-  return [...sums.entries()].map(([mint, total]) => ({
-    id: mint,
-    mint,
-    amount: total.toString(),
-  }))
-}
-
-function compressedLeavesFromRpcItems(
-  items: CompressedTokenAccountRpcItem[]
-): CompressedTokenLeaf[] {
-  const out: CompressedTokenLeaf[] = []
-  for (const item of items) {
-    const amt = bn(item.parsed.amount.toString())
-    if (amt.lte(bn(0))) continue
-    const h = item.compressedAccount?.hash
-    if (h == null) continue
-    out.push({
-      id: bn(h).toString(10),
-      mint: item.parsed.mint.toBase58(),
-      amount: amt.toString(10),
-    })
   }
   return out
 }
 
-/**
- * All compressed token leaves for an owner (no aggregation). One entry per claimable row.
- */
-export async function fetchCompressedTokenLeaves(
-  rpcUrl: string,
-  ownerAddress: string
-): Promise<CompressedTokenLeaf[]> {
-  const rpc = getRpc(rpcUrl)
-  const owner = new PublicKey(ownerAddress)
-  const res = await rpc.getCompressedTokenAccountsByOwner(owner, {})
-  return compressedLeavesFromRpcItems(compressedTokenItemsFromRpcResponse(res))
-}
-
-/**
- * Compressed leaves for specific mints only (tenant shipment mints). Dedupes by leaf id.
- */
-export async function fetchCompressedTokenLeavesForMints(
-  rpcUrl: string,
-  ownerAddress: string,
-  mints: string[]
-): Promise<CompressedTokenLeaf[]> {
-  const rpc = getRpc(rpcUrl)
-  const owner = new PublicKey(ownerAddress)
-  const byId = new Map<string, CompressedTokenLeaf>()
-  const unique = [...new Set(mints.filter((m) => typeof m === 'string' && m.trim()))]
-  for (const mint of unique) {
-    try {
-      const mintPk = new PublicKey(mint)
-      const res = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
-      for (const leaf of compressedLeavesFromRpcItems(
-        compressedTokenItemsFromRpcResponse(res)
-      )) {
-        byId.set(leaf.id, leaf)
-      }
-    } catch {
-      void 0
-    }
-  }
-  return [...byId.values()]
-}
-
-/** Helius exposes Solana + Photon + prover JSON-RPC on one URL; Light docs pass it three times explicitly. */
 function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
-  return createRpc(rpcEndpoint, rpcEndpoint, rpcEndpoint, {
+  return createRpc(rpcEndpoint, rpcEndpoint, undefined, {
     commitment: 'confirmed',
   })
-}
-
-/**
- * New compress output tree. Prefer State V1 so claims use `getValidityProofV0`; Helius has been
- * observed returning `compressedProof: null` for State V2 prove-by-index token leaves while the indexer
- * still lists the balance.
- */
-function selectOutputStateTreeInfoForCompress(
-  infos: Parameters<typeof selectStateTreeInfo>[0]
-): ReturnType<typeof selectStateTreeInfo> {
-  try {
-    return selectStateTreeInfo(infos, TreeType.StateV1)
-  } catch {
-    return selectStateTreeInfo(infos)
-  }
-}
-
-function pickLowestInitializedSplInterfaceInfo(
-  rows: Awaited<ReturnType<typeof getSplInterfaceInfos>>
-) {
-  const poolCandidates = rows
-    .filter((i) => i.isInitialized)
-    .sort((a, b) => a.poolIndex - b.poolIndex)
-  if (poolCandidates.length === 0) {
-    throw new Error(
-      'No initialized SPL compression interface for this mint. Register the mint for compression first.',
-    )
-  }
-  return poolCandidates[0]
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms)
-  })
-}
-
-async function snapshotCompressedLeavesByRecipient(
-  rpc: ReturnType<typeof createRpc>,
-  mintPk: PublicKey,
-  recipientAddresses: string[]
-): Promise<Map<string, CompressedTokenLeaf[]>> {
-  const map = new Map<string, CompressedTokenLeaf[]>()
-  const unique = [
-    ...new Set(recipientAddresses.map((a) => a.trim()).filter(Boolean)),
-  ]
-  for (const addr of unique) {
-    try {
-      const owner = new PublicKey(addr)
-      const res = await rpc.getCompressedTokenAccountsByOwner(owner, {
-        mint: mintPk,
-      })
-      map.set(
-        addr,
-        compressedLeavesFromRpcItems(compressedTokenItemsFromRpcResponse(res)),
-      )
-    } catch {
-      map.set(addr, [])
-    }
-  }
-  return map
-}
-
-function captureNewCompressedLeaves(
-  before: Map<string, CompressedTokenLeaf[]>,
-  after: Map<string, CompressedTokenLeaf[]>,
-  recipients: ShipmentRecipient[],
-  amountsBN: Array<ReturnType<typeof bn>>
-): ShipmentCompressedLeafCapture[] {
-  const consumed = new Set<string>()
-  const out: ShipmentCompressedLeafCapture[] = []
-  for (let i = 0; i < recipients.length; i++) {
-    const addr = recipients[i]!.address.trim()
-    const beforeLeaves = before.get(addr) ?? []
-    const afterLeaves = after.get(addr) ?? []
-    const beforeIds = new Set(beforeLeaves.map((l) => l.id))
-    const expected = amountsBN[i]!.toString(10)
-    const candidates = afterLeaves
-      .filter(
-        (l) =>
-          !beforeIds.has(l.id) && !consumed.has(l.id) && l.amount === expected,
-      )
-      .sort((a, b) =>
-        a.id.localeCompare(b.id, undefined, { numeric: true }),
-      )
-    if (candidates.length === 0) {
-      throw new Error(
-        `No new compressed leaf for recipient ${addr} matching amount ${expected}.`,
-      )
-    }
-    const leaf = candidates[0]!
-    consumed.add(leaf.id)
-    out.push({
-      recipientWallet: addr,
-      leafHashDecimal: leaf.id,
-      amountRaw: expected,
-    })
-  }
-  return out
-}
-
-/**
- * Proof path aligned with bundled `decompress()` in @lightprotocol/compressed-token@0.23.x:
- * StateV1 inputs → `getValidityProofV0` only (no silent V2 fallback — wrong proof class matches on-chain 0x1900-style failures).
- * Otherwise → `getValidityProofV2` (standard, then compressible).
- */
-async function fetchValidityProofForDecompress(
-  rpc: ReturnType<typeof createRpc>,
-  inputAccounts: Array<{ compressedAccount: CompressedAccount }>
-): Promise<ValidityProofWithContext> {
-  const v1Only = inputAccounts.every(
-    (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV1
-  )
-  if (v1Only) {
-    return rpc.getValidityProofV0(
-      inputAccounts.map((account) => ({
-        hash: account.compressedAccount.hash,
-        tree: account.compressedAccount.treeInfo.tree,
-        queue: account.compressedAccount.treeInfo.queue,
-      })),
-      [],
-    )
-  }
-  const contexts = inputAccounts.map((a) => a.compressedAccount)
-  try {
-    return await rpc.getValidityProofV2(
-      contexts,
-      [],
-      DerivationMode.standard
-    )
-  } catch {
-    return rpc.getValidityProofV2(
-      contexts,
-      [],
-      DerivationMode.compressible
-    )
-  }
-}
-
-function stateTreeLookupTablePairsForRpcUrl(rpcUrl: string) {
-  const devnet = /devnet/i.test(rpcUrl)
-  const pairs = devnet
-    ? defaultStateTreeLookupTables().devnet
-    : defaultStateTreeLookupTables().mainnet
-  if (!pairs?.length) {
-    throw new Error('No state tree LUT pair in defaultStateTreeLookupTables')
-  }
-  return pairs[0]
-}
-
-async function fetchStateTreeLookupTableAccounts(
-  rpc: ReturnType<typeof createRpc>,
-  rpcUrl: string
-): Promise<import('@solana/web3.js').AddressLookupTableAccount[]> {
-  const { stateTreeLookupTable, nullifyLookupTable } =
-    stateTreeLookupTablePairsForRpcUrl(rpcUrl)
-  const [stateRes, nullifyRes] = await Promise.all([
-    rpc.getAddressLookupTable(stateTreeLookupTable),
-    rpc.getAddressLookupTable(nullifyLookupTable),
-  ])
-  const out: import('@solana/web3.js').AddressLookupTableAccount[] = []
-  if (stateRes.value) out.push(stateRes.value)
-  if (nullifyRes.value) out.push(nullifyRes.value)
-  if (out.length === 0) {
-    throw new Error('State tree lookup tables not found on this cluster')
-  }
-  return out
 }
 
 /**
@@ -509,19 +242,16 @@ export async function registerMintForCompression(
 
 /**
  * Compress and send tokens to recipients. Ship wallet must hold the tokens in its ATA.
- * Uses createTokenPool, getStateTreeInfos + selectStateTreeInfo, getSplInterfaceInfos +
- * lowest poolIndex (deterministic ship),
- * CompressedTokenProgram.compress with outputStateTreeInfo + tokenPoolInfo,
- * buildAndSignTx with default state-tree LUT pair(s).
+ * Uses AirShip flow: createTokenPool, getCachedActiveStateTreeInfo, pickRandomTreeAndQueue,
+ * CompressedTokenProgram.compress with outputStateTree, buildAndSignTx.
  * Large recipient lists are split across multiple transactions (v0 message size limit).
  * The payer keypair signs every partial tx in one batch (same blockhash) before any
  * send—no per-tx wallet popups; only the RPC submit/confirm steps are sequential.
- * Returns tx signatures (comma-separated when multiple txs were sent) and, when the indexer
- * catches up, one captured leaf per recipient for persistence.
+ * Returns one base58 signature, or comma-separated signatures when multiple txs were sent.
  */
 export async function compressAndSend(
   params: CompressAndSendParams
-): Promise<CompressAndSendResult> {
+): Promise<string> {
   const {
     connection,
     payer,
@@ -567,27 +297,18 @@ export async function compressAndSend(
     programId
   )
 
-  const stateTreeInfos = await rpc.getStateTreeInfos()
-  const outputStateTreeInfo = selectOutputStateTreeInfoForCompress(stateTreeInfos)
+  const activeStateTrees = await rpc.getCachedActiveStateTreeInfo()
+  const { tree } = pickRandomTreeAndQueue(activeStateTrees)
 
-  const splRows = await getSplInterfaceInfos(rpc, mintPk)
-  const tokenPoolInfo = pickLowestInitializedSplInterfaceInfo(splRows)
-
-  const lookupTableAccounts = await fetchStateTreeLookupTableAccounts(
-    rpc,
-    rpcEndpoint
-  )
+  const lookupTableResult = await rpc.getAddressLookupTable(LOOKUP_TABLE_MAINNET)
+  const lookupTableAccount = lookupTableResult.value
+  if (!lookupTableAccount) {
+    throw new Error('Mainnet lookup table not found')
+  }
 
   const toAddresses = recipients.map((r) => new PublicKey(r.address))
   const amountsRaw = recipients.map((r) => Math.round(r.amount * multiplier))
   const amountsBN = amountsRaw.map((a) => bn(a))
-  const recipientKeys = recipients.map((r) => r.address.trim())
-
-  const beforeLeaves = await snapshotCompressedLeavesByRecipient(
-    rpc,
-    mintPk,
-    recipientKeys,
-  )
 
   const compressInstructions: import('@solana/web3.js').TransactionInstruction[] =
     []
@@ -601,8 +322,8 @@ export async function compressAndSend(
       toAddress: batch,
       amount: batchAmounts,
       mint: mintPk,
-      outputStateTreeInfo,
-      tokenPoolInfo,
+      tokenProgramId: programId,
+      outputStateTree: tree,
     })
     compressInstructions.push(compressIx)
   }
@@ -629,7 +350,7 @@ export async function compressAndSend(
         payer,
         blockhash,
         undefined,
-        lookupTableAccounts
+        [lookupTableAccount]
       )
     )
   }
@@ -643,38 +364,7 @@ export async function compressAndSend(
     signatures.push(sig)
   }
 
-  let leaves: ShipmentCompressedLeafCapture[] = []
-  let leavesComplete = false
-  const captureWaitsMs = [0, 1800, 4000]
-  for (const waitMs of captureWaitsMs) {
-    if (waitMs > 0) await delay(waitMs)
-    const afterLeaves = await snapshotCompressedLeavesByRecipient(
-      rpc,
-      mintPk,
-      recipientKeys,
-    )
-    try {
-      leaves = captureNewCompressedLeaves(
-        beforeLeaves,
-        afterLeaves,
-        recipients,
-        amountsBN,
-      )
-      leavesComplete = true
-      break
-    } catch {
-      void 0
-    }
-  }
-  if (!leavesComplete) {
-    leaves = []
-  }
-
-  return {
-    txSignature: signatures.join(','),
-    leaves,
-    leavesComplete,
-  }
+  return signatures.join(',')
 }
 
 export interface DecompressParams {
@@ -682,18 +372,19 @@ export interface DecompressParams {
   /** Wallet adapter. Use getEscrowWalletFromConnector from @decentraguild/web3. */
   wallet: import('@decentraguild/web3').EscrowWallet
   mint: string
-  /** Raw token amount for this leaf (same units as on-chain parsed.amount). */
+  /** Raw token amount (same units as on-chain parsed.amount). Prefer string to avoid float loss. */
   amount: bigint | number | string
   decimals: number
-  /**
-   * Leaf commitment from `CompressedTokenLeaf.id` / indexer (decimal string).
-   * Required so each claim signs one decompress for one row from `getCompressedTokenAccountsByOwner`.
-   */
-  compressedLeafHash: string
   /** RPC URL. Prefer passing this explicitly (e.g. from useRpc) for decompress. */
   rpcUrl?: string
   /** SPL or Token-2022 mint program. Defaults to TOKEN_PROGRAM_ID. */
   tokenProgramId?: typeof TOKEN_PROGRAM_ID | typeof TOKEN_2022_PROGRAM_ID
+  /**
+   * When set, decompress only this compressed token account (from `CompressedTokenAccount.accountHash`).
+   * Required when multiple compressed accounts exist for the same mint; otherwise `selectMinCompressedTokenAccountsForTransfer`
+   * may pick the wrong accounts (largest-first) and fail with custom program error 0x1900.
+   */
+  compressedAccountHash?: string
 }
 
 function amountToBn(amount: bigint | number | string) {
@@ -720,8 +411,45 @@ async function resolveSplTokenProgramForMint(
   throw new Error(`Unsupported mint owner program: ${info.owner.toBase58()}`)
 }
 
+function u8eq(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+type BnInput = Parameters<typeof bn>[0]
+
+function compressedLeafHashMatches(h: unknown, needle: string): boolean {
+  const n = needle.trim()
+  if (!n || h == null) return false
+  try {
+    if (bn(h as BnInput).eq(bn(n))) return true
+  } catch {
+    void 0
+  }
+  const hStr =
+    typeof h === 'object' && h !== null && 'toString' in h
+      ? String((h as { toString: () => string }).toString())
+      : String(h)
+  if (hStr === n) return true
+  try {
+    const nBytes = new PublicKey(n).toBytes()
+    const hBn = bn(h as BnInput)
+    const le32 = new Uint8Array(hBn.toArray('le', 32))
+    const be32 = new Uint8Array(hBn.toArray('be', 32))
+    if (u8eq(le32, nBytes)) return true
+    if (u8eq(be32, nBytes)) return true
+  } catch {
+    void 0
+  }
+  return false
+}
+
 /**
- * Decompress one compressed token leaf to the owner's SPL ATA (one wallet signature for decompress).
+ * Decompress a compressed token to the owner's SPL ATA.
+ * Mirrors `@lightprotocol/compressed-token` account selection, amount semantics, and proof fetch.
+ * Uses legacy `Transaction` (not v0) so Solana Connector / embedded wallets can sign; v0 hits
+ * "Versioned messages must be deserialized with VersionedMessage.deserialize()".
  */
 export async function decompressToken(params: DecompressParams): Promise<string> {
   const {
@@ -729,14 +457,13 @@ export async function decompressToken(params: DecompressParams): Promise<string>
     wallet,
     mint,
     amount,
-    compressedLeafHash,
     rpcUrl: rpcUrlParam,
     tokenProgramId,
+    compressedAccountHash,
   } = params
   const owner = wallet.publicKey
   const mintPk = new PublicKey(mint)
   const requestedBn = amountToBn(amount)
-  const leafHashBn = bn(compressedLeafHash.trim())
   const programId =
     tokenProgramId ?? (await resolveSplTokenProgramForMint(connection, mintPk))
   const splAta = getAssociatedTokenAddressSync(mintPk, owner, false, programId)
@@ -752,17 +479,108 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   }
   const rpc = getRpc(rpcEndpoint)
 
-  const ataInfo = await rpc.getAccountInfo(splAta)
-  const needsAta = !ataInfo
-  const DECOMPRESS_CU_LIMIT = 550_000
-
-  const lookupTableAccounts = await fetchStateTreeLookupTableAccounts(
-    rpc,
-    rpcEndpoint
+  const compressedAccounts = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
+  const items = (compressedAccounts.items ?? []).filter((account) =>
+    bn(account.parsed.amount).gt(bn(0))
   )
 
+  if (items.length === 0) {
+    throw new Error('No compressed token balance found for this mint. Refresh and try again.')
+  }
+
+  const hashNeedle = compressedAccountHash?.trim()
+  if (items.length > 1 && !hashNeedle) {
+    throw new Error(
+      'More than one compressed balance exists for this mint. Refresh the page so each shipment row includes an account hash, then claim the row you want. Without the hash, the wrong accounts can be selected and the transaction fails with error 0x1900.'
+    )
+  }
+
+  let inputAccounts: (typeof items)[number][]
+
+  if (hashNeedle) {
+    const found = items.find((account) =>
+      compressedLeafHashMatches(account.compressedAccount?.hash, hashNeedle),
+    )
+    if (!found) {
+      throw new Error(
+        'This compressed token account was not found. Refresh the page and try again.'
+      )
+    }
+    inputAccounts = [found]
+  } else {
+    const [selected] = selectMinCompressedTokenAccountsForTransfer(items, requestedBn)
+    inputAccounts = selected
+  }
+
+  if (hashNeedle) {
+    const latest = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
+    const latestItems = (latest.items ?? []).filter((account) =>
+      bn(account.parsed.amount).gt(bn(0)),
+    )
+    const fresh = latestItems.find((account) =>
+      compressedLeafHashMatches(account.compressedAccount?.hash, hashNeedle),
+    )
+    if (!fresh) {
+      throw new Error(
+        'This compressed token account was not found. Refresh the page and try again.',
+      )
+    }
+    inputAccounts = [fresh]
+  }
+
+  const tree0 = inputAccounts[0].compressedAccount.merkleTree.toBase58()
+  for (let i = 1; i < inputAccounts.length; i++) {
+    if (inputAccounts[i].compressedAccount.merkleTree.toBase58() !== tree0) {
+      throw new Error(
+        'Compressed balances for this mint sit in different state trees. Merge those compressed accounts (Light Protocol) into one, then claim again.'
+      )
+    }
+  }
+
+  let sumParsed = bn(0)
+  for (const a of inputAccounts) {
+    sumParsed = sumParsed.add(bn(a.parsed.amount))
+  }
+  for (const a of inputAccounts) {
+    const bal = await rpc.getCompressedTokenAccountBalance(bn(a.compressedAccount.hash))
+    if (!bal.amount.eq(bn(a.parsed.amount))) {
+      throw new Error(
+        'On-chain balance does not match this claim row. Refresh the page and try again.',
+      )
+    }
+  }
+  const amountForInstruction =
+    compressedAccountHash?.trim() || inputAccounts.length === 1
+      ? sumParsed
+      : requestedBn
+
+  const proof = await rpc.getValidityProof(
+    inputAccounts.map((account) => bn(account.compressedAccount.hash)),
+  )
+
+  const outputStateTree = inputAccounts[0].compressedAccount.merkleTree
+
+  const decompressIx = await CompressedTokenProgram.decompress({
+    payer: owner,
+    inputCompressedTokenAccounts: inputAccounts,
+    toAddress: splAta,
+    amount: amountForInstruction,
+    recentInputStateRootIndices: proof.rootIndices,
+    recentValidityProof: proof.compressedProof,
+    outputStateTree,
+    tokenProgramId: programId,
+  })
+
+  const ataInfo = await rpc.getAccountInfo(splAta)
+  const needsAta = !ataInfo
+  const cuLimit = 1_000_000
+
+  let blockhashCtx = (await rpc.getLatestBlockhashAndContext()).value
+
+  // Create the SPL ATA in its own transaction when missing. Bundling ATA idempotent + Light
+  // decompress in one legacy Transaction has triggered "writable privilege escalated" on the
+  // state tree for some wallets (outer ix passes the tree read-only after sign/serialize).
   if (needsAta) {
-    const { blockhash } = (await rpc.getLatestBlockhashAndContext()).value
     const createAtaTx = new Transaction()
     createAtaTx.add(
       ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
@@ -774,7 +592,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
         programId
       )
     )
-    createAtaTx.recentBlockhash = blockhash
+    createAtaTx.recentBlockhash = blockhashCtx.blockhash
     createAtaTx.feePayer = owner
     const signedCreate = await wallet.signTransaction(createAtaTx)
     try {
@@ -798,107 +616,21 @@ export async function decompressToken(params: DecompressParams): Promise<string>
       }
       throw e
     }
+    blockhashCtx = (await rpc.getLatestBlockhashAndContext()).value
   }
 
-  const compressedAccounts = await rpc.getCompressedTokenAccountsByOwner(owner, {
-    mint: mintPk,
-  })
-  const items = (compressedAccounts.items ?? []).filter((account) =>
-    bn(account.parsed.amount.toString()).gt(bn(0))
-  ) as CompressedTokenAccountRpcItem[]
+  const tx = new Transaction()
+  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }))
+  tx.add(decompressIx)
+  tx.recentBlockhash = blockhashCtx.blockhash
+  tx.feePayer = owner
 
-  const row = items.find((a) => bn(a.compressedAccount.hash).eq(leafHashBn))
-  if (!row) {
-    throw new Error(
-      'This shipment row was not found on-chain. Refresh the page if you already claimed it.',
-    )
-  }
-  if (!row.parsed.owner.equals(owner)) {
-    throw new Error('Compressed account owner does not match your wallet.')
-  }
-  if (!bn(row.parsed.amount.toString()).eq(requestedBn)) {
-    throw new Error(
-      'Amount no longer matches this row. Refresh the page and try again.',
-    )
-  }
-
-  const totalAllBn = items.reduce(
-    (s, a) => s.add(bn(a.parsed.amount.toString())),
-    bn(0)
-  )
-  const { accounts: preferred } = selectAccountsByPreferredTreeType(
-    items as Parameters<typeof selectAccountsByPreferredTreeType>[0],
-    totalAllBn
-  )
-  const hit = preferred.find((a) => bn(a.compressedAccount.hash).eq(leafHashBn))
-  if (!hit) {
-    throw new Error(
-      'This compressed account does not match the active tree version for this network. Refresh the page and try again.',
-    )
-  }
-
-  const bal = await rpc.getCompressedTokenAccountBalance(bn(hit.compressedAccount.hash))
-  if (!bal.amount.eq(bn(hit.parsed.amount.toString()))) {
-    throw new Error(
-      'On-chain balance does not match this claim row. Refresh the page and try again.',
-    )
-  }
-
-  const proof = await fetchValidityProofForDecompress(rpc, [hit])
-  if (proof.compressedProof == null) {
-    const rootsLen = proof.roots?.length ?? 0
-    const onStateV2 =
-      hit.compressedAccount.treeInfo.treeType === TreeType.StateV2
-    const detail =
-      rootsLen === 0 ?
-        ' The prover returned no roots for this leaf (it may already be spent, or your RPC URL may not be a Helius ZK-compression endpoint). Wait a few seconds, refresh, and try again.'
-      : onStateV2 ?
-        ' This balance is on a State V2 compressed tree; the ZK prover did not return a proof (the indexer still shows the tokens). Open a ticket with Helius with your wallet, mint, and claim id. If this shipment was created before the dGuild shipped an update that targets State V1 trees, ask the organizer to re-ship the same allocation so it lands on State V1.'
-      : ' The prover returned roots but no compressed proof. Wait a few minutes, refresh, and try again, or contact Helius support.'
-    throw new Error(`Validity proof unavailable from the compression RPC.${detail}`)
-  }
-
-  const splRows = await getSplInterfaceInfos(rpc, mintPk)
-  const decompressAmount = bn(hit.parsed.amount.toString())
-  const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
-    splRows,
-    decompressAmount,
-  )
-
-  const decompressIx = await CompressedTokenProgram.decompress({
-    payer: owner,
-    inputCompressedTokenAccounts: [hit],
-    toAddress: splAta,
-    amount: decompressAmount,
-    recentInputStateRootIndices: proof.rootIndices,
-    recentValidityProof: proof.compressedProof,
-    tokenPoolInfos,
-  })
-
-  const latest = await rpc.getLatestBlockhash('confirmed')
-  const messageV0 = new TransactionMessage({
-    payerKey: owner,
-    recentBlockhash: latest.blockhash,
-    instructions: [
-      ComputeBudgetProgram.setComputeUnitLimit({ units: DECOMPRESS_CU_LIMIT }),
-      decompressIx,
-    ],
-  }).compileToV0Message(lookupTableAccounts)
-
-  const vtx = new VersionedTransaction(messageV0)
-  const signedTx = await wallet.signTransaction(vtx)
+  const signedTx = await wallet.signTransaction(tx)
   try {
     const sig = await rpc.sendRawTransaction(signedTx.serialize(), {
       skipPreflight: false,
     })
-    await rpc.confirmTransaction(
-      {
-        signature: sig,
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: latest.lastValidBlockHeight,
-      },
-      'confirmed',
-    )
+    await rpc.confirmTransaction(sig, 'confirmed')
     return sig
   } catch (e) {
     if (e instanceof SendTransactionError) {
@@ -914,7 +646,7 @@ export async function decompressToken(params: DecompressParams): Promise<string>
             logBlock = `\n\nFull logs:\n${fetched.join('\n')}`
           }
         } catch {
-          // simulation-only
+          // no signature / simulation-only — message may already include logs
         }
       }
       throw new Error(`${base}${logBlock}`, { cause: e })
