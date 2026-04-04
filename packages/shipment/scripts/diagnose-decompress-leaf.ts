@@ -237,11 +237,15 @@ async function main() {
   console.log('roots length:', proof.roots?.length ?? 0)
 
   if (cp == null) {
+    const isV2 = row.compressedAccount.treeInfo.treeType === TreeType.StateV2
     console.error(
       '\nFAIL: compressedProof is null. Common causes:\n' +
         '  - Helius URL is not ZK-compression enabled (use mainnet.helius-rpc.com?api-key=… as in Helius dashboard).\n' +
         '  - Leaf is not in the merkle tree the prover uses (spent / reorg / indexer lag).\n' +
         '  - Rate limits or transient prover errors (retry later).\n' +
+        (isV2 ?
+          '  - TreeType is StateV2: Helius has been observed returning null proofs while the indexer still lists the leaf. Contact Helius support; for new sends, prefer compress output to State V1 trees.\n'
+        : '') +
         'A bad unrelated transaction yesterday does not break all compression; it only affects leaves it touched.',
     )
     process.exit(4)

@@ -282,6 +282,21 @@ function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
   })
 }
 
+/**
+ * New compress output tree. Prefer State V1 so claims use `getValidityProofV0`; Helius has been
+ * observed returning `compressedProof: null` for State V2 prove-by-index token leaves while the indexer
+ * still lists the balance.
+ */
+function selectOutputStateTreeInfoForCompress(
+  infos: Parameters<typeof selectStateTreeInfo>[0]
+): ReturnType<typeof selectStateTreeInfo> {
+  try {
+    return selectStateTreeInfo(infos, TreeType.StateV1)
+  } catch {
+    return selectStateTreeInfo(infos)
+  }
+}
+
 function pickLowestInitializedSplInterfaceInfo(
   rows: Awaited<ReturnType<typeof getSplInterfaceInfos>>
 ) {
@@ -553,7 +568,7 @@ export async function compressAndSend(
   )
 
   const stateTreeInfos = await rpc.getStateTreeInfos()
-  const outputStateTreeInfo = selectStateTreeInfo(stateTreeInfos)
+  const outputStateTreeInfo = selectOutputStateTreeInfoForCompress(stateTreeInfos)
 
   const splRows = await getSplInterfaceInfos(rpc, mintPk)
   const tokenPoolInfo = pickLowestInitializedSplInterfaceInfo(splRows)
@@ -832,13 +847,15 @@ export async function decompressToken(params: DecompressParams): Promise<string>
   const proof = await fetchValidityProofForDecompress(rpc, [hit])
   if (proof.compressedProof == null) {
     const rootsLen = proof.roots?.length ?? 0
+    const onStateV2 =
+      hit.compressedAccount.treeInfo.treeType === TreeType.StateV2
     const detail =
       rootsLen === 0 ?
-        ' The prover returned no roots for this leaf (it may already be spent, or your RPC URL may not be a Helius ZK-compression endpoint).'
-      : ''
-    throw new Error(
-      `Validity proof unavailable from the compression RPC.${detail} Wait a few seconds, refresh the page, and try again.`,
-    )
+        ' The prover returned no roots for this leaf (it may already be spent, or your RPC URL may not be a Helius ZK-compression endpoint). Wait a few seconds, refresh, and try again.'
+      : onStateV2 ?
+        ' This balance is on a State V2 compressed tree; the ZK prover did not return a proof (the indexer still shows the tokens). Open a ticket with Helius with your wallet, mint, and claim id. If this shipment was created before the dGuild shipped an update that targets State V1 trees, ask the organizer to re-ship the same allocation so it lands on State V1.'
+      : ' The prover returned roots but no compressed proof. Wait a few minutes, refresh, and try again, or contact Helius support.'
+    throw new Error(`Validity proof unavailable from the compression RPC.${detail}`)
   }
 
   const splRows = await getSplInterfaceInfos(rpc, mintPk)
