@@ -56,6 +56,11 @@ export interface UsePlanShipmentFormOptions {
     recipientCount: number
     totalAmount: number
     txSignature: string
+    leaves?: Array<{
+      recipientWallet: string
+      leafHashDecimal: string
+      amountRaw: string
+    }>
   }) => Promise<unknown>
 }
 
@@ -195,7 +200,7 @@ export function usePlanShipmentForm(options: UsePlanShipmentFormOptions) {
       const meta = await fetchMintMetadataFromChain(conn, json.mint)
       const decimals = meta?.decimals != null && Number.isFinite(meta.decimals) ? meta.decimals : null
       if (decimals == null) throw new Error('Could not fetch token decimals from chain')
-      const sig = await compressAndSend({
+      const shipResult = await compressAndSend({
         connection: conn,
         payer: kp,
         mint: json.mint,
@@ -207,8 +212,15 @@ export function usePlanShipmentForm(options: UsePlanShipmentFormOptions) {
         mint: json.mint,
         recipientCount: json.recipients.length,
         totalAmount: totalAmount.value,
-        txSignature: sig,
+        txSignature: shipResult.txSignature,
+        ...(shipResult.leavesComplete && shipResult.leaves.length > 0
+          ? { leaves: shipResult.leaves }
+          : {}),
       })
+      if (!shipResult.leavesComplete) {
+        registerMessage.value =
+          'Shipment recorded. Claim leaf ids were not captured yet (indexer delay); recipients can still claim from wallet balances.'
+      }
       loadedJson.value = null
       jsonInput.value = ''
       await refreshBalance()
