@@ -1,27 +1,27 @@
 /**
- * Diagnose validity proof for one compressed token leaf (same path as tenant claim).
+ * Diagnose compressed-token decompress proof path (aligned with @lightprotocol/compressed-token `decompress`).
  *
  * Loads NUXT_PUBLIC_HELIUS_RPC / HELIUS_RPC from `.env` in cwd, `apps/tenant/.env`, or `apps/tenant/.env.local`
- * if not set in the shell (so `pnpm exec tsx ...` works without exporting the URL).
+ * if not set in the shell.
  *
  * List leaves:
  *   pnpm exec tsx packages/shipment/scripts/diagnose-decompress-leaf.ts <owner> <mint>
  *
- * Diagnose one leaf (hash = "Claim id" on the shipment card, or from list output):
- *   pnpm exec tsx packages/shipment/scripts/diagnose-decompress-leaf.ts <owner> <mint> <leafHashDecimal>
+ * Test validity proof for a raw amount (same selection + proof path as production claim):
+ *   pnpm exec tsx packages/shipment/scripts/diagnose-decompress-leaf.ts <owner> <mint> <amountRaw>
+ *
+ * Optional: first arg can be <rpcUrl> if not in env.
  */
 
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { PublicKey } from '@solana/web3.js'
+import { createRpc, bn, TreeType } from '@lightprotocol/stateless.js'
 import {
-  createRpc,
-  bn,
-  TreeType,
-  DerivationMode,
-} from '@lightprotocol/stateless.js'
-import type { CompressedAccount } from '@lightprotocol/stateless.js'
-import { selectAccountsByPreferredTreeType } from '@lightprotocol/compressed-token'
+  selectAccountsByPreferredTreeType,
+  selectMinCompressedTokenAccountsForTransfer,
+} from '@lightprotocol/compressed-token'
+import { fetchDecompressValidityProof } from '../src/decompress-proof.ts'
 
 function maskUrl(u: string) {
   return u.replace(/api-key=[^&]+/i, 'api-key=***')
@@ -91,33 +91,7 @@ function parseArgs() {
     rpcUrl,
     owner: args[i],
     mint: args[i + 1],
-    leafHash: args[i + 2],
-  }
-}
-
-async function fetchValidityProofLikeProduction(
-  rpc: ReturnType<typeof createRpc>,
-  inputAccounts: Array<{ compressedAccount: CompressedAccount }>
-) {
-  const v1Only = inputAccounts.every(
-    (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV1
-  )
-  if (v1Only) {
-    return rpc.getValidityProofV0(
-      inputAccounts.map((account) => ({
-        hash: account.compressedAccount.hash,
-        tree: account.compressedAccount.treeInfo.tree,
-        queue: account.compressedAccount.treeInfo.queue,
-      })),
-      []
-    )
-  }
-  const contexts = inputAccounts.map((a) => a.compressedAccount)
-  try {
-    return await rpc.getValidityProofV2(contexts, [], DerivationMode.standard)
-  } catch (e) {
-    console.warn('getValidityProofV2(standard) failed, trying compressible:', e)
-    return rpc.getValidityProofV2(contexts, [], DerivationMode.compressible)
+    amountRaw: args[i + 2],
   }
 }
 
@@ -130,7 +104,7 @@ async function listLeaves(
   const items = (res.items ?? []).filter((a) =>
     bn(a.parsed.amount.toString()).gt(bn(0))
   )
-  console.log('\nCompressed token leaves (use leafHashDecimal in the last column for the diagnostic):\n')
+  console.log('\nCompressed token leaves:\n')
   let n = 0
   for (const a of items) {
     n++
@@ -147,14 +121,14 @@ async function listLeaves(
 }
 
 async function main() {
-  const { rpcUrl, owner: ownerStr, mint: mintStr, leafHash: hashStr } = parseArgs()
+  const { rpcUrl, owner: ownerStr, mint: mintStr, amountRaw } = parseArgs()
   if (!rpcUrl || !ownerStr || !mintStr) {
     console.error(
       'Usage:\n' +
-        '  List leaves (no 4th arg):\n' +
+        '  List leaves:\n' +
         '    NUXT_PUBLIC_HELIUS_RPC=<url> pnpm exec tsx packages/shipment/scripts/diagnose-decompress-leaf.ts <owner> <mint>\n' +
-        '  Diagnose one leaf:\n' +
-        '    ... diagnose-decompress-leaf.ts <owner> <mint> <leafHashDecimal>\n' +
+        '  Test getValidityProofV0 for amount (same as @decentraguild/shipment decompress):\n' +
+        '    ... diagnose-decompress-leaf.ts <owner> <mint> <amountRaw>\n' +
         '  Optional: first arg can be <rpcUrl> if not in env.',
     )
     process.exit(1)
@@ -168,15 +142,20 @@ async function main() {
   const owner = new PublicKey(ownerStr)
   const mintPk = new PublicKey(mintStr)
 
-  if (!hashStr?.trim()) {
+  if (!amountRaw?.trim()) {
     await listLeaves(rpc, owner, mintPk)
     console.log(
-      'Re-run with the same owner, mint, and one leafHashDecimal above to test the validity proof.',
+      '\nRe-run with the same owner, mint, and amountRaw (token base units) to test getValidityProofV0.',
     )
     return
   }
 
-  console.log('Leaf hash (decimal):', hashStr.slice(0, 24) + (hashStr.length > 24 ? '…' : ''))
+  const amountStr = amountRaw.trim()
+  if (!/^\d+$/.test(amountStr) || amountStr === '0') {
+    console.error('FAIL: amountRaw must be a positive decimal integer (token raw units).')
+    process.exit(1)
+  }
+  const amountBn = bn(amountStr)
 
   const res = await rpc.getCompressedTokenAccountsByOwner(owner, { mint: mintPk })
   const items = (res.items ?? []).filter((a) =>
@@ -185,51 +164,54 @@ async function main() {
 
   console.log('\nLeaves with balance for mint:', items.length)
 
-  const leafHashBn = bn(hashStr.trim())
-
-  const row = items.find((a) => bn(a.compressedAccount.hash).eq(leafHashBn))
-  if (!row) {
-    console.error(
-      '\nFAIL: No leaf with this hash in indexer response. Either already claimed/spent, or UI id is stale/wrong.',
-    )
-    if (items.length) {
-      console.log('Sample other leaf hash (decimal):', bn(items[0]!.compressedAccount.hash).toString(10))
-    }
+  const walletTotalBn = items.reduce(
+    (s, a) => s.add(bn(a.parsed.amount.toString())),
+    bn(0),
+  )
+  if (walletTotalBn.lt(amountBn)) {
+    console.error('\nFAIL: Insufficient compressed balance for this amount.')
     process.exit(2)
   }
 
-  console.log('Leaf amount (raw):', row.parsed.amount.toString())
-  console.log('Tree:', row.compressedAccount.treeInfo.tree.toBase58())
-  console.log('TreeType:', row.compressedAccount.treeInfo.treeType, '(StateV1=', TreeType.StateV1, ')')
-
-  try {
-    const bal = await rpc.getCompressedTokenAccountBalance(bn(row.compressedAccount.hash))
-    console.log('getCompressedTokenAccountBalance:', bal.amount.toString(10))
-    if (!bal.amount.eq(bn(row.parsed.amount.toString()))) {
-      console.warn('WARN: balance RPC != parsed.amount (indexer inconsistency)')
-    }
-  } catch (e) {
-    console.warn('getCompressedTokenAccountBalance error:', e)
-  }
-
-  const totalAllBn = items.reduce(
-    (s, a) => s.add(bn(a.parsed.amount.toString())),
-    bn(0)
-  )
-  const { accounts: preferred } = selectAccountsByPreferredTreeType(
+  const { accounts: accountsToUse } = selectAccountsByPreferredTreeType(
     items as Parameters<typeof selectAccountsByPreferredTreeType>[0],
-    totalAllBn
+    amountBn,
   )
-  const hit = preferred.find((a) => bn(a.compressedAccount.hash).eq(leafHashBn))
-  if (!hit) {
+
+  const [inputAccounts, selectedTotalBn] =
+    selectMinCompressedTokenAccountsForTransfer(
+      accountsToUse as Parameters<
+        typeof selectMinCompressedTokenAccountsForTransfer
+      >[0],
+      amountBn,
+    )
+
+  if (selectedTotalBn.lt(amountBn)) {
     console.error(
-      '\nFAIL: selectAccountsByPreferredTreeType dropped this leaf (wrong StateV1/V2 era for current network defaults).',
+      '\nFAIL: selectMinCompressedTokenAccountsForTransfer could not cover amount on preferred tree.',
     )
     process.exit(3)
   }
 
-  console.log('\nCalling validity proof (same as app)...')
-  const proof = await fetchValidityProofLikeProduction(rpc, [hit])
+  console.log('Input accounts selected:', inputAccounts.length)
+  for (const acc of inputAccounts) {
+    console.log(
+      '  amount(raw)=',
+      acc.parsed.amount.toString(),
+      ' TreeType=',
+      acc.compressedAccount.treeInfo.treeType,
+      '(StateV1=',
+      TreeType.StateV1,
+      ', StateV2=',
+      TreeType.StateV2,
+      ')',
+    )
+  }
+
+  console.log(
+    '\nCalling fetchDecompressValidityProof (V0 if all StateV1, else V2 + fallbacks — same as app)...',
+  )
+  const proof = await fetchDecompressValidityProof(rpc, inputAccounts)
 
   const cp = proof.compressedProof
   console.log('compressedProof:', cp == null ? 'null' : 'present')
@@ -237,16 +219,17 @@ async function main() {
   console.log('roots length:', proof.roots?.length ?? 0)
 
   if (cp == null) {
-    const isV2 = row.compressedAccount.treeInfo.treeType === TreeType.StateV2
+    const isV2 = inputAccounts.some(
+      (a) => a.compressedAccount.treeInfo.treeType === TreeType.StateV2,
+    )
     console.error(
       '\nFAIL: compressedProof is null. Common causes:\n' +
-        '  - Helius URL is not ZK-compression enabled (use mainnet.helius-rpc.com?api-key=… as in Helius dashboard).\n' +
-        '  - Leaf is not in the merkle tree the prover uses (spent / reorg / indexer lag).\n' +
-        '  - Rate limits or transient prover errors (retry later).\n' +
+        '  - Helius URL is not ZK-compression enabled.\n' +
+        '  - Rate limits / prover errors.\n' +
         (isV2 ?
-          '  - TreeType is StateV2: Helius has been observed returning null proofs while the indexer still lists the leaf. Contact Helius support; for new sends, prefer compress output to State V1 trees.\n'
+          '  - State V2: app tries V2 + legacy proof RPCs; if still null, escalate to Helius.\n'
         : '') +
-        'A bad unrelated transaction yesterday does not break all compression; it only affects leaves it touched.',
+        'Use amountRaw from a listed row when testing a specific shipment line.',
     )
     process.exit(4)
   }

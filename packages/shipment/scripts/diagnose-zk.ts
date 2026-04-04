@@ -102,7 +102,7 @@ async function main() {
 
   console.log('\n--- getAllStateTreeInfos (using createRpc) ---')
   try {
-    const rpc = createRpc(RPC_URL, RPC_URL, RPC_URL, {
+    const rpc = createRpc(RPC_URL, RPC_URL, undefined, {
       commitment: 'confirmed',
     })
     const infos = await getAllStateTreeInfos({
