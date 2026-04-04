@@ -122,6 +122,7 @@ const shipmentState = computed(() => getModuleState(tenant.value?.modules?.shipm
 const shipmentVisible = computed(() => isModuleVisibleToMembers(shipmentState.value))
 
 interface CompressedAsset {
+  /** Leaf hash (decimal); one card per compressed row. */
   id: string
   mint?: string
   amount?: string
@@ -255,32 +256,12 @@ async function fetchDisplay(mints: string[]) {
   displayByMint.value = map
 }
 
-/** One row per mint; if the same mint appears from shipment scan + full wallet, keep the larger total (should match on-chain). */
-function mergeCompressedAssetsByKey(a: CompressedAsset[], b: CompressedAsset[]): CompressedAsset[] {
+/** One row per compressed leaf id (hash); duplicate ids from mint scan + full wallet keep one row. */
+function mergeCompressedLeavesById(a: CompressedAsset[], b: CompressedAsset[]): CompressedAsset[] {
   const map = new Map<string, CompressedAsset>()
   for (const x of [...a, ...b]) {
-    const k = mintKey(x)
-    const prev = map.get(k)
-    if (!prev) {
-      map.set(k, { ...x, id: k, mint: x.mint ?? k })
-      continue
-    }
-    let pa = 0n
-    let xa = 0n
-    try {
-      pa = BigInt(prev.amount ?? '0')
-      xa = BigInt(x.amount ?? '0')
-    } catch {
-      map.set(k, prev)
-      continue
-    }
-    const maxAmt = pa > xa ? pa : xa
-    map.set(k, {
-      ...prev,
-      amount: maxAmt.toString(),
-      id: k,
-      mint: prev.mint ?? x.mint ?? k,
-    })
+    const k = x.id
+    if (!map.has(k)) map.set(k, x)
   }
   return [...map.values()]
 }
@@ -352,16 +333,16 @@ async function fetchAssets() {
   }
   try {
     const shipment = await import('@decentraguild/shipment')
-    const fromMints = await shipment.fetchCompressedTokenAccountsForMints(url, w, mintsFromShipments)
-    let fromFull: Awaited<ReturnType<typeof shipment.fetchCompressedTokenAccounts>> = []
+    const fromMints = await shipment.fetchCompressedTokenLeavesForMints(url, w, mintsFromShipments)
+    let fromFull: Awaited<ReturnType<typeof shipment.fetchCompressedTokenLeaves>> = []
     try {
-      fromFull = await shipment.fetchCompressedTokenAccounts(url, w)
+      fromFull = await shipment.fetchCompressedTokenLeaves(url, w)
     } catch {
       fromFull = []
     }
     const enrichedMints = await enrichCompressedRows(fromMints)
     const enrichedFull = await enrichCompressedRows(fromFull)
-    assets.value = mergeCompressedAssetsByKey(enrichedMints, enrichedFull)
+    assets.value = mergeCompressedLeavesById(enrichedMints, enrichedFull)
     const mints = [...new Set(assets.value.map((a) => mintKey(a)).filter(Boolean))]
     await fetchDisplay(mints)
   } catch {
@@ -393,6 +374,7 @@ async function claim(a: CompressedAsset) {
       mint,
       amount: amountStr,
       decimals,
+      compressedLeafHash: a.id,
       rpcUrl: rpcUrl.value || undefined,
     })
     if (sig) {
