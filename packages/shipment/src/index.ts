@@ -275,8 +275,9 @@ export async function fetchCompressedTokenLeavesForMints(
   return [...byId.values()]
 }
 
+/** Helius exposes Solana + Photon + prover JSON-RPC on one URL; Light docs pass it three times explicitly. */
 function getRpc(rpcEndpoint: string): ReturnType<typeof createRpc> {
-  return createRpc(rpcEndpoint, rpcEndpoint, undefined, {
+  return createRpc(rpcEndpoint, rpcEndpoint, rpcEndpoint, {
     commitment: 'confirmed',
   })
 }

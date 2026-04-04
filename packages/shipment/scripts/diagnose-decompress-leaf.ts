@@ -164,7 +164,7 @@ async function main() {
   console.log('Owner:', ownerStr)
   console.log('Mint:', mintStr)
 
-  const rpc = createRpc(rpcUrl, rpcUrl, undefined, { commitment: 'confirmed' })
+  const rpc = createRpc(rpcUrl, rpcUrl, rpcUrl, { commitment: 'confirmed' })
   const owner = new PublicKey(ownerStr)
   const mintPk = new PublicKey(mintStr)
 

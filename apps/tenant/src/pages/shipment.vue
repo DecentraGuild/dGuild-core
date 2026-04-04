@@ -387,10 +387,13 @@ async function claim(a: CompressedAsset) {
     const original = err.originalError ?? err.cause
     const originalMsg =
       original instanceof Error ? original.message : typeof original === 'string' ? original : null
-    const msg =
+    let msg =
       originalMsg && originalMsg !== err.message
         ? `${err.message}: ${originalMsg}`
         : err instanceof Error ? err.message : 'Claim failed'
+    const mintForSupport = a.mint ?? a.id
+    const ownerForSupport = wallet.value ?? '(unknown)'
+    msg += `\n\n---\nSupport context (include when reporting)\nowner: ${ownerForSupport}\nmint: ${mintForSupport}\nclaimLeafId: ${a.id}\namountRaw: ${String(a.amount ?? '')}`
     openClaimError(msg)
   } finally {
     claiming.value = null
