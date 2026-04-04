@@ -39,6 +39,7 @@ import {
   CompressedTokenProgram,
   createTokenPool,
   selectAccountsByPreferredTreeType,
+  selectSplInterfaceInfosForDecompression,
   getSplInterfaceInfos,
 } from '@lightprotocol/compressed-token'
 
@@ -61,6 +62,20 @@ export interface CompressAndSendParams {
   rpcUrl?: string
   /** SPL or Token-2022. Defaults to TOKEN_PROGRAM_ID. */
   tokenProgramId?: typeof TOKEN_PROGRAM_ID | typeof TOKEN_2022_PROGRAM_ID
+}
+
+/** One recipient row to persist after a successful compress (leaf hash = claim id). */
+export interface ShipmentCompressedLeafCapture {
+  recipientWallet: string
+  leafHashDecimal: string
+  amountRaw: string
+}
+
+export interface CompressAndSendResult {
+  txSignature: string
+  leaves: ShipmentCompressedLeafCapture[]
+  /** False when the indexer never returned a matching new leaf per recipient (retry window exhausted). */
+  leavesComplete: boolean
 }
 
 export interface RegisterMintParams {
@@ -280,6 +295,76 @@ function pickLowestInitializedSplInterfaceInfo(
   return poolCandidates[0]
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+async function snapshotCompressedLeavesByRecipient(
+  rpc: ReturnType<typeof createRpc>,
+  mintPk: PublicKey,
+  recipientAddresses: string[]
+): Promise<Map<string, CompressedTokenLeaf[]>> {
+  const map = new Map<string, CompressedTokenLeaf[]>()
+  const unique = [
+    ...new Set(recipientAddresses.map((a) => a.trim()).filter(Boolean)),
+  ]
+  for (const addr of unique) {
+    try {
+      const owner = new PublicKey(addr)
+      const res = await rpc.getCompressedTokenAccountsByOwner(owner, {
+        mint: mintPk,
+      })
+      map.set(
+        addr,
+        compressedLeavesFromRpcItems(compressedTokenItemsFromRpcResponse(res)),
+      )
+    } catch {
+      map.set(addr, [])
+    }
+  }
+  return map
+}
+
+function captureNewCompressedLeaves(
+  before: Map<string, CompressedTokenLeaf[]>,
+  after: Map<string, CompressedTokenLeaf[]>,
+  recipients: ShipmentRecipient[],
+  amountsBN: Array<ReturnType<typeof bn>>
+): ShipmentCompressedLeafCapture[] {
+  const consumed = new Set<string>()
+  const out: ShipmentCompressedLeafCapture[] = []
+  for (let i = 0; i < recipients.length; i++) {
+    const addr = recipients[i]!.address.trim()
+    const beforeLeaves = before.get(addr) ?? []
+    const afterLeaves = after.get(addr) ?? []
+    const beforeIds = new Set(beforeLeaves.map((l) => l.id))
+    const expected = amountsBN[i]!.toString(10)
+    const candidates = afterLeaves
+      .filter(
+        (l) =>
+          !beforeIds.has(l.id) && !consumed.has(l.id) && l.amount === expected,
+      )
+      .sort((a, b) =>
+        a.id.localeCompare(b.id, undefined, { numeric: true }),
+      )
+    if (candidates.length === 0) {
+      throw new Error(
+        `No new compressed leaf for recipient ${addr} matching amount ${expected}.`,
+      )
+    }
+    const leaf = candidates[0]!
+    consumed.add(leaf.id)
+    out.push({
+      recipientWallet: addr,
+      leafHashDecimal: leaf.id,
+      amountRaw: expected,
+    })
+  }
+  return out
+}
+
 /**
  * Proof path aligned with bundled `decompress()` in @lightprotocol/compressed-token@0.23.x:
  * StateV1 inputs → `getValidityProofV0` only (no silent V2 fallback — wrong proof class matches on-chain 0x1900-style failures).
@@ -415,11 +500,12 @@ export async function registerMintForCompression(
  * Large recipient lists are split across multiple transactions (v0 message size limit).
  * The payer keypair signs every partial tx in one batch (same blockhash) before any
  * send—no per-tx wallet popups; only the RPC submit/confirm steps are sequential.
- * Returns one base58 signature, or comma-separated signatures when multiple txs were sent.
+ * Returns tx signatures (comma-separated when multiple txs were sent) and, when the indexer
+ * catches up, one captured leaf per recipient for persistence.
  */
 export async function compressAndSend(
   params: CompressAndSendParams
-): Promise<string> {
+): Promise<CompressAndSendResult> {
   const {
     connection,
     payer,
@@ -479,6 +565,13 @@ export async function compressAndSend(
   const toAddresses = recipients.map((r) => new PublicKey(r.address))
   const amountsRaw = recipients.map((r) => Math.round(r.amount * multiplier))
   const amountsBN = amountsRaw.map((a) => bn(a))
+  const recipientKeys = recipients.map((r) => r.address.trim())
+
+  const beforeLeaves = await snapshotCompressedLeavesByRecipient(
+    rpc,
+    mintPk,
+    recipientKeys,
+  )
 
   const compressInstructions: import('@solana/web3.js').TransactionInstruction[] =
     []
@@ -534,7 +627,38 @@ export async function compressAndSend(
     signatures.push(sig)
   }
 
-  return signatures.join(',')
+  let leaves: ShipmentCompressedLeafCapture[] = []
+  let leavesComplete = false
+  const captureWaitsMs = [0, 1800, 4000]
+  for (const waitMs of captureWaitsMs) {
+    if (waitMs > 0) await delay(waitMs)
+    const afterLeaves = await snapshotCompressedLeavesByRecipient(
+      rpc,
+      mintPk,
+      recipientKeys,
+    )
+    try {
+      leaves = captureNewCompressedLeaves(
+        beforeLeaves,
+        afterLeaves,
+        recipients,
+        amountsBN,
+      )
+      leavesComplete = true
+      break
+    } catch {
+      void 0
+    }
+  }
+  if (!leavesComplete) {
+    leaves = []
+  }
+
+  return {
+    txSignature: signatures.join(','),
+    leaves,
+    leavesComplete,
+  }
 }
 
 export interface DecompressParams {
@@ -706,19 +830,28 @@ export async function decompressToken(params: DecompressParams): Promise<string>
 
   const proof = await fetchValidityProofForDecompress(rpc, [hit])
   if (proof.compressedProof == null) {
+    const rootsLen = proof.roots?.length ?? 0
+    const detail =
+      rootsLen === 0 ?
+        ' The prover returned no roots for this leaf (it may already be spent, or your RPC URL may not be a Helius ZK-compression endpoint).'
+      : ''
     throw new Error(
-      'Validity proof unavailable from the compression RPC. Wait a few seconds, refresh the page, and try again.',
+      `Validity proof unavailable from the compression RPC.${detail} Wait a few seconds, refresh the page, and try again.`,
     )
   }
 
   const splRows = await getSplInterfaceInfos(rpc, mintPk)
-  const tokenPoolInfos = [pickLowestInitializedSplInterfaceInfo(splRows)]
+  const decompressAmount = bn(hit.parsed.amount.toString())
+  const tokenPoolInfos = selectSplInterfaceInfosForDecompression(
+    splRows,
+    decompressAmount,
+  )
 
   const decompressIx = await CompressedTokenProgram.decompress({
     payer: owner,
     inputCompressedTokenAccounts: [hit],
     toAddress: splAta,
-    amount: bn(hit.parsed.amount.toString()),
+    amount: decompressAmount,
     recentInputStateRootIndices: proof.rootIndices,
     recentValidityProof: proof.compressedProof,
     tokenPoolInfos,

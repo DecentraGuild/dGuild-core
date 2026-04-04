@@ -173,6 +173,36 @@
             </p>
             <p class="plan-shipment-tab__history-by">By {{ resolveWallet(r.created_by, 8, 6) }}</p>
             <p class="plan-shipment-tab__history-at">{{ formatDateTime(r.created_at) }}</p>
+            <div v-if="leavesLoadingId === r.id" class="plan-shipment-tab__history-leaves-loading">
+              Loading claim leaf ids…
+            </div>
+            <template v-else>
+              <p v-if="leavesFor(r.id).length === 0" class="plan-shipment-tab__history-leaves-empty">
+                No stored claim leaf ids (older shipment or indexer did not return leaves in time).
+              </p>
+              <ul v-else class="plan-shipment-tab__history-leaf-list">
+                <li
+                  v-for="(row, leafIdx) in leavesFor(r.id)"
+                  :key="`${row.recipient_wallet}-${row.leaf_hash_decimal}-${leafIdx}`"
+                  class="plan-shipment-tab__history-leaf-item"
+                >
+                  <div class="plan-shipment-tab__history-leaf-head">
+                    <span>{{ truncateAddress(row.recipient_wallet, 6, 4) }}</span>
+                    <span class="plan-shipment-tab__history-leaf-amount">{{ row.amount_raw }}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      class="plan-shipment-tab__history-leaf-copy"
+                      @click="copyLeafHash(row.leaf_hash_decimal)"
+                    >
+                      <Icon icon="lucide:copy" />
+                    </Button>
+                  </div>
+                  <code class="plan-shipment-tab__history-leaf-hash">{{ row.leaf_hash_decimal }}</code>
+                </li>
+              </ul>
+            </template>
           </div>
         </li>
       </ul>
@@ -328,6 +358,8 @@ const {
   loading: historyLoading,
   error: historyError,
   expandedId,
+  leavesLoadingId,
+  leavesFor,
   fetch: fetchHistory,
   toggleExpanded,
   formatTotalAmount,
@@ -420,6 +452,10 @@ watch(
   () => { if (shipWallet.hasWallet.value) refreshBalance() },
   { immediate: true },
 )
+
+function copyLeafHash(leafHashDecimal: string) {
+  void navigator.clipboard.writeText(leafHashDecimal)
+}
 
 function copyAddress() {
   const addr = shipWallet.address.value
@@ -717,6 +753,39 @@ onMounted(() => void fetchHistory())
 }
 .plan-shipment-tab__link:hover {
   text-decoration: underline;
+}
+.plan-shipment-tab__history-leaves-loading,
+.plan-shipment-tab__history-leaves-empty {
+  margin-top: var(--theme-space-sm);
+  color: var(--theme-text-muted);
+}
+.plan-shipment-tab__history-leaf-list {
+  list-style: none;
+  margin: var(--theme-space-sm) 0 0;
+  padding: 0;
+}
+.plan-shipment-tab__history-leaf-item {
+  margin-bottom: var(--theme-space-sm);
+  font-size: 10px;
+}
+.plan-shipment-tab__history-leaf-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--theme-space-xs);
+}
+.plan-shipment-tab__history-leaf-amount {
+  color: var(--theme-text-muted);
+}
+.plan-shipment-tab__history-leaf-hash {
+  display: block;
+  margin-top: 2px;
+  word-break: break-all;
+  font-size: 9px;
+  color: var(--theme-text-secondary);
+}
+.plan-shipment-tab__history-leaf-copy {
+  margin-left: auto;
 }
 
 </style>

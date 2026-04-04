@@ -1,19 +1,35 @@
 <template>
   <div class="shipment-claim-card">
-    <a
-      v-if="explorerUrl"
-      :href="explorerUrl"
-      target="_blank"
-      rel="noopener"
-      class="shipment-claim-card__link"
-      @click.stop
-    >
-      <Icon icon="lucide:external-link" />
-    </a>
+    <div class="shipment-claim-card__top-links">
+      <button
+        v-if="claimLeafId"
+        type="button"
+        class="shipment-claim-card__icon-btn"
+        :title="claimLeafId"
+        @click.stop="copyClaimLeafId"
+      >
+        <Icon icon="lucide:copy" />
+      </button>
+      <a
+        v-if="explorerUrl"
+        :href="explorerUrl"
+        target="_blank"
+        rel="noopener"
+        class="shipment-claim-card__icon-btn"
+        title="View mint on explorer"
+        @click.stop
+      >
+        <Icon icon="lucide:external-link" />
+      </a>
+    </div>
     <div class="shipment-claim-card__left">
       <div class="shipment-claim-card__content">
         <h4 class="shipment-claim-card__name">{{ title }}</h4>
         <span class="shipment-claim-card__amount">{{ amount }}</span>
+        <p v-if="claimLeafId" class="shipment-claim-card__claim-id">
+          <span class="shipment-claim-card__claim-id-label">Claim id</span>
+          <code class="shipment-claim-card__claim-id-value">{{ shortClaimLeafId }}</code>
+        </p>
         <Button
           variant="default"
           size="sm"
@@ -35,13 +51,16 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { Button } from '~/components/ui/button'
 
-defineProps<{
+const props = defineProps<{
   title: string
   amount: string
   claiming: boolean
+  /** Decimal leaf hash for support / diagnostics (matches decompress `compressedLeafHash`). */
+  claimLeafId?: string
   explorerUrl?: string
   hasBanner: boolean
   hasImage: boolean
@@ -51,6 +70,23 @@ defineProps<{
 const emit = defineEmits<{
   claim: []
 }>()
+
+const shortClaimLeafId = computed(() => {
+  const id = props.claimLeafId
+  if (!id) return ''
+  if (id.length <= 22) return id
+  return `${id.slice(0, 10)}…${id.slice(-8)}`
+})
+
+async function copyClaimLeafId() {
+  const id = props.claimLeafId
+  if (!id) return
+  try {
+    await navigator.clipboard.writeText(id)
+  } catch {
+    void 0
+  }
+}
 </script>
 
 <style scoped>
@@ -64,16 +100,50 @@ const emit = defineEmits<{
   overflow: hidden;
   text-align: left;
 }
-.shipment-claim-card__link {
+.shipment-claim-card__top-links {
   position: absolute;
   top: var(--theme-space-sm);
   right: var(--theme-space-sm);
-  color: var(--theme-text-secondary);
-  display: inline-flex;
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-xs);
   z-index: 1;
 }
-.shipment-claim-card__link:hover {
+.shipment-claim-card__icon-btn {
+  color: var(--theme-text-secondary);
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--theme-radius-sm);
+}
+a.shipment-claim-card__icon-btn {
+  text-decoration: none;
+}
+.shipment-claim-card__icon-btn:hover {
   color: var(--theme-text);
+}
+.shipment-claim-card__claim-id {
+  margin: 0;
+  max-width: 100%;
+  font-size: var(--theme-font-sm);
+  color: var(--theme-text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.shipment-claim-card__claim-id-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.shipment-claim-card__claim-id-value {
+  font-size: 0.65rem;
+  word-break: break-all;
+  text-align: center;
+  line-height: 1.3;
 }
 .shipment-claim-card__left {
   display: flex;

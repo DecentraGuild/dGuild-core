@@ -34,21 +34,62 @@ Deno.serve(async (req: Request) => {
     const recipientCount = Number(body.recipientCount) || 0
     const totalAmount = Number(body.totalAmount) || 0
     const txSignature = body.txSignature as string
+    const leavesRaw = body.leaves
 
     if (!tenantId || !mint || !txSignature) {
       return errorResponse('tenantId, mint, txSignature required', req)
     }
 
-    const { error } = await db.from('shipment_records').insert({
-      tenant_id: tenantId,
-      mint,
-      recipient_count: recipientCount,
-      total_amount: totalAmount,
-      tx_signature: txSignature,
-      created_by: authCheck.wallet,
-    })
+    if (leavesRaw != null && !Array.isArray(leavesRaw)) {
+      return errorResponse('leaves must be an array when provided', req)
+    }
+
+    const { data: row, error } = await db
+      .from('shipment_records')
+      .insert({
+        tenant_id: tenantId,
+        mint,
+        recipient_count: recipientCount,
+        total_amount: totalAmount,
+        tx_signature: txSignature,
+        created_by: authCheck.wallet,
+      })
+      .select('id')
+      .single()
 
     if (error) return errorResponse(error.message, req, 500)
+
+    const leaves = leavesRaw as Array<Record<string, unknown>> | undefined
+    if (leaves && leaves.length > 0) {
+      const rows = []
+      for (const l of leaves) {
+        const recipientWallet = typeof l.recipientWallet === 'string' ? l.recipientWallet.trim() : ''
+        const leafHashDecimal =
+          typeof l.leafHashDecimal === 'string' ? l.leafHashDecimal.trim() : ''
+        const amountRaw = l.amountRaw
+        if (!recipientWallet || !leafHashDecimal) {
+          return errorResponse('Each leaf needs recipientWallet and leafHashDecimal', req)
+        }
+        if (
+          typeof amountRaw !== 'string' &&
+          typeof amountRaw !== 'number' &&
+          typeof amountRaw !== 'bigint'
+        ) {
+          return errorResponse('Each leaf needs amountRaw', req)
+        }
+        rows.push({
+          tenant_id: tenantId,
+          shipment_record_id: row.id,
+          recipient_wallet: recipientWallet,
+          mint,
+          leaf_hash_decimal: leafHashDecimal,
+          amount_raw: String(amountRaw),
+        })
+      }
+      const { error: leafErr } = await db.from('shipment_compressed_leaves').insert(rows)
+      if (leafErr) return errorResponse(leafErr.message, req, 500)
+    }
+
     return jsonResponse({ ok: true }, req)
   }
 

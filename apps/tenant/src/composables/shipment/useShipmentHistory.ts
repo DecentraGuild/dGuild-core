@@ -1,3 +1,5 @@
+import type { Ref } from 'vue'
+import { ref } from 'vue'
 import { useSupabase } from '~/composables/core/useSupabase'
 
 export interface ShipmentRecord {
@@ -10,6 +12,12 @@ export interface ShipmentRecord {
   created_at: string
 }
 
+export interface ShipmentCompressedLeafRow {
+  recipient_wallet: string
+  leaf_hash_decimal: string
+  amount_raw: string
+}
+
 export function useShipmentHistory(tenantId: Ref<string | null | undefined>) {
   const supabase = useSupabase()
 
@@ -17,6 +25,8 @@ export function useShipmentHistory(tenantId: Ref<string | null | undefined>) {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const expandedId = ref<number | null>(null)
+  const leavesByRecordId = ref<Record<number, ShipmentCompressedLeafRow[]>>({})
+  const leavesLoadingId = ref<number | null>(null)
 
   async function fetch() {
     const id = tenantId.value
@@ -32,6 +42,7 @@ export function useShipmentHistory(tenantId: Ref<string | null | undefined>) {
         .limit(50)
       if (err) throw new Error(err.message)
       records.value = (data ?? []) as ShipmentRecord[]
+      leavesByRecordId.value = {}
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load shipment history'
       records.value = []
@@ -40,8 +51,41 @@ export function useShipmentHistory(tenantId: Ref<string | null | undefined>) {
     }
   }
 
-  function toggleExpanded(id: number) {
-    expandedId.value = expandedId.value === id ? null : id
+  function leavesFor(recordId: number): ShipmentCompressedLeafRow[] {
+    return leavesByRecordId.value[recordId] ?? []
+  }
+
+  async function loadLeavesForShipment(recordId: number) {
+    if (leavesByRecordId.value[recordId]) return
+    leavesLoadingId.value = recordId
+    try {
+      const { data, error: err } = await supabase
+        .from('shipment_compressed_leaves')
+        .select('recipient_wallet, leaf_hash_decimal, amount_raw')
+        .eq('shipment_record_id', recordId)
+        .order('id', { ascending: true })
+      if (err) throw new Error(err.message)
+      leavesByRecordId.value = {
+        ...leavesByRecordId.value,
+        [recordId]: (data ?? []) as ShipmentCompressedLeafRow[],
+      }
+    } catch {
+      leavesByRecordId.value = {
+        ...leavesByRecordId.value,
+        [recordId]: [],
+      }
+    } finally {
+      leavesLoadingId.value = null
+    }
+  }
+
+  async function toggleExpanded(id: number) {
+    if (expandedId.value === id) {
+      expandedId.value = null
+    } else {
+      expandedId.value = id
+      await loadLeavesForShipment(id)
+    }
   }
 
   function formatTotalAmount(raw: string): string {
@@ -50,5 +94,15 @@ export function useShipmentHistory(tenantId: Ref<string | null | undefined>) {
     return n.toLocaleString(undefined, { maximumFractionDigits: 6 })
   }
 
-  return { records, loading, error, expandedId, fetch, toggleExpanded, formatTotalAmount }
+  return {
+    records,
+    loading,
+    error,
+    expandedId,
+    leavesLoadingId,
+    leavesFor,
+    fetch,
+    toggleExpanded,
+    formatTotalAmount,
+  }
 }
