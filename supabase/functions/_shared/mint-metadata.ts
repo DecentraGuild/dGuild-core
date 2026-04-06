@@ -3,7 +3,7 @@
  * Shared by tenant_catalog and marketplace for consistent metadata.
  */
 
-import { classifyDasAssetKind, getOnChainSplMintState } from './spl-mint-guard.ts'
+import { classifyDasAssetKind, getOnChainSplMintState, isMplCoreAccount } from './spl-mint-guard.ts'
 
 export interface MintMetadataResult {
   kind: 'SPL' | 'NFT'
@@ -169,7 +169,8 @@ export async function fetchMintMetadata(
       const collectionSize = colData.result?.total ?? 0
       if (collectionSize > 0) {
         const onChain = await getOnChainSplMintState(rpcUrl, mint)
-        if (!onChain.ok) return null
+        const mplCoreCollection = await isMplCoreAccount(rpcUrl, mint)
+        if (!onChain.ok && !mplCoreCollection) return null
         const traitKeys = new Set<string>()
         const traitOptions: Record<string, Set<string>> = {}
         let pgN = 1
@@ -239,11 +240,14 @@ export async function fetchMintMetadata(
     if (!asset) return null
 
     const onChain = await getOnChainSplMintState(rpcUrl, mint)
-    if (!onChain.ok) return null
+    const mplCore = await isMplCoreAccount(rpcUrl, mint)
+    if (!onChain.ok && !mplCore) return null
+    if (mplCore && kindHint === 'SPL') return null
 
     let classified = classifyDasAssetKind(asset as Record<string, unknown>)
+    if (mplCore) classified = 'NFT'
     if (!classified) {
-      if (onChain.decimals > 0) classified = 'SPL'
+      if (onChain.ok && onChain.decimals > 0) classified = 'SPL'
       else if (kindHint === 'SPL') classified = 'SPL'
       else if (kindHint === 'NFT') classified = 'NFT'
       else return null
@@ -255,7 +259,8 @@ export async function fetchMintMetadata(
     const tokenInfo = asset.token_info as Record<string, unknown> | undefined
     const name = meta?.name as string ?? null
     const symbol = meta?.symbol as string ?? null
-    const decimals = typeof tokenInfo?.decimals === 'number' ? tokenInfo.decimals : onChain.decimals
+    const decimals =
+      typeof tokenInfo?.decimals === 'number' ? tokenInfo.decimals : onChain.ok ? onChain.decimals : null
     const ext = extractExtendedMetadata(asset as Record<string, unknown>)
     const image = await resolveDasImage(asset as Record<string, unknown>)
 

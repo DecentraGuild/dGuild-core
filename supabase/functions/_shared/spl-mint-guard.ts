@@ -1,5 +1,7 @@
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+/** Metaplex Core — collection and asset accounts are owned by this program, not SPL Token. */
+export const MPL_CORE_PROGRAM_ID = 'CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d'
 
 export type OnChainSplMintState = { ok: false } | { ok: true; decimals: number }
 
@@ -32,8 +34,29 @@ export async function getOnChainSplMintState(rpcUrl: string, address: string): P
   }
 }
 
+export async function isMplCoreAccount(rpcUrl: string, address: string): Promise<boolean> {
+  try {
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getAccountInfo',
+        params: [address, { encoding: 'jsonParsed' }],
+      }),
+    })
+    const json = (await res.json()) as { result?: { value: { owner?: string } | null } }
+    const owner = json.result?.value?.owner
+    return owner === MPL_CORE_PROGRAM_ID
+  } catch {
+    return false
+  }
+}
+
 export function classifyDasAssetKind(asset: Record<string, unknown>): 'SPL' | 'NFT' | null {
   const iface = String(asset.interface ?? '')
+  if (/MplCore/i.test(iface)) return 'NFT'
   const tokenInfo = asset.token_info as Record<string, unknown> | undefined
   const decimals = typeof tokenInfo?.decimals === 'number' ? tokenInfo.decimals : null
   const content = asset.content as Record<string, unknown> | undefined
