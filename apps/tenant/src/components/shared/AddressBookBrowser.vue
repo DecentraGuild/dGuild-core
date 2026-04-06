@@ -91,6 +91,7 @@
 import { BASE_CURRENCY_MINT_ADDRESSES } from '@decentraguild/core'
 import { truncateAddress } from '@decentraguild/display'
 import { Icon } from '@iconify/vue'
+import { isMintSupportedByMarketplaceEscrow } from '@decentraguild/core'
 import type { AddressBookEntry, MintKind } from '~/types/mints'
 import { useAddressBook } from '~/composables/watchtower/useAddressBook'
 
@@ -99,8 +100,11 @@ const props = withDefaults(defineProps<{
   kind?: MintKind
   /** When true, hide the four base currencies (SOL, WBTC, USDC, USDT) so they are only toggled via checkboxes. */
   hideBaseMints?: boolean
+  /** When true, hide Token-2022, Metaplex Core, and compressed NFT mints (marketplace escrow). */
+  requireMarketplaceEscrowSupport?: boolean
 }>(), {
   hideBaseMints: false,
+  requireMarketplaceEscrowSupport: false,
 })
 
 const emit = defineEmits<{
@@ -158,6 +162,21 @@ const filtered = computed(() => {
     list = list.filter((e) => !BASE_CURRENCY_MINT_ADDRESSES.has(e.mint))
   }
   return list.filter((e) => {
+    if (props.requireMarketplaceEscrowSupport) {
+      if (e.marketplaceEscrowSupported === false) return false
+      if (e.marketplaceEscrowSupported !== true) {
+        if (
+          !isMintSupportedByMarketplaceEscrow({
+            kind: e.kind,
+            splTokenProgram: e.splTokenProgram ?? null,
+            isMplCore: e.isMplCore ?? false,
+            isCompressedNft: e.isCompressedNft ?? false,
+          })
+        ) {
+          return false
+        }
+      }
+    }
     if (kindFilter.value !== 'all' && e.kind !== kindFilter.value) return false
     if (q) {
       const matchMint = e.mint.toLowerCase().includes(q)

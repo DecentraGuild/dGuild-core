@@ -88,6 +88,13 @@ async function fetchAddressBook() {
       label: r.label,
       image: r.image,
       name: r.name,
+      symbol: r.symbol ?? null,
+      collectionSize: r.collectionSize,
+      uniqueTraitCount: r.uniqueTraitCount,
+      splTokenProgram: r.splTokenProgram ?? null,
+      isMplCore: r.isMplCore === true,
+      isCompressedNft: r.isCompressedNft === true,
+      marketplaceEscrowSupported: r.marketplaceEscrowSupported !== false,
       shipment_banner_image: (r as { shipment_banner_image?: string | null }).shipment_banner_image ?? null,
     }))
     addressBook.value = entries

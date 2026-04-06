@@ -9,18 +9,7 @@ import { useTenantStore } from '~/stores/tenant'
 import { useTenantCatalog } from '~/composables/watchtower/useTenantCatalog'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { sortByMintDisplayName } from '~/utils/mintDisplaySort'
-
-export interface AddressBookEntry {
-  id?: number
-  mint: string
-  kind: 'SPL' | 'NFT'
-  tier: 'base'
-  label?: string | null
-  image?: string | null
-  name?: string | null
-  symbol?: string | null
-  traitIndex?: unknown
-}
+import type { AddressBookEntry } from '~/types/mints'
 
 const DEFAULT_MINT_SET = new Set(ADDRESS_BOOK_DEFAULT_MINTS.map((c) => c.mint))
 
@@ -32,6 +21,7 @@ function defaultEntriesFromMeta(
   return ADDRESS_BOOK_DEFAULT_MINTS.map((c) => {
     const m = metaByMint.get(c.mint)
     return {
+      id: 0,
       mint: c.mint,
       kind: c.kind,
       tier: 'base' as const,
@@ -39,6 +29,10 @@ function defaultEntriesFromMeta(
       name: m?.name ?? c.name,
       symbol: m?.symbol ?? c.symbol,
       image: m?.image ?? null,
+      splTokenProgram: 'legacy' as const,
+      isMplCore: false,
+      isCompressedNft: false,
+      marketplaceEscrowSupported: true,
     }
   })
 }
@@ -84,6 +78,10 @@ export function useAddressBook() {
             collectionSize: row.collectionSize,
             uniqueTraitCount: row.uniqueTraitCount,
             traitIndex: row.trait_index,
+            splTokenProgram: row.splTokenProgram ?? null,
+            isMplCore: row.isMplCore === true,
+            isCompressedNft: row.isCompressedNft === true,
+            marketplaceEscrowSupported: row.marketplaceEscrowSupported !== false,
           })),
       )
       entries.value = [...defaults, ...catalogEntries]

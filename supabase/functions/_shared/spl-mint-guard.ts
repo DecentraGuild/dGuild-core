@@ -3,7 +3,11 @@ const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 /** Metaplex Core — collection and asset accounts are owned by this program, not SPL Token. */
 export const MPL_CORE_PROGRAM_ID = 'CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d'
 
-export type OnChainSplMintState = { ok: false } | { ok: true; decimals: number }
+export type SplMintTokenProgram = 'legacy' | 'token_2022'
+
+export type OnChainSplMintState =
+  | { ok: false }
+  | { ok: true; decimals: number; tokenProgram: SplMintTokenProgram }
 
 export async function getOnChainSplMintState(rpcUrl: string, address: string): Promise<OnChainSplMintState> {
   try {
@@ -28,7 +32,8 @@ export async function getOnChainSplMintState(rpcUrl: string, address: string): P
     const info = parsed.info as Record<string, unknown> | undefined
     const decimals = typeof info?.decimals === 'number' ? info.decimals : null
     if (decimals === null || decimals < 0 || decimals > 9) return { ok: false }
-    return { ok: true, decimals }
+    const tokenProgram: SplMintTokenProgram = owner === TOKEN_2022_PROGRAM_ID ? 'token_2022' : 'legacy'
+    return { ok: true, decimals, tokenProgram }
   } catch {
     return { ok: false }
   }
@@ -52,6 +57,14 @@ export async function isMplCoreAccount(rpcUrl: string, address: string): Promise
   } catch {
     return false
   }
+}
+
+export function isDasCompressedNft(asset: Record<string, unknown>): boolean {
+  const comp = asset.compression as Record<string, unknown> | undefined
+  if (comp && comp.compressed === true) return true
+  const iface = String(asset.interface ?? '')
+  if (/compressed/i.test(iface)) return true
+  return false
 }
 
 export function classifyDasAssetKind(asset: Record<string, unknown>): 'SPL' | 'NFT' | null {

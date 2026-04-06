@@ -22,6 +22,10 @@ export interface CatalogEntry {
   collectionSize?: number
   /** NFT collections: number of trait types from trait_index. */
   uniqueTraitCount?: number
+  splTokenProgram?: 'legacy' | 'token_2022' | null
+  isMplCore?: boolean
+  isCompressedNft?: boolean
+  marketplaceEscrowSupported?: boolean
 }
 
 export interface CatalogAddResolved {
@@ -32,6 +36,10 @@ export interface CatalogAddResolved {
   decimals: number | null
   collectionSize?: number
   uniqueTraitCount?: number
+  splTokenProgram?: 'legacy' | 'token_2022' | null
+  isMplCore?: boolean
+  isCompressedNft?: boolean
+  marketplaceEscrowSupported?: boolean
 }
 
 export interface CatalogAddResult {

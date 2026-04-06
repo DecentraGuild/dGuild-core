@@ -15,7 +15,7 @@
     <Card>
       <h3>Mint catalog</h3>
       <p class="marketplace-settings__hint">
-        Paste any mint address or pick from your address book. New mints are added to the address book automatically when you load them here.
+        Paste any mint address or pick from your address book. Only legacy SPL tokens and standard (non-compressed) Metaplex NFTs are supported for trades; Token-2022, Metaplex Core, and compressed NFTs are hidden here until escrow supports them. New mints are added to the address book automatically when you load them here.
       </p>
 
       <AdminMintCatalog
@@ -41,6 +41,7 @@
             <AddMintInput
               v-model="newMint"
               v-model:kind="newMintKind"
+              require-marketplace-escrow-support
               :error="addMintError"
               :loading="adding"
               :disabled="saving"
