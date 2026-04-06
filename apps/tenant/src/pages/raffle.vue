@@ -33,64 +33,64 @@
               </Button>
             </div>
             <div class="raffle-page__grid admin__card-grid--auto-comfortable">
-            <button
-              v-for="r in orderedVisibleRaffles"
-              :key="r.rafflePubkey"
-              type="button"
-              class="raffle-card"
-              :class="{
-                'raffle-card--selected': selectedRaffle?.rafflePubkey === r.rafflePubkey,
-                'raffle-card--has-winner': publicRaffleHasDecidedWinner(r),
-              }"
-              :style="r.chainData?.url ? { backgroundImage: `url(${r.chainData.url})` } : {}"
-              @click="selectRaffle(r)"
-            >
-              <div class="raffle-card__overlay" />
-              <div class="raffle-card__content">
-                <h3 class="raffle-card__name">{{ r.chainData?.name ?? 'Raffle' }}</h3>
-                <p v-if="r.chainData?.description" class="raffle-card__desc">{{ r.chainData.description }}</p>
-                <p v-if="r.chainData" class="raffle-card__price">
-                  {{ formatTicketPrice(r.chainData) }} per ticket
-                </p>
-                <p v-if="r.chainData" class="raffle-card__tickets">
-                  {{ r.chainData.ticketsSold }} / {{ r.chainData.ticketsTotal }} tickets
-                </p>
-                <p
-                  v-if="r.chainData && prizeConfigured(r.chainData)"
-                  class="raffle-card__prize"
-                >
-                  Prize: {{ formatPrizeLine(r.chainData) }}
-                </p>
-                <span
-                  v-if="r.chainData"
-                  class="raffle-card__state"
-                  :class="`raffle-card__state--${r.chainData.state}`"
-                >
-                  {{ r.chainData.stateDisplay }}
-                </span>
-                <p v-if="r.chainData?.winner && revealPublicOutcomes" class="raffle-card__winner">
-                  Winner: {{ resolveWallet(r.chainData.winner, 8, 4) }}
-                </p>
-                <p v-else-if="r.chainData?.winner && !revealPublicOutcomes" class="raffle-card__winner raffle-card__winner--masked">
-                  Winner decided — use Show winner above to reveal.
-                </p>
-                <div v-if="r.chainData" class="raffle-card__footer">
-                  <span
-                    class="raffle-card__mint-name"
-                    :title="r.chainData.ticketMint"
-                  >{{ mintCatalogLabel(r.chainData.ticketMint) }}</span>
-                  <a
-                    :href="accountUrl(r.rafflePubkey)"
-                    target="_blank"
-                    rel="noopener"
-                    class="raffle-card__link"
-                    @click.stop
+              <button
+                v-for="r in orderedVisibleRaffles"
+                :key="r.rafflePubkey"
+                type="button"
+                class="raffle-card"
+                :class="{
+                  'raffle-card--selected': selectedRaffle?.rafflePubkey === r.rafflePubkey,
+                  'raffle-card--has-winner': publicRaffleHasDecidedWinner(r),
+                }"
+                :style="r.chainData?.url ? { backgroundImage: `url(${r.chainData.url})` } : {}"
+                @click="selectRaffle(r)"
+              >
+                <div class="raffle-card__overlay" />
+                <div class="raffle-card__content">
+                  <h3 class="raffle-card__name">{{ r.chainData?.name ?? 'Raffle' }}</h3>
+                  <p v-if="r.chainData?.description" class="raffle-card__desc">{{ r.chainData.description }}</p>
+                  <p v-if="r.chainData" class="raffle-card__price">
+                    {{ formatTicketPrice(r.chainData) }} per ticket
+                  </p>
+                  <p v-if="r.chainData" class="raffle-card__tickets">
+                    {{ r.chainData.ticketsSold }} / {{ r.chainData.ticketsTotal }} tickets
+                  </p>
+                  <p
+                    v-if="r.chainData && prizeConfigured(r.chainData)"
+                    class="raffle-card__prize"
                   >
-                    <Icon icon="lucide:external-link" />
-                  </a>
+                    Prize: {{ formatPrizeLine(r.chainData) }}
+                  </p>
+                  <span
+                    v-if="r.chainData"
+                    class="raffle-card__state"
+                    :class="`raffle-card__state--${r.chainData.state}`"
+                  >
+                    {{ r.chainData.stateDisplay }}
+                  </span>
+                  <p v-if="r.chainData?.winner && revealPublicOutcomes" class="raffle-card__winner">
+                    Winner: {{ resolveWallet(r.chainData.winner, 8, 4) }}
+                  </p>
+                  <p v-else-if="r.chainData?.winner && !revealPublicOutcomes" class="raffle-card__winner raffle-card__winner--masked">
+                    Winner decided — use Show winner above to reveal.
+                  </p>
+                  <div v-if="r.chainData" class="raffle-card__footer">
+                    <span
+                      class="raffle-card__mint-name"
+                      :title="r.chainData.ticketMint"
+                    >{{ mintCatalogLabel(r.chainData.ticketMint) }}</span>
+                    <a
+                      :href="accountUrl(r.rafflePubkey)"
+                      target="_blank"
+                      rel="noopener"
+                      class="raffle-card__link"
+                      @click.stop
+                    >
+                      <Icon icon="lucide:external-link" />
+                    </a>
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
             </div>
           </div>
           <aside v-if="selectedRaffle" class="raffle-page__panel layout-split__sidebar">

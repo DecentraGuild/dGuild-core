@@ -476,6 +476,9 @@ export async function handleVoucherSyncMintMetadata(
   const symbolIn = (body.symbol as string)?.trim()
   const imageIn = typeof body.image === 'string' ? body.image.trim() : ''
   const image = imageIn.length > 0 ? imageIn : null
+  const metadataUriIn = typeof body.metadataUri === 'string' ? body.metadataUri.trim() : ''
+  const metadataUri = metadataUriIn.length > 0 ? metadataUriIn : null
+  const rawSyncBps = body.sellerFeeBasisPoints
 
   const { data: existing } = await db.from('mint_metadata').select('*').eq('mint', mint).maybeSingle()
   const ex = (existing ?? {}) as Record<string, unknown>
@@ -484,6 +487,14 @@ export async function handleVoucherSyncMintMetadata(
   const name = nameIn && nameIn.length > 0 ? nameIn : ((ex.name as string | null | undefined) ?? null)
   const symbol = symbolIn && symbolIn.length > 0 ? symbolIn : ((ex.symbol as string | null | undefined) ?? null)
   const imageMerged = image ?? ((ex.image as string | null | undefined) ?? null)
+
+  let sellerFeeMerged = (ex.seller_fee_basis_points as number | null | undefined) ?? null
+  if (typeof rawSyncBps === 'number' && rawSyncBps >= 0 && rawSyncBps <= 10000) {
+    sellerFeeMerged = rawSyncBps
+  } else if (typeof rawSyncBps === 'string' && rawSyncBps.trim()) {
+    const n = parseInt(rawSyncBps, 10)
+    if (!Number.isNaN(n)) sellerFeeMerged = Math.max(0, Math.min(10000, n))
+  }
 
   let chainDecimals: number | null = null
   try {
@@ -512,9 +523,9 @@ export async function handleVoucherSyncMintMetadata(
       decimals,
       traits: ex.traits ?? null,
       trait_index: ex.trait_index ?? null,
-      seller_fee_basis_points: ex.seller_fee_basis_points ?? null,
+      seller_fee_basis_points: sellerFeeMerged,
       update_authority: ex.update_authority ?? null,
-      uri: ex.uri ?? null,
+      uri: metadataUri ?? ((ex.uri as string | null | undefined) ?? null),
       primary_sale_happened: ex.primary_sale_happened ?? null,
       is_mutable: ex.is_mutable ?? null,
       edition_nonce: ex.edition_nonce ?? null,

@@ -38,6 +38,7 @@ coverage/
 
 # Agent-only docs (not for the repo; local context only)
 .cursor/
+.agents/
 
 # Reference only; do not commit (implement in apps/packages)
 _integrate/

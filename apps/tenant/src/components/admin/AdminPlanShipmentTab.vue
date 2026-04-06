@@ -188,7 +188,7 @@
                 >
                   <div class="plan-shipment-tab__history-leaf-head">
                     <span>{{ truncateAddress(row.recipient_wallet, 6, 4) }}</span>
-                    <span class="plan-shipment-tab__history-leaf-amount">{{ row.amount_raw }}</span>
+                    <span class="plan-shipment-tab__history-leaf-amount">{{ formatLeafAmount(r.mint, row.amount_raw) }}</span>
                     <Button
                       type="button"
                       variant="ghost"
@@ -315,7 +315,8 @@ import AddressBookModal from '~/components/shared/AddressBookModal.vue'
 import SimpleModal from '~/components/ui/simple-modal/SimpleModal.vue'
 import ConfirmTransactionModal from '~/components/ui/confirm-transaction-modal/ConfirmTransactionModal.vue'
 import ConditionSetCatalog from '~/components/gates/ConditionSetCatalog.vue'
-import { truncateAddress, formatDate, formatDateTime } from '@decentraguild/display'
+import { truncateAddress, formatDate, formatDateTime, formatRawTokenAmount } from '@decentraguild/display'
+import { fetchMintMetadataFromChain } from '@decentraguild/web3'
 import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 import { useShipWallet } from '~/composables/shipment/useShipWallet'
 import { usePlanShipmentForm, JSON_PLACEHOLDER } from '~/composables/shipment/usePlanShipmentForm'
@@ -342,6 +343,30 @@ const explorerLinks = useExplorerLinks()
 const { resolveWallet } = useMemberProfiles()
 const supabase = useSupabase()
 
+const mintDecimalsByMint = ref<Map<string, number>>(new Map())
+
+async function ensureMintDecimals(mint: string) {
+  const cur = mintDecimalsByMint.value
+  if (cur.has(mint)) return
+  const conn = connection.value
+  if (!conn) return
+  try {
+    const meta = await fetchMintMetadataFromChain(conn, mint)
+    const d = meta?.decimals
+    if (d != null && Number.isFinite(d)) {
+      mintDecimalsByMint.value = new Map(cur).set(mint, d)
+    }
+  } catch {
+    void 0
+  }
+}
+
+function formatLeafAmount(mint: string, raw: string): string {
+  const d = mintDecimalsByMint.value.get(mint)
+  if (d == null) return '?'
+  return formatRawTokenAmount(raw, d, 'SPL')
+}
+
 function shipmentTxRows(txSignature: string): Array<{ sig: string; label: string }> {
   const sigs = txSignature
     .split(',')
@@ -364,6 +389,12 @@ const {
   toggleExpanded,
   formatTotalAmount,
 } = useShipmentHistory(tenantId)
+
+watch(expandedId, (id) => {
+  if (id == null) return
+  const r = historyRecords.value.find((x) => x.id === id)
+  if (r?.mint) void ensureMintDecimals(r.mint)
+})
 
 const form = usePlanShipmentForm({
   connection,

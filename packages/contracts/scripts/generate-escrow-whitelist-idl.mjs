@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer'
+import process from 'node:process'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -284,4 +286,4 @@ const whitelistIdl = {
 const idlDir = path.join(__dirname, '../src/idl')
 fs.writeFileSync(path.join(idlDir, 'escrow_service.json'), JSON.stringify(escrowIdl, null, 2))
 fs.writeFileSync(path.join(idlDir, 'whitelist.json'), JSON.stringify(whitelistIdl, null, 2))
-console.log('Wrote escrow_service.json and whitelist.json')
+process.stdout.write('Wrote escrow_service.json and whitelist.json\n')

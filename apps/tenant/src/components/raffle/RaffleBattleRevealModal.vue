@@ -4,78 +4,78 @@
       :show-close-button="false"
       class="raffle-battle-reveal__shell !flex !flex-col !gap-3 !overflow-hidden !min-h-0 sm:!max-w-none"
     >
-        <DialogTitle class="sr-only">Raffle battle reveal</DialogTitle>
-        <div ref="themeRef" class="raffle-battle-reveal">
-          <div class="raffle-battle-reveal__toolbar">
-            <span v-if="raffleName" class="raffle-battle-reveal__title">{{ raffleName }}</span>
-            <div class="raffle-battle-reveal__toolbar-actions">
-              <Button v-if="phase === 'battle'" type="button" variant="ghost" size="sm" @click="skipBattle">
-                Skip
-              </Button>
-              <Button type="button" variant="ghost" size="sm" @click="closeAll">
-                Close
-              </Button>
+      <DialogTitle class="sr-only">Raffle battle reveal</DialogTitle>
+      <div ref="themeRef" class="raffle-battle-reveal">
+        <div class="raffle-battle-reveal__toolbar">
+          <span v-if="raffleName" class="raffle-battle-reveal__title">{{ raffleName }}</span>
+          <div class="raffle-battle-reveal__toolbar-actions">
+            <Button v-if="phase === 'battle'" type="button" variant="ghost" size="sm" @click="skipBattle">
+              Skip
+            </Button>
+            <Button type="button" variant="ghost" size="sm" @click="closeAll">
+              Close
+            </Button>
+          </div>
+        </div>
+
+        <div v-if="phase === 'roster'" class="raffle-battle-reveal__roster">
+          <p v-if="loading" class="raffle-battle-reveal__hint">Loading entries…</p>
+          <p v-else-if="loadError" class="raffle-battle-reveal__err">{{ loadError }}</p>
+          <template v-else>
+            <p v-if="!matchesSold" class="raffle-battle-reveal__warn">
+              Holder totals from the indexer do not match sold tickets yet. You can still run the reveal for display.
+            </p>
+            <p v-if="winnerMissingFromHolders" class="raffle-battle-reveal__warn">
+              The on-chain winner is not in the holder list (indexing lag). The animation may not match the real winner; the overlay still shows the chain winner.
+            </p>
+            <p class="raffle-battle-reveal__hint">
+              Each wallet is one squad (colour + label); more tickets mean more health. Member nicknames show when your community has them. The on-chain winner cannot be eliminated. Presentation only — the draw is already settled on-chain.
+            </p>
+            <div class="raffle-battle-reveal__table-wrap">
+              <table class="raffle-battle-reveal__table">
+                <thead>
+                  <tr>
+                    <th class="raffle-battle-reveal__th-swatch" aria-hidden="true" />
+                    <th>Squad</th>
+                    <th>Fighters</th>
+                    <th>Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in displayRows" :key="r.owner">
+                    <td class="raffle-battle-reveal__td-swatch">
+                      <span
+                        class="raffle-battle-reveal__swatch"
+                        :style="{ background: squadColorForOwner(r.owner) }"
+                        :title="formatWallet(r.owner, 8, 8)"
+                      />
+                    </td>
+                    <td>{{ formatWallet(r.owner, 10, 6) }}</td>
+                    <td>{{ r.tickets }}</td>
+                    <td>{{ r.sharePercent.toFixed(1) }}%</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-          </div>
+            <div class="raffle-battle-reveal__roster-actions">
+              <Button type="button" variant="default" :disabled="!canStartBattle" @click="startBattle">
+                Start battle
+              </Button>
+              <Button type="button" variant="ghost" @click="closeAll">Skip</Button>
+            </div>
+          </template>
+        </div>
 
-          <div v-if="phase === 'roster'" class="raffle-battle-reveal__roster">
-            <p v-if="loading" class="raffle-battle-reveal__hint">Loading entries…</p>
-            <p v-else-if="loadError" class="raffle-battle-reveal__err">{{ loadError }}</p>
-            <template v-else>
-              <p v-if="!matchesSold" class="raffle-battle-reveal__warn">
-                Holder totals from the indexer do not match sold tickets yet. You can still run the reveal for display.
-              </p>
-              <p v-if="winnerMissingFromHolders" class="raffle-battle-reveal__warn">
-                The on-chain winner is not in the holder list (indexing lag). The animation may not match the real winner; the overlay still shows the chain winner.
-              </p>
-              <p class="raffle-battle-reveal__hint">
-                Each wallet is one squad (colour + label); more tickets mean more health. Member nicknames show when your community has them. The on-chain winner cannot be eliminated. Presentation only — the draw is already settled on-chain.
-              </p>
-              <div class="raffle-battle-reveal__table-wrap">
-                <table class="raffle-battle-reveal__table">
-                  <thead>
-                    <tr>
-                      <th class="raffle-battle-reveal__th-swatch" aria-hidden="true" />
-                      <th>Squad</th>
-                      <th>Fighters</th>
-                      <th>Share</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="r in displayRows" :key="r.owner">
-                      <td class="raffle-battle-reveal__td-swatch">
-                        <span
-                          class="raffle-battle-reveal__swatch"
-                          :style="{ background: squadColorForOwner(r.owner) }"
-                          :title="formatWallet(r.owner, 8, 8)"
-                        />
-                      </td>
-                      <td>{{ formatWallet(r.owner, 10, 6) }}</td>
-                      <td>{{ r.tickets }}</td>
-                      <td>{{ r.sharePercent.toFixed(1) }}%</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="raffle-battle-reveal__roster-actions">
-                <Button type="button" variant="default" :disabled="!canStartBattle" @click="startBattle">
-                  Start battle
-                </Button>
-                <Button type="button" variant="ghost" @click="closeAll">Skip</Button>
-              </div>
-            </template>
-          </div>
-
-          <div v-show="phase === 'battle' || phase === 'done'" class="raffle-battle-reveal__canvas-wrap">
-            <canvas ref="canvasRef" class="raffle-battle-reveal__canvas" />
-            <div v-if="phase === 'done'" class="raffle-battle-reveal__victory">
-              <div class="raffle-battle-reveal__victory-panel">
-                <p class="raffle-battle-reveal__victory-label">Winner</p>
-                <p class="raffle-battle-reveal__victory-wallet">{{ formatWallet(winnerWalletLabel) }}</p>
-              </div>
+        <div v-show="phase === 'battle' || phase === 'done'" class="raffle-battle-reveal__canvas-wrap">
+          <canvas ref="canvasRef" class="raffle-battle-reveal__canvas" />
+          <div v-if="phase === 'done'" class="raffle-battle-reveal__victory">
+            <div class="raffle-battle-reveal__victory-panel">
+              <p class="raffle-battle-reveal__victory-label">Winner</p>
+              <p class="raffle-battle-reveal__victory-wallet">{{ formatWallet(winnerWalletLabel) }}</p>
             </div>
           </div>
         </div>
+      </div>
     </DialogContent>
   </Dialog>
 </template>
