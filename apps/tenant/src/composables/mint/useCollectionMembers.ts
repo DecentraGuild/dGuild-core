@@ -1,9 +1,7 @@
 /**
- * Member NFTs for a collection from tenant_mint_catalog (central store).
- * Used by MintDetailModal (Address Book) and Watchtower modal.
+ * Member NFTs for a collection from collection_members (platform-wide, public read via RLS).
+ * Used by marketplace browse, MintDetailModal, NFT selector, and create-trade flow.
  */
-import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
-import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 
 export interface CollectionMemberNft {
@@ -17,15 +15,13 @@ export interface CollectionMemberNft {
 }
 
 export function useCollectionMembers(collectionMint: Ref<string | null>) {
-  const tenantStore = useTenantStore()
   const assets = ref<CollectionMemberNft[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
   async function fetch() {
     const mint = collectionMint.value
-    const id = tenantStore.tenantId
-    if (!mint || !id) {
+    if (!mint) {
       assets.value = []
       return
     }
@@ -33,20 +29,23 @@ export function useCollectionMembers(collectionMint: Ref<string | null>) {
     error.value = null
     try {
       const supabase = useSupabase()
-      const data = await invokeEdgeFunction<{ entries?: Array<{ mint: string; name?: string | null; image?: string | null; traits?: unknown; owner?: string | null }> }>(
-        supabase,
-        'tenant_catalog',
-        { action: 'list-members', tenantId: id, collectionMint: mint },
-        { errorFallback: 'Failed to load member NFTs' },
-      )
-      const entries = data?.entries ?? []
+      const { data: rows, error: qErr } = await supabase
+        .from('collection_members')
+        .select('mint, name, image, traits, owner')
+        .eq('collection_mint', mint)
+        .order('mint')
+        .limit(2000)
+      if (qErr) throw qErr
+      const entries = rows ?? []
       assets.value = entries.map((e) => ({
-        mint: e.mint,
+        mint: e.mint as string,
         metadata: {
-          name: e.name ?? null,
-          image: e.image ?? null,
-          traits: Array.isArray(e.traits) ? e.traits : [],
-          owner: e.owner ?? null,
+          name: (e.name as string | null) ?? null,
+          image: (e.image as string | null) ?? null,
+          traits: Array.isArray(e.traits)
+            ? (e.traits as Array<{ trait_type?: string; traitType?: string; value?: string }>)
+            : [],
+          owner: (e.owner as string | null) ?? null,
         },
       }))
     } catch (e) {
