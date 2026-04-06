@@ -303,75 +303,12 @@ Deno.serve(async (req: Request) => {
     if (error) return errorResponse(error.message, req, 500)
 
     if (kind === 'NFT' && (meta?.collectionSize ?? 0) > 0) {
-      const rpcUrl = Deno.env.get('HELIUS_RPC_URL') ?? Deno.env.get('SOLANA_RPC_URL')
-      if (rpcUrl) {
-        try {
-          const allMembers: Array<{ collection_mint: string; mint: string; name: string | null; image: string | null; traits: unknown; owner: string | null }> = []
-          const metaUpserts: Array<{ mint: string; name: string | null; image: string | null; traits: unknown; updated_at: string }> = []
-          let page = 1
-          let hasMore = true
-
-          while (hasMore) {
-            const r = await fetch(rpcUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'getAssetsByGroup',
-                params: { groupKey: 'collection', groupValue: mint, limit: 1000, page },
-              }),
-            })
-            const d = await r.json() as { result?: { items?: Array<Record<string, unknown>> } }
-            const items = d.result?.items ?? []
-
-            for (const item of items) {
-              const id = item.id as string
-              const content = item.content as Record<string, unknown> | undefined
-              const metadata = content?.metadata as Record<string, unknown> | undefined
-              const links = content?.links as Record<string, unknown> | undefined
-              const ownership = item.ownership as { owner?: string } | undefined
-              const nftName = metadata?.name as string ?? null
-              const nftImage = links?.image as string ?? null
-              const attrs = metadata?.attributes as Array<{ trait_type?: string; value?: string }> | undefined
-              const traits = Array.isArray(attrs) ? attrs : []
-              const owner = ownership?.owner ?? null
-
-              allMembers.push({
-                collection_mint: mint,
-                mint: id,
-                name: nftName,
-                image: nftImage,
-                traits,
-                owner,
-              })
-              metaUpserts.push({
-                mint: id,
-                name: nftName,
-                image: nftImage,
-                traits,
-                updated_at: now,
-              })
-            }
-            hasMore = items.length >= 1000
-            page++
-          }
-
-          if (allMembers.length > 0) {
-            await db.from('tenant_collection_scope').upsert(
-              { tenant_id: tenantId, collection_mint: mint },
-              { onConflict: 'tenant_id,collection_mint' },
-            )
-            await db.from('collection_members').upsert(
-              allMembers.map((m) => ({ ...m, updated_at: now })),
-              { onConflict: 'collection_mint,mint' },
-            )
-            await db.from('mint_metadata').upsert(metaUpserts, { onConflict: 'mint' })
-          }
-        } catch {
-          /* expand best-effort */
-        }
-      }
+      await db.from('tenant_collection_scope').upsert(
+        { tenant_id: tenantId, collection_mint: mint },
+        { onConflict: 'tenant_id,collection_mint' },
+      )
+      const { enqueueCollectionIndexing } = await import('../_shared/mint-catalog-index-worker.ts')
+      await enqueueCollectionIndexing(db, mint, now)
     }
 
     const traitKeys = meta.traitIndex && typeof meta.traitIndex === 'object' && 'trait_keys' in meta.traitIndex
@@ -425,11 +362,39 @@ Deno.serve(async (req: Request) => {
     const mint = existing.mint as string
 
     const { fetchMintMetadata } = await import('../_shared/mint-metadata.ts')
+    const {
+      emptyPartialTraitState,
+      mergeAttributesIntoPartialTraitState,
+      partialTraitStateToTraitIndex,
+    } = await import('../_shared/index-collection-members.ts')
+
     const meta = await fetchMintMetadata(mint, 'NFT')
-    if (!meta?.traitIndex) return errorResponse('Could not fetch traits for collection', req, 500)
+    let traitIndex: Record<string, unknown> | null = null
+    const fromMeta = meta?.traitIndex
+    if (fromMeta && typeof fromMeta === 'object' && 'trait_keys' in fromMeta) {
+      const tk = (fromMeta as { trait_keys?: unknown }).trait_keys
+      if (Array.isArray(tk) && tk.length > 0) traitIndex = fromMeta as Record<string, unknown>
+    }
+    if (!traitIndex) {
+      const { data: memberRows } = await db
+        .from('collection_members')
+        .select('traits')
+        .eq('collection_mint', mint)
+        .limit(5000)
+      const partial = emptyPartialTraitState()
+      const attrsList = (memberRows ?? []).map((r) =>
+        Array.isArray(r.traits) ? (r.traits as Array<{ trait_type?: string; value?: string }>) : undefined,
+      )
+      mergeAttributesIntoPartialTraitState(partial, attrsList)
+      traitIndex = partialTraitStateToTraitIndex(partial)
+    }
+    const keys = traitIndex?.trait_keys as unknown
+    if (!Array.isArray(keys) || keys.length === 0) {
+      return errorResponse('Could not fetch traits for collection', req, 500)
+    }
 
     await db.from('mint_metadata').update({
-      trait_index: meta.traitIndex,
+      trait_index: traitIndex,
       updated_at: now,
     }).eq('mint', mint)
 

@@ -171,38 +171,6 @@ export async function fetchMintMetadata(
         const onChain = await getOnChainSplMintState(rpcUrl, mint)
         const mplCoreCollection = await isMplCoreAccount(rpcUrl, mint)
         if (!onChain.ok && !mplCoreCollection) return null
-        const traitKeys = new Set<string>()
-        const traitOptions: Record<string, Set<string>> = {}
-        let pgN = 1
-        let more = true
-        while (more) {
-          const r2 = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getAssetsByGroup',
-              params: { groupKey: 'collection', groupValue: mint, limit: 1000, page: pgN },
-            }),
-          })
-          const d2 = await r2.json() as { result?: { items?: Array<Record<string, unknown>> } }
-          const items = d2.result?.items ?? []
-          for (const item of items) {
-            const attrs = ((item.content as Record<string, unknown>)?.metadata as Record<string, unknown>)
-              ?.attributes as Array<{ trait_type?: string; value?: string }> | undefined
-            if (attrs) {
-              for (const a of attrs) {
-                if (!a.trait_type) continue
-                traitKeys.add(a.trait_type)
-                if (!traitOptions[a.trait_type]) traitOptions[a.trait_type] = new Set()
-                if (a.value) traitOptions[a.trait_type].add(String(a.value))
-              }
-            }
-          }
-          more = items.length >= 1000
-          pgN++
-        }
         const metaRes = await fetch(rpcUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -221,10 +189,7 @@ export async function fetchMintMetadata(
           label: name,
           image,
           collectionSize,
-          traitIndex: {
-            trait_keys: [...traitKeys],
-            trait_options: Object.fromEntries([...Object.entries(traitOptions)].map(([k, v]) => [k, [...v]])),
-          },
+          traitIndex: null,
           ...ext,
         }
       }

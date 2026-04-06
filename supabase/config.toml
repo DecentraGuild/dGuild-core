@@ -128,6 +128,9 @@ verify_jwt = false
 verify_jwt = false
 [functions.cron-tracker]
 verify_jwt = false
+[functions.mint-catalog-index]
+verify_jwt = false
+import_map = "./functions/mint-catalog-index/deno.json"
 [functions.watchtower]
 verify_jwt = false
 [functions.qualification]
