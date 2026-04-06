@@ -1,5 +1,5 @@
 <template>
-  <PageSection>
+  <PageSection v-if="opsAccessOk">
     <div class="ops">
       <header class="ops__header">
         <div>
@@ -174,6 +174,7 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Platform operations' })
 
+import { assertPlatformOpsAccess } from '~/composables/assertPlatformOpsAccess'
 import { useAuth } from '@decentraguild/auth'
 import { Button } from '~/components/ui/button'
 import { useSupabase, invokeEdgeFunction } from '@decentraguild/nuxt-composables'
@@ -182,6 +183,8 @@ import { useOpsVouchers } from '~/composables/useOpsVouchers'
 import { useOpsMetadataRefresh } from '~/composables/useOpsMetadataRefresh'
 import { useOpsAudit } from '~/composables/useOpsAudit'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '~/components/ui/dialog'
+
+const opsAccessOk = await assertPlatformOpsAccess()
 
 const auth = useAuth()
 
@@ -216,6 +219,7 @@ const billingLoading = ref(true)
 const billingError = ref<string | null>(null)
 
 onMounted(async () => {
+  if (!opsAccessOk) return
   await Promise.all([loadTenants(), loadBilling(), loadAudit()])
   await Promise.all([loadMeters(), loadBundles(), loadVoucherList()])
 })
