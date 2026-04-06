@@ -124,6 +124,7 @@ verify_jwt = false
 verify_jwt = false
 [functions.tenant_catalog]
 verify_jwt = false
+import_map = "./functions/tenant_catalog/deno.json"
 [functions.cron-lifecycle]
 verify_jwt = false
 [functions.cron-tracker]

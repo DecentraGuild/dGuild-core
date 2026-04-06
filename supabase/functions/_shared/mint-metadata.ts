@@ -3,7 +3,12 @@
  * Shared by tenant_catalog and marketplace for consistent metadata.
  */
 
-import { classifyDasAssetKind, getOnChainSplMintState, isMplCoreAccount } from './spl-mint-guard.ts'
+import {
+  classifyDasAssetKind,
+  getOnChainSplMintState,
+  isDasCompressedNft,
+  isMplCoreAccount,
+} from './spl-mint-guard.ts'
 
 export interface MintMetadataResult {
   kind: 'SPL' | 'NFT'
@@ -23,6 +28,10 @@ export interface MintMetadataResult {
   isMutable?: boolean | null
   editionNonce?: number | null
   tokenStandard?: string | null
+  /** Legacy Tokenkeg… mint vs Token-2022; null when mint is not an SPL mint account (e.g. MPL Core). */
+  splTokenProgram?: 'legacy' | 'token_2022' | null
+  isMplCore?: boolean
+  isCompressedNft?: boolean
 }
 
 function traitIndexFromDasAsset(asset: Record<string, unknown>): Record<string, unknown> {
@@ -183,6 +192,8 @@ export async function fetchMintMetadata(
         const name = assetMeta?.name as string ?? null
         const ext = extractExtendedMetadata(assetResult as Record<string, unknown>)
         const image = await resolveDasImage(assetResult as Record<string, unknown>)
+        const isCompressedNft = isDasCompressedNft(assetResult as Record<string, unknown>)
+        const splTokenProgram = onChain.ok ? onChain.tokenProgram : null
         return {
           kind: 'NFT',
           name,
@@ -190,6 +201,9 @@ export async function fetchMintMetadata(
           image,
           collectionSize,
           traitIndex: null,
+          splTokenProgram,
+          isMplCore: mplCoreCollection,
+          isCompressedNft,
           ...ext,
         }
       }
@@ -208,6 +222,9 @@ export async function fetchMintMetadata(
     const mplCore = await isMplCoreAccount(rpcUrl, mint)
     if (!onChain.ok && !mplCore) return null
     if (mplCore && kindHint === 'SPL') return null
+
+    const isCompressedNft = isDasCompressedNft(asset as Record<string, unknown>)
+    const splTokenProgram = onChain.ok ? onChain.tokenProgram : null
 
     let classified = classifyDasAssetKind(asset as Record<string, unknown>)
     if (mplCore) classified = 'NFT'
@@ -237,6 +254,9 @@ export async function fetchMintMetadata(
         image,
         collectionSize: 0,
         traitIndex: traitIndexFromDasAsset(asset as Record<string, unknown>),
+        splTokenProgram,
+        isMplCore: mplCore,
+        isCompressedNft,
         ...ext,
       }
     }
@@ -248,6 +268,9 @@ export async function fetchMintMetadata(
       image,
       traitIndex: null,
       decimals,
+      splTokenProgram,
+      isMplCore: mplCore,
+      isCompressedNft,
       ...ext,
     }
   } catch {

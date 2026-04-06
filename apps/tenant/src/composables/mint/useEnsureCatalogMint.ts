@@ -10,6 +10,10 @@ export interface EnsuredMintEntry {
   decimals: number | null
   collectionSize?: number
   uniqueTraitCount?: number
+  splTokenProgram?: 'legacy' | 'token_2022' | null
+  isMplCore?: boolean
+  isCompressedNft?: boolean
+  marketplaceEscrowSupported?: boolean
 }
 
 export function useEnsureCatalogMint() {
@@ -34,6 +38,10 @@ export function useEnsureCatalogMint() {
         decimals: resolved.decimals,
         collectionSize: resolved.collectionSize,
         uniqueTraitCount: resolved.uniqueTraitCount,
+        splTokenProgram: resolved.splTokenProgram ?? null,
+        isMplCore: resolved.isMplCore ?? false,
+        isCompressedNft: resolved.isCompressedNft ?? false,
+        marketplaceEscrowSupported: resolved.marketplaceEscrowSupported !== false,
       }
     } finally {
       ensuring.value = false

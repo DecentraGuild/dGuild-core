@@ -3,7 +3,7 @@
  * Form state, add/remove mints, save to Supabase.
  */
 
-import { BASE_CURRENCY_MINTS } from '@decentraguild/core'
+import { BASE_CURRENCY_MINTS, isMintSupportedByMarketplaceEscrow } from '@decentraguild/core'
 import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import type { TieredAddonsPricing } from '@decentraguild/catalog'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
@@ -109,6 +109,17 @@ function getMarketplaceUiMintsCap(): number {
 }
 
 const MARKETPLACE_UI_MINTS_CAP = getMarketplaceUiMintsCap()
+
+function addressBookEntryOkForMarketplaceEscrow(entry: AddressBookEntry): boolean {
+  if (entry.marketplaceEscrowSupported === false) return false
+  if (entry.marketplaceEscrowSupported === true) return true
+  return isMintSupportedByMarketplaceEscrow({
+    kind: entry.kind,
+    splTokenProgram: entry.splTokenProgram ?? null,
+    isMplCore: entry.isMplCore ?? false,
+    isCompressedNft: entry.isCompressedNft ?? false,
+  })
+}
 
 export function useMarketplaceSettings(opts: {
   slug: () => string
@@ -226,6 +237,30 @@ export function useMarketplaceSettings(opts: {
     const mints = [...new Set(rows.map((r) => r.mint))]
     const { data: catRows } = await supabase.from('tenant_mint_catalog').select('mint, kind').eq('tenant_id', id).in('mint', mints)
     const catalogByMint = new Map((catRows ?? []).map((r) => [r.mint as string, r.kind as 'SPL' | 'NFT']))
+    const { data: escrowMetaRows } = await supabase
+      .from('mint_metadata')
+      .select('mint, spl_token_program, is_mpl_core, is_compressed_nft')
+      .in('mint', mints)
+    const escrowMetaByMint = new Map(
+      (escrowMetaRows ?? []).map((r) => [
+        r.mint as string,
+        {
+          splTokenProgram: (r.spl_token_program as 'legacy' | 'token_2022' | null | undefined) ?? null,
+          isMplCore: r.is_mpl_core === true,
+          isCompressedNft: r.is_compressed_nft === true,
+        },
+      ]),
+    )
+    function mintOkForMarketplaceEscrow(mintAddr: string, k: 'SPL' | 'NFT'): boolean {
+      const meta = escrowMetaByMint.get(mintAddr)
+      if (!meta) return true
+      return isMintSupportedByMarketplaceEscrow({
+        kind: k,
+        splTokenProgram: meta.splTokenProgram,
+        isMplCore: meta.isMplCore,
+        isCompressedNft: meta.isCompressedNft,
+      })
+    }
 
     let applied = 0
     for (const row of rows) {
@@ -242,11 +277,28 @@ export function useMarketplaceSettings(opts: {
               errors.push(`${row.mint}: not an NFT collection`)
               continue
             }
+            if (r.marketplaceEscrowSupported === false) {
+              await tenantCatalog.remove(row.mint)
+              errors.push(
+                `${row.mint}: not supported for marketplace escrow (Token-2022, Metaplex Core, or compressed NFT)`,
+              )
+              continue
+            }
+            escrowMetaByMint.set(row.mint, {
+              splTokenProgram: r.splTokenProgram ?? null,
+              isMplCore: r.isMplCore ?? false,
+              isCompressedNft: r.isCompressedNft ?? false,
+            })
             catalogByMint.set(row.mint, 'NFT')
           } catch (e) {
             errors.push(`${row.mint}: ${e instanceof Error ? e.message : 'resolve failed'}`)
             continue
           }
+        } else if (!mintOkForMarketplaceEscrow(row.mint, 'NFT')) {
+          errors.push(
+            `${row.mint}: not supported for marketplace escrow (Token-2022, Metaplex Core, or compressed NFT)`,
+          )
+          continue
         }
         const snapNft = form.collectionMints.find((m) => m.mint === row.mint)
         removeMintFromAllLists(row.mint)
@@ -289,11 +341,28 @@ export function useMarketplaceSettings(opts: {
               errors.push(`${row.mint}: not SPL`)
               continue
             }
+            if (r.marketplaceEscrowSupported === false) {
+              await tenantCatalog.remove(row.mint)
+              errors.push(
+                `${row.mint}: not supported for marketplace escrow (Token-2022, Metaplex Core, or compressed NFT)`,
+              )
+              continue
+            }
+            escrowMetaByMint.set(row.mint, {
+              splTokenProgram: r.splTokenProgram ?? null,
+              isMplCore: r.isMplCore ?? false,
+              isCompressedNft: r.isCompressedNft ?? false,
+            })
             catalogByMint.set(row.mint, 'SPL')
           } catch (e) {
             errors.push(`${row.mint}: ${e instanceof Error ? e.message : 'resolve failed'}`)
             continue
           }
+        } else if (!mintOkForMarketplaceEscrow(row.mint, 'SPL')) {
+          errors.push(
+            `${row.mint}: not supported for marketplace escrow (Token-2022, Metaplex Core, or compressed NFT)`,
+          )
+          continue
         }
         const snapSpl = form.splAssetMints.find((m) => m.mint === row.mint)
         removeMintFromAllLists(row.mint)
@@ -515,6 +584,35 @@ export function useMarketplaceSettings(opts: {
     addMintError.value = ''
     adding.value = true
     try {
+      if (entry && !addressBookEntryOkForMarketplaceEscrow(entry)) {
+        addMintError.value =
+          'This mint uses Token-2022, Metaplex Core, or is a compressed NFT. Marketplace supports only legacy SPL and standard NFTs until escrow is updated.'
+        return
+      }
+      if (!entry) {
+        const tid = tenantId.value
+        if (!tid) {
+          addMintError.value = 'No tenant'
+          return
+        }
+        const supabase = useSupabase()
+        const preview = await invokeEdgeFunction<{ marketplaceEscrowSupported?: boolean }>(
+          supabase,
+          'tenant_catalog',
+          {
+            action: 'resolve-full',
+            tenantId: tid,
+            mint: trimmed,
+            kind: kind === 'auto' ? 'auto' : kind,
+          },
+          { errorFallback: 'Failed to resolve mint' },
+        )
+        if (preview?.marketplaceEscrowSupported === false) {
+          addMintError.value =
+            'This mint uses Token-2022, Metaplex Core, or is a compressed NFT. Marketplace supports only legacy SPL and standard NFTs until escrow is updated.'
+          return
+        }
+      }
       const resolved = entry
         ? {
             kind: entry.kind,

@@ -31,6 +31,8 @@ export interface CollectionMint extends BaseMintMetadata {
 
 export type MintKind = 'SPL' | 'NFT'
 
+export type SplTokenProgramKind = 'legacy' | 'token_2022'
+
 export interface AddressBookEntry {
   id: number
   mint: string
@@ -42,6 +44,10 @@ export interface AddressBookEntry {
   symbol?: string | null
   collectionSize?: number
   uniqueTraitCount?: number
+  splTokenProgram?: SplTokenProgramKind | null
+  isMplCore?: boolean
+  isCompressedNft?: boolean
+  marketplaceEscrowSupported?: boolean
   shipment_banner_image?: string | null
   /** NFT collection trait keys (e.g. for filtering or rule dropdowns). */
   trait_keys?: string[] | null

@@ -19,6 +19,25 @@ import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { requireTenantAdmin } from '../_shared/auth.ts'
 import { compareMintCatalogDisplay } from '../_shared/mint-display-sort.ts'
+import { isMintSupportedByMarketplaceEscrow } from '@decentraguild/core'
+import type { MintMetadataResult } from '../_shared/mint-metadata.ts'
+
+function marketplaceEscrowFields(meta: MintMetadataResult) {
+  const splTokenProgram = meta.splTokenProgram ?? null
+  const isMplCore = meta.isMplCore ?? false
+  const isCompressedNft = meta.isCompressedNft ?? false
+  return {
+    splTokenProgram,
+    isMplCore,
+    isCompressedNft,
+    marketplaceEscrowSupported: isMintSupportedByMarketplaceEscrow({
+      kind: meta.kind,
+      splTokenProgram,
+      isMplCore,
+      isCompressedNft,
+    }),
+  }
+}
 
 Deno.serve(async (req: Request) => {
   const preflight = handlePreflight(req)
@@ -49,10 +68,12 @@ Deno.serve(async (req: Request) => {
     const hint = kindHint === 'auto' || !kindHint ? undefined : kindHint
     const meta = await fetchMintMetadata(mint, hint)
     if (!meta) return errorResponse('Mint not found or invalid', req, 404)
+    const escrow = marketplaceEscrowFields(meta)
     if (meta.kind === 'SPL') {
       return jsonResponse({
         kind: 'SPL',
         spl: { mint, name: meta.name ?? undefined, symbol: meta.label ?? undefined, image: meta.image ?? undefined },
+        ...escrow,
       }, req)
     }
     const traitKeys = meta.traitIndex && typeof meta.traitIndex === 'object' && 'trait_keys' in meta.traitIndex
@@ -68,6 +89,7 @@ Deno.serve(async (req: Request) => {
         uniqueTraitCount: traitKeys?.length ?? undefined,
         traitTypes: traitKeys,
       },
+      ...escrow,
     }, req)
   }
 
@@ -123,19 +145,38 @@ Deno.serve(async (req: Request) => {
     const allMints = entries.map((e) => e.mint)
     const { data: metaRows } = await db
       .from('mint_metadata')
-      .select('mint, name, image, symbol')
+      .select('mint, name, image, symbol, spl_token_program, is_mpl_core, is_compressed_nft')
       .in('mint', allMints)
     const metaByMint = new Map((metaRows ?? []).map((m) => [(m.mint as string), m]))
 
     const enriched = entries.map((r) => {
-      const meta = metaByMint.get(r.mint)
+      const meta = metaByMint.get(r.mint) as {
+        name?: string | null
+        image?: string | null
+        symbol?: string | null
+        spl_token_program?: string | null
+        is_mpl_core?: boolean | null
+        is_compressed_nft?: boolean | null
+      } | undefined
       const row = r as { shipment_banner_image?: string | null }
+      const splTokenProgram = (meta?.spl_token_program as 'legacy' | 'token_2022' | null | undefined) ?? null
+      const isMplCore = meta?.is_mpl_core === true
+      const isCompressedNft = meta?.is_compressed_nft === true
       const out: Record<string, unknown> = {
         ...r,
         name: meta?.name ?? null,
         image: meta?.image ?? null,
         symbol: meta?.symbol ?? null,
         shipment_banner_image: row?.shipment_banner_image ?? null,
+        splTokenProgram,
+        isMplCore,
+        isCompressedNft,
+        marketplaceEscrowSupported: isMintSupportedByMarketplaceEscrow({
+          kind: r.kind as 'SPL' | 'NFT',
+          splTokenProgram,
+          isMplCore,
+          isCompressedNft,
+        }),
       }
       if (r.kind === 'NFT') {
         out.collectionSize = memberCountByCollection[r.mint] ?? 0
@@ -202,7 +243,7 @@ Deno.serve(async (req: Request) => {
         .order('mint'),
       db
         .from('mint_metadata')
-        .select('mint, name, image, symbol, trait_index, decimals')
+        .select('mint, name, image, symbol, trait_index, decimals, spl_token_program, is_mpl_core, is_compressed_nft')
         .in('mint', mints),
     ])
 
@@ -222,7 +263,13 @@ Deno.serve(async (req: Request) => {
         symbol?: string | null
         trait_index?: unknown
         decimals?: number | null
+        spl_token_program?: string | null
+        is_mpl_core?: boolean | null
+        is_compressed_nft?: boolean | null
       } | undefined
+      const splTokenProgram = (meta?.spl_token_program as 'legacy' | 'token_2022' | null | undefined) ?? null
+      const isMplCore = meta?.is_mpl_core === true
+      const isCompressedNft = meta?.is_compressed_nft === true
       return {
         ...r,
         name: meta?.name ?? null,
@@ -230,6 +277,15 @@ Deno.serve(async (req: Request) => {
         symbol: meta?.symbol ?? null,
         trait_index: meta?.trait_index ?? null,
         decimals: meta?.decimals ?? null,
+        splTokenProgram,
+        isMplCore,
+        isCompressedNft,
+        marketplaceEscrowSupported: isMintSupportedByMarketplaceEscrow({
+          kind: r.kind as 'SPL' | 'NFT',
+          splTokenProgram,
+          isMplCore,
+          isCompressedNft,
+        }),
         track_holders: w?.track_holders ?? false,
         track_snapshot: w?.track_snapshot ?? false,
         track_transactions: w?.track_transactions ?? false,
@@ -281,6 +337,9 @@ Deno.serve(async (req: Request) => {
       is_mutable: meta.isMutable ?? null,
       edition_nonce: meta.editionNonce ?? null,
       token_standard: meta.tokenStandard ?? null,
+      spl_token_program: meta.splTokenProgram ?? null,
+      is_mpl_core: meta.isMplCore ?? false,
+      is_compressed_nft: meta.isCompressedNft ?? false,
       updated_at: now,
     }, { onConflict: 'mint' })
 
@@ -322,6 +381,15 @@ Deno.serve(async (req: Request) => {
       decimals: meta.decimals ?? null,
       collectionSize: meta.collectionSize ?? undefined,
       uniqueTraitCount: traitKeys?.length ?? undefined,
+      splTokenProgram: meta.splTokenProgram ?? null,
+      isMplCore: meta.isMplCore ?? false,
+      isCompressedNft: meta.isCompressedNft ?? false,
+      marketplaceEscrowSupported: isMintSupportedByMarketplaceEscrow({
+        kind: meta.kind,
+        splTokenProgram: meta.splTokenProgram ?? null,
+        isMplCore: meta.isMplCore ?? false,
+        isCompressedNft: meta.isCompressedNft ?? false,
+      }),
     }
 
     return jsonResponse({ entry, resolved }, req)

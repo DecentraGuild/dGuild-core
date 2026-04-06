@@ -15,6 +15,7 @@
       <AddressBookBrowser
         :kind="bookKind"
         :hide-base-mints="hideBookBaseMints"
+        :require-marketplace-escrow-support="requireMarketplaceEscrowSupport"
         @select="onAddressBookSelect"
       />
       <select
@@ -62,6 +63,7 @@ const props = withDefaults(
     showKindSelector?: boolean
     bookKind?: MintKind
     hideBookBaseMints?: boolean
+    requireMarketplaceEscrowSupport?: boolean
   }>(),
   {
     kind: 'auto',
@@ -73,6 +75,7 @@ const props = withDefaults(
     finePrint: 'If auto-detection fails, select SPL or NFT explicitly and try again.',
     showKindSelector: true,
     hideBookBaseMints: false,
+    requireMarketplaceEscrowSupport: false,
   }
 )
 
