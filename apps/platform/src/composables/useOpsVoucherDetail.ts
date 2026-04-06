@@ -46,7 +46,7 @@ interface VoucherDetail {
   }>
 }
 
-export function useOpsVoucherDetail(mint: Ref<string>) {
+export function useOpsVoucherDetail(mint: Ref<string>, opsAllowed?: Ref<boolean>) {
   const auth = useAuth()
   const toastStore = useTransactionNotificationsStore()
   const opsVoucherDetailTxLock = useSubmitInFlightLock()
@@ -280,7 +280,10 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
 
   watch(
     mint,
-    async (m) => { if (m) await Promise.all([loadDetail(), loadMeters()]) },
+    async (m) => {
+      if (opsAllowed && !opsAllowed.value) return
+      if (m) await Promise.all([loadDetail(), loadMeters()])
+    },
     { immediate: true },
   )
 
@@ -304,7 +307,12 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
 
   watch(
     [detail, () => auth.wallet.value],
-    () => { if (detail.value && mint.value) { loadOurBalance(); loadHolders() } },
+    () => {
+      if (opsAllowed && !opsAllowed.value) return
+      if (detail.value && mint.value) {
+        loadOurBalance(); loadHolders()
+      }
+    },
     { immediate: true },
   )
 

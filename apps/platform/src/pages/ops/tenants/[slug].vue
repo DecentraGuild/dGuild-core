@@ -1,5 +1,5 @@
 <template>
-  <PageSection>
+  <PageSection v-if="opsAccessOk">
     <div class="ops flex flex-col gap-6">
       <header class="ops__header flex flex-col md:flex-row justify-between items-start gap-4">
         <div>
@@ -242,8 +242,8 @@
               <p class="m-0 mb-2 text-xs text-muted-foreground">Manually set paid track counts when billing sync was wrong. Changes apply immediately.</p>
               <div class="flex flex-wrap items-center gap-4">
                 <div v-for="t in watchtowerTracks" :key="t.scopeKey" class="flex items-center gap-2">
-                  <label :for="`track-${t.scopeKey}`" class="text-sm text-muted-foreground">{{ t.label }}</label>
-                  <Input :id="`track-${t.scopeKey}`" v-model.number="watchtowerTrackInputs[t.scopeKey]" type="number" min="0" class="w-16" />
+                  <label :for="`track-${t.formKey}`" class="text-sm text-muted-foreground">{{ t.label }}</label>
+                  <Input :id="`track-${t.formKey}`" v-model.number="watchtowerTrackInputs[t.formKey]" type="number" min="0" class="w-16" />
                 </div>
                 <Button size="xs" variant="default" :disabled="watchtowerTracksSaving" @click="saveWatchtowerTracks">{{ watchtowerTracksSaving ? 'Saving…' : 'Save tracks' }}</Button>
               </div>
@@ -324,6 +324,7 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Tenant detail' })
 
+import { assertPlatformOpsAccess } from '~/composables/assertPlatformOpsAccess'
 import type { TenantConfig } from '@decentraguild/core'
 import { formatDate, formatUsdc } from '@decentraguild/display'
 import { truncateAddress } from '@decentraguild/display'
@@ -340,6 +341,8 @@ import { useOpsTenantBindList } from '~/composables/useOpsTenantBindList'
 import { useOpsTenantModules } from '~/composables/useOpsTenantModules'
 import { useOpsTenantCrafter } from '~/composables/useOpsTenantCrafter'
 import { useOpsTenantBilling } from '~/composables/useOpsTenantBilling'
+
+const opsAccessOk = await assertPlatformOpsAccess()
 
 interface SubscriptionSummary { billingPeriod: string; periodStart: string; periodEnd: string; recurringAmountUsdc: number }
 interface BillingPayment { id: string; tenantSlug: string; moduleId: string; amountUsdc: number; status: string; confirmedAt: string | null; txSignature: string | null }
@@ -436,7 +439,10 @@ const {
   listError: raffleError, fetchUnbound: fetchUnboundRaffles, bind: bindRaffle, unbind: unbindRaffle,
 } = useOpsTenantBindList<{ rafflePubkey: string; name: string }>(tenantId, { fetchAction: 'raffle-fetch-unbound', bindAction: 'raffle-bind', unbindAction: 'raffle-unbind', keyField: 'rafflePubkey', parseUnbound: (data) => (data as { unbound?: Array<{ rafflePubkey: string; name: string }> }).unbound ?? [] }, loadTenant)
 
-onMounted(async () => { await loadTenant() })
+onMounted(async () => {
+  if (!opsAccessOk) return
+  await loadTenant()
+})
 
 function opsSubscriptionHasPeriodEnd(s: SubscriptionSummary): boolean {
   const pe = s.periodEnd

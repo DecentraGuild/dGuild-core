@@ -1,5 +1,5 @@
 <template>
-  <PageSection>
+  <PageSection v-if="opsAccessOk">
     <div class="ops flex flex-col gap-6">
       <header class="ops__header flex flex-col md:flex-row justify-between items-start gap-4">
         <div>
@@ -300,6 +300,7 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Voucher detail' })
 
+import { assertPlatformOpsAccess } from '~/composables/assertPlatformOpsAccess'
 import { formatDate, formatRawTokenAmount, truncateAddress } from '@decentraguild/display'
 import { Icon } from '@iconify/vue'
 import { Button } from '~/components/ui/button'
@@ -309,6 +310,9 @@ import { Input } from '~/components/ui/input'
 import { useExplorerLinks } from '~/composables/useExplorerLinks'
 import { useOpsVoucherDetail } from '~/composables/useOpsVoucherDetail'
 import OpsVoucherEditForm from '~/components/ops/OpsVoucherEditForm.vue'
+
+const opsAccessOk = await assertPlatformOpsAccess()
+const opsAllowedForVoucher = ref(opsAccessOk)
 
 const route = useRoute()
 const router = useRouter()
@@ -323,7 +327,7 @@ const {
   editExpanded, editSaving, editError, editMetadata,
   mintLoading, burnLoading, mintDialogOpen, burnDialogOpen, mintAmount, burnAmount,
   meters, confirmMint, confirmBurn, saveEdit,
-} = useOpsVoucherDetail(mint)
+} = useOpsVoucherDetail(mint, opsAllowedForVoucher)
 
 function onVoucherImageError(e: Event) {
   const el = e.currentTarget
