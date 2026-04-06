@@ -196,6 +196,7 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
     name?: string; symbol?: string; imageUrl?: string; sellerFeeBasisPoints?: number | null
     tokensRequired?: number; label?: string; maxRedemptionsPerTenant?: number | null
     entitlements?: Array<{ meter_key: string; quantity: number; duration_days: number }>
+    republishMetadata?: boolean
   }) {
     if (!detail.value?.voucher?.mint) return
     const exclusive = await opsVoucherDetailTxLock.runExclusive(async () => {
@@ -206,7 +207,13 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
         const rpcUrl = useRpc().rpcUrl.value
         const supabase = useSupabase()
 
+        const priorBps = Math.max(0, Math.min(10000, editMetadata.value?.sellerFeeBasisPoints ?? 0))
+        const payloadBps = Math.max(0, Math.min(10000, payload.sellerFeeBasisPoints ?? priorBps))
+        const sellerFeeChanged = payloadBps !== priorBps
+
         const metadataChanged =
+          Boolean(payload.republishMetadata) ||
+          sellerFeeChanged ||
           (payload.name !== undefined && payload.name !== (editMetadata.value?.name ?? '')) ||
           (payload.symbol !== undefined && payload.symbol !== (editMetadata.value?.symbol ?? '')) ||
           (payload.imageUrl !== undefined && payload.imageUrl !== (editMetadata.value?.image ?? ''))
@@ -214,7 +221,7 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
         const resolvedName = (payload.name ?? editMetadata.value?.name ?? '').trim()
         const resolvedSymbol = (payload.symbol ?? editMetadata.value?.symbol ?? '').trim()
         if (metadataChanged && resolvedName && resolvedSymbol && wallet?.publicKey && rpcUrl) {
-          const sellerFeeBasisPoints = Math.max(0, Math.min(10000, payload.sellerFeeBasisPoints ?? editMetadata.value?.sellerFeeBasisPoints ?? 0))
+          const sellerFeeBasisPoints = payloadBps
           const metaData = await invokeEdgeFunction<{ metadataUri?: string }>(supabase, 'platform', {
             action: 'voucher-prepare-metadata',
             mint: mintAddr,
@@ -241,6 +248,8 @@ export function useOpsVoucherDetail(mint: Ref<string>) {
             name: resolvedName,
             symbol: resolvedSymbol,
             image: imageForSync,
+            metadataUri: uri,
+            sellerFeeBasisPoints,
           })
         }
 

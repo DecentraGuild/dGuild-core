@@ -24,12 +24,12 @@
           variant="ghost"
           size="icon-sm"
           class="raffle-slots__outcomes-toggle"
-        :title="revealOutcomes ? 'Hide winner addresses' : 'Show winner addresses'"
-        :aria-pressed="revealOutcomes"
-        @click="revealOutcomes = !revealOutcomes"
-      >
-        <Icon :icon="revealOutcomes ? 'lucide:eye-off' : 'lucide:eye'" />
-      </Button>
+          :title="revealOutcomes ? 'Hide winner addresses' : 'Show winner addresses'"
+          :aria-pressed="revealOutcomes"
+          @click="revealOutcomes = !revealOutcomes"
+        >
+          <Icon :icon="revealOutcomes ? 'lucide:eye-off' : 'lucide:eye'" />
+        </Button>
       </div>
     </div>
     <p class="admin__hint raffle-slots__hint">Each slot holds one raffle. Click the plus to create a new raffle in that slot.</p>
@@ -56,8 +56,8 @@
           @pause="$emit('pause', slot)"
           @resume="$emit('resume', slot)"
           @edit="$emit('edit', slot)"
-            @reveal-winner="$emit('revealWinner', slot)"
-            @play-battle-reveal="$emit('playBattleReveal', slot)"
+          @reveal-winner="$emit('revealWinner', slot)"
+          @play-battle-reveal="$emit('playBattleReveal', slot)"
           @distribute-reward="$emit('distributeReward', slot)"
           @claim-proceeds="$emit('claimProceeds', slot)"
           @refund-prize-before-start="$emit('refundPrizeBeforeStart', slot)"

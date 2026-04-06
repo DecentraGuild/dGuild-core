@@ -47,6 +47,17 @@
       />
       <p class="text-muted-foreground text-xs m-0">0–10000 (100 = 1%)</p>
     </div>
+    <div class="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3">
+      <input
+        id="edit-republish-metadata"
+        v-model="republishMetadata"
+        type="checkbox"
+        class="mt-1 h-4 w-4 shrink-0 rounded border-input"
+      >
+      <label for="edit-republish-metadata" class="cursor-pointer text-sm leading-snug text-foreground">
+        Re-publish metadata on-chain (new JSON URI). Use if wallets or the address book still show old artwork even after changing the image URL.
+      </label>
+    </div>
     <template v-if="voucher.type === 'bundle'">
       <div class="space-y-2">
         <label class="text-sm font-medium text-foreground">Bundle</label>
@@ -148,6 +159,7 @@ const emit = defineEmits<{
     label?: string
     maxRedemptionsPerTenant?: number | null
     entitlements?: Array<{ meter_key: string; quantity: number; duration_days: number }>
+    republishMetadata?: boolean
   }]
 }>()
 
@@ -164,6 +176,8 @@ const individualForm = ref({
 })
 const localMaxRedemptions = ref<number | undefined>(props.initialMaxRedemptions ?? undefined)
 
+const republishMetadata = ref(false)
+
 watch(
   () => [
     props.voucher,
@@ -178,6 +192,7 @@ watch(
   ] as const,
   ([v, name, symbol, imageUrl, sellerFee, tokens, label, ents, max]) => {
     if (v) {
+      republishMetadata.value = false
       metadataForm.value.name = name ?? ''
       metadataForm.value.symbol = symbol ?? ''
       metadataForm.value.imageUrl = imageUrl ?? ''
@@ -206,6 +221,7 @@ function onSubmit() {
     imageUrl: metadataForm.value.imageUrl?.trim() || undefined,
     sellerFeeBasisPoints: metadataForm.value.sellerFeeBasisPoints ?? 0,
     maxRedemptionsPerTenant: localMaxRedemptions.value ?? undefined,
+    republishMetadata: republishMetadata.value ? true : undefined,
   }
   if (props.voucher?.type === 'bundle') {
     emit('save', {

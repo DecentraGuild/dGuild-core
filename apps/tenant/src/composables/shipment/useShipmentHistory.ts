@@ -57,11 +57,14 @@ export function useShipmentHistory(tenantId: Ref<string | null | undefined>) {
 
   async function loadLeavesForShipment(recordId: number) {
     if (leavesByRecordId.value[recordId]) return
+    const id = tenantId.value
+    if (!id) return
     leavesLoadingId.value = recordId
     try {
       const { data, error: err } = await supabase
         .from('shipment_compressed_leaves')
         .select('recipient_wallet, leaf_hash_decimal, amount_raw')
+        .eq('tenant_id', id)
         .eq('shipment_record_id', recordId)
         .order('id', { ascending: true })
       if (err) throw new Error(err.message)

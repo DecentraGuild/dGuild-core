@@ -200,6 +200,8 @@ export function useOpsVouchers() {
           name: metadataForm.name.trim(),
           symbol: metadataForm.symbol.trim(),
           image: metadataForm.imageUrl?.trim() || null,
+          metadataUri: uri,
+          sellerFeeBasisPoints,
         })
 
         toastStore.add(toastId, { status: 'success', message: `${metadataOnChain ? 'Metadata updated' : 'Metadata created'} & voucher linked: ${mint.slice(0, 8)}…`, signature: metaSig })

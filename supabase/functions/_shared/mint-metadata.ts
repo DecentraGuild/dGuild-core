@@ -44,6 +44,71 @@ function traitIndexFromDasAsset(asset: Record<string, unknown>): Record<string, 
   }
 }
 
+function normalizeMetadataJsonUri(uri: string): string | null {
+  const t = uri.trim()
+  if (!t || t.startsWith('http://localhost')) return null
+  if (t.startsWith('ipfs://')) {
+    return `https://ipfs.io/ipfs/${t.replace('ipfs://', '').replace(/^\/+/, '')}`
+  }
+  if (t.startsWith('ar://')) {
+    return `https://arweave.net/${t.replace('ar://', '').replace(/^\/+/, '')}`
+  }
+  if (t.startsWith('http://') || t.startsWith('https://')) return t
+  return null
+}
+
+async function fetchImageFromMetadataJsonUri(jsonUri: string): Promise<string | null> {
+  const url = normalizeMetadataJsonUri(jsonUri)
+  if (!url) return null
+  try {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 8000)
+    const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } })
+    clearTimeout(t)
+    if (!res.ok) return null
+    const json = (await res.json()) as { image?: string; image_url?: string }
+    const img = json.image ?? json.image_url
+    return typeof img === 'string' && img.trim() ? img.trim() : null
+  } catch {
+    return null
+  }
+}
+
+/** Prefer DAS-native fields; fungible Metaplex mints often omit content.links.image until JSON is fetched. */
+export function extractImageFromDasAsset(asset: Record<string, unknown>): string | null {
+  const content = asset.content as Record<string, unknown> | undefined
+  if (!content) return null
+  const links = content.links as Record<string, unknown> | undefined
+  const li = links?.image
+  if (typeof li === 'string' && li.trim()) return li.trim()
+  const files = content.files as Array<Record<string, unknown>> | undefined
+  if (files?.length) {
+    const f0 = files[0]
+    const u = (f0?.uri ?? f0?.cdn_uri ?? f0?.cdnUri) as string | undefined
+    if (typeof u === 'string' && u.trim()) return u.trim()
+  }
+  const json = content.json as Record<string, unknown> | undefined
+  if (json) {
+    const ji = json.image ?? json.image_url
+    if (typeof ji === 'string' && ji.trim()) return ji.trim()
+  }
+  const metadata = content.metadata as Record<string, unknown> | undefined
+  const mi = metadata?.image
+  if (typeof mi === 'string' && mi.trim()) return mi.trim()
+  return null
+}
+
+async function resolveDasImage(asset: Record<string, unknown>): Promise<string | null> {
+  const direct = extractImageFromDasAsset(asset)
+  if (direct) return direct
+  const ext = extractExtendedMetadata(asset)
+  if (ext.uri) {
+    const fromJson = await fetchImageFromMetadataJsonUri(ext.uri)
+    if (fromJson) return fromJson
+  }
+  return null
+}
+
 /** Extract extended metadata from DAS getAsset result. */
 export function extractExtendedMetadata(asset: Record<string, unknown> | null | undefined): {
   updateAuthority: string | null
@@ -62,7 +127,8 @@ export function extractExtendedMetadata(asset: Record<string, unknown> | null | 
   const royalty = asset.royalty as Record<string, unknown> | undefined
   const authorities = (asset.authorities as Array<{ address?: string; scopes?: string[] }>) ?? []
   const updateAuth = authorities.find((a) => (a.scopes ?? []).includes('update') || (a.scopes ?? []).includes('full'))?.address ?? authorities[0]?.address ?? null
-  const uri = (content?.json_uri as string) ?? null
+  const uriRaw = (content?.json_uri as string) ?? (content?.uri as string) ?? null
+  const uri = uriRaw && uriRaw.trim() ? uriRaw.trim() : null
   const bps = typeof meta?.seller_fee_basis_points === 'number' ? meta.seller_fee_basis_points : (typeof royalty?.basis_points === 'number' ? royalty.basis_points : null)
   const sellerFeeBasisPoints = bps != null && bps >= 0 && bps <= 10000 ? bps : null
   const primarySaleHappened = typeof royalty?.primary_sale_happened === 'boolean' ? royalty.primary_sale_happened : null
@@ -71,7 +137,7 @@ export function extractExtendedMetadata(asset: Record<string, unknown> | null | 
   const tokenStandard = (asset.interface as string) ?? (meta?.token_standard as string) ?? null
   return {
     updateAuthority: updateAuth ?? null,
-    uri: uri && uri.trim() ? uri.trim() : null,
+    uri,
     sellerFeeBasisPoints,
     primarySaleHappened,
     isMutable,
@@ -145,10 +211,9 @@ export async function fetchMintMetadata(
         const assetResult = metaData.result
         if (!assetResult) return null
         const assetMeta = (assetResult.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
-        const links = (assetResult.content as Record<string, unknown>)?.links as Record<string, unknown> | undefined
         const name = assetMeta?.name as string ?? null
-        const image = links?.image as string ?? null
         const ext = extractExtendedMetadata(assetResult as Record<string, unknown>)
+        const image = await resolveDasImage(assetResult as Record<string, unknown>)
         return {
           kind: 'NFT',
           name,
@@ -187,13 +252,12 @@ export async function fetchMintMetadata(
     if (kindHint === 'NFT' && classified !== 'NFT') return null
 
     const meta = (asset.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
-    const links = (asset.content as Record<string, unknown>)?.links as Record<string, unknown> | undefined
     const tokenInfo = asset.token_info as Record<string, unknown> | undefined
     const name = meta?.name as string ?? null
     const symbol = meta?.symbol as string ?? null
-    const image = links?.image as string ?? null
     const decimals = typeof tokenInfo?.decimals === 'number' ? tokenInfo.decimals : onChain.decimals
     const ext = extractExtendedMetadata(asset as Record<string, unknown>)
+    const image = await resolveDasImage(asset as Record<string, unknown>)
 
     if (classified === 'NFT') {
       return {
