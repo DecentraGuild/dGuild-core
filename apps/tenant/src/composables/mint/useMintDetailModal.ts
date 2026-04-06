@@ -1,3 +1,4 @@
+import { onScopeDispose, watch } from 'vue'
 import { formatRawTokenAmount, truncateAddress } from '@decentraguild/display'
 import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useCollectionMembers } from '~/composables/mint/useCollectionMembers'
@@ -103,7 +104,47 @@ export function useMintDetailModal(
   const nftMintForCollection = computed(() =>
     props.modelValue.value && isCatalog.value && display.value?.kind === 'NFT' ? display.value.mint : null
   )
-  const { assets, loading: assetsLoading } = useCollectionMembers(nftMintForCollection)
+  const { assets, loading: assetsLoading, fetch: refetchCollectionMembers } = useCollectionMembers(nftMintForCollection)
+
+  let membersPollId: ReturnType<typeof setInterval> | null = null
+  watch(
+    () => [props.modelValue.value, nftMintForCollection.value, isCatalog.value] as const,
+    ([open, mint, catalog]) => {
+      if (membersPollId) {
+        clearInterval(membersPollId)
+        membersPollId = null
+      }
+      if (!open || !mint || !catalog) return
+      let n = 0
+      membersPollId = setInterval(() => {
+        n++
+        if (n > 24 || !props.modelValue.value) {
+          if (membersPollId) clearInterval(membersPollId)
+          membersPollId = null
+          return
+        }
+        if (assets.value.length > 0) {
+          if (membersPollId) clearInterval(membersPollId)
+          membersPollId = null
+          return
+        }
+        if (!assetsLoading.value) void refetchCollectionMembers()
+      }, 4000)
+    },
+    { immediate: true },
+  )
+  onScopeDispose(() => {
+    if (membersPollId) clearInterval(membersPollId)
+  })
+
+  const showCatalogCollectionIndexingHint = computed(
+    () =>
+      props.modelValue.value &&
+      isCatalog.value &&
+      display.value?.kind === 'NFT' &&
+      !assetsLoading.value &&
+      assets.value.length === 0,
+  )
 
   const memberNfts = computed(() => {
     if (isWatchtower.value && fetchedDetail.value?.memberNfts?.length) {
@@ -565,5 +606,6 @@ export function useMintDetailModal(
     shipmentBannerImage, shipmentBannerSaving, jsonPreview,
     close, copyMint, copyToClipboard, onHoldersCopy, formatHolderAmount, toggleSnapshot, saveShipmentBanner,
     explorerLinks, truncateAddress,
+    showCatalogCollectionIndexingHint,
   }
 }

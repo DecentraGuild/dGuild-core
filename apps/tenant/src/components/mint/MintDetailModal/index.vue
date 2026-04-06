@@ -56,6 +56,12 @@
               @copy-mint="copyMint"
             />
             <MintDetailModalTraitTypes v-if="display.kind === 'NFT'" :display="display" />
+            <p
+              v-if="showCatalogCollectionIndexingHint"
+              class="mint-modal__muted mint-modal__section"
+            >
+              Collection items are indexed in the background; this list refreshes automatically.
+            </p>
             <MintDetailModalHoldersNfts
               v-if="showHoldersAndNftsSection"
               v-model="memberNftView"
@@ -168,6 +174,7 @@ const {
   shipmentBannerImage, shipmentBannerSaving, jsonPreview,
   close, copyMint, copyToClipboard, onHoldersCopy, formatHolderAmount, toggleSnapshot, saveShipmentBanner,
   explorerLinks, truncateAddress,
+  showCatalogCollectionIndexingHint,
 } = useMintDetailModal(
   {
     modelValue: toRef(props, 'modelValue'),

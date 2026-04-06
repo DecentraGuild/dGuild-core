@@ -36,7 +36,7 @@ export function useOpsMetadataRefresh() {
     metadataRefreshError.value = null
     try {
       const supabase = useSupabase()
-      const res = await invokeEdgeFunction<{ refreshed?: number; total?: number; trackedTotal?: number; message?: string; nextOffset?: number | null }>(supabase, 'marketplace', { action: 'metadata-refresh-all', limit, offset: metadataRefreshOffset.value })
+      const res = await invokeEdgeFunction<{ refreshed?: number; total?: number; trackedTotal?: number; message?: string; nextOffset?: number | null; enqueuedCollections?: number }>(supabase, 'mint-catalog-index', { mode: 'ops-refresh', limit, offset: metadataRefreshOffset.value })
       const msg = res.message ?? `Refreshed ${res.refreshed ?? 0} of ${res.total ?? 0} mints${res.trackedTotal != null ? ` (${res.trackedTotal} in catalog scope)` : ''}.`
       metadataRefreshResult.value = msg + (res.nextOffset != null ? ' Click again to continue.' : '')
       metadataRefreshOffset.value = res.nextOffset ?? 0
