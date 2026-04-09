@@ -1,57 +1,35 @@
 <template>
   <div class="flag-carousel" role="group" :aria-label="ariaLabel">
-    <button
-      type="button"
-      class="flag-carousel__arrow"
-      aria-label="Previous module"
-      :disabled="!canGoPrev"
-      @click="goPrev"
+    <div
+      ref="scrollerRef"
+      class="flag-carousel__track"
+      role="listbox"
+      tabindex="0"
+      @keydown="onKeydown"
     >
-      <Icon icon="mdi:chevron-left" class="flag-carousel__arrow-icon" aria-hidden="true" />
-    </button>
-
-    <div class="flag-carousel__wheel-zone">
-      <div
-        ref="scrollerRef"
-        class="flag-carousel__track"
-        role="listbox"
-        tabindex="0"
-        @keydown="onKeydown"
+      <button
+        v-for="entry in modules"
+        :id="`module-flag-${entry.id}`"
+        :key="entry.id"
+        type="button"
+        role="option"
+        :aria-selected="selectedId === entry.id"
+        class="flag-tile"
+        :class="{
+          'flag-tile--selected': selectedId === entry.id,
+          'flag-tile--dguild': entry.id === 'dguild',
+        }"
+        @click="emit('select', entry.id)"
       >
-        <button
-          v-for="entry in modules"
-          :id="`module-flag-${entry.id}`"
-          :key="entry.id"
-          type="button"
-          role="option"
-          :aria-selected="selectedId === entry.id"
-          class="flag-tile"
-          :class="{
-            'flag-tile--selected': selectedId === entry.id,
-            'flag-tile--dguild': entry.id === 'dguild',
-          }"
-          @click="emit('select', entry.id)"
-        >
-          <span class="flag-tile__bg" aria-hidden="true" />
-          <span class="flag-tile__face">
-            <span class="flag-tile__icon-wrap">
-              <Icon :icon="flagIcon(entry)" class="flag-tile__icon" aria-hidden="true" />
-            </span>
-            <span class="flag-tile__name">{{ entry.name }}</span>
+        <span class="flag-tile__bg" aria-hidden="true" />
+        <span class="flag-tile__face">
+          <span class="flag-tile__icon-wrap">
+            <Icon :icon="flagIcon(entry)" class="flag-tile__icon" aria-hidden="true" />
           </span>
-        </button>
-      </div>
+          <span class="flag-tile__name">{{ entry.name }}</span>
+        </span>
+      </button>
     </div>
-
-    <button
-      type="button"
-      class="flag-carousel__arrow"
-      aria-label="Next module"
-      :disabled="!canGoNext"
-      @click="goNext"
-    >
-      <Icon icon="mdi:chevron-right" class="flag-carousel__arrow-icon" aria-hidden="true" />
-    </button>
   </div>
 </template>
 
@@ -101,12 +79,6 @@ const selectedIndex = computed(() => {
   return props.modules.findIndex((m) => m.id === props.selectedId)
 })
 
-const canGoPrev = computed(() => selectedIndex.value > 0)
-const canGoNext = computed(() => {
-  const i = selectedIndex.value
-  return i >= 0 && i < props.modules.length - 1
-})
-
 function flagIcon(entry: ModuleCatalogEntry) {
   return entry.id === 'dguild' ? 'mdi:home' : entry.icon
 }
@@ -152,16 +124,6 @@ onUnmounted(() => {
   removeWheelListener?.()
 })
 
-function goPrev() {
-  const i = selectedIndex.value
-  if (i > 0) focusIndex(i - 1)
-}
-
-function goNext() {
-  const i = selectedIndex.value
-  if (i >= 0 && i < props.modules.length - 1) focusIndex(i + 1)
-}
-
 function onKeydown(e: KeyboardEvent) {
   const ids = props.modules.map((m) => m.id)
   const i = ids.findIndex((id) => id === props.selectedId)
@@ -185,16 +147,7 @@ function onKeydown(e: KeyboardEvent) {
 
 <style scoped>
 .flag-carousel {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: var(--theme-space-xs);
   width: 100%;
-  min-width: 0;
-}
-
-.flag-carousel__wheel-zone {
-  flex: 1;
   min-width: 0;
 }
 
@@ -216,41 +169,6 @@ function onKeydown(e: KeyboardEvent) {
   border-radius: var(--theme-radius-sm);
 }
 
-.flag-carousel__arrow {
-  flex-shrink: 0;
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  padding: 0;
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-md);
-  background: var(--theme-bg-card);
-  color: var(--theme-text-primary);
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    opacity 0.15s ease;
-}
-
-.flag-carousel__arrow:hover:not(:disabled) {
-  border-color: var(--theme-primary);
-  color: var(--theme-primary);
-}
-
-.flag-carousel__arrow:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.flag-carousel__arrow-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
 .flag-tile {
   position: relative;
   flex: 0 0 auto;
@@ -269,7 +187,7 @@ function onKeydown(e: KeyboardEvent) {
   inset: 0;
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), 50% 100%, 0 calc(100% - 14px));
   background: var(--flag-accent, rgba(0, 212, 255, 0.85));
-  opacity: 0.75;
+  opacity: 0.28;
   transition: opacity 0.2s ease;
   z-index: 0;
 }
@@ -285,19 +203,21 @@ function onKeydown(e: KeyboardEvent) {
   min-height: 7rem;
   clip-path: polygon(1% 0, 99% 0, 99% calc(100% - 15px), 50% 99%, 1% calc(100% - 15px));
   background: var(--theme-bg-card);
-  border: 2px solid var(--theme-border);
+  border: 2px solid color-mix(in srgb, var(--theme-border) 58%, var(--theme-text-muted) 42%);
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease;
 }
 
-.flag-tile:hover .flag-tile__face {
-  border-color: color-mix(in srgb, var(--theme-primary) 55%, var(--theme-border));
+.flag-tile:not(.flag-tile--selected):hover .flag-tile__face {
+  border-color: color-mix(in srgb, var(--theme-border) 40%, var(--theme-text-secondary) 60%);
 }
 
 .flag-tile--selected .flag-tile__face {
   border-color: var(--theme-primary);
-  box-shadow: 0 0 0 1px var(--theme-primary);
+  box-shadow:
+    0 0 0 1px var(--theme-primary),
+    0 0 16px color-mix(in srgb, var(--theme-primary) 28%, transparent);
 }
 
 .flag-tile--selected .flag-tile__bg {
@@ -327,7 +247,20 @@ function onKeydown(e: KeyboardEvent) {
   justify-content: center;
   width: 2.5rem;
   height: 2.5rem;
+  color: var(--theme-text-muted);
+  transition: color 0.2s ease;
+}
+
+.flag-tile:not(.flag-tile--selected):hover .flag-tile__icon-wrap {
+  color: color-mix(in srgb, var(--theme-text-muted) 35%, var(--theme-text-secondary) 65%);
+}
+
+.flag-tile--selected .flag-tile__icon-wrap {
   color: var(--theme-primary);
+}
+
+.flag-tile--selected:hover .flag-tile__icon-wrap {
+  color: var(--theme-primary-hover);
 }
 
 .flag-tile__icon {
@@ -346,15 +279,4 @@ function onKeydown(e: KeyboardEvent) {
   overflow: hidden;
 }
 
-@media (max-width: 479px) {
-  .flag-carousel__arrow {
-    width: 2rem;
-    height: 2rem;
-  }
-
-  .flag-carousel__arrow-icon {
-    width: 1.25rem;
-    height: 1.25rem;
-  }
-}
 </style>

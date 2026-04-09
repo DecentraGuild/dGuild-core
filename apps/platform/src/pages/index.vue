@@ -8,7 +8,14 @@
         <div class="home__catalog-inner">
           <h2 id="home-modules-heading" class="home__heading">Modules</h2>
 
-          <ModuleCatalogDetailPanel :entry="selectedEntry" />
+          <ModuleCatalogWindowRow
+            :can-go-prev="canGoPrev"
+            :can-go-next="canGoNext"
+            @prev="goPrev"
+            @next="goNext"
+          >
+            <ModuleCatalogDetailPanel :entry="selectedEntry" />
+          </ModuleCatalogWindowRow>
 
           <ModuleFlagCarousel
             :modules="displayModules"
@@ -31,7 +38,9 @@ import {
 } from '@decentraguild/catalog'
 import type { ModuleCatalogEntry } from '@decentraguild/catalog'
 import ModuleCatalogDetailPanel from '~/components/home/ModuleCatalogDetailPanel.vue'
+import ModuleCatalogWindowRow from '~/components/home/ModuleCatalogWindowRow.vue'
 import ModuleFlagCarousel from '~/components/home/ModuleFlagCarousel.vue'
+import { useModuleCarouselNav } from '~/composables/useModuleCarouselNav'
 
 const route = useRoute()
 const router = useRouter()
@@ -92,6 +101,12 @@ function onSelectModule(id: string) {
   selectedModuleId.value = id
   void router.replace({ query: { ...route.query, module: id } })
 }
+
+const { canGoPrev, canGoNext, goPrev, goNext } = useModuleCarouselNav(
+  displayModules,
+  selectedModuleId,
+  onSelectModule,
+)
 </script>
 
 <style scoped>
