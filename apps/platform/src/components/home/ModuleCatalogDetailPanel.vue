@@ -47,6 +47,9 @@
 
       <div v-if="isDguild" class="module-panel__col module-panel__col--actions">
         <p class="module-panel__topic">Get started</p>
+        <ul v-if="dguildPricingLines.length" class="module-panel__dguild-pricing">
+          <li v-for="(line, i) in dguildPricingLines" :key="i">{{ line }}</li>
+        </ul>
         <div class="module-panel__actions">
           <NuxtLink to="/onboard" class="module-panel__cta">
             <Button class="w-full sm:w-auto">Create org</Button>
@@ -137,6 +140,10 @@ function parsePricingLines(raw: string | undefined): string[] {
 }
 
 const pricingLines = computed(() => parsePricingLines(props.entry?.docs?.pricing))
+
+const dguildPricingLines = computed(() =>
+  isDguild.value ? parsePricingLines(props.entry?.docs?.pricing) : [],
+)
 </script>
 
 <style scoped>
@@ -274,6 +281,20 @@ const pricingLines = computed(() => parsePricingLines(props.entry?.docs?.pricing
 
 .module-panel__learn-more:hover {
   color: var(--theme-primary-hover);
+}
+
+.module-panel__dguild-pricing {
+  margin: 0 0 var(--theme-space-md);
+  padding-left: var(--theme-space-lg);
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+  list-style: disc;
+  line-height: 1.45;
+}
+
+.module-panel__dguild-pricing li {
+  margin: 0;
 }
 
 .module-panel__col--actions .module-panel__actions {
