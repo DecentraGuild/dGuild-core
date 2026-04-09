@@ -4,6 +4,7 @@
       <Icon icon="mdi:home" height="none" class="dguild-center__bg-icon-svg" />
     </span>
     <div class="dguild-center__left">
+      <p v-if="registrationPricingLine" class="dguild-center__pricing">{{ registrationPricingLine }}</p>
       <NuxtLink to="/onboard" class="dguild-center__cta">
         <Button size="sm">Create org</Button>
       </NuxtLink>
@@ -31,7 +32,13 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
+import { getModuleCatalogEntry } from '@decentraguild/catalog'
 import { Button } from '~/components/ui/button'
+
+const registrationPricingLine = computed(() => {
+  const raw = getModuleCatalogEntry('dguild')?.docs?.pricing?.trim()
+  return raw ? raw.replace(/\s*\n+\s*/g, ' ').trim() : ''
+})
 
 const config = useRuntimeConfig()
 const dguildDocsUrl = computed(() => {
@@ -113,6 +120,16 @@ const protocolLayer =
   padding: var(--theme-space-xl);
   min-width: 140px;
   color: var(--theme-text-primary);
+}
+
+.dguild-center__pricing {
+  margin: 0 0 var(--theme-space-md);
+  max-width: 11rem;
+  font-size: var(--theme-font-sm);
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--theme-text-secondary);
 }
 
 .dguild-center__cta {
