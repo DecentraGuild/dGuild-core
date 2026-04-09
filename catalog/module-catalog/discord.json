@@ -22,7 +22,7 @@
     "overview": "This module connects your guild to Discord and automates community roles based on blockchain data.",
     "mechanics": "Users link wallets\n\nConditions determine role assignment\n\nSync runs periodically\n\nWorks across multiple guilds",
     "setup": "Invite bot\n\nConnect server\n\nDefine roles\n\nApply conditions\n\nActivate sync",
-    "pricing": "Included (depends on Watchtower usage)"
+    "pricing": "Free module"
   },
   "activationInstructions": {
     "intro": "Bridge your guildhall and your Discord keep. Let roles be earned, not granted.",

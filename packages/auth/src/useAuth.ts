@@ -23,7 +23,20 @@ import {
   type ConnectorStateSnapshot,
 } from '@decentraguild/web3/wallet'
 import type { WalletConnectorId } from '@solana/connector/headless'
+import type { User } from '@supabase/supabase-js'
 import { getBrowserClient } from './supabase-client'
+
+export function walletFromSupabaseUser(user: User): string | null {
+  const meta = user.user_metadata as Record<string, unknown> | undefined
+  if (!meta) return null
+  const custom = meta.custom_claims as Record<string, unknown> | undefined
+  const raw =
+    (typeof meta.wallet_address === 'string' && meta.wallet_address) ||
+    (typeof custom?.address === 'string' && custom.address) ||
+    ''
+  const t = raw.trim()
+  return t || null
+}
 
 // Shared state: layout, AuthWidget, and plugin all see the same session.
 const wallet = ref<string | null>(null)
@@ -85,17 +98,12 @@ export function useAuth() {
     loading.value = true
     error.value = null
     try {
-      const { data } = await getClient().auth.getSession()
-      const session = data.session
-      if (session) {
-        const addr = (session.user?.user_metadata?.wallet_address as string) ?? null
+      const { data: { user } } = await getClient().auth.getUser()
+      if (user) {
+        const addr = walletFromSupabaseUser(user)
         if (addr) wallet.value = addr
       }
-      // Do NOT clear wallet when session is null or missing wallet_address (e.g. token
-      // refresh with minimal payload): getSession can return null during
-      // tab switch / token refresh races. Only clear on explicit signOut or SIGNED_OUT.
     } catch {
-      // On error, don't clear: could be transient. signOut handles explicit logout.
     } finally {
       loading.value = false
     }

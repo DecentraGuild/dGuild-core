@@ -15,7 +15,7 @@ import {
   runMobileWalletStandardWarmup,
   registerSolanaMobileWalletAdapter,
 } from '@decentraguild/web3/wallet'
-import { useAuth } from './useAuth'
+import { useAuth, walletFromSupabaseUser } from './useAuth'
 import { getBrowserClient } from './supabase-client'
 
 /** Same host rule as SIWS: connector metadata / WalletConnect icons must match the live origin. */
@@ -64,13 +64,9 @@ export default defineNuxtPlugin(async () => {
   void auth.fetchMe()
 
   supabase.auth.onAuthStateChange((_event, session) => {
-    if (session) {
-      const addr = session.user?.user_metadata?.wallet_address as string | undefined
-      // Only set when we have an address. Token refresh can send session with minimal
-      // user_metadata; do not overwrite wallet with null and drop the user's login.
+    if (session?.user) {
+      const addr = walletFromSupabaseUser(session.user)
       if (addr) auth.wallet.value = addr
     }
-    // Never clear from events: Supabase fires spurious null on tab switch / refresh.
-    // Only signOut() clears.
   })
 })
