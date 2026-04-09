@@ -72,7 +72,7 @@ const props = defineProps<{
 
 const cardStyle = computed(() => {
   const logo = props.tenant?.branding?.logo
-  if (!logo) return { background: 'var(--theme-bg-secondary)' }
+  if (!logo) return { backgroundColor: 'var(--theme-bg-card)' }
   return {
     backgroundImage: `url(${logo})`,
   }
@@ -94,12 +94,8 @@ const cardStyle = computed(() => {
 .discovery-card__overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.9) 0%,
-    rgba(0, 0, 0, 0.5) 50%,
-    rgba(0, 0, 0, 0.2) 100%
-  );
+  background: color-mix(in srgb, var(--theme-bg-secondary) 86%, transparent);
+  pointer-events: none;
 }
 
 .discovery-card__content {
