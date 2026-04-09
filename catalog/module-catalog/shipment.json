@@ -24,7 +24,7 @@
     "overview": "Shipment is your distribution system. It allows you to send tokens to large groups efficiently.",
     "mechanics": "Uses condition engine or JSON lists\n\nExecutes via ship wallet\n\nUses ZK compression for cost efficiency\n\nResults stored after execution",
     "setup": "Create/import ship wallet\n\nFund wallet\n\nBuild recipient list\n\nExecute shipment",
-    "pricing": "Free module\n\nCost per recipient (network/compression dependent)"
+    "pricing": "Free module\nCost per recipient (network/compression dependent)"
   },
   "activationInstructions": {
     "intro": "Create shipment lists and ship tokens to your community.",

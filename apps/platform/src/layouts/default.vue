@@ -11,8 +11,8 @@
           <span class="platform-header__brand-text">DecentraGuild</span>
         </NuxtLink>
         <nav class="platform-header__nav platform-header__nav--desktop" aria-label="Main">
-          <NuxtLink to="/" class="platform-header__link">Discover</NuxtLink>
-          <NuxtLink to="/modules" :prefetch="false" class="platform-header__link">Modules</NuxtLink>
+          <NuxtLink to="/" class="platform-header__link">Home</NuxtLink>
+          <NuxtLink to="/discover" :prefetch="false" class="platform-header__link">Discover</NuxtLink>
           <NuxtLink to="/onboard" class="platform-header__link">Create</NuxtLink>
         </nav>
       </div>
@@ -38,15 +38,15 @@
                 class="flex min-h-11 items-center rounded-md px-3 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 @click="mobileNavOpen = false"
               >
-                Discover
+                Home
               </NuxtLink>
               <NuxtLink
-                to="/modules"
+                to="/discover"
                 :prefetch="false"
                 class="flex min-h-11 items-center rounded-md px-3 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 @click="mobileNavOpen = false"
               >
-                Modules
+                Discover
               </NuxtLink>
               <NuxtLink
                 to="/onboard"
@@ -64,7 +64,10 @@
       </div>
     </header>
 
-    <main class="platform-main">
+    <main
+      class="platform-main"
+      :class="{ 'platform-main--flush-top': isHomeRoute }"
+    >
       <slot />
     </main>
     <ClientOnly>
@@ -91,6 +94,8 @@ import {
 
 const route = useRoute()
 const mobileNavOpen = ref(false)
+
+const isHomeRoute = computed(() => route.path === '/')
 
 watch(
   () => route.path,
@@ -195,6 +200,10 @@ watch(
   padding: var(--theme-space-xl);
 }
 
+.platform-main--flush-top {
+  padding-top: 0;
+}
+
 @media (max-width: 767px) {
   .platform-header {
     padding: 0 var(--theme-space-md);
@@ -210,6 +219,10 @@ watch(
 
   .platform-main {
     padding: var(--theme-space-md);
+  }
+
+  .platform-main--flush-top {
+    padding-top: 0;
   }
 }
 </style>

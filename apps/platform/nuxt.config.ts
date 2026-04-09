@@ -22,12 +22,15 @@ export default defineNuxtConfig({
   },
   css: [uiVarsCss, '~/assets/global.css', '~/assets/platform-theme.css'],
   plugins: ['~/plugins/buffer.server', '~/plugins/buffer.client', '@decentraguild/auth/plugin.client'],
-  routeRules: {},
+  routeRules: {
+    '/modules': { redirect: { to: '/', statusCode: 301 } },
+  },
   nitro: {
     preset: 'static',
     prerender: {
       routes: [
-        '/modules',
+        '/',
+        '/discover',
         '/docs',
         '/docs/general/getting-started',
         '/docs/general/creating-a-dguild',

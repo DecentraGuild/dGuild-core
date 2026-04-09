@@ -25,7 +25,7 @@
     "overview": "Crafter is your on-chain forge. It allows you to create fungible tokens that can power access systems, rewards, currencies, or community mechanics.",
     "mechanics": "Creates SPL tokens (legacy standard)\n\nMetadata stored via API or external URI\n\nFull lifecycle control: Mint, Burn, Edit metadata",
     "setup": "Activate Crafter\n\nCreate a token (name, symbol, image)\n\nPay creation fee\n\nManage supply as needed",
-    "pricing": "5 USDC per token (one-time)\n\nNetwork fees apply for minting/burning"
+    "pricing": "5 USDC per token (one-time)\nNetwork fees apply for minting/burning"
   },
   "activationInstructions": {
     "intro": "Forge your tokens. Create SPL fungibles for access passes, tickets, or any on-chain asset.",
