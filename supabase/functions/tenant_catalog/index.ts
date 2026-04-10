@@ -88,6 +88,7 @@ Deno.serve(async (req: Request) => {
         collectionSize: meta.collectionSize ?? undefined,
         uniqueTraitCount: traitKeys?.length ?? undefined,
         traitTypes: traitKeys,
+        nftCollectionSyncMode: meta.nftCollectionSyncMode ?? 'das_group',
       },
       ...escrow,
     }, req)
@@ -96,7 +97,7 @@ Deno.serve(async (req: Request) => {
   if (action === 'list') {
     const { data: rows, error } = await db
       .from('tenant_mint_catalog')
-      .select('id, mint, kind, label, shipment_banner_image')
+      .select('id, mint, kind, label, shipment_banner_image, nft_collection_sync_mode')
       .eq('tenant_id', tenantId)
       .order('mint')
 
@@ -343,6 +344,9 @@ Deno.serve(async (req: Request) => {
       updated_at: now,
     }, { onConflict: 'mint' })
 
+    const nftCollectionSyncMode =
+      kind === 'NFT' ? (meta.nftCollectionSyncMode ?? 'das_group') : null
+
     const { data: entry, error } = await db
       .from('tenant_mint_catalog')
       .upsert(
@@ -352,6 +356,7 @@ Deno.serve(async (req: Request) => {
           kind,
           label: label ?? null,
           shipment_banner_image: shipmentBannerImage,
+          nft_collection_sync_mode: nftCollectionSyncMode,
           updated_at: now,
         },
         { onConflict: 'tenant_id,mint' },
@@ -366,8 +371,12 @@ Deno.serve(async (req: Request) => {
         { tenant_id: tenantId, collection_mint: mint },
         { onConflict: 'tenant_id,collection_mint' },
       )
-      const { enqueueCollectionIndexing } = await import('../_shared/mint-catalog-index-worker.ts')
+      const { enqueueCollectionIndexing, runCollectionIndexForMintUntilComplete } = await import(
+        '../_shared/mint-catalog-index-worker.ts',
+      )
+      const { getRpcUrl } = await import('../_shared/rpc-url.ts')
       await enqueueCollectionIndexing(db, mint, now)
+      await runCollectionIndexForMintUntilComplete(db, getRpcUrl(), mint, now)
     }
 
     const traitKeys = meta.traitIndex && typeof meta.traitIndex === 'object' && 'trait_keys' in meta.traitIndex
@@ -381,6 +390,7 @@ Deno.serve(async (req: Request) => {
       decimals: meta.decimals ?? null,
       collectionSize: meta.collectionSize ?? undefined,
       uniqueTraitCount: traitKeys?.length ?? undefined,
+      nftCollectionSyncMode: kind === 'NFT' ? (meta.nftCollectionSyncMode ?? 'das_group') : undefined,
       splTokenProgram: meta.splTokenProgram ?? null,
       isMplCore: meta.isMplCore ?? false,
       isCompressedNft: meta.isCompressedNft ?? false,

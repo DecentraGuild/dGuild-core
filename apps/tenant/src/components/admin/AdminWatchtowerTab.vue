@@ -82,6 +82,10 @@
                   <div class="watchtower-tab__item-info">
                     <span class="watchtower-tab__item-name">{{ mint.name ?? mint.label ?? truncateAddress(mint.mint, 8, 6) }}</span>
                     <code class="watchtower-tab__item-addr">{{ truncateAddress(mint.mint, 8, 6) }}</code>
+                    <span
+                      v-if="mint.nft_collection_sync_mode === 'sft_per_mint'"
+                      class="watchtower-tab__mode"
+                    >SFT collection (holders per item mint)</span>
                   </div>
                   <div class="watchtower-tab__item-tracks">
                     <label class="watchtower-tab__check">
@@ -245,6 +249,11 @@ defineExpose({ saveWatches })
 }
 
 .watchtower-tab__item-addr {
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-muted);
+}
+
+.watchtower-tab__mode {
   font-size: var(--theme-font-xs);
   color: var(--theme-text-muted);
 }

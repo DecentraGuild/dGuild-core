@@ -4,6 +4,8 @@
  * supports resume after a failed run (e.g. Edge timeout), not deliberate partial sync.
  */
 
+import { solanaJsonRpc } from './solana-json-rpc.ts'
+
 const GROUP_PAGE_LIMIT = 1000
 
 export function nftHolderWalletsJsonToMap(raw: unknown): Map<string, number> {
@@ -63,27 +65,12 @@ export async function fetchNftHoldersWithProgress(
   let pagesDone = 0
 
   while (pagesDone < pageLimit) {
-    const res = await fetch(rpcEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getAssetsByGroup',
-        params: { groupKey: 'collection', groupValue: mint, limit: GROUP_PAGE_LIMIT, page },
-      }),
-    })
-    if (!res.ok) {
-      throw new Error(`getAssetsByGroup HTTP ${res.status}`)
-    }
-    const data = await res.json() as {
-      result?: { items?: Array<{ ownership?: { owner?: string } }> }
-      error?: { message?: string }
-    }
-    if (data.error) {
-      throw new Error(data.error.message ?? 'getAssetsByGroup RPC error')
-    }
-    const items = data.result?.items ?? []
+    const data = await solanaJsonRpc<{ items?: Array<{ ownership?: { owner?: string } }> }>(
+      rpcEndpoint,
+      'getAssetsByGroup',
+      { groupKey: 'collection', groupValue: mint, limit: GROUP_PAGE_LIMIT, page },
+    )
+    const items = data.items ?? []
     for (const item of items) {
       const owner = item.ownership?.owner
       if (owner) mergeInto.set(owner, (mergeInto.get(owner) ?? 0) + 1)

@@ -28,6 +28,7 @@
               :select-node-by-breadcrumb-index="selectNodeByBreadcrumbIndex"
               :set-selected-detail-mint="setSelectedDetailMint"
               :create-disabled="createDisabled"
+              :sft-collection-roots="sftCollectionMints"
               @open-create-trade="openCreateTradeModal"
             />
             <MarketOpenTradesView
@@ -123,7 +124,7 @@ const marketplaceDeactivating = computed(() => marketplaceState.value === 'deact
 const createDisabled = computed(() => !FEATURES.marketplace.createTrade || marketplaceDeactivating.value)
 const activeTab = computed(() => (route.query.tab === 'open-trades' ? 'open-trades' : 'browse'))
 
-const { entries, mintsSet, fetchScope } = useMarketplaceScope()
+const { entries, mintsSet, fetchScope, mintsByCollection, sftCollectionMints } = useMarketplaceScope()
 const { labelByMint } = useMintLabels(mintsSet)
 const {
   tree,
@@ -135,7 +136,7 @@ const {
   selectNode,
   selectNodeByBreadcrumbIndex,
   setSelectedDetailMint,
-} = useMarketplaceTree(entries, marketplaceSettings, labelByMint)
+} = useMarketplaceTree(entries, marketplaceSettings, labelByMint, mintsByCollection, sftCollectionMints)
 
 onMounted(() => {
   fetchScope()
@@ -160,6 +161,9 @@ const createInitialOfferType = ref<string | null>(null)
 const selectedAssetType = computed(() => {
   const node = selectedNode.value
   if (!node?.mint) return null
+  if (node.collectionMint && node.mint !== node.collectionMint && sftCollectionMints.value.has(node.collectionMint)) {
+    return 'SPL_ASSET'
+  }
   if (node.collectionMint && node.mint === node.collectionMint) return 'NFT_COLLECTION'
   const settings = marketplaceSettings.value
   if (!settings) return null

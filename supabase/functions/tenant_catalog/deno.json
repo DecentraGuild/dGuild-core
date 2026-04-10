@@ -1,5 +1,5 @@
 {
   "imports": {
-    "@decentraguild/core": "../../../packages/core/dist/index.js"
+    "@decentraguild/core": "../../../packages/core/dist/browser.js"
   }
 }

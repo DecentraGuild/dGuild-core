@@ -63,6 +63,113 @@ function partialToJson(p: { trait_keys: string[]; trait_options: Record<string, 
   return { trait_keys: p.trait_keys, trait_options: p.trait_options }
 }
 
+const MAX_PAGES_INLINE_INDEX = 500
+
+/**
+ * After enqueue, walk getAssetsByGroup for this collection until the last page — same data as cron ticks,
+ * but completes in one call so local dev and fresh adds get member names/images without waiting for pg_cron.
+ */
+export async function runCollectionIndexForMintUntilComplete(
+  db: Db,
+  rpcUrl: string,
+  collectionMint: string,
+  nowIso: string,
+): Promise<{ ok: boolean; pagesProcessed: number }> {
+  const { data: raw } = await db
+    .from('collection_members_index_progress')
+    .select('collection_mint, next_page, partial_trait_index')
+    .eq('collection_mint', collectionMint)
+    .maybeSingle()
+
+  if (!raw) return { ok: true, pagesProcessed: 0 }
+
+  let page = Number(raw.next_page) || 1
+  let partial = parsePartialTraitState(raw.partial_trait_index)
+  let pagesProcessed = 0
+
+  while (pagesProcessed < MAX_PAGES_INLINE_INDEX) {
+    const { ok, items } = await fetchCollectionGroupPage(rpcUrl, collectionMint, page)
+    if (!ok) {
+      await db
+        .from('collection_members_index_progress')
+        .update({ last_error: 'getAssetsByGroup request failed', updated_at: nowIso })
+        .eq('collection_mint', collectionMint)
+      return { ok: false, pagesProcessed }
+    }
+
+    pagesProcessed++
+
+    const members = items.map((it) => dasItemToCollectionMember(collectionMint, it))
+    const attrsList = members.map((m) => m.traits as Array<{ trait_type?: string; value?: string }> | undefined)
+    mergeAttributesIntoPartialTraitState(partial, attrsList)
+
+    if (members.length > 0) {
+      await db.from('collection_members').upsert(
+        members.map((m) => ({
+          collection_mint: m.collection_mint,
+          mint: m.mint,
+          name: m.name,
+          image: m.image,
+          traits: m.traits,
+          owner: m.owner,
+          updated_at: nowIso,
+        })),
+        { onConflict: 'collection_mint,mint' },
+      )
+
+      const metaUpserts = members.map((m, i) => ({
+        mint: m.mint,
+        name: m.name,
+        symbol: null as string | null,
+        image: m.image,
+        decimals: null as number | null,
+        traits: m.traits,
+        trait_index: null as unknown,
+        token_standard: (typeof items[i]?.interface === 'string' ? items[i].interface : null) as string | null,
+        updated_at: nowIso,
+      }))
+      await db.from('mint_metadata').upsert(metaUpserts, { onConflict: 'mint' })
+    }
+
+    const isLastPage = items.length < 1000
+    if (isLastPage) {
+      const traitIndex = partialTraitStateToTraitIndex(partial)
+      const { data: ex } = await db.from('mint_metadata').select('*').eq('mint', collectionMint).maybeSingle()
+      const fresh = await fetchMintMetadata(collectionMint, 'NFT')
+      if (fresh) {
+        const merged = mergeMintMetadataUpsertFromFetchResult(
+          ex as Record<string, unknown> | null,
+          collectionMint,
+          { ...fresh, traitIndex },
+          nowIso,
+        )
+        await db.from('mint_metadata').upsert(merged, { onConflict: 'mint' })
+      } else {
+        await db
+          .from('mint_metadata')
+          .update({ trait_index: traitIndex, updated_at: nowIso })
+          .eq('mint', collectionMint)
+      }
+
+      await db.from('collection_members_index_progress').delete().eq('collection_mint', collectionMint)
+      return { ok: true, pagesProcessed }
+    }
+
+    page += 1
+    await db
+      .from('collection_members_index_progress')
+      .update({
+        next_page: page,
+        partial_trait_index: partialToJson(partial),
+        last_error: null,
+        updated_at: nowIso,
+      })
+      .eq('collection_mint', collectionMint)
+  }
+
+  return { ok: false, pagesProcessed }
+}
+
 export async function runCollectionIndexTick(
   db: Db,
   rpcUrl: string,

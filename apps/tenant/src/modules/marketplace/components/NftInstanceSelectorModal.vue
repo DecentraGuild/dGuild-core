@@ -68,7 +68,20 @@
             @click="selectNft(nft)"
           >
             <div class="nft-instance-selector__card-media">
-              <img v-if="nft.metadata?.image" :src="nft.metadata.image" :alt="nft.metadata.name ?? nft.mint" />
+              <RemoteImage
+                v-if="nft.metadata?.image"
+                :src="nft.metadata.image"
+                :alt="nft.metadata.name ?? nft.mint"
+                img-class="nft-instance-selector__card-img"
+                root-class="nft-instance-selector__card-remote"
+                root-margin="120px"
+              >
+                <template #placeholder>
+                  <div class="nft-instance-selector__card-placeholder nft-instance-selector__card-placeholder--loading">
+                    <Icon icon="lucide:loader-2" class="nft-instance-selector__card-loading-icon" />
+                  </div>
+                </template>
+              </RemoteImage>
               <div v-else class="nft-instance-selector__card-placeholder">
                 <Icon icon="lucide:image-off" />
               </div>
@@ -101,6 +114,7 @@
 import { ref, computed, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { truncateAddress } from '@decentraguild/display'
+import RemoteImage from '~/components/ui/RemoteImage.vue'
 import { useCollectionMembers } from '~/composables/mint/useCollectionMembers'
 import { Dialog, DialogContent } from '~/components/ui/dialog'
 import {
@@ -399,10 +413,26 @@ watch(filteredNfts, () => {
   overflow: hidden;
 }
 
-.nft-instance-selector__card-media img {
+:deep(.nft-instance-selector__card-remote) {
+  width: 100%;
+  height: 100%;
+}
+
+:deep(.nft-instance-selector__card-img) {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.nft-instance-selector__card-loading-icon {
+  font-size: 1.5rem;
+  animation: nft-instance-selector-spin 0.9s linear infinite;
+}
+
+@keyframes nft-instance-selector-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .nft-instance-selector__card-placeholder {

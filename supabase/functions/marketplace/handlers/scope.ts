@@ -1,6 +1,7 @@
 import { jsonResponse, errorResponse } from '../../_shared/cors.ts'
 import { getWalletFromAuthHeader } from '../../_shared/auth.ts'
 import type { getAdminClient } from '../../_shared/supabase-admin.ts'
+import { solanaJsonRpc } from '../../_shared/solana-json-rpc.ts'
 
 type Db = ReturnType<typeof getAdminClient>
 
@@ -27,16 +28,38 @@ export async function handleScopeSync(body: Record<string, unknown>, db: Db, aut
   const now = new Date().toISOString()
   const { fetchMintMetadata } = await import('../../_shared/mint-metadata.ts')
 
-  const catalogRows: Array<{ tenant_id: string; mint: string; kind: 'SPL' | 'NFT'; label: string | null; store_bps: number | null }> = []
+  const catalogRows: Array<{
+    tenant_id: string
+    mint: string
+    kind: 'SPL' | 'NFT'
+    label: string | null
+    store_bps: number | null
+    nft_collection_sync_mode: string | null
+  }> = []
   for (const m of collectionMints) {
     let label = m.name ?? null
-    if (!label) { const meta = await fetchMintMetadata(m.mint, undefined); if (meta) label = meta.label ?? meta.name ?? null }
-    catalogRows.push({ tenant_id: tenantId, mint: m.mint, kind: 'NFT', label, store_bps: pickStoreBps(m as { store_bps?: number | null; storeBps?: number | null }) })
+    const colMeta = await fetchMintMetadata(m.mint, undefined)
+    if (!label && colMeta) label = colMeta.label ?? colMeta.name ?? null
+    catalogRows.push({
+      tenant_id: tenantId,
+      mint: m.mint,
+      kind: 'NFT',
+      label,
+      store_bps: pickStoreBps(m as { store_bps?: number | null; storeBps?: number | null }),
+      nft_collection_sync_mode: colMeta?.nftCollectionSyncMode ?? 'das_group',
+    })
   }
   for (const m of [...splAssetMints, ...currencyMints]) {
     let label = m.name ?? (m as { symbol?: string }).symbol ?? null
     if (!label) { const meta = await fetchMintMetadata(m.mint, 'SPL'); if (meta) label = meta.label ?? meta.name ?? null }
-    catalogRows.push({ tenant_id: tenantId, mint: m.mint, kind: 'SPL', label, store_bps: pickStoreBps(m as { store_bps?: number | null; storeBps?: number | null }) })
+    catalogRows.push({
+      tenant_id: tenantId,
+      mint: m.mint,
+      kind: 'SPL',
+      label,
+      store_bps: pickStoreBps(m as { store_bps?: number | null; storeBps?: number | null }),
+      nft_collection_sync_mode: null,
+    })
   }
   const catalogUnique = [...new Map(catalogRows.map((r) => [r.mint, r])).values()]
   if (catalogUnique.length > 0) {
@@ -78,10 +101,18 @@ export async function handleScopeExpand(body: Record<string, unknown>, db: Db, _
       const allMembers: Array<{ collection_mint: string; mint: string; name: string | null; image: string | null; traits: unknown; owner: string | null }> = []
       const now = new Date().toISOString()
       while (hasMore) {
-        const res = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAssetsByGroup', params: { groupKey: 'collection', groupValue: collectionMint, limit: 1000, page } }) })
-        if (!res.ok) return errorResponse('RPC request failed', req, 502)
-        const data = await res.json() as { result?: { items?: Array<Record<string, unknown>> } }
-        const items = data.result?.items ?? []
+        let data: { items?: Array<Record<string, unknown>> }
+        try {
+          data = await solanaJsonRpc<{ items?: Array<Record<string, unknown>> }>(rpcUrl, 'getAssetsByGroup', {
+            groupKey: 'collection',
+            groupValue: collectionMint,
+            limit: 1000,
+            page,
+          })
+        } catch {
+          return errorResponse('RPC request failed', req, 502)
+        }
+        const items = data.items ?? []
         for (const item of items) {
           const id = item.id as string
           const content = item.content as Record<string, unknown> | undefined

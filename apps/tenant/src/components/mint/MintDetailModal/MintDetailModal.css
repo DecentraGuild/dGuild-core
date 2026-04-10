@@ -289,6 +289,18 @@
 .mint-modal__nft-list-row--spl {
   grid-template-columns: minmax(8rem, 1fr) minmax(6rem, 1fr);
 }
+.mint-modal__nft-list--sft .mint-modal__nft-list-header--spl,
+.mint-modal__nft-list--sft .mint-modal__nft-list-row--spl {
+  grid-template-columns: minmax(7rem, 1fr) minmax(8rem, 1.2fr) minmax(5rem, auto);
+}
+.mint-modal__nft-list-col--item-mint {
+  font-family: var(--theme-font-mono, monospace);
+  font-size: var(--theme-font-xs);
+  color: var(--theme-text-secondary);
+}
+.mint-modal__item-mint {
+  word-break: break-all;
+}
 .mint-modal__holders-pager {
   display: flex;
   flex-wrap: wrap;

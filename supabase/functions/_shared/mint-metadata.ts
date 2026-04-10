@@ -9,6 +9,7 @@ import {
   isDasCompressedNft,
   isMplCoreAccount,
 } from './spl-mint-guard.ts'
+import { solanaJsonRpc } from './solana-json-rpc.ts'
 
 export interface MintMetadataResult {
   kind: 'SPL' | 'NFT'
@@ -32,6 +33,29 @@ export interface MintMetadataResult {
   splTokenProgram?: 'legacy' | 'token_2022' | null
   isMplCore?: boolean
   isCompressedNft?: boolean
+  /**
+   * NFT collection mints only: how Watchtower aggregates holders.
+   * From DAS `getAssetsByGroup` item `interface` (Metaplex): all `FungibleAsset` → per-child SPL holders.
+   */
+  nftCollectionSyncMode?: 'das_group' | 'sft_per_mint'
+}
+
+/** DAS `interface` values that represent fungible collection members (SFT); holders are per-mint SPL. */
+const DAS_INTERFACE_FUNGIBLE_COLLECTION_MEMBER = new Set(['FungibleAsset', 'FungibleToken'])
+
+/**
+ * First page of collection members: if every item is a fungible interface, use per-mint SPL holder sync.
+ * Mixed or non-fungible → classic getAssetsByGroup ownership rollup.
+ */
+export function inferNftCollectionSyncModeFromDasGroupItems(
+  items: Array<Record<string, unknown>>,
+): 'das_group' | 'sft_per_mint' {
+  if (items.length === 0) return 'das_group'
+  for (const it of items) {
+    const iface = String(it.interface ?? '').trim()
+    if (!DAS_INTERFACE_FUNGIBLE_COLLECTION_MEMBER.has(iface)) return 'das_group'
+  }
+  return 'sft_per_mint'
 }
 
 function traitIndexFromDasAsset(asset: Record<string, unknown>): Record<string, unknown> {
@@ -164,29 +188,31 @@ export async function fetchMintMetadata(
 
   try {
     if (kindHint !== 'SPL') {
-      const colRes = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'getAssetsByGroup',
-          params: { groupKey: 'collection', groupValue: mint, limit: 1, page: 1 },
-        }),
-      })
-      const colData = await colRes.json() as { result?: { total?: number } }
-      const collectionSize = colData.result?.total ?? 0
+      const colData = await solanaJsonRpc<{ total?: number; items?: Array<Record<string, unknown>> }>(
+        rpcUrl,
+        'getAssetsByGroup',
+        { groupKey: 'collection', groupValue: mint, limit: 1, page: 1 },
+      )
+      const collectionSize = colData.total ?? 0
       if (collectionSize > 0) {
         const onChain = await getOnChainSplMintState(rpcUrl, mint)
         const mplCoreCollection = await isMplCoreAccount(rpcUrl, mint)
         if (!onChain.ok && !mplCoreCollection) return null
-        const metaRes = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAsset', params: { id: mint } }),
-        })
-        const metaData = await metaRes.json() as { result?: Record<string, unknown> }
-        const assetResult = metaData.result
+
+        const pageLimit = Math.min(1000, Math.max(1, collectionSize))
+        const sampleData = await solanaJsonRpc<{ items?: Array<Record<string, unknown>> }>(
+          rpcUrl,
+          'getAssetsByGroup',
+          { groupKey: 'collection', groupValue: mint, limit: pageLimit, page: 1 },
+        )
+        const sampleItems = sampleData.items ?? []
+        const nftCollectionSyncMode = inferNftCollectionSyncModeFromDasGroupItems(sampleItems)
+
+        const assetResult = await solanaJsonRpc<Record<string, unknown> | null>(
+          rpcUrl,
+          'getAsset',
+          { id: mint },
+        )
         if (!assetResult) return null
         const assetMeta = (assetResult.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
         const name = assetMeta?.name as string ?? null
@@ -204,18 +230,13 @@ export async function fetchMintMetadata(
           splTokenProgram,
           isMplCore: mplCoreCollection,
           isCompressedNft,
+          nftCollectionSyncMode,
           ...ext,
         }
       }
     }
 
-    const res = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAsset', params: { id: mint } }),
-    })
-    const data = await res.json() as { result?: Record<string, unknown> }
-    const asset = data.result
+    const asset = await solanaJsonRpc<Record<string, unknown> | null>(rpcUrl, 'getAsset', { id: mint })
     if (!asset) return null
 
     const onChain = await getOnChainSplMintState(rpcUrl, mint)

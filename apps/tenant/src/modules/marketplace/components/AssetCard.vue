@@ -7,13 +7,19 @@
     @click="!linkTo && $emit('select', { mint, assetType, collectionMint: collectionMint ?? undefined })"
   >
     <div class="asset-card__media">
-      <img
+      <RemoteImage
         v-if="image"
         :src="image"
-        :alt="name"
-        class="asset-card__img"
-        loading="lazy"
-      />
+        :alt="name ?? ''"
+        img-class="asset-card__img"
+        root-class="asset-card__remote-img"
+      >
+        <template #placeholder>
+          <div class="asset-card__placeholder asset-card__placeholder--loading">
+            <Icon icon="lucide:loader-2" class="asset-card__placeholder-icon asset-card__placeholder-icon--spin" />
+          </div>
+        </template>
+      </RemoteImage>
       <div v-else class="asset-card__placeholder">
         <Icon icon="lucide:image-off" class="asset-card__placeholder-icon" />
       </div>
@@ -48,6 +54,7 @@
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { truncateAddress } from '@decentraguild/display'
+import RemoteImage from '~/components/ui/RemoteImage.vue'
 import type { AssetType } from '../../../composables/useMarketplaceAssets'
 
 const props = withDefaults(
@@ -105,7 +112,12 @@ defineEmits<{
   overflow: hidden;
 }
 
-.asset-card__img {
+:deep(.asset-card__remote-img) {
+  width: 100%;
+  height: 100%;
+}
+
+:deep(.asset-card__img) {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -122,6 +134,16 @@ defineEmits<{
 
 .asset-card__placeholder-icon {
   font-size: 1.25rem;
+}
+
+.asset-card__placeholder-icon--spin {
+  animation: asset-card-spin 0.9s linear infinite;
+}
+
+@keyframes asset-card-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .asset-card__body {

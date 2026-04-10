@@ -26,6 +26,7 @@ export interface CatalogEntry {
   isMplCore?: boolean
   isCompressedNft?: boolean
   marketplaceEscrowSupported?: boolean
+  nftCollectionSyncMode?: 'das_group' | 'sft_per_mint' | null
 }
 
 export interface CatalogAddResolved {
@@ -40,6 +41,7 @@ export interface CatalogAddResolved {
   isMplCore?: boolean
   isCompressedNft?: boolean
   marketplaceEscrowSupported?: boolean
+  nftCollectionSyncMode?: 'das_group' | 'sft_per_mint'
 }
 
 export interface CatalogAddResult {

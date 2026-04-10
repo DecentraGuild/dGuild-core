@@ -20,8 +20,12 @@ const DEFAULT_SNAPSHOT_EVERY_N_CYCLES = 12  // 5 × 12 = 60 min default snapshot
 export const TIMER_KEY_CYCLE = 'watchtower_cycle_minutes'
 export const TIMER_KEY_SNAPSHOT_N = 'watchtower_snapshot_every_n_cycles'
 export const TIMER_KEY_MAX_MINTS_PER_TICK = 'watchtower_max_mints_per_tick'
+export const TIMER_KEY_SFT_MAX_GPA_PAGES = 'watchtower_sft_max_gpa_pages_per_tick'
+export const TIMER_KEY_SFT_MAX_CHILDREN = 'watchtower_sft_max_children_per_tick'
 
 const DEFAULT_MAX_MINTS_PER_TICK = 10
+const DEFAULT_SFT_MAX_GPA_PAGES = 8
+const DEFAULT_SFT_MAX_CHILDREN = 1
 
 const DEFAULT_TIERS: HolderTierRow[] = [
   { sort_order: 1, max_holders: 500, interval_minutes: 5 },
@@ -48,6 +52,10 @@ export type WatchtowerSyncConfig = {
   nft_item_tiers: NftItemTierRow[]
   /** Max mints to run a full holder sync for per unified cron tick (protects Supabase IO). */
   max_mints_per_tick: number
+  /** GPA pages per cron tick for each SFT collection child mint. */
+  sft_max_gpa_pages_per_tick: number
+  /** Child mints fully completed per tick (within each child, GPA may span ticks). */
+  sft_max_children_per_tick: number
 }
 
 export async function loadWatchtowerSyncConfig(
@@ -57,12 +65,16 @@ export async function loadWatchtowerSyncConfig(
     { data: cycleRow },
     { data: nRow },
     { data: maxMintsRow },
+    { data: sftGpaRow },
+    { data: sftChildRow },
     { data: tierRows, error: tierErr },
     { data: nftTierRows, error: nftTierErr },
   ] = await Promise.all([
     db.from('interval_timers').select('interval_minutes').eq('timer_key', TIMER_KEY_CYCLE).maybeSingle(),
     db.from('interval_timers').select('interval_minutes').eq('timer_key', TIMER_KEY_SNAPSHOT_N).maybeSingle(),
     db.from('interval_timers').select('interval_minutes').eq('timer_key', TIMER_KEY_MAX_MINTS_PER_TICK).maybeSingle(),
+    db.from('interval_timers').select('interval_minutes').eq('timer_key', TIMER_KEY_SFT_MAX_GPA_PAGES).maybeSingle(),
+    db.from('interval_timers').select('interval_minutes').eq('timer_key', TIMER_KEY_SFT_MAX_CHILDREN).maybeSingle(),
     db.from('platform_watchtower_holder_tier').select('sort_order, max_holders, interval_minutes').order('sort_order'),
     db.from('platform_watchtower_nft_item_tier').select('sort_order, max_items, interval_minutes').order('sort_order'),
   ])
@@ -101,6 +113,16 @@ export async function loadWatchtowerSyncConfig(
       ? Math.floor(maxMintsRow.interval_minutes)
       : DEFAULT_MAX_MINTS_PER_TICK
 
+  const sft_max_gpa_pages_per_tick =
+    typeof sftGpaRow?.interval_minutes === 'number' && sftGpaRow.interval_minutes >= 1
+      ? Math.floor(sftGpaRow.interval_minutes)
+      : DEFAULT_SFT_MAX_GPA_PAGES
+
+  const sft_max_children_per_tick =
+    typeof sftChildRow?.interval_minutes === 'number' && sftChildRow.interval_minutes >= 1
+      ? Math.floor(sftChildRow.interval_minutes)
+      : DEFAULT_SFT_MAX_CHILDREN
+
   return {
     cycle_minutes,
     snapshot_every_n_cycles,
@@ -108,6 +130,8 @@ export async function loadWatchtowerSyncConfig(
     tiers,
     nft_item_tiers,
     max_mints_per_tick,
+    sft_max_gpa_pages_per_tick,
+    sft_max_children_per_tick,
   }
 }
 
@@ -171,6 +195,7 @@ export function isNftHolderSyncDue(
 }
 
 /** Minutes past the tier-based "next refresh" time; higher = more stale (for due-first sort). */
+/** NFT + sft_per_mint uses SPL-style holder row-count tiers (not NFT item tiers). */
 export function currentTierOverdueMinutes(
   lastUpdatedIso: string | null,
   holderCount: number,
@@ -179,11 +204,13 @@ export function currentTierOverdueMinutes(
   holderTiers: HolderTierRow[],
   nftTiers: NftItemTierRow[],
   now: Date,
+  nftCollectionSyncMode?: string | null,
 ): number {
   if (!lastUpdatedIso) return 1e9
-  const intervalMin = kind === 'NFT'
-    ? intervalMinutesForNftItemCount(nftTiers, itemCount)
-    : intervalMinutesForHolderCount(holderTiers, holderCount)
+  const useHolderTiers = kind === 'SPL' || (kind === 'NFT' && nftCollectionSyncMode === 'sft_per_mint')
+  const intervalMin = useHolderTiers
+    ? intervalMinutesForHolderCount(holderTiers, holderCount)
+    : intervalMinutesForNftItemCount(nftTiers, itemCount)
   const elapsedMin = (now.getTime() - new Date(lastUpdatedIso).getTime()) / 60000
   return elapsedMin - intervalMin
 }

@@ -12,6 +12,7 @@ interface MintRow {
   label: string | null
   name: string | null
   image: string | null
+  nft_collection_sync_mode: string | null
 }
 
 interface WatchRow {
@@ -153,7 +154,7 @@ export function useAdminWatchtowerScope(
     loading.value = true; localSaveError.value = null
     try {
       const supabase = useSupabase()
-      const catalogRes = await supabase.from('tenant_mint_catalog').select('mint, kind, label').eq('tenant_id', id)
+      const catalogRes = await supabase.from('tenant_mint_catalog').select('mint, kind, label, nft_collection_sync_mode').eq('tenant_id', id)
       if (catalogRes.error) throw new Error(catalogRes.error.message)
       const catalogRows = catalogRes.data ?? []
       const catalogMints = catalogRows.map((r) => r.mint as string)
@@ -179,6 +180,7 @@ export function useAdminWatchtowerScope(
               label: r.label as string | null,
               name: meta?.name ?? null,
               image: meta?.image ?? null,
+              nft_collection_sync_mode: (r as { nft_collection_sync_mode?: string | null }).nft_collection_sync_mode ?? null,
             }
           }),
       )

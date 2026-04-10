@@ -10,7 +10,17 @@
       @click="emit('inspect', item)"
     >
       <div class="mint-list-item__thumb">
-        <img v-if="item.image" :src="item.image" :alt="item.label" />
+        <RemoteImage
+          v-if="item.image"
+          :src="item.image"
+          :alt="item.label"
+          img-class="mint-list-item__thumb-img"
+        >
+          <template #placeholder>
+            <Icon v-if="item._loading" icon="lucide:loader-2" class="mint-list-item__spin" />
+            <Icon v-else :icon="placeholderIcon" />
+          </template>
+        </RemoteImage>
         <span v-else class="mint-list-item__thumb-placeholder">
           <Icon v-if="item._loading" icon="lucide:loader-2" class="mint-list-item__spin" />
           <Icon v-else :icon="placeholderIcon" />
@@ -56,6 +66,7 @@
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { truncateAddress } from '@decentraguild/display'
+import RemoteImage from '~/components/ui/RemoteImage.vue'
 import type { CatalogMintItem } from '~/types/mints'
 
 const props = defineProps<{
@@ -123,7 +134,7 @@ const placeholderIcon = computed(() =>
   background: var(--theme-bg-muted);
 }
 
-.mint-list-item__thumb img {
+:deep(.mint-list-item__thumb-img) {
   width: 100%;
   height: 100%;
   object-fit: cover;

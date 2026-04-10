@@ -20,6 +20,7 @@ export function useMarketplaceScope() {
   const scope = ref<ScopeEntry[]>([])
   const memberMints = ref<string[]>([])
   const memberMintsByCollection = ref<Map<string, string[]>>(new Map())
+  const sftCollectionMints = ref<Set<string>>(new Set())
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -51,7 +52,19 @@ export function useMarketplaceScope() {
       if (collectionMints.length === 0) {
         memberMints.value = []
         memberMintsByCollection.value = new Map()
+        sftCollectionMints.value = new Set()
       } else {
+        const { data: catalogModeRows } = await supabase
+          .from('tenant_mint_catalog')
+          .select('mint, nft_collection_sync_mode')
+          .eq('tenant_id', id)
+          .in('mint', collectionMints)
+        const sft = new Set<string>()
+        for (const row of catalogModeRows ?? []) {
+          const r = row as { mint: string; nft_collection_sync_mode?: string | null }
+          if (r.nft_collection_sync_mode === 'sft_per_mint') sft.add(r.mint)
+        }
+        sftCollectionMints.value = sft
         const { data: members } = await supabase
           .from('collection_members')
           .select('collection_mint, mint')
@@ -80,6 +93,7 @@ export function useMarketplaceScope() {
       scope.value = []
       memberMints.value = []
       memberMintsByCollection.value = new Map()
+      sftCollectionMints.value = new Set()
     }
   }, { immediate: true })
 
@@ -109,6 +123,7 @@ export function useMarketplaceScope() {
     entries,
     mintsSet,
     mintsByCollection,
+    sftCollectionMints,
     loading,
     error,
     fetchScope,
