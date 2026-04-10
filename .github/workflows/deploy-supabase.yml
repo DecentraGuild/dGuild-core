@@ -52,8 +52,10 @@ jobs:
 
       # Explicit --password: on GitHub-hosted Linux there is no credential store; newer CLIs may not
       # reuse the password from `link` for `db push`, which yields 28P01 even when the secret is correct.
+      # --include-all: apply migrations whose timestamp sorts before an already-applied remote migration
+      # (e.g. a migration merged after a later-dated one was deployed).
       - name: Push migrations
-        run: pnpm supabase db push --dns-resolver https --yes --password "$SUPABASE_DB_PASSWORD"
+        run: pnpm supabase db push --dns-resolver https --yes --include-all --password "$SUPABASE_DB_PASSWORD"
 
       - name: Build packages used by Edge Functions
         run: |
