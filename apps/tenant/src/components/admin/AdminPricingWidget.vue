@@ -600,9 +600,13 @@ const upgradeRecurringAmount = computed(() => {
 
 
 const storedConditionsRef = computed(() => props.storedConditions ?? null)
-const extraSkipUsageMetersRef = computed((): readonly string[] | undefined =>
-  props.moduleId === 'slug' ? ['registration'] : undefined,
-)
+const extraSkipUsageMetersRef = computed((): readonly string[] | undefined => {
+  if (props.moduleId === 'slug') return ['registration']
+  if (props.moduleId === 'marketplace') {
+    return ['custom_currencies', 'monetize_storefront']
+  }
+  return undefined
+})
 const { usageRows, addonComponents } = usePricingDisplay(
   pricingModel,
   conditions,

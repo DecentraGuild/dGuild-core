@@ -28,6 +28,8 @@ import {
   fetchNftHoldersWithProgress,
   nftHolderWalletsJsonToMap,
 } from '../_shared/fetch-nft-holders.ts'
+import { fetchMintMetadata } from '../_shared/mint-metadata.ts'
+import { mergeMintMetadataUpsertFromFetchResult } from '../_shared/mint-metadata-merge.ts'
 
 const METADATA_REFRESH_AGE_DAYS = 7
 
@@ -83,58 +85,13 @@ function classifyCronWork(row: CronCandidateRow, config: WatchtowerSyncConfig, n
 }
 
 // ---------------------------------------------------------------------------
-// RPC helpers
+// Metadata refresh (shared fetch: DAS + JSON uri image resolution; merge preserves prior image)
 // ---------------------------------------------------------------------------
-
-async function fetchMintMetadata(
-  rpcEndpoint: string,
-  mint: string,
-): Promise<{
-  name: string | null
-  symbol: string | null
-  image: string | null
-  decimals: number | null
-  updateAuthority: string | null
-  uri: string | null
-  sellerFeeBasisPoints: number | null
-  primarySaleHappened: boolean | null
-  isMutable: boolean | null
-  editionNonce: number | null
-  tokenStandard: string | null
-} | null> {
-  try {
-    const res = await fetch(rpcEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAsset', params: { id: mint } }),
-    })
-    if (!res.ok) return null
-    const data = await res.json() as { result?: Record<string, unknown> }
-    const asset = data.result as Record<string, unknown> | undefined
-    if (!asset) return null
-    const content = asset.content as Record<string, unknown> | undefined
-    const metadata = (content?.metadata as Record<string, unknown>) ?? {}
-    const links = (content?.links as Record<string, unknown>) ?? {}
-    const tokenInfo = asset.token_info as Record<string, unknown> | undefined
-    const decimals = typeof tokenInfo?.decimals === 'number' ? tokenInfo.decimals : null
-    const { extractExtendedMetadata } = await import('../_shared/mint-metadata.ts')
-    const ext = extractExtendedMetadata(asset)
-    return {
-      name: (metadata.name as string) ?? null,
-      symbol: (metadata.symbol as string) ?? null,
-      image: (links.image as string) ?? null,
-      decimals,
-      ...ext,
-    }
-  } catch {
-    return null
-  }
-}
 
 async function refreshMintMetadataIfStale(
   db: ReturnType<typeof getAdminClient>,
-  rpcEndpoint: string,
   mint: string,
+  kind: 'SPL' | 'NFT',
   now: Date,
 ): Promise<void> {
   const { data: meta } = await db
@@ -149,24 +106,13 @@ async function refreshMintMetadataIfStale(
 
   if (metaAge <= METADATA_REFRESH_AGE_DAYS) return
 
-  const fetched = await fetchMintMetadata(rpcEndpoint, mint)
+  const hint = kind === 'SPL' ? 'SPL' : 'NFT'
+  const fetched = await fetchMintMetadata(mint, hint)
   if (!fetched) return
 
-  await db.from('mint_metadata').upsert({
-    mint,
-    name: fetched.name,
-    symbol: fetched.symbol,
-    image: fetched.image,
-    decimals: fetched.decimals,
-    update_authority: fetched.updateAuthority ?? null,
-    uri: fetched.uri ?? null,
-    seller_fee_basis_points: fetched.sellerFeeBasisPoints ?? null,
-    primary_sale_happened: fetched.primarySaleHappened ?? null,
-    is_mutable: fetched.isMutable ?? null,
-    edition_nonce: fetched.editionNonce ?? null,
-    token_standard: fetched.tokenStandard ?? null,
-    updated_at: now.toISOString(),
-  }, { onConflict: 'mint' })
+  const { data: existing } = await db.from('mint_metadata').select('*').eq('mint', mint).maybeSingle()
+  const row = mergeMintMetadataUpsertFromFetchResult(existing, mint, fetched, now.toISOString())
+  await db.from('mint_metadata').upsert(row, { onConflict: 'mint' })
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +194,7 @@ Deno.serve(async (req: Request) => {
       if (snapDup && !syncCurrent) {
         return jsonResponse({ processed: 0, synced: 0, message: 'Snapshot already exists for bucket' }, req)
       }
-      await refreshMintMetadataIfStale(db, rpcEndpoint, syncMint, now)
+      await refreshMintMetadataIfStale(db, syncMint, kind, now)
     }
 
     let holders: Array<{ wallet: string; amount: string }>
@@ -489,7 +435,7 @@ Deno.serve(async (req: Request) => {
 
     try {
       if (snapshotDue) {
-        await refreshMintMetadataIfStale(db, rpcEndpoint, mint, now)
+        await refreshMintMetadataIfStale(db, mint, kind, now)
       }
 
       let holders: Array<{ wallet: string; amount: string }>

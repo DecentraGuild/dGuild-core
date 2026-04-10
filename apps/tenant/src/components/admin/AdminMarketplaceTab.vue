@@ -18,6 +18,7 @@
       :saving="marketplaceSaving"
       :deploying="deploying"
       :save-error="saveError"
+      :show-catalog-pricing-panel="false"
       @save="onSave"
       @deploy="onDeploy"
       @reactivate="(p: BillingPeriod) => emit('reactivate', p)"
@@ -28,7 +29,6 @@
 <script setup lang="ts">
 import type { ModuleState } from '@decentraguild/core'
 import type { BillingPeriod } from '@decentraguild/billing'
-import { BASE_CURRENCY_MINT_ADDRESSES } from '@decentraguild/core'
 import AdminMarketplaceSettings from '~/components/admin/AdminMarketplaceSettings.vue'
 import AdminPricingWidget from '~/components/admin/AdminPricingWidget.vue'
 
@@ -64,14 +64,8 @@ const liveConditions = computed(() => {
   const f = settingsRef.value?.form
   if (!f) return null
   const mintsCount = f.collectionMints.length + (f.splAssetMints?.length ?? 0)
-  const baseCurrenciesCount = f.currencyMints.filter((c: { mint: string }) => BASE_CURRENCY_MINT_ADDRESSES.has(c.mint)).length
-  const customCurrenciesCount = f.currencyMints.length - baseCurrenciesCount
-  const fee = f.shopFee
-  const monetizeStorefront = fee.makerFlatFee > 0 || fee.takerFlatFee > 0 || fee.makerPercentFee > 0 || fee.takerPercentFee > 0
   return {
     mints_count: mintsCount,
-    custom_currencies: customCurrenciesCount,
-    monetize_storefront: monetizeStorefront,
   }
 })
 
