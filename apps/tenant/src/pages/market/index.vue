@@ -124,7 +124,7 @@ const marketplaceDeactivating = computed(() => marketplaceState.value === 'deact
 const createDisabled = computed(() => !FEATURES.marketplace.createTrade || marketplaceDeactivating.value)
 const activeTab = computed(() => (route.query.tab === 'open-trades' ? 'open-trades' : 'browse'))
 
-const { entries, mintsSet, fetchScope, mintsByCollection, sftCollectionMints } = useMarketplaceScope()
+const { entries, mintsSet, fetchScope, memberMintsByCollection, sftCollectionMints } = useMarketplaceScope()
 const { labelByMint } = useMintLabels(mintsSet)
 const {
   tree,
@@ -136,7 +136,7 @@ const {
   selectNode,
   selectNodeByBreadcrumbIndex,
   setSelectedDetailMint,
-} = useMarketplaceTree(entries, marketplaceSettings, labelByMint, mintsByCollection, sftCollectionMints)
+} = useMarketplaceTree(entries, marketplaceSettings, labelByMint, memberMintsByCollection, sftCollectionMints)
 
 onMounted(() => {
   fetchScope()

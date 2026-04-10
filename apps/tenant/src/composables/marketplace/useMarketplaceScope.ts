@@ -123,6 +123,7 @@ export function useMarketplaceScope() {
     entries,
     mintsSet,
     mintsByCollection,
+    memberMintsByCollection,
     sftCollectionMints,
     loading,
     error,

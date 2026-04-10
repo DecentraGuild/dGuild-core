@@ -142,6 +142,15 @@ function buildTree(input: MarketplaceTreeInput): TreeNode[] {
   const currencyMintsInScope = currencyMints.filter(hasMintInScope)
   const splMintsInScope = splAssetMints.filter(hasMintInScope)
 
+  const sftRootsEarly = input.sftCollectionMints ?? EMPTY_SFT_SET
+  const membersMapEarly = input.memberMintsByCollection ?? EMPTY_MEMBER_MAP
+  const sftExpandedMemberMintSet = new Set<string>()
+  for (const colMint of sftRootsEarly) {
+    const members = membersMapEarly.get(colMint) ?? []
+    if (members.length === 0) continue
+    for (const m of members) sftExpandedMemberMintSet.add(m)
+  }
+
   function addAssetToType(typeId: string, mint: string, label: string, collectionMint: string | null, groupPath: string[]) {
     const typeNode = typeById.get(typeId)
     if (!typeNode || !typeNode.children) return
@@ -249,8 +258,8 @@ function buildTree(input: MarketplaceTreeInput): TreeNode[] {
     if (mint == null) continue
     const groupPath = getGroupPath(item)
     const label = (item as { name?: string }).name ?? getLabel(mint)
-    const sftRoots = input.sftCollectionMints ?? new Set<string>()
-    const membersMap = input.memberMintsByCollection ?? new Map<string, string[]>()
+    const sftRoots = input.sftCollectionMints ?? EMPTY_SFT_SET
+    const membersMap = input.memberMintsByCollection ?? EMPTY_MEMBER_MAP
     if (sftRoots.has(mint)) {
       const members = membersMap.get(mint) ?? []
       if (members.length > 0) {
@@ -272,6 +281,7 @@ function buildTree(input: MarketplaceTreeInput): TreeNode[] {
   for (const item of splMintsInScope) {
     const mint = toMint(item)
     if (mint == null) continue
+    if (sftExpandedMemberMintSet.has(mint)) continue
     const groupPath = getGroupPath(item)
     const label = (item as { name?: string }).name ?? (item as { symbol?: string }).symbol ?? getLabel(mint)
     addAssetToType('type:spl_asset', mint, label, null, groupPath)
