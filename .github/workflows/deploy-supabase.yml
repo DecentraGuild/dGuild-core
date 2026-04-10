@@ -59,6 +59,7 @@ jobs:
 
       - name: Build packages used by Edge Functions
         run: |
+          pnpm --filter @decentraguild/core build
           pnpm --filter @decentraguild/billing build
           pnpm --filter @decentraguild/catalog build
           pnpm --filter @decentraguild/condition-engine build
