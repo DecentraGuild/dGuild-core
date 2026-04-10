@@ -131,7 +131,7 @@ Deno.serve(async (req: Request) => {
       ] = await Promise.all([
         db
           .from('tenant_mint_catalog')
-          .select('id, mint, kind, label')
+          .select('id, mint, kind, label, nft_collection_sync_mode')
           .eq('tenant_id', tenantId)
           .eq('mint', mint)
           .maybeSingle(),
@@ -194,9 +194,21 @@ Deno.serve(async (req: Request) => {
       const holdersWithinCurrent = !watch?.track_holders || Boolean(watch.billing_eligible_current)
       const holdersWithinSnapshot = !watch?.track_snapshot || Boolean(watch.billing_eligible_snapshot)
       const rawHolders = (holderSnapshot as { holder_wallets?: Array<{ wallet?: string; amount?: string } | string> } | null)?.holder_wallets ?? []
+      const nftCollectionSyncMode =
+        ((catalogRow as Record<string, unknown> | null)?.nft_collection_sync_mode as string | null) ?? null
       const allHoldersNorm = holdersWithinCurrent
         ? rawHolders
-            .map((h) => (typeof h === 'string' ? { wallet: h, amount: '1' } : { wallet: h.wallet ?? '', amount: h.amount ?? '1' }))
+            .map((h) =>
+              typeof h === 'string'
+                ? { wallet: h, amount: '1' }
+                : {
+                  wallet: (h as { wallet?: string }).wallet ?? '',
+                  amount: (h as { amount?: string }).amount ?? '1',
+                  mint: typeof (h as { mint?: string }).mint === 'string'
+                    ? (h as { mint: string }).mint
+                    : undefined,
+                },
+            )
             .filter((h) => h.wallet)
         : []
 
@@ -214,6 +226,16 @@ Deno.serve(async (req: Request) => {
       let holdersTotal = allHoldersNorm.length
       if (catalogKind === 'SPL' && allHoldersNorm.length > 0) {
         const sorted = sortHoldersByAmountDesc(allHoldersNorm)
+        holdersTotal = sorted.length
+        holdersPage = sorted.slice(holdersOffset, holdersOffset + holdersLimit)
+      } else if (nftCollectionSyncMode === 'sft_per_mint' && allHoldersNorm.length > 0) {
+        const sorted = [...allHoldersNorm].sort((a, b) => {
+          const ma = (a as { mint?: string }).mint ?? ''
+          const mb = (b as { mint?: string }).mint ?? ''
+          const c = ma.localeCompare(mb)
+          if (c !== 0) return c
+          return (a.wallet ?? '').localeCompare(b.wallet ?? '')
+        })
         holdersTotal = sorted.length
         holdersPage = sorted.slice(holdersOffset, holdersOffset + holdersLimit)
       }
@@ -304,8 +326,16 @@ Deno.serve(async (req: Request) => {
         track_holders: watch?.track_holders ?? false,
         track_snapshot: watch?.track_snapshot ?? false,
         track_transactions: watch?.track_transactions ?? false,
-        holders: holdersPage.map((h) => ({ wallet: h.wallet, amount: h.amount })),
-        ...(catalogKind === 'SPL'
+        holders: holdersPage.map((h) => {
+          const mint = (h as { mint?: string }).mint
+          return {
+            wallet: h.wallet,
+            amount: h.amount,
+            ...(typeof mint === 'string' && mint ? { mint } : {}),
+          }
+        }),
+        nftCollectionSyncMode: nftCollectionSyncMode ?? null,
+        ...(catalogKind === 'SPL' || nftCollectionSyncMode === 'sft_per_mint'
           ? { holdersTotal, holdersOffset, holdersLimit }
           : {}),
         holdersUpdatedAt: holder?.last_updated ?? null,
@@ -327,7 +357,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: catRow, error: catErr } = await db
         .from('tenant_mint_catalog')
-        .select('mint, kind')
+        .select('mint, kind, nft_collection_sync_mode')
         .eq('tenant_id', tenantId)
         .eq('mint', mint)
         .maybeSingle()
@@ -349,6 +379,8 @@ Deno.serve(async (req: Request) => {
       } | null
 
       const catalogKind = ((catRow as { kind?: string }).kind as string) ?? 'SPL'
+      const nftCollectionSyncMode =
+        ((catRow as { nft_collection_sync_mode?: string | null }).nft_collection_sync_mode as string | null) ?? null
 
       let rawHolders: unknown[] = []
       if (snapshotAt) {
@@ -390,13 +422,25 @@ Deno.serve(async (req: Request) => {
         .map((h) =>
           typeof h === 'string'
             ? { wallet: h, amount: '1' }
-            : { wallet: (h as { wallet?: string }).wallet ?? '', amount: (h as { amount?: string }).amount ?? '1' },
+            : {
+              wallet: (h as { wallet?: string }).wallet ?? '',
+              amount: (h as { amount?: string }).amount ?? '1',
+              mint: typeof (h as { mint?: string }).mint === 'string' ? (h as { mint: string }).mint : undefined,
+            },
         )
         .filter((h) => h.wallet)
 
       let rows = allHoldersNorm
       if (catalogKind === 'SPL' && rows.length > 0) {
         rows = sortHoldersByAmountDesc(rows)
+      } else if (nftCollectionSyncMode === 'sft_per_mint' && rows.length > 0) {
+        rows = [...rows].sort((a, b) => {
+          const ma = a.mint ?? ''
+          const mb = b.mint ?? ''
+          const c = ma.localeCompare(mb)
+          if (c !== 0) return c
+          return a.wallet.localeCompare(b.wallet)
+        })
       }
 
       const csv = buildHoldersCsv(rows)

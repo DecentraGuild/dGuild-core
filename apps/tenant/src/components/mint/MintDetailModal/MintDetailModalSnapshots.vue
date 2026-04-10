@@ -33,7 +33,12 @@
           </p>
           <p v-else-if="!holders.length" class="mint-modal__muted">No holders recorded.</p>
           <ul v-else class="mint-modal__wallet-list">
-            <li v-for="h in holders.slice(0, 50)" :key="h.wallet" class="mint-modal__wallet-item">
+            <li
+              v-for="(h, idx) in holders.slice(0, 50)"
+              :key="`${h.wallet}-${h.mint ?? idx}`"
+              class="mint-modal__wallet-item"
+            >
+              <span v-if="h.mint" class="mint-modal__snapshot-mint" :title="h.mint">{{ truncateAddress(h.mint, 4, 4) }}</span>
               <span class="mint-modal__holder-amount">{{ formatHolderAmount(h.amount) }}</span>
               <span class="mint-modal__holder-wallet">{{ resolveWallet(h.wallet, 6, 4) }}</span>
               <button type="button" class="mint-modal__icon-btn" aria-label="Copy" @click="onCopyWallet(h.wallet)">
@@ -55,9 +60,16 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
+import { truncateAddress } from '@decentraguild/display'
 import { useMemberProfiles } from '~/composables/members/useMemberProfiles'
 
 const { resolveWallet } = useMemberProfiles()
+
+interface HolderRow {
+  wallet: string
+  amount: string
+  mint?: string
+}
 
 interface SnapshotItem {
   date: string
@@ -69,7 +81,7 @@ defineProps<{
   snapshots: SnapshotItem[]
   loading?: boolean
   expandedDate: string | null
-  holders: Array<{ wallet: string; amount: string }>
+  holders: HolderRow[]
   walletsLoading?: boolean
   copiedWallet?: string | null
   formatHolderAmount: (amount: string) => string

@@ -15,8 +15,9 @@ interface DisplayMint {
   decimals?: number | null; sellerFeeBasisPoints?: number | null; updateAuthority?: string | null
   uri?: string | null; primarySaleHappened?: boolean | null; isMutable?: boolean | null
   editionNonce?: number | null; tokenStandard?: string | null; traitTypes?: string[]
+  nftCollectionSyncMode?: 'das_group' | 'sft_per_mint' | null
   tier?: string; createdAt?: string; track_holders?: boolean; track_snapshot?: boolean
-  track_transactions?: boolean; holders?: Array<{ wallet: string; amount: string }>
+  track_transactions?: boolean; holders?: Array<{ wallet: string; amount: string; mint?: string }>
   holdersTotal?: number
   holdersUpdatedAt?: string | null
   snapshots?: { date: string; holderCount: number; snapshotAt?: string | null }[]
@@ -87,16 +88,34 @@ export function useMintDetailModal(
     }
   })
 
-  function toHoldersWithAmount(raw: unknown): Array<{ wallet: string; amount: string }> {
+  function toHoldersWithAmount(raw: unknown): Array<{ wallet: string; amount: string; mint?: string }> {
     if (!Array.isArray(raw)) return []
-    return raw
+    const mapped = raw
       .map((h) => {
         if (typeof h === 'string') return { wallet: h, amount: '1' }
-        const o = h as { wallet?: string; amount?: string }
-        return { wallet: o.wallet ?? '', amount: o.amount ?? '1' }
+        const o = h as { wallet?: string; amount?: string; mint?: string }
+        return {
+          wallet: o.wallet ?? '',
+          amount: o.amount ?? '1',
+          ...(typeof o.mint === 'string' && o.mint ? { mint: o.mint } : {}),
+        }
       })
       .filter((h) => h.wallet)
-      .sort((a, b) => { const na = BigInt(a.amount), nb = BigInt(b.amount); return nb > na ? 1 : nb < na ? -1 : 0 })
+    const hasChildMint = mapped.some((h) => h.mint)
+    if (hasChildMint) {
+      return [...mapped].sort((a, b) => {
+        const ma = a.mint ?? ''
+        const mb = b.mint ?? ''
+        const c = ma.localeCompare(mb)
+        if (c !== 0) return c
+        return a.wallet.localeCompare(b.wallet)
+      })
+    }
+    return mapped.sort((a, b) => {
+      const na = BigInt(a.amount)
+      const nb = BigInt(b.amount)
+      return nb > na ? 1 : nb < na ? -1 : 0
+    })
   }
 
   const displayHolders = computed(() => toHoldersWithAmount(display.value?.holders))
@@ -174,6 +193,17 @@ export function useMintDetailModal(
         count: 0,
         nfts: [],
         splAmount: h.amount,
+      }))
+    }
+    if (d.kind === 'NFT' && d.nftCollectionSyncMode === 'sft_per_mint') {
+      const holders = displayHolders.value
+      if (!holders.length) return []
+      return holders.map((h) => ({
+        wallet: h.wallet,
+        count: 0,
+        nfts: [],
+        splAmount: h.amount,
+        itemMint: h.mint ?? '',
       }))
     }
     if (d.kind !== 'NFT') return []
@@ -306,16 +336,29 @@ export function useMintDetailModal(
   }
 
   function formatHolderAmount(amountStr: string): string {
-    const kind = display.value?.kind === 'NFT' ? 'NFT' : 'SPL'
-    const decimals = kind === 'NFT' ? 0 : (display.value?.decimals ?? null)
-    return formatRawTokenAmount(amountStr, decimals, kind)
+    const d = display.value
+    if (!d) return amountStr
+    if (d.kind === 'SPL') return formatRawTokenAmount(amountStr, d.decimals ?? null, 'SPL')
+    if (d.kind === 'NFT' && d.nftCollectionSyncMode === 'sft_per_mint') {
+      return formatRawTokenAmount(amountStr, d.decimals ?? null, 'SPL')
+    }
+    if (d.kind === 'NFT') return formatRawTokenAmount(amountStr, 0, 'NFT')
+    return formatRawTokenAmount(amountStr, null, 'SPL')
   }
 
-  function parseWatchtowerHoldersFromRaw(raw: unknown): Array<{ wallet: string; amount: string }> {
+  function parseWatchtowerHoldersFromRaw(raw: unknown): Array<{ wallet: string; amount: string; mint?: string }> {
     if (!Array.isArray(raw)) return []
     return raw
       .map((h) =>
-        typeof h === 'string' ? { wallet: h, amount: '1' } : { wallet: (h as { wallet?: string }).wallet ?? '', amount: (h as { amount?: string }).amount ?? '1' },
+        typeof h === 'string'
+          ? { wallet: h, amount: '1' }
+          : {
+              wallet: (h as { wallet?: string }).wallet ?? '',
+              amount: (h as { amount?: string }).amount ?? '1',
+              ...(typeof (h as { mint?: string }).mint === 'string' && (h as { mint: string }).mint
+                ? { mint: (h as { mint: string }).mint }
+                : {}),
+            },
       )
       .filter((h) => h.wallet)
   }
@@ -323,7 +366,7 @@ export function useMintDetailModal(
   function buildFetchedDetailFromMintDetailRaw(
     raw: Record<string, unknown>,
     mint: string,
-    pageHolders: Array<{ wallet: string; amount: string }>,
+    pageHolders: Array<{ wallet: string; amount: string; mint?: string }>,
     holdersTotalParsed: number,
   ): FetchedDetail {
     const snapshots = Array.isArray(raw.snapshots)
@@ -343,6 +386,8 @@ export function useMintDetailModal(
         }))
       : []
     const kindParsed = (raw.kind as string) ?? 'SPL'
+    const nftMode = (raw.nftCollectionSyncMode as string | null) ?? null
+    const sftPerMint = kindParsed === 'NFT' && nftMode === 'sft_per_mint'
     return {
       mint: (raw.mint as string) ?? mint ?? '',
       kind: kindParsed,
@@ -359,11 +404,12 @@ export function useMintDetailModal(
       editionNonce: typeof raw.editionNonce === 'number' ? raw.editionNonce : null,
       tokenStandard: (raw.tokenStandard as string) ?? null,
       traitTypes: Array.isArray(raw.traitTypes) ? (raw.traitTypes as string[]) : [],
+      nftCollectionSyncMode: nftMode === 'sft_per_mint' || nftMode === 'das_group' ? nftMode : null,
       track_holders: Boolean(raw.track_holders),
       track_snapshot: Boolean(raw.track_snapshot),
       track_transactions: Boolean(raw.track_transactions),
       holders: pageHolders,
-      ...(kindParsed === 'SPL' ? { holdersTotal: holdersTotalParsed } : {}),
+      ...((kindParsed === 'SPL' || sftPerMint) ? { holdersTotal: holdersTotalParsed } : {}),
       holdersUpdatedAt: (raw.holdersUpdatedAt as string) ?? null,
       snapshots,
       memberNfts: memberNftsRaw,
@@ -389,10 +435,13 @@ export function useMintDetailModal(
       const raw = (data ?? {}) as Record<string, unknown>
       const pageHolders = parseWatchtowerHoldersFromRaw(raw.holders)
       const holdersTotalParsed = typeof raw.holdersTotal === 'number' ? raw.holdersTotal : pageHolders.length
+      const sft =
+        fetchedDetail.value.kind === 'NFT' &&
+        fetchedDetail.value.nftCollectionSyncMode === 'sft_per_mint'
       fetchedDetail.value = {
         ...fetchedDetail.value,
         holders: pageHolders,
-        ...(fetchedDetail.value.kind === 'SPL' ? { holdersTotal: holdersTotalParsed } : {}),
+        ...((fetchedDetail.value.kind === 'SPL' || sft) ? { holdersTotal: holdersTotalParsed } : {}),
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load'
@@ -551,12 +600,18 @@ export function useMintDetailModal(
     () => { if (props.modelValue.value && isCatalog.value) fetchCatalogSnapshots() },
   )
 
-  const holdersSectionSplMode = computed(() => display.value?.kind === 'SPL')
+  const holdersSectionSplMode = computed(
+    () => display.value?.kind === 'SPL' || display.value?.nftCollectionSyncMode === 'sft_per_mint',
+  )
 
   const watchtowerHoldersTotal = computed(() => {
     const d = display.value
-    if (!d || d.kind !== 'SPL') return undefined
-    return typeof d.holdersTotal === 'number' ? d.holdersTotal : d.holders?.length
+    if (!d) return undefined
+    if (d.kind === 'SPL') return typeof d.holdersTotal === 'number' ? d.holdersTotal : d.holders?.length
+    if (d.kind === 'NFT' && d.nftCollectionSyncMode === 'sft_per_mint') {
+      return typeof d.holdersTotal === 'number' ? d.holdersTotal : d.holders?.length
+    }
+    return undefined
   })
 
   const watchtowerHoldersPageCount = computed(() => {
@@ -565,13 +620,17 @@ export function useMintDetailModal(
     return Math.max(1, Math.ceil(total / WATCHTOWER_HOLDERS_PAGE_SIZE))
   })
 
-  const showWatchtowerHoldersPagination = computed(
-    () =>
-      isWatchtower.value &&
-      display.value?.kind === 'SPL' &&
+  const showWatchtowerHoldersPagination = computed(() => {
+    if (!isWatchtower.value) return false
+    const d = display.value
+    const splLike =
+      d?.kind === 'SPL' || (d?.kind === 'NFT' && d.nftCollectionSyncMode === 'sft_per_mint')
+    return (
+      splLike &&
       typeof watchtowerHoldersTotal.value === 'number' &&
-      watchtowerHoldersTotal.value > WATCHTOWER_HOLDERS_PAGE_SIZE,
-  )
+      watchtowerHoldersTotal.value > WATCHTOWER_HOLDERS_PAGE_SIZE
+    )
+  })
 
   const tenantIdForWatchtowerApi = computed(() => props.tenantId.value || tenantStore.tenantId || '')
 
@@ -579,16 +638,18 @@ export function useMintDetailModal(
     const d = display.value
     const m = mintAddress.value
     if (!d?.track_holders || !m || !tenantIdForWatchtowerApi.value) return false
-    if (d.kind === 'SPL') {
-      const n = typeof d.holdersTotal === 'number' ? d.holdersTotal : 0
+    if (d.kind === 'SPL' || (d.kind === 'NFT' && d.nftCollectionSyncMode === 'sft_per_mint')) {
+      const n = typeof d.holdersTotal === 'number' ? d.holdersTotal : combinedHolders.value.length
       return n > 0
     }
     return combinedHolders.value.length > 0
   })
 
   function goWatchtowerHoldersPage(page: number) {
-    if (!isWatchtower.value || fetchedDetail.value?.kind !== 'SPL') return
-    const total = fetchedDetail.value.holdersTotal ?? 0
+    const fd = fetchedDetail.value
+    const splLike = fd?.kind === 'SPL' || (fd?.kind === 'NFT' && fd.nftCollectionSyncMode === 'sft_per_mint')
+    if (!isWatchtower.value || !splLike) return
+    const total = fd?.holdersTotal ?? 0
     const pages = Math.max(1, Math.ceil(total / WATCHTOWER_HOLDERS_PAGE_SIZE))
     if (page < 1 || page > pages || page === watchtowerHoldersPage.value) return
     watchtowerHoldersPage.value = page

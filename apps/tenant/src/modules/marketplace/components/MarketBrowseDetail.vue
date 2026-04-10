@@ -2,12 +2,20 @@
   <div class="market-browse-detail">
     <div class="market-browse-detail__meta">
       <div class="market-browse-detail__media">
-        <img
+        <RemoteImage
           v-if="detailAsset?.metadata?.image"
           :src="detailAsset.metadata.image"
           :alt="detailAsset.metadata.name ?? detailMint"
-          class="market-browse-detail__img"
-        />
+          img-class="market-browse-detail__img"
+          root-class="market-browse-detail__remote-img"
+          root-margin="80px"
+        >
+          <template #placeholder>
+            <div class="market-browse-detail__placeholder market-browse-detail__placeholder--loading">
+              <Icon icon="lucide:loader-2" class="market-browse-detail__placeholder-spin" />
+            </div>
+          </template>
+        </RemoteImage>
         <div v-else class="market-browse-detail__placeholder">
           <Icon icon="lucide:image-off" />
         </div>
@@ -92,6 +100,7 @@
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { truncateAddress } from '@decentraguild/display'
+import RemoteImage from '~/components/ui/RemoteImage.vue'
 import TradeList from './TradeList.vue'
 import type { EscrowWithAddress } from '@decentraguild/web3'
 import type { TraitAttribute } from '~/utils/nftFilterHelpers'
@@ -162,7 +171,12 @@ defineEmits<{
   overflow: hidden;
 }
 
-.market-browse-detail__img {
+:deep(.market-browse-detail__remote-img) {
+  width: 100%;
+  height: 100%;
+}
+
+:deep(.market-browse-detail__img) {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -203,6 +217,17 @@ defineEmits<{
   width: 100%;
   height: 100%;
   color: var(--theme-text-muted);
+}
+
+.market-browse-detail__placeholder-spin {
+  font-size: 1.75rem;
+  animation: market-browse-detail-spin 0.9s linear infinite;
+}
+
+@keyframes market-browse-detail-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .market-browse-detail__name {

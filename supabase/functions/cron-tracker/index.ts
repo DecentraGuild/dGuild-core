@@ -30,18 +30,21 @@ import {
 } from '../_shared/fetch-nft-holders.ts'
 import { fetchMintMetadata } from '../_shared/mint-metadata.ts'
 import { mergeMintMetadataUpsertFromFetchResult } from '../_shared/mint-metadata-merge.ts'
+import { runSftCollectionHolderSyncTick } from '../_shared/fetch-sft-collection-holders.ts'
 
 const METADATA_REFRESH_AGE_DAYS = 7
 
 type CronCandidateRow = {
   mint: string
   kind: string
+  nft_collection_sync_mode: string | null
   last_updated: string | null
   holder_count: number
   item_total: number
   has_snapshot_for_bucket: boolean
   spl_pagination_key: string | null
   nft_next_page: number | null
+  sft_holder_sync_resume: boolean
   any_current_eligible: boolean
   any_snapshot_eligible: boolean
 }
@@ -55,14 +58,19 @@ type ClassifiedWork = {
 
 function classifyCronWork(row: CronCandidateRow, config: WatchtowerSyncConfig, now: Date): ClassifiedWork | null {
   const kind = row.kind === 'SPL' ? 'SPL' : 'NFT'
-  const resume = kind === 'SPL'
+  const isSftCollection = kind === 'NFT' && row.nft_collection_sync_mode === 'sft_per_mint'
+  const resume = isSftCollection
+    ? Boolean(row.sft_holder_sync_resume)
+    : kind === 'SPL'
     ? Boolean(row.spl_pagination_key)
     : row.nft_next_page != null && Number.isFinite(Number(row.nft_next_page)) && Number(row.nft_next_page) >= 1
   const snapshotDue = row.any_snapshot_eligible && !row.has_snapshot_for_bucket
   const itemTotal = Number(row.item_total) || 0
   const holderCount = Number(row.holder_count) || 0
   const currentDue = row.any_current_eligible && (
-    kind === 'NFT'
+    isSftCollection
+      ? isHolderSyncDue(row.last_updated, holderCount, config.tiers, now)
+      : kind === 'NFT'
       ? isNftHolderSyncDue(row.last_updated, itemTotal, config.nft_item_tiers, now)
       : isHolderSyncDue(row.last_updated, holderCount, config.tiers, now)
   )
@@ -79,6 +87,7 @@ function classifyCronWork(row: CronCandidateRow, config: WatchtowerSyncConfig, n
       config.tiers,
       config.nft_item_tiers,
       now,
+      row.nft_collection_sync_mode,
     )
     : 0
   return { row, kind, tier, overdueMin }
@@ -178,11 +187,12 @@ Deno.serve(async (req: Request) => {
 
     const { data: catalog } = await db
       .from('tenant_mint_catalog')
-      .select('kind')
+      .select('kind, nft_collection_sync_mode')
       .eq('tenant_id', syncTenantId)
       .eq('mint', syncMint)
       .maybeSingle()
     const kind = (catalog?.kind as 'SPL' | 'NFT') ?? 'NFT'
+    const nftCollectionSyncMode = (catalog?.nft_collection_sync_mode as string | null) ?? null
 
     if (syncSnapshot) {
       const { data: snapDup } = await db
@@ -197,9 +207,10 @@ Deno.serve(async (req: Request) => {
       await refreshMintMetadataIfStale(db, syncMint, kind, now)
     }
 
-    let holders: Array<{ wallet: string; amount: string }>
+    let holders: Array<{ wallet: string; amount: string; mint?: string }>
     let splCompleted = true
     let nftCompleted = true
+    let sftCompleted = true
 
     if (kind === 'SPL') {
       const { data: gpaRow } = await db
@@ -236,6 +247,27 @@ Deno.serve(async (req: Request) => {
       } else {
         await db.from('spl_holder_gpa_progress').delete().eq('mint', syncMint)
       }
+    } else if (nftCollectionSyncMode === 'sft_per_mint') {
+      sftCompleted = false
+      while (true) {
+        const r = await runSftCollectionHolderSyncTick(db, rpcEndpoint, syncMint, now.toISOString(), {
+          maxGpaPagesPerTick: 10_000,
+          maxChildrenPerTick: 10_000,
+        })
+        if (r.completed) {
+          sftCompleted = true
+          break
+        }
+      }
+      const { data: hc } = await db
+        .from('holder_current')
+        .select('holder_wallets')
+        .eq('mint', syncMint)
+        .maybeSingle()
+      const hw = hc?.holder_wallets
+      holders = Array.isArray(hw)
+        ? (hw as Array<{ wallet: string; amount: string; mint?: string }>)
+        : []
     } else {
       const { data: nftRow } = await db
         .from('nft_holder_group_progress')
@@ -279,7 +311,7 @@ Deno.serve(async (req: Request) => {
         holder_wallets: holders,
         last_updated: now.toISOString(),
       }, { onConflict: 'mint' })
-    } else {
+    } else if (nftCollectionSyncMode !== 'sft_per_mint') {
       await db.from('holder_current').upsert({
         mint: syncMint,
         holder_wallets: holders,
@@ -296,7 +328,15 @@ Deno.serve(async (req: Request) => {
           message: 'SPL holder sync in progress; snapshot is written when the holder scan completes.',
         }, req)
       }
-      if (kind === 'NFT' && !nftCompleted) {
+      if (kind === 'NFT' && nftCollectionSyncMode === 'sft_per_mint' && !sftCompleted) {
+        return jsonResponse({
+          processed: 1,
+          synced: 0,
+          sftHoldersContinuing: true,
+          message: 'SFT collection holder sync in progress; snapshot is written when all child mints complete.',
+        }, req)
+      }
+      if (kind === 'NFT' && nftCollectionSyncMode !== 'sft_per_mint' && !nftCompleted) {
         return jsonResponse({
           processed: 1,
           synced: 0,
@@ -321,12 +361,17 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const done = (kind === 'SPL' ? splCompleted : nftCompleted)
+    const done = kind === 'SPL'
+      ? splCompleted
+      : nftCollectionSyncMode === 'sft_per_mint'
+      ? sftCompleted
+      : nftCompleted
     return jsonResponse({
       processed: 1,
       synced: done ? 1 : 0,
       splHoldersContinuing: kind === 'SPL' && !splCompleted,
-      nftHoldersContinuing: kind === 'NFT' && !nftCompleted,
+      nftHoldersContinuing: kind === 'NFT' && nftCollectionSyncMode !== 'sft_per_mint' && !nftCompleted,
+      sftHoldersContinuing: kind === 'NFT' && nftCollectionSyncMode === 'sft_per_mint' && !sftCompleted,
     }, req)
   }
 
@@ -406,8 +451,16 @@ Deno.serve(async (req: Request) => {
 
     const itemTotal = Number(item.row.item_total) || 0
     const holderCount = Number(item.row.holder_count) || 0
+    const isSft = kind === 'NFT' && item.row.nft_collection_sync_mode === 'sft_per_mint'
     const currentDue = anyCurrent && (
-      kind === 'NFT'
+      isSft
+        ? isHolderSyncDue(
+          item.row.last_updated,
+          holderCount,
+          config.tiers,
+          now,
+        )
+        : kind === 'NFT'
         ? isNftHolderSyncDue(
           item.row.last_updated,
           itemTotal,
@@ -425,10 +478,11 @@ Deno.serve(async (req: Request) => {
 
     const splResumeKey = kind === 'SPL' ? gpaByMint.get(mint) ?? null : null
     const splIncomplete = kind === 'SPL' && splResumeKey != null
-    const nftResumePage = kind === 'NFT' ? nftNextPageByMint.get(mint) ?? null : null
-    const nftIncomplete = kind === 'NFT' && nftResumePage != null
+    const nftResumePage = kind === 'NFT' && !isSft ? nftNextPageByMint.get(mint) ?? null : null
+    const nftIncomplete = kind === 'NFT' && !isSft && nftResumePage != null
+    const sftIncomplete = isSft && item.row.sft_holder_sync_resume
 
-    if (!currentDue && !snapshotDue && !splIncomplete && !nftIncomplete) {
+    if (!currentDue && !snapshotDue && !splIncomplete && !nftIncomplete && !sftIncomplete) {
       processed++
       continue
     }
@@ -438,9 +492,10 @@ Deno.serve(async (req: Request) => {
         await refreshMintMetadataIfStale(db, mint, kind, now)
       }
 
-      let holders: Array<{ wallet: string; amount: string }>
+      let holders: Array<{ wallet: string; amount: string; mint?: string }> = []
       let splCompleted = true
       let nftCompleted = true
+      let sftCompleted = true
 
       if (kind === 'SPL') {
         let mergeMap = new Map<string, bigint>()
@@ -469,6 +524,21 @@ Deno.serve(async (req: Request) => {
           await db.from('spl_holder_gpa_progress').delete().eq('mint', mint)
           gpaByMint.delete(mint)
         }
+      } else if (isSft) {
+        const sft = await runSftCollectionHolderSyncTick(db, rpcEndpoint, mint, now.toISOString(), {
+          maxGpaPagesPerTick: config.sft_max_gpa_pages_per_tick,
+          maxChildrenPerTick: config.sft_max_children_per_tick,
+        })
+        sftCompleted = sft.completed
+        const { data: hc } = await db
+          .from('holder_current')
+          .select('holder_wallets')
+          .eq('mint', mint)
+          .maybeSingle()
+        const hw = hc?.holder_wallets
+        holders = Array.isArray(hw)
+          ? (hw as Array<{ wallet: string; amount: string; mint?: string }>)
+          : []
       } else {
         let mergeCounts = new Map<string, number>()
         if (nftIncomplete) {
@@ -505,7 +575,7 @@ Deno.serve(async (req: Request) => {
           holder_wallets: holders,
           last_updated: now.toISOString(),
         }, { onConflict: 'mint' })
-      } else {
+      } else if (!isSft) {
         await db.from('holder_current').upsert({
           mint,
           holder_wallets: holders,
@@ -513,7 +583,11 @@ Deno.serve(async (req: Request) => {
         }, { onConflict: 'mint' })
       }
 
-      if (snapshotDue && splCompleted && nftCompleted) {
+      const holdersReady = (kind === 'SPL' && splCompleted) ||
+        (isSft && sftCompleted) ||
+        (kind === 'NFT' && !isSft && nftCompleted)
+
+      if (snapshotDue && holdersReady) {
         await db.from('holder_snapshots').upsert({
           mint,
           snapshot_at: snapshotAt,

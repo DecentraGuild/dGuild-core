@@ -57,7 +57,7 @@
     />
     <div v-else>
       <MarketBrowseToolbar
-        v-if="isCollectionSelected && hasAnyTraits"
+        v-if="showCollectionMemberGrid && hasAnyTraits"
         v-model:search-query="browseSearchQuery"
         v-model:filters-open="browseFiltersOpen"
         :selected-traits="browseSelectedTraits"
@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRef } from 'vue'
+import { computed, toRef, watch } from 'vue'
 import StatusBanner from '~/components/ui/status-banner/StatusBanner.vue'
 import { useAuth } from '@decentraguild/auth'
 import { useMarketplaceEscrowLinks } from '~/composables/marketplace/useMarketplaceEscrowLinks'
@@ -96,6 +96,8 @@ import MarketBrowseDetail from './MarketBrowseDetail.vue'
 import MarketBrowseGrid from './MarketBrowseGrid.vue'
 import type { TreeNode } from '~/composables/marketplace/useMarketplaceTree'
 import type { EscrowWithAddress } from '@decentraguild/web3'
+
+const EMPTY_SFT_ROOTS = new Set<string>()
 
 const props = withDefaults(
   defineProps<{
@@ -108,6 +110,7 @@ const props = withDefaults(
     selectNodeByBreadcrumbIndex: (index: number | null) => void
     setSelectedDetailMint: (mint: string | null) => void
     createDisabled?: boolean
+    sftCollectionRoots?: Set<string>
   }>(),
   { createDisabled: false }
 )
@@ -116,6 +119,7 @@ defineEmits<{ 'open-create-trade': [] }>()
 
 const selectedNodeRef = toRef(props, 'selectedNode')
 const descendantAssetNodesRef = toRef(props, 'descendantAssetNodes')
+const sftCollectionRootsRef = computed(() => props.sftCollectionRoots ?? EMPTY_SFT_ROOTS)
 
 const config = useRuntimeConfig()
 const supabaseConfigured = computed(() => Boolean(config.public.supabaseUrl && config.public.supabaseAnonKey))
@@ -132,7 +136,7 @@ const {
   detailAssets,
   byMint,
   mintsByCollectionMerged,
-  isCollectionSelected,
+  showCollectionMemberGrid,
   browseSearchQuery,
   browseSelectedTraits,
   browseFiltersOpen,
@@ -147,10 +151,19 @@ const {
   getDisplayName,
   getDisplaySymbol,
   getDisplayImage,
+  refreshDetailAssetMint,
 } = useMarketBrowseData({
   selectedNode: selectedNodeRef,
   descendantAssetNodes: descendantAssetNodesRef,
+  sftCollectionRoots: sftCollectionRootsRef,
 })
+
+watch(
+  () => props.selectedDetailMint,
+  (mint) => {
+    if (mint) void refreshDetailAssetMint(mint)
+  },
+)
 
 const { escrowLink } = useMarketplaceEscrowLinks(slug)
 const auth = useAuth()

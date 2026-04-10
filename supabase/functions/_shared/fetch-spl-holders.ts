@@ -3,6 +3,8 @@
  * Large mints: use `fetchSplHoldersWithProgress` + `maxPages` and persist `pagination_key`
  * in `spl_holder_gpa_progress` across cron invocations (Edge WORKER_LIMIT / HTTP 546).
  */
+import { solanaJsonRpc } from './solana-json-rpc.ts'
+
 const SPL_DATA_SIZE = 165
 const OWNER_AMOUNT_SLICE_OFFSET = 32
 const OWNER_AMOUNT_SLICE_LEN = 40
@@ -54,26 +56,6 @@ type GpaV2RpcResult = {
     account?: { data?: [string, string] }
   }>
   paginationKey?: string | null
-}
-
-async function solanaRpc<T>(rpcUrl: string, method: string, params: unknown[]): Promise<T> {
-  const res = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-  })
-  if (!res.ok) {
-    throw new Error(`RPC ${method} HTTP ${res.status}`)
-  }
-  const json = await res.json() as { result?: T; error?: { message?: string; code?: unknown } }
-  if (json.error) {
-    const msg = json.error.message ?? 'RPC error'
-    throw new Error(`${method}: ${msg}`)
-  }
-  if (json.result === undefined) {
-    throw new Error(`RPC ${method}: missing result`)
-  }
-  return json.result
 }
 
 export type FetchSplHoldersOptions = {
@@ -134,7 +116,7 @@ export async function fetchSplHoldersWithProgress(
 
   for (;;) {
     const opts = paginationKey != null ? { ...baseOpts, paginationKey } : baseOpts
-    const result = await solanaRpc<GpaV2RpcResult>(rpcUrl, 'getProgramAccountsV2', [
+    const result = await solanaJsonRpc<GpaV2RpcResult>(rpcUrl, 'getProgramAccountsV2', [
       programId,
       opts,
     ])

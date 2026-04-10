@@ -1,7 +1,7 @@
 <template>
   <section class="mint-modal__section mint-modal__section--bordered">
     <div class="mint-modal__section-header mint-modal__section-header--holders">
-      <h4 class="mint-modal__section-title">{{ splMode ? 'Holders' : 'Holders & NFTs' }}</h4>
+      <h4 class="mint-modal__section-title">{{ splMode ? (sftPerMintMode ? 'Holders (per item mint)' : 'Holders') : 'Holders & NFTs' }}</h4>
       <div class="mint-modal__section-header-actions">
         <button
           v-if="showCsvDownload"
@@ -48,14 +48,15 @@
       {{ splMode ? 'No holders yet. Enable Holders tracking in Watchtower.' : 'No holders or member NFTs yet. Add the collection in Address Book and enable Holders tracking.' }}
     </div>
     <template v-else-if="splMode">
-      <div class="mint-modal__nft-list mint-modal__nft-list--spl">
+      <div class="mint-modal__nft-list mint-modal__nft-list--spl" :class="{ 'mint-modal__nft-list--sft': sftPerMintMode }">
         <div class="mint-modal__nft-list-header mint-modal__nft-list-header--spl">
           <span class="mint-modal__nft-list-col mint-modal__nft-list-col--holder">Holder</span>
+          <span v-if="sftPerMintMode" class="mint-modal__nft-list-col mint-modal__nft-list-col--item-mint">Item mint</span>
           <span class="mint-modal__nft-list-col mint-modal__nft-list-col--count">Balance</span>
         </div>
         <div
           v-for="h in combinedHolders"
-          :key="h.wallet"
+          :key="sftPerMintMode ? `${h.wallet}-${h.itemMint ?? ''}` : h.wallet"
           class="mint-modal__nft-list-row mint-modal__nft-list-row--spl"
         >
           <div class="mint-modal__nft-list-col mint-modal__nft-list-col--holder">
@@ -72,6 +73,26 @@
             <a :href="accountUrl(h.wallet)" target="_blank" rel="noopener" class="mint-modal__icon-btn mint-modal__icon-btn--sm" title="Solscan">
               <Icon icon="lucide:external-link" />
             </a>
+          </div>
+          <div v-if="sftPerMintMode" class="mint-modal__nft-list-col mint-modal__nft-list-col--item-mint">
+            <a
+              v-if="h.itemMint"
+              :href="tokenUrl(h.itemMint)"
+              target="_blank"
+              rel="noopener"
+              class="mint-modal__link mint-modal__item-mint"
+            >{{ truncateAddress(h.itemMint, 6, 4) }}</a>
+            <span v-else class="mint-modal__muted">—</span>
+            <button
+              v-if="h.itemMint"
+              type="button"
+              class="mint-modal__icon-btn mint-modal__icon-btn--sm"
+              :class="{ 'mint-modal__icon-btn--success': copiedMint === h.itemMint }"
+              title="Copy mint"
+              @click.stop="onCopy(h.itemMint, 'mint')"
+            >
+              <Icon :icon="copiedMint === h.itemMint ? 'lucide:check' : 'lucide:copy'" />
+            </button>
           </div>
           <div class="mint-modal__nft-list-col mint-modal__nft-list-col--count">
             <span class="mint-modal__holder-amount">{{ formatTokenAmount(h.splAmount ?? '0') }}</span>
@@ -215,6 +236,8 @@ interface CombinedHolder {
   count: number
   nfts: HolderNft[]
   splAmount?: string
+  /** Child SPL mint for sft_per_mint collections (one row per wallet × item mint). */
+  itemMint?: string
 }
 
 defineProps<{
@@ -224,6 +247,8 @@ defineProps<{
   loading?: boolean
   modelValue: 'list' | 'card'
   splMode?: boolean
+  /** Metaplex SFT collection: show item mint column; do not aggregate rows by wallet. */
+  sftPerMintMode?: boolean
   formatTokenAmount?: (raw: string) => string
   nftLink?: boolean
   copiedWallet?: string | null

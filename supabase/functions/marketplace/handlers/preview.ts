@@ -1,5 +1,6 @@
 import { jsonResponse, errorResponse } from '../../_shared/cors.ts'
 import type { getAdminClient } from '../../_shared/supabase-admin.ts'
+import { solanaJsonRpc } from '../../_shared/solana-json-rpc.ts'
 
 type Db = ReturnType<typeof getAdminClient>
 
@@ -11,21 +12,25 @@ export async function handleCollectionPreview(body: Record<string, unknown>, _db
   if (!rpcUrl) return errorResponse('RPC not configured', req, 500)
 
   try {
-    const assetRes = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAsset', params: { id: mint } }) })
-    if (!assetRes.ok) return errorResponse('RPC request failed', req, 502)
-    const assetData = await assetRes.json() as { result?: Record<string, unknown> }
-    const asset = assetData.result
+    const asset = await solanaJsonRpc<Record<string, unknown> | null>(rpcUrl, 'getAsset', { id: mint })
 
     let collectionSize = 0
     const traitTypesSet = new Set<string>()
     let page = 1; let hasMore = true
 
     while (hasMore) {
-      const r = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAssetsByGroup', params: { groupKey: 'collection', groupValue: mint, limit: 1000, page } }) })
-      if (!r.ok) break
-      const d = await r.json() as { result?: { items?: Array<Record<string, unknown>>; total?: number } }
-      const items = d.result?.items ?? []
-      if (page === 1 && d.result?.total) collectionSize = d.result.total
+      let d: { items?: Array<Record<string, unknown>>; total?: number }
+      try {
+        d = await solanaJsonRpc<{ items?: Array<Record<string, unknown>>; total?: number }>(
+          rpcUrl,
+          'getAssetsByGroup',
+          { groupKey: 'collection', groupValue: mint, limit: 1000, page },
+        )
+      } catch {
+        break
+      }
+      const items = d.items ?? []
+      if (page === 1 && d.total) collectionSize = d.total
       for (const item of items) {
         const attrs = ((item.content as Record<string, unknown>)?.metadata as Record<string, unknown>)?.attributes as Array<{ trait_type?: string }> | undefined
         if (attrs) for (const a of attrs) if (a.trait_type) traitTypesSet.add(a.trait_type)
@@ -50,10 +55,7 @@ export async function handleSplPreview(body: Record<string, unknown>, _db: Db, _
   if (!rpcUrl) return errorResponse('RPC not configured', req, 500)
 
   try {
-    const res = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAsset', params: { id: mint } }) })
-    if (!res.ok) return errorResponse('RPC request failed', req, 502)
-    const data = await res.json() as { result?: Record<string, unknown> }
-    const asset = data.result
+    const asset = await solanaJsonRpc<Record<string, unknown> | null>(rpcUrl, 'getAsset', { id: mint })
     if (!asset) return errorResponse('Asset not found', req, 404)
 
     const meta = (asset.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined

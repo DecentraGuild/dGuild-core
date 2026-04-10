@@ -1,5 +1,7 @@
 import { jsonResponse, errorResponse } from '../../_shared/cors.ts'
 import type { getAdminClient } from '../../_shared/supabase-admin.ts'
+import { inferNftCollectionSyncModeFromDasGroupItems } from '../../_shared/mint-metadata.ts'
+import { solanaJsonRpc } from '../../_shared/solana-json-rpc.ts'
 
 type Db = ReturnType<typeof getAdminClient>
 
@@ -14,16 +16,26 @@ export async function handleCatalogAdd(body: Record<string, unknown>, db: Db, _a
 
   if (kindHint !== 'SPL') {
     try {
-      const colRes = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAssetsByGroup', params: { groupKey: 'collection', groupValue: mint, limit: 1, page: 1 } }) })
-      const colData = await colRes.json() as { result?: { total?: number } }
-      if ((colData.result?.total ?? 0) > 0) {
+      const colData = await solanaJsonRpc<{ total?: number }>(rpcUrl, 'getAssetsByGroup', {
+        groupKey: 'collection',
+        groupValue: mint,
+        limit: 1,
+        page: 1,
+      })
+      if ((colData.total ?? 0) > 0) {
         const traitKeys = new Set<string>()
         const traitOptions: Record<string, Set<string>> = {}
         let pgN = 1; let more = true
+        let nftCollectionSyncMode: 'das_group' | 'sft_per_mint' = 'das_group'
         while (more) {
-          const r2 = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAssetsByGroup', params: { groupKey: 'collection', groupValue: mint, limit: 1000, page: pgN } }) })
-          const d2 = await r2.json() as { result?: { items?: Array<Record<string, unknown>> } }
-          const items = d2.result?.items ?? []
+          const d2 = await solanaJsonRpc<{ items?: Array<Record<string, unknown>> }>(rpcUrl, 'getAssetsByGroup', {
+            groupKey: 'collection',
+            groupValue: mint,
+            limit: 1000,
+            page: pgN,
+          })
+          const items = d2.items ?? []
+          if (pgN === 1) nftCollectionSyncMode = inferNftCollectionSyncModeFromDasGroupItems(items)
           for (const item of items) {
             const attrs = ((item.content as Record<string, unknown>)?.metadata as Record<string, unknown>)?.attributes as Array<{ trait_type?: string; value?: string }> | undefined
             if (attrs) for (const a of attrs) {
@@ -35,12 +47,18 @@ export async function handleCatalogAdd(body: Record<string, unknown>, db: Db, _a
           }
           more = items.length >= 1000; pgN++
         }
-        const metaRes = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAsset', params: { id: mint } }) })
-        const metaData = await metaRes.json() as { result?: Record<string, unknown> }
-        const assetMeta = (metaData.result?.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
+        const metaResult = await solanaJsonRpc<Record<string, unknown> | null>(rpcUrl, 'getAsset', { id: mint })
+        const assetMeta = (metaResult?.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
         const traitIndex = { trait_keys: [...traitKeys], trait_options: Object.fromEntries([...Object.entries(traitOptions)].map(([k, v]) => [k, [...v]])) }
-        await db.from('mint_metadata').upsert({ mint, name: assetMeta?.name as string ?? null, image: ((metaData.result?.content as Record<string, unknown>)?.links as Record<string, unknown>)?.image as string ?? null, trait_index: traitIndex, updated_at: new Date().toISOString() }, { onConflict: 'mint' })
-        const { data: entry, error } = await db.from('tenant_mint_catalog').upsert({ tenant_id: tenantId, mint, kind: 'NFT', label: assetMeta?.name as string ?? null, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id,mint' }).select().single()
+        await db.from('mint_metadata').upsert({ mint, name: assetMeta?.name as string ?? null, image: ((metaResult?.content as Record<string, unknown>)?.links as Record<string, unknown>)?.image as string ?? null, trait_index: traitIndex, updated_at: new Date().toISOString() }, { onConflict: 'mint' })
+        const { data: entry, error } = await db.from('tenant_mint_catalog').upsert({
+          tenant_id: tenantId,
+          mint,
+          kind: 'NFT',
+          label: assetMeta?.name as string ?? null,
+          nft_collection_sync_mode: nftCollectionSyncMode,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'tenant_id,mint' }).select().single()
         if (error) return errorResponse(error.message, req, 500)
         return jsonResponse({ entry }, req)
       }
@@ -48,9 +66,7 @@ export async function handleCatalogAdd(body: Record<string, unknown>, db: Db, _a
   }
 
   try {
-    const res = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAsset', params: { id: mint } }) })
-    const data = await res.json() as { result?: Record<string, unknown> }
-    const asset = data.result
+    const asset = await solanaJsonRpc<Record<string, unknown> | null>(rpcUrl, 'getAsset', { id: mint })
     const meta = (asset?.content as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined
     const tokenInfo = asset?.token_info as Record<string, unknown> | undefined
     await db.from('mint_metadata').upsert({ mint, name: meta?.name as string ?? null, symbol: meta?.symbol as string ?? null, image: ((asset?.content as Record<string, unknown>)?.links as Record<string, unknown>)?.image as string ?? null, decimals: tokenInfo?.decimals as number ?? null, updated_at: new Date().toISOString() }, { onConflict: 'mint' })
@@ -79,9 +95,13 @@ export async function handleCatalogRefreshTraits(body: Record<string, unknown>, 
     const traitOptions: Record<string, Set<string>> = {}
     let pgN = 1; let more = true
     while (more) {
-      const r = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getAssetsByGroup', params: { groupKey: 'collection', groupValue: mint, limit: 1000, page: pgN } }) })
-      const d = await r.json() as { result?: { items?: Array<Record<string, unknown>> } }
-      const items = d.result?.items ?? []
+      const d = await solanaJsonRpc<{ items?: Array<Record<string, unknown>> }>(rpcUrl, 'getAssetsByGroup', {
+        groupKey: 'collection',
+        groupValue: mint,
+        limit: 1000,
+        page: pgN,
+      })
+      const items = d.items ?? []
       for (const item of items) {
         const attrs = ((item.content as Record<string, unknown>)?.metadata as Record<string, unknown>)?.attributes as Array<{ trait_type?: string; value?: string }> | undefined
         if (attrs) for (const a of attrs) {

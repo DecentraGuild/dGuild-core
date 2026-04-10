@@ -368,11 +368,28 @@ watch(
   gap: var(--theme-space-xs);
 }
 
+.escrow-modal__token-img-wrap {
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+}
+
 .escrow-modal__token-img {
   width: 3rem;
   height: 3rem;
   object-fit: cover;
   border-radius: var(--theme-radius-sm);
+}
+
+.escrow-modal__token-loading-icon {
+  font-size: 1.25rem;
+  animation: escrow-modal-token-spin 0.9s linear infinite;
+}
+
+@keyframes escrow-modal-token-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .escrow-modal__token-placeholder {

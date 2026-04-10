@@ -69,6 +69,7 @@
               :holders-updated-at="display.track_holders ? display.holdersUpdatedAt : null"
               :loading="memberNftsLoading"
               :spl-mode="holdersSectionSplMode"
+              :sft-per-mint-mode="display.kind === 'NFT' && display.nftCollectionSyncMode === 'sft_per_mint'"
               :format-token-amount="formatHolderAmount"
               :nft-link="nftLink"
               :copied-wallet="copiedWallet"

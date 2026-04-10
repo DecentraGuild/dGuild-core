@@ -3,13 +3,39 @@
     <div class="escrow-modal__details-col-left">
       <div v-if="display" class="escrow-modal__token-preview">
         <div class="escrow-modal__token-preview-item">
-          <img v-if="display.depositImage" :src="display.depositImage" :alt="display.depositName ?? 'Deposit'" class="escrow-modal__token-img">
+          <RemoteImage
+            v-if="display.depositImage"
+            :src="display.depositImage"
+            :alt="display.depositName ?? 'Deposit'"
+            img-class="escrow-modal__token-img"
+            root-class="escrow-modal__token-img-wrap"
+            root-margin="40px"
+          >
+            <template #placeholder>
+              <div class="escrow-modal__token-placeholder escrow-modal__token-placeholder--loading">
+                <Icon icon="lucide:loader-2" class="escrow-modal__token-loading-icon" />
+              </div>
+            </template>
+          </RemoteImage>
           <div v-else class="escrow-modal__token-placeholder"><Icon icon="lucide:coins" /></div>
           <span class="escrow-modal__token-label">{{ display.depositName ?? display.depositSymbol ?? 'Deposit' }}</span>
         </div>
         <Icon icon="lucide:arrow-right" class="escrow-modal__token-arrow" />
         <div class="escrow-modal__token-preview-item">
-          <img v-if="display.requestImage" :src="display.requestImage" :alt="display.requestName ?? 'Request'" class="escrow-modal__token-img">
+          <RemoteImage
+            v-if="display.requestImage"
+            :src="display.requestImage"
+            :alt="display.requestName ?? 'Request'"
+            img-class="escrow-modal__token-img"
+            root-class="escrow-modal__token-img-wrap"
+            root-margin="40px"
+          >
+            <template #placeholder>
+              <div class="escrow-modal__token-placeholder escrow-modal__token-placeholder--loading">
+                <Icon icon="lucide:loader-2" class="escrow-modal__token-loading-icon" />
+              </div>
+            </template>
+          </RemoteImage>
           <div v-else class="escrow-modal__token-placeholder"><Icon icon="lucide:image" /></div>
           <span class="escrow-modal__token-label">{{ display.requestName ?? display.priceSymbol ?? 'Request' }}</span>
         </div>
@@ -86,6 +112,7 @@
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { formatUiAmount } from '@decentraguild/display'
+import RemoteImage from '~/components/ui/RemoteImage.vue'
 import type { EscrowWithAddress } from '@decentraguild/web3'
 import type { EscrowDisplayData } from '~/composables/marketplace/useEscrowDisplay'
 

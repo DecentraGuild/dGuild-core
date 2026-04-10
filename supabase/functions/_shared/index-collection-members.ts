@@ -3,6 +3,7 @@
  */
 
 import { extractImageFromDasAsset } from './mint-metadata.ts'
+import { solanaJsonRpc } from './solana-json-rpc.ts'
 
 export type CollectionMemberRow = {
   collection_mint: string
@@ -91,17 +92,14 @@ export async function fetchCollectionGroupPage(
   collectionMint: string,
   page: number,
 ): Promise<{ ok: boolean; items: Record<string, unknown>[] }> {
-  const res = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'getAssetsByGroup',
-      params: { groupKey: 'collection', groupValue: collectionMint, limit: 1000, page },
-    }),
-  })
-  if (!res.ok) return { ok: false, items: [] }
-  const data = await res.json() as { result?: { items?: Array<Record<string, unknown>> } }
-  return { ok: true, items: data.result?.items ?? [] }
+  try {
+    const data = await solanaJsonRpc<{ items?: Array<Record<string, unknown>> }>(
+      rpcUrl,
+      'getAssetsByGroup',
+      { groupKey: 'collection', groupValue: collectionMint, limit: 1000, page },
+    )
+    return { ok: true, items: data.items ?? [] }
+  } catch {
+    return { ok: false, items: [] }
+  }
 }

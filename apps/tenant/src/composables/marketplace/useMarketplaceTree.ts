@@ -16,6 +16,9 @@ const SOURCE_TO_TYPE = {
   currency: 'Currency',
 } as const
 
+const EMPTY_MEMBER_MAP = new Map<string, string[]>()
+const EMPTY_SFT_SET = new Set<string>()
+
 export type TreeNodeKind = 'type' | 'group' | 'asset'
 
 export interface TreeNode {
@@ -32,6 +35,8 @@ export interface MarketplaceTreeInput {
   entries: ScopeEntry[]
   settings: MarketplaceSettings | null
   labelByMint?: Map<string, string>
+  memberMintsByCollection?: Map<string, string[]>
+  sftCollectionMints?: Set<string>
 }
 
 function getAssetLabel(mint: string, settings: MarketplaceSettings | null, labelByMint?: Map<string, string>): string {
@@ -179,11 +184,80 @@ function buildTree(input: MarketplaceTreeInput): TreeNode[] {
     parent.children.push(assetNode)
   }
 
+  function addSftCollectionWithMembers(
+    collectionMint: string,
+    collectionLabel: string,
+    groupPath: string[],
+    memberMints: string[],
+    getLabelFn: (m: string) => string,
+  ) {
+    const typeId = 'type:collection'
+    const typeNode = typeById.get(typeId)
+    if (!typeNode || !typeNode.children) return
+
+    let parent: TreeNode = typeNode
+    let currentPath = [...typeNode.path]
+
+    for (let i = 0; i < groupPath.length; i++) {
+      const seg = groupPath[i]
+      currentPath.push(seg)
+      const groupId = `group:${typeId}:${groupPath.slice(0, i + 1).join(':')}`
+      let groupNode = parent.children?.find((c) => c.id === groupId)
+      if (!groupNode) {
+        groupNode = { id: groupId, label: seg, kind: 'group', path: [...currentPath], children: [] }
+        if (!parent.children) parent.children = []
+        parent.children.push(groupNode)
+      }
+      parent = groupNode
+    }
+
+    const collGroupId = `group:${typeId}:sftcoll:${collectionMint}`
+    currentPath = [...currentPath, collectionLabel]
+    let collGroup = parent.children?.find((c) => c.id === collGroupId)
+    if (!collGroup) {
+      collGroup = {
+        id: collGroupId,
+        label: collectionLabel,
+        kind: 'group',
+        path: [...currentPath],
+        children: [],
+      }
+      if (!parent.children) parent.children = []
+      parent.children.push(collGroup)
+    }
+    parent = collGroup
+
+    const sortedMembers = [...memberMints].sort((a, b) => getLabelFn(a).localeCompare(getLabelFn(b)))
+    for (const childMint of sortedMembers) {
+      const childLabel = getLabelFn(childMint)
+      const assetNode: TreeNode = {
+        id: `asset:${childMint}`,
+        label: childLabel,
+        kind: 'asset',
+        mint: childMint,
+        collectionMint,
+        path: [...currentPath, childLabel],
+        children: undefined,
+      }
+      if (!parent.children) parent.children = []
+      parent.children.push(assetNode)
+    }
+  }
+
   for (const item of collectionMintsInScope) {
     const mint = toMint(item)
     if (mint == null) continue
     const groupPath = getGroupPath(item)
     const label = (item as { name?: string }).name ?? getLabel(mint)
+    const sftRoots = input.sftCollectionMints ?? new Set<string>()
+    const membersMap = input.memberMintsByCollection ?? new Map<string, string[]>()
+    if (sftRoots.has(mint)) {
+      const members = membersMap.get(mint) ?? []
+      if (members.length > 0) {
+        addSftCollectionWithMembers(mint, label, groupPath, members, getLabel)
+        continue
+      }
+    }
     addAssetToType('type:collection', mint, label, mint, groupPath)
   }
 
@@ -266,13 +340,17 @@ function findNodeByPath(nodes: TreeNode[], path: string[]): TreeNode | null {
 export function useMarketplaceTree(
   entries: Ref<ScopeEntry[]>,
   settings: Ref<MarketplaceSettings | null>,
-  labelByMint?: Ref<Map<string, string>>
+  labelByMint?: Ref<Map<string, string>>,
+  memberMintsByCollection?: Ref<Map<string, string[]>>,
+  sftCollectionMints?: Ref<Set<string>>,
 ) {
   const tree = computed<TreeNode[]>(() =>
     buildTree({
       entries: entries.value,
       settings: settings.value,
       labelByMint: labelByMint?.value,
+      memberMintsByCollection: memberMintsByCollection?.value ?? EMPTY_MEMBER_MAP,
+      sftCollectionMints: sftCollectionMints?.value ?? EMPTY_SFT_SET,
     })
   )
 

@@ -34,20 +34,15 @@ function snapToStep(n: number): number {
 export interface UseMarketBrowseDataOptions {
   selectedNode: Ref<TreeNode | null>
   descendantAssetNodes: Ref<TreeNode[]>
+  sftCollectionRoots?: Ref<Set<string>>
 }
 
 export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
   const { selectedNode, descendantAssetNodes } = options
+  const sftCollectionRoots = options.sftCollectionRoots ?? ref(new Set<string>())
   const tenantStore = useTenantStore()
   const { slug, marketplaceSettings } = storeToRefs(tenantStore)
   const { rpcUrl, rpcError } = useRpc()
-
-  const _collectionRef = computed(() => {
-    const node = selectedNode.value
-    if (!node || node.kind !== 'asset' || !node.mint) return null
-    if (node.mint === node.collectionMint) return node.mint
-    return null
-  })
 
   const {
     entries,
@@ -60,14 +55,48 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
 
   const scopeMints = computed(() => entries.value.map((e) => e.mint))
 
-  const { assets, loading: assetsLoading, fetchPage: assetsFetchPage } = useMarketplaceAssets()
+  const { assets, loading: assetsLoading, fetchPage: assetsFetchPage, refreshMints } = useMarketplaceAssets()
 
-  const selectedCollectionMint = computed(() => {
+  /** Collection mint whose members should drive the grid: NFT collection leaf, SFT group folder, or a selection whose descendants are all one SFT collection's children. */
+  const gridCollectionMint = computed(() => {
     const node = selectedNode.value
-    if (node?.kind === 'asset' && node.mint === node.collectionMint) return node.mint
+    const roots = sftCollectionRoots.value
+
+    if (node?.kind === 'asset' && node.mint && node.mint === node.collectionMint) {
+      return node.mint
+    }
+
+    if (
+      node?.kind === 'asset' &&
+      node.mint &&
+      node.collectionMint &&
+      node.mint !== node.collectionMint &&
+      roots.has(node.collectionMint)
+    ) {
+      return node.collectionMint
+    }
+
+    if (node?.kind === 'group' && node.id?.includes('sftcoll:')) {
+      const rest = node.id.split('sftcoll:')[1]?.trim()
+      if (rest && roots.has(rest)) return rest
+    }
+
+    const desc = descendantAssetNodes.value.filter(
+      (n): n is TreeNode & { mint: string; collectionMint?: string | null } =>
+        n.kind === 'asset' && Boolean(n.mint),
+    )
+    if (desc.length === 0) return null
+    const colMints = [...new Set(desc.map((n) => n.collectionMint).filter((c): c is string => Boolean(c)))]
+    if (colMints.length === 1 && roots.has(colMints[0])) return colMints[0]
+
     return null
   })
-  const { assets: collectionMemberAssets, loading: collectionMemberLoading } = useCollectionMembers(selectedCollectionMint)
+
+  const {
+    assets: collectionMemberAssets,
+    loading: collectionMemberLoading,
+    fetch: fetchCollectionMembers,
+  } = useCollectionMembers(gridCollectionMint)
 
   const assetsMintsByCollection = computed(() => {
     const list = assets.value
@@ -85,6 +114,14 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
     assetsFetchPage(true)
   })
 
+  watch(
+    gridCollectionMint,
+    (m) => {
+      if (m && sftCollectionRoots.value.has(m)) void refreshMints([m])
+    },
+    { immediate: true },
+  )
+
   const auth = useAuth()
   const walletRef = computed(() => auth.wallet.value ?? null)
   const { byMint, retry: escrowsRetry } = useEscrowsForMints(scopeMintsSet, rpcUrl, {
@@ -99,12 +136,8 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
     if (wasLoading && !loading) escrowsRetry()
   })
 
-  const isCollectionSelected = computed(
-    () =>
-      selectedNode.value?.kind === 'asset' &&
-      selectedNode.value?.mint &&
-      selectedNode.value?.mint === selectedNode.value?.collectionMint
-  )
+  /** True when the grid should list collection_members (NFT collection root or SFT-per-mint folder / single-collection scope). */
+  const showCollectionMemberGrid = computed(() => Boolean(gridCollectionMint.value))
 
   const descendantAssetMints = computed(() =>
     new Set(
@@ -115,21 +148,27 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
   )
 
   function withAssetType(a: MarketplaceAsset & { assetType?: string }): MarketplaceAsset & { assetType: string } {
-    const t = a.assetType ?? (a.mint === a.collectionMint ? 'NFT_COLLECTION' : (a.collectionMint ? 'NFT' : 'SPL_ASSET'))
+    let t = a.assetType
+    if (!t) {
+      if (a.mint === a.collectionMint) t = 'NFT_COLLECTION'
+      else if (a.collectionMint && sftCollectionRoots.value.has(a.collectionMint)) t = 'SPL_ASSET'
+      else if (a.collectionMint) t = 'NFT'
+      else t = 'SPL_ASSET'
+    }
     return { ...a, assetType: t }
   }
 
   const assetCardsAll = computed(() => {
     const targetMints = descendantAssetMints.value
     const list = assets.value
-    const selectedCollection = selectedCollectionMint.value
-    if (isCollectionSelected.value && selectedCollection) {
+    const cm = gridCollectionMint.value
+    if (showCollectionMemberGrid.value && cm) {
       const members = collectionMemberAssets.value
-      return members.map((m) => {
+      const memberCards = members.map((m) => {
         const base = {
           mint: m.mint,
           source: 'collection' as const,
-          collectionMint: selectedCollection,
+          collectionMint: cm,
           name: m.metadata?.name ?? null,
           symbol: null,
           image: m.metadata?.image ?? null,
@@ -138,6 +177,20 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
         }
         return withAssetType(base)
       })
+      if (sftCollectionRoots.value.has(cm)) {
+        const parentRow = list.find((a) => a.mint === cm)
+        if (parentRow) {
+          const parentCard = withAssetType({
+            ...parentRow,
+            mint: parentRow.mint,
+            collectionMint: cm,
+            metadata: undefined,
+            assetType: 'NFT_COLLECTION',
+          })
+          return [parentCard, ...memberCards]
+        }
+      }
+      return memberCards
     }
     if (targetMints.size === 0) return []
     const fromAssets = list.filter((a) => targetMints.has(a.mint)).map(withAssetType)
@@ -271,16 +324,17 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
   }
 
   const effectiveAssetsLoading = computed(() =>
-    isCollectionSelected.value ? collectionMemberLoading.value : assetsLoading.value,
+    showCollectionMemberGrid.value ? collectionMemberLoading.value : assetsLoading.value,
   )
 
   const detailAssets = computed(() => {
-    if (isCollectionSelected.value) {
+    const cm = gridCollectionMint.value
+    if (showCollectionMemberGrid.value && cm) {
       const members = collectionMemberAssets.value
       return members.map((m) => ({
         mint: m.mint,
         source: 'collection' as const,
-        collectionMint: selectedCollectionMint.value,
+        collectionMint: cm,
         name: m.metadata?.name ?? null,
         symbol: null,
         image: m.metadata?.image ?? null,
@@ -289,6 +343,17 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
     }
     return assets.value
   })
+
+  /** Re-fetch Supabase rows for the mint shown in item detail (single-asset view). */
+  async function refreshDetailAssetMint(mint: string) {
+    const trimmed = mint.trim()
+    if (!trimmed) return
+    if (showCollectionMemberGrid.value) {
+      await fetchCollectionMembers()
+    } else {
+      await refreshMints([trimmed])
+    }
+  }
 
   return {
     slug,
@@ -304,7 +369,7 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
     assetsLoading: effectiveAssetsLoading,
     byMint,
     mintsByCollectionMerged,
-    isCollectionSelected,
+    showCollectionMemberGrid,
     browseSearchQuery,
     browseSelectedTraits,
     browseFiltersOpen,
@@ -321,5 +386,6 @@ export function useMarketBrowseData(options: UseMarketBrowseDataOptions) {
     getDisplayName,
     getDisplaySymbol,
     getDisplayImage,
+    refreshDetailAssetMint,
   }
 }

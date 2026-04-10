@@ -1,3 +1,5 @@
+import { solanaJsonRpc } from './solana-json-rpc.ts'
+
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 /** Metaplex Core — collection and asset accounts are owned by this program, not SPL Token. */
@@ -11,18 +13,12 @@ export type OnChainSplMintState =
 
 export async function getOnChainSplMintState(rpcUrl: string, address: string): Promise<OnChainSplMintState> {
   try {
-    const res = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getAccountInfo',
-        params: [address, { encoding: 'jsonParsed' }],
-      }),
-    })
-    const json = (await res.json()) as { result?: { value: Record<string, unknown> | null } }
-    const value = json.result?.value
+    const json = await solanaJsonRpc<{ value: Record<string, unknown> | null } | null>(
+      rpcUrl,
+      'getAccountInfo',
+      [address, { encoding: 'jsonParsed' }],
+    )
+    const value = json?.value
     if (!value) return { ok: false }
     const owner = value.owner as string | undefined
     if (owner !== TOKEN_PROGRAM_ID && owner !== TOKEN_2022_PROGRAM_ID) return { ok: false }
@@ -41,18 +37,12 @@ export async function getOnChainSplMintState(rpcUrl: string, address: string): P
 
 export async function isMplCoreAccount(rpcUrl: string, address: string): Promise<boolean> {
   try {
-    const res = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getAccountInfo',
-        params: [address, { encoding: 'jsonParsed' }],
-      }),
-    })
-    const json = (await res.json()) as { result?: { value: { owner?: string } | null } }
-    const owner = json.result?.value?.owner
+    const json = await solanaJsonRpc<{ value: { owner?: string } | null } | null>(
+      rpcUrl,
+      'getAccountInfo',
+      [address, { encoding: 'jsonParsed' }],
+    )
+    const owner = json?.value?.owner
     return owner === MPL_CORE_PROGRAM_ID
   } catch {
     return false
