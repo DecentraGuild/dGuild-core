@@ -38,6 +38,7 @@ export {
   BASE_CURRENCY_MINTS,
   BASE_CURRENCY_MINT_ADDRESSES,
   isBaseCurrencyMint,
+  getBaseCurrencyDecimals,
 } from './currencies.js'
 export { ADDRESS_BOOK_DEFAULT_MINTS } from './address-book-defaults.js'
 export type { AddressBookDefaultMint } from './address-book-defaults.js'

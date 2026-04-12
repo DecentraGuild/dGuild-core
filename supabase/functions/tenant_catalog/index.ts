@@ -4,17 +4,6 @@
  * All actions require tenant admin (wallet in tenant_config.admins).
  */
 
-const BASE_CURRENCY_MINTS = new Set([
-  'So11111111111111111111111111111111111111112',
-  '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',
-  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-])
-
-function isBaseCurrencyMint(mint: string): boolean {
-  return BASE_CURRENCY_MINTS.has(mint)
-}
-
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { requireTenantAdmin } from '../_shared/auth.ts'
@@ -103,13 +92,12 @@ Deno.serve(async (req: Request) => {
 
     if (error) return errorResponse(error.message, req, 500)
 
-    const allEntries = (rows ?? []) as Array<{
+    const entries = (rows ?? []) as Array<{
       id: number
       mint: string
       kind: string
       label: string | null
     }>
-    const entries = allEntries.filter((e) => !isBaseCurrencyMint(e.mint))
 
     if (entries.length === 0) return jsonResponse({ entries: [] }, req)
 
@@ -298,9 +286,6 @@ Deno.serve(async (req: Request) => {
 
   if (action === 'add') {
     const mint = (body.mint as string)?.trim()
-    if (isBaseCurrencyMint(mint)) {
-      return errorResponse('Base currencies (SOL, USDC, USDT, WBTC) are platform-level and cannot be added to the tenant catalog.', req, 400)
-    }
     const kindInput = body.kind as string | undefined
     const kindHint = kindInput === 'auto' || kindInput === undefined ? undefined : kindInput as 'SPL' | 'NFT'
     let name = (body.name as string) ?? null
@@ -510,8 +495,7 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ synced: 0 }, req)
     }
 
-    const filtered = mints.filter((m) => !isBaseCurrencyMint(String(m.mint).trim()))
-    const rows = filtered.map((m) => ({
+    const rows = mints.map((m) => ({
       tenant_id: tenantId,
       mint: String(m.mint).trim(),
       kind: m.kind ?? 'SPL',
@@ -521,7 +505,7 @@ Deno.serve(async (req: Request) => {
 
     const { error } = await db.from('tenant_mint_catalog').upsert(rows, { onConflict: 'tenant_id,mint' })
     if (error) return errorResponse(error.message, req, 500)
-    return jsonResponse({ synced: rows.length, skipped: mints.length - filtered.length }, req)
+    return jsonResponse({ synced: rows.length, skipped: 0 }, req)
   }
 
   return errorResponse(`Unknown action: ${action}`, req, 400)
