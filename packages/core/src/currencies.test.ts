@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { BASE_CURRENCY_MINTS, BASE_CURRENCY_MINT_ADDRESSES, isBaseCurrencyMint } from './currencies.js'
+import {
+  BASE_CURRENCY_MINTS,
+  BASE_CURRENCY_MINT_ADDRESSES,
+  getBaseCurrencyDecimals,
+  isBaseCurrencyMint,
+} from './currencies.js'
 
 describe('BASE_CURRENCY_MINTS', () => {
   it('contains SOL, WBTC, USDC, USDT', () => {
@@ -12,6 +17,13 @@ describe('BASE_CURRENCY_MINTS', () => {
 
   it('has 4 entries', () => {
     expect(BASE_CURRENCY_MINTS).toHaveLength(4)
+  })
+
+  it('includes decimals for each entry', () => {
+    for (const c of BASE_CURRENCY_MINTS) {
+      expect(typeof c.decimals).toBe('number')
+      expect(c.decimals).toBeGreaterThanOrEqual(0)
+    }
   })
 })
 
@@ -30,5 +42,13 @@ describe('isBaseCurrencyMint', () => {
   it('returns false for unknown mints', () => {
     expect(isBaseCurrencyMint('RandomMintAddress123')).toBe(false)
     expect(isBaseCurrencyMint('')).toBe(false)
+  })
+})
+
+describe('getBaseCurrencyDecimals', () => {
+  it('returns chain decimals for each base mint', () => {
+    expect(getBaseCurrencyDecimals('So11111111111111111111111111111111111111112')).toBe(9)
+    expect(getBaseCurrencyDecimals('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')).toBe(6)
+    expect(getBaseCurrencyDecimals('unknown')).toBeUndefined()
   })
 })

@@ -2,14 +2,8 @@
  * Marketplace pricing adapter. Resolves mints_count, base_currencies_count, custom_currencies, monetize_storefront.
  * Keep two separate meters (base + custom) for billing extend; do not merge.
  */
+import { isBaseCurrencyMint } from '@decentraguild/core'
 import type { PricingAdapter } from '../types.js'
-
-const BASE_CURRENCY_MINTS = new Set([
-  'So11111111111111111111111111111111111111112',
-  '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',
-  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-])
 
 export const marketplaceAdapter: PricingAdapter = {
   productKey: 'marketplace',
@@ -24,7 +18,7 @@ export const marketplaceAdapter: PricingAdapter = {
     const monetizeStorefront = settings.monetizeStorefront ?? settings.monetize_storefront ? 1 : 0
 
     const currencyMints = (currencyRows ?? []).map((r: { mint: string }) => r.mint as string)
-    const baseCurrenciesCount = currencyMints.filter((m: string) => BASE_CURRENCY_MINTS.has(m)).length
+    const baseCurrenciesCount = currencyMints.filter((m: string) => isBaseCurrencyMint(m)).length
     const customCurrencies = currencyMints.length - baseCurrenciesCount
 
     return {

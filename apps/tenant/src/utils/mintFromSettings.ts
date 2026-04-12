@@ -4,15 +4,13 @@
  * Base currencies (SOL, WBTC, USDC, USDT) get name, symbol, decimals from core when missing in settings.
  */
 import { truncateAddress } from '@decentraguild/display'
-import { BASE_CURRENCY_MINTS, isBaseCurrencyMint, type MarketplaceSettings } from '@decentraguild/core'
+import {
+  BASE_CURRENCY_MINTS,
+  getBaseCurrencyDecimals,
+  isBaseCurrencyMint,
+  type MarketplaceSettings,
+} from '@decentraguild/core'
 import type { MarketplaceAsset } from '~/composables/marketplace/useMarketplaceAssets'
-
-const BASE_CURRENCY_DECIMALS: Record<string, number> = {
-  So11111111111111111111111111111111111111112: 9,
-  '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh': 8,
-  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: 6,
-  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: 6,
-}
 
 export interface MintInfoFromSettings {
   name: string | null
@@ -57,7 +55,7 @@ export function getMintInfoFromSettings(
     return {
       name: curr.name ?? base?.name ?? null,
       symbol: curr.symbol ?? base?.symbol ?? null,
-      decimals: curr.decimals ?? base ? BASE_CURRENCY_DECIMALS[mint] ?? 6 : 0,
+      decimals: curr.decimals ?? (base ? (getBaseCurrencyDecimals(mint) ?? 6) : 0),
       image: curr.image ?? null,
       source: 'currency',
     }
@@ -68,7 +66,7 @@ export function getMintInfoFromSettings(
       return {
         name: base.name,
         symbol: base.symbol,
-        decimals: BASE_CURRENCY_DECIMALS[mint] ?? 6,
+        decimals: getBaseCurrencyDecimals(mint) ?? 6,
         image: null,
         source: 'currency',
       }
@@ -122,7 +120,7 @@ export function getMarketplaceAssetFromSettings(
           name: curr.name ?? base?.name ?? null,
           symbol: curr.symbol ?? base?.symbol ?? null,
           image: curr.image ?? null,
-          decimals: curr.decimals ?? (base ? BASE_CURRENCY_DECIMALS[mint] ?? 6 : undefined) ?? null,
+          decimals: curr.decimals ?? (base ? (getBaseCurrencyDecimals(mint) ?? 6) : undefined) ?? null,
         },
       }
     }
@@ -136,7 +134,7 @@ export function getMarketplaceAssetFromSettings(
         name: base.name,
         symbol: base.symbol,
         image: null,
-        decimals: BASE_CURRENCY_DECIMALS[mint] ?? 6,
+        decimals: getBaseCurrencyDecimals(mint) ?? 6,
       },
     }
   }
