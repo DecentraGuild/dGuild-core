@@ -1,0 +1,16 @@
+Play Console + Solana dApp Store — listing checklist
+====================================================
+
+Before submission
+- [ ] TWA opens https://dapp.dguild.org/ (or /discover) with verified Digital Asset Links
+- [ ] SIWS round-trip on device with production Supabase redirect URLs
+- [ ] Privacy policy URL (platform)
+- [ ] Support / contact URL
+- [ ] Short and long descriptions (DecentraGuild multi-tenant story)
+- [ ] Feature graphic, phone screenshots (chooser, wallet connect, tenant home)
+- [ ] 512x512 store icon (DecentraGuild brand, not tenant-specific)
+- [ ] Package name matches apps/tenant/public/.well-known/assetlinks.json target.package_name
+
+iOS PWA (optional QA)
+- [ ] Add to Home Screen: theme-color, apple touch icon, standalone behaviour on a physical iPhone
+- [ ] Note: iOS Web Push and some APIs differ from Android TWA; document known gaps for support

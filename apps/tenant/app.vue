@@ -1,24 +1,28 @@
 <template>
-  <div v-if="tenantStore.loading && !tenantStore.tenant" class="loading">Loading...</div>
-  <div v-else-if="!tenantStore.tenant" class="no-tenant">
-    No tenant. Use <code>?tenant=&lt;id&gt;</code> for local development (e.g. 0000000 or decentraguild). Set NUXT_PUBLIC_DEV_TENANT or add ?tenant= to the URL.
-  </div>
+  <div v-if="tenantStore.loading && !tenantStore.tenant" class="app-entry__loading">Loading...</div>
+  <TenantSubdomainError v-else-if="showSubdomainMissing" />
+  <NuxtPage v-else-if="isTenantSingleHost && route.path === '/discover'" />
+  <TenantChooser v-else-if="!tenantStore.tenant" />
   <NuxtLayout v-else>
     <NuxtPage />
   </NuxtLayout>
 </template>
 
 <script setup lang="ts">
+import TenantChooser from '~/components/chooser/TenantChooser.vue'
+import TenantSubdomainError from '~/components/chooser/TenantSubdomainError.vue'
+import { useTenantEntryRouting } from '~/composables/core/useTenantEntryRouting'
+import { useTenantSingleHost } from '~/composables/core/useTenantSingleHost'
 import { useTenantStore } from '~/stores/tenant'
 
+const route = useRoute()
 const tenantStore = useTenantStore()
-const config = useRuntimeConfig()
-const _devTenantSlug = (config.public.devTenantSlug as string) ?? ''
+const { showSubdomainMissing } = useTenantEntryRouting()
+const isTenantSingleHost = useTenantSingleHost()
 </script>
 
 <style scoped>
-.loading,
-.no-tenant {
+.app-entry__loading {
   padding: 2rem;
   text-align: center;
   color: var(--theme-text-muted);

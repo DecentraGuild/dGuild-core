@@ -16,6 +16,7 @@ import {
   validateXLink,
   validateTelegramLink,
 } from '~/lib/validateSocialLinks'
+import { buildPwaPayload, validatePwaForm } from '~/lib/validatePwaBranding'
 
 export interface AdminForm {
   name: string
@@ -29,21 +30,34 @@ export interface AdminForm {
   branding: {
     logo: string
     theme: ReturnType<typeof mergeTheme>
+    pwa: {
+      displayName: string
+      shortName: string
+      icon192: string
+      icon512: string
+    }
   }
   modulesById: Record<string, ModuleState>
 }
 
 function buildBrandingForm(
-  tenant: { branding?: { logo?: string; theme?: unknown }; discordServerInviteLink?: string } | null
+  tenant: { branding?: TenantConfig['branding']; discordServerInviteLink?: string } | null
 ): AdminForm['branding'] {
   const theme = mergeTheme(
     DEFAULT_TENANT_THEME,
     (tenant?.branding?.theme ?? {}) as Parameters<typeof mergeTheme>[1],
   )
   delete theme.spacing
+  const pwa = tenant?.branding?.pwa
   return {
     logo: tenant?.branding?.logo ?? '',
     theme,
+    pwa: {
+      displayName: pwa?.displayName ?? '',
+      shortName: pwa?.shortName ?? '',
+      icon192: pwa?.icon192 ?? '',
+      icon512: pwa?.icon512 ?? '',
+    },
   }
 }
 
@@ -163,6 +177,8 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
       if (!x.valid) throw new Error(`X: ${x.error}`)
       const t = validateTelegramLink(form.telegramLink)
       if (!t.valid) throw new Error(`Telegram: ${t.error}`)
+      const pwaCheck = validatePwaForm(form.branding.pwa, slug.value ?? tenant.value?.slug)
+      if (!pwaCheck.valid) throw new Error(pwaCheck.error ?? 'Invalid PWA fields')
       const prevMods = tenant.value?.modules ?? {}
       const modules: Record<
         string,
@@ -186,6 +202,16 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
         }
       }
 
+      const prevBranding = (tenant.value?.branding ?? {}) as Record<string, unknown>
+      const pwaPayload = buildPwaPayload(form.branding.pwa)
+      const brandingPayload: Record<string, unknown> = {
+        ...prevBranding,
+        logo: form.branding.logo,
+        theme: form.branding.theme,
+      }
+      if (pwaPayload) brandingPayload.pwa = pwaPayload
+      else delete brandingPayload.pwa
+
       const supabase = useSupabase()
       const { data, error } = await supabase
         .from('tenant_config')
@@ -198,7 +224,7 @@ export function useAdminForm(subscriptions: Record<string, { periodEnd?: string 
           x_link: form.xLink || null,
           telegram_link: form.telegramLink || null,
           default_gate: form.defaultGate ?? null,
-          branding: { logo: form.branding.logo, theme: form.branding.theme },
+          branding: brandingPayload,
           modules,
           updated_at: new Date().toISOString(),
         })

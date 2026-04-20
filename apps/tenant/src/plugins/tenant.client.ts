@@ -1,18 +1,9 @@
 import { getTenantSlugFromHost } from '@decentraguild/core'
 import { useThemeStore } from '@decentraguild/ui'
 import { useTenantStore } from '~/stores/tenant'
+import { requestHostMatchesTenantSingleHost } from '~/utils/tenantSingleHostMatch'
 
 const LAST_TENANT_STORAGE_KEY = 'dg_last_tenant'
-
-function getCachedTenantId(): string | null {
-  if (import.meta.server || typeof localStorage === 'undefined') return null
-  try {
-    const s = localStorage.getItem(LAST_TENANT_STORAGE_KEY)
-    return s?.trim() || null
-  } catch {
-    return null
-  }
-}
 
 function setCachedTenantId(tenantId: string): void {
   if (import.meta.server || typeof localStorage === 'undefined') return
@@ -31,22 +22,19 @@ function queryTenantAsString(q: unknown): string | null {
   return t || null
 }
 
-/** Tenant param from URL (id or slug). On single host with no param, uses cached tenant id. */
+/** Tenant param from URL (id or slug). On dapp single host, only `?tenant=` (or dev defaults) resolves — never localStorage. */
 function getTenantParamFromUrl(): string | null {
   if (import.meta.server) return null
   const config = useRuntimeConfig()
   const devDefaultSlug = (config.public.devTenantSlug as string)?.trim() || ''
-  const singleHost = ((config.public as { tenantSingleHost?: string }).tenantSingleHost ?? 'dapp.dguild.org').toLowerCase()
   const host = window.location.hostname.toLowerCase()
   const searchParams = new URL(window.location.href).searchParams
   const queryParam = searchParams.get('tenant')?.trim() || null
 
   if (queryParam) return queryParam
 
-  const isSingleHost = singleHost && host === singleHost
-  if (isSingleHost) {
-    const cached = getCachedTenantId()
-    if (cached) return cached
+  if (requestHostMatchesTenantSingleHost(window.location.host, config.public.tenantSingleHost)) {
+    return null
   }
 
   let slug = getTenantSlugFromHost(host, searchParams)
@@ -95,19 +83,17 @@ export default defineNuxtPlugin(async () => {
   await ensureTenantContext(initialParam)
   persistTenantToCache()
 
-  const singleHost = ((config.public as { tenantSingleHost?: string }).tenantSingleHost ?? 'dapp.dguild.org').toLowerCase()
-  const host = window.location.hostname.toLowerCase()
-  const isSingleHost = singleHost && host === singleHost
-  const tenantIdForUrl = tenantStore.tenantId ?? tenantStore.slug
+  const isSingleHost = requestHostMatchesTenantSingleHost(window.location.host, config.public.tenantSingleHost)
+  const loadedTenantId = tenantStore.tenant?.id
 
-  if (isSingleHost && tenantIdForUrl && router) {
+  if (isSingleHost && loadedTenantId && router) {
     const currentQuery = queryTenantAsString(route.query.tenant)
-    if (currentQuery !== tenantIdForUrl) {
-      router.replace({ path: route.path, query: { ...route.query, tenant: tenantIdForUrl } })
+    if (currentQuery !== loadedTenantId) {
+      router.replace({ path: route.path, query: { ...route.query, tenant: loadedTenantId } })
     }
   }
 
-  if (isNewOrgRedirect && router && tenantIdForUrl) {
+  if (isNewOrgRedirect && router && loadedTenantId) {
     const q = { ...route.query }
     delete q.new
     router.replace({ path: route.path, query: Object.keys(q).length ? q : undefined })

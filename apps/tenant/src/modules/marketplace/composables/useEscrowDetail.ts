@@ -2,7 +2,6 @@
  * Escrow detail: fetch, display, fill/cancel. Used by EscrowDetailModal and EscrowDetailPanel (deep-link page).
  */
 import { computed, ref, watch, watchEffect } from 'vue'
-import { storeToRefs } from 'pinia'
 import { formatUiAmount, toRawUnits, escrowPriceToHuman, sanitizeTokenLabel } from '@decentraguild/display'
 import { useEscrowDisplay } from '~/composables/marketplace/useEscrowDisplay'
 import { useTenantStore } from '~/stores/tenant'
@@ -64,8 +63,7 @@ export function useEscrowDetail(props: {
 }) {
   const tenantStore = useTenantStore()
   const { resolveWallet } = useMemberProfiles()
-  const { slug } = storeToRefs(tenantStore)
-  const { shareUrl: getShareUrl } = useMarketplaceEscrowLinks(slug)
+  const { shareUrl: getShareUrl } = useMarketplaceEscrowLinks()
   const auth = useAuth()
   const { connection, rpcUrl, hasRpc, rpcError } = useSolanaConnection()
   const txNotifications = useTransactionNotificationsStore()

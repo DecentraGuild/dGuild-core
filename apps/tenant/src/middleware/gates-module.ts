@@ -1,8 +1,12 @@
 import { getModuleState, isModuleVisibleToMembers } from '@decentraguild/core'
 import { getTenantSlugFromHost } from '@decentraguild/core'
 
-function homeWithTenantQuery(slug: string | null, appendTenant: boolean) {
-  return slug && appendTenant ? { path: '/', query: { tenant: slug } } : slug ? '/' : '/'
+function homeWithTenantQuery(tenantQuery: string | null, appendTenant: boolean) {
+  return tenantQuery && appendTenant
+    ? { path: '/', query: { tenant: tenantQuery } }
+    : tenantQuery
+      ? '/'
+      : '/'
 }
 
 function shouldAppendTenantToRedirect(slug: string | null): boolean {
@@ -17,11 +21,12 @@ function shouldAppendTenantToRedirect(slug: string | null): boolean {
 export default defineNuxtRouteMiddleware(() => {
   const tenantStore = useTenantStore()
   const slug = tenantStore.slug
+  const tenantQuery = tenantStore.tenant?.id ?? slug
   const appendTenant = shouldAppendTenantToRedirect(slug)
 
   if (!tenantStore.tenant) return
   const gatesState = getModuleState(tenantStore.tenant.modules?.gates)
   if (isModuleVisibleToMembers(gatesState)) return
 
-  return navigateTo(homeWithTenantQuery(slug, appendTenant), { replace: true })
+  return navigateTo(homeWithTenantQuery(tenantQuery, appendTenant), { replace: true })
 })

@@ -12,9 +12,17 @@ import { useTenantStore } from '~/stores/tenant'
 export function useTenantInLinks() {
   const tenantStore = useTenantStore()
 
+  const tenantParamForQuery = computed(() => {
+    const id = tenantStore.tenant?.id
+    if (id) return id
+    return tenantStore.slug
+  })
+
   const shouldAppendTenantToLinks = computed(() => {
-    const slug = tenantStore.slug
-    if (!slug) return false
+    const param = tenantParamForQuery.value
+    if (!param) return false
+    const routingKey = tenantStore.slug
+    if (!routingKey) return false
 
     let host = ''
     if (import.meta.client && typeof window !== 'undefined') {
@@ -27,8 +35,8 @@ export function useTenantInLinks() {
     if (!host) return true
 
     const slugFromHost = getTenantSlugFromHost(host, undefined)
-    return slugFromHost !== slug
+    return slugFromHost !== routingKey
   })
 
-  return { shouldAppendTenantToLinks }
+  return { shouldAppendTenantToLinks, tenantParamForQuery }
 }

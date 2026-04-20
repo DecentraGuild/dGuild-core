@@ -69,6 +69,9 @@ importers:
       '@decentraguild/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@decentraguild/discovery':
+        specifier: workspace:*
+        version: link:../../packages/discovery
       '@decentraguild/display':
         specifier: workspace:*
         version: link:../../packages/display
@@ -160,6 +163,9 @@ importers:
       '@decentraguild/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@decentraguild/discovery':
+        specifier: workspace:*
+        version: link:../../packages/discovery
       '@decentraguild/display':
         specifier: workspace:*
         version: link:../../packages/display
@@ -317,6 +323,18 @@ importers:
       typescript:
         specifier: ^5.3.0
         version: 5.9.3
+
+  packages/discovery:
+    dependencies:
+      '@decentraguild/catalog':
+        specifier: workspace:*
+        version: link:../../catalog
+      '@decentraguild/core':
+        specifier: workspace:*
+        version: link:../core
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.28(typescript@5.9.3)
 
   packages/display:
     devDependencies:

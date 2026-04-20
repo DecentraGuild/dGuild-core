@@ -165,7 +165,7 @@ watch(
   },
 )
 
-const { escrowLink } = useMarketplaceEscrowLinks(slug)
+const { escrowLink } = useMarketplaceEscrowLinks()
 const auth = useAuth()
 const walletAddress = computed(() => auth.connectorState.value?.account ?? null)
 

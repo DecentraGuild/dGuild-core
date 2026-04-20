@@ -1,0 +1,14 @@
+name: TWA manual reminder
+
+on:
+  workflow_dispatch:
+
+jobs:
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pointer
+        run: |
+          echo "Bubblewrap and Play signing are local or Play Console operations."
+          echo "See apps/tenant/twa/README.md and apps/tenant/store-listing/checklist.txt"

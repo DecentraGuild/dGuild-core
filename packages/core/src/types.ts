@@ -129,12 +129,23 @@ export interface TenantTheme {
   effects?: TenantThemeEffects
 }
 
+/** Install / manifest fields for PWAs (subdomain); icons should be HTTPS and square (maskable). */
+export interface TenantBrandingPwa {
+  /** Overrides branding.name in the web app manifest when set. */
+  displayName?: string
+  /** Short name for manifest (about 12 chars recommended). */
+  shortName?: string
+  icon192?: string
+  icon512?: string
+}
+
 export interface TenantBranding {
   logo?: string
   name?: string
   shortName?: string
   theme?: TenantTheme
   themeRef?: string
+  pwa?: TenantBrandingPwa
 }
 
 export interface TenantConfig {
