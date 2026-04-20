@@ -87,12 +87,13 @@ const displayModules = computed(() => {
     .filter((e): e is ModuleCatalogEntry => !!e?.routePath)
 })
 
-const { shouldAppendTenantToLinks } = useTenantInLinks()
+const { shouldAppendTenantToLinks, tenantParamForQuery } = useTenantInLinks()
 
 function moduleLink(entry: ModuleCatalogEntry) {
   const path = entry.routePath?.startsWith('/') ? entry.routePath : `/${entry.routePath}`
-  if (tenantStore.slug && shouldAppendTenantToLinks.value) {
-    return { path, query: { tenant: tenantStore.slug } }
+  const t = tenantParamForQuery.value
+  if (t && shouldAppendTenantToLinks.value) {
+    return { path, query: { tenant: t } }
   }
   return { path }
 }

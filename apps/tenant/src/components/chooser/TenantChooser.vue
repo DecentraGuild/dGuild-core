@@ -1,21 +1,22 @@
 <template>
-  <div class="discovery-page">
-    <div v-if="loading" class="discovery__loading">
+  <div class="tenant-chooser">
+    <div v-if="loading" class="tenant-chooser__loading">
       <Skeleton class="h-9 w-full max-w-xs" />
       <div class="mt-4 flex gap-2">
         <Skeleton class="h-9 w-28" />
         <Skeleton class="h-9 w-28" />
       </div>
     </div>
-    <div v-else-if="error" class="discovery__error">{{ error }}</div>
-    <div v-else class="discovery">
-      <div class="discovery__bar">
-        <div class="discovery__search">
-          <Label for="discovery-search" class="discovery__label">Search</Label>
+    <div v-else-if="loadError" class="tenant-chooser__error">{{ loadError }}</div>
+    <div v-else class="tenant-chooser__inner">
+      <h1 class="tenant-chooser__title">Choose your dGuild</h1>
+      <div class="tenant-chooser__bar">
+        <div class="tenant-chooser__search">
+          <Label for="tenant-chooser-search" class="tenant-chooser__label">Search</Label>
           <div class="relative">
-            <Icon icon="mdi:magnify" class="discovery__search-icon" aria-hidden="true" />
+            <Icon icon="mdi:magnify" class="tenant-chooser__search-icon" aria-hidden="true" />
             <Input
-              id="discovery-search"
+              id="tenant-chooser-search"
               v-model="searchQuery"
               type="search"
               placeholder="Search dGuilds"
@@ -25,31 +26,27 @@
             />
           </div>
         </div>
-        <div class="discovery__filters">
-          <div class="discovery__filter">
-            <Label for="discovery-module" class="discovery__label">Module</Label>
+        <div class="tenant-chooser__filters">
+          <div class="tenant-chooser__filter">
+            <Label for="tenant-chooser-module" class="tenant-chooser__label">Module</Label>
             <Select v-model="moduleFilterModel" aria-label="Filter by module">
-              <SelectTrigger id="discovery-module" class="w-[140px]">
+              <SelectTrigger id="tenant-chooser-module" class="w-[140px]">
                 <SelectValue placeholder="Any module" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">
                   <span>Any module</span>
                 </SelectItem>
-                <SelectItem
-                  v-for="opt in moduleFilterOptions"
-                  :key="opt.value"
-                  :value="opt.value"
-                >
+                <SelectItem v-for="opt in moduleFilterOptions" :key="opt.value" :value="opt.value">
                   {{ opt.label }}
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div class="discovery__filter">
-            <Label for="discovery-access" class="discovery__label">Access</Label>
+          <div class="tenant-chooser__filter">
+            <Label for="tenant-chooser-access" class="tenant-chooser__label">Access</Label>
             <Select v-model="accessFilter" aria-label="Filter by access">
-              <SelectTrigger id="discovery-access" class="w-[120px]">
+              <SelectTrigger id="tenant-chooser-access" class="w-[120px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -62,18 +59,18 @@
         </div>
       </div>
 
-      <div v-if="filteredTenants.length === 0" class="discovery__empty">
-        <p class="discovery__empty-text">No dGuilds match your search.</p>
-        <p class="discovery__empty-hint">Try clearing the search or filters.</p>
+      <div v-if="filteredTenants.length === 0" class="tenant-chooser__empty">
+        <p class="tenant-chooser__empty-text">No dGuilds match your search.</p>
+        <p class="tenant-chooser__empty-hint">Try clearing the search or filters.</p>
       </div>
-      <div v-else class="discovery__grid">
-        <DiscoveryCard
+      <div v-else class="tenant-chooser__grid">
+        <TenantDiscoverCard
           v-for="t in filteredTenants"
           :key="t.id"
           :tenant="t"
-          :tenant-url="tenantUrl"
           :has-gate="hasGates(t)"
           :active-modules-with-gate="activeModulesWithGate(t)"
+          @select="onSelectTenant"
         />
       </div>
     </div>
@@ -81,12 +78,11 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({ title: 'Discover' })
 import { Icon } from '@iconify/vue'
 import type { TenantConfig } from '@decentraguild/core'
-import DiscoveryCard from '~/components/DiscoveryCard.vue'
+import { getBrowserClient } from '@decentraguild/auth'
 import { useDiscoveryFilters } from '@decentraguild/discovery'
-import { useSupabase } from '~/composables/useSupabase'
+import TenantDiscoverCard from '~/components/chooser/TenantDiscoverCard.vue'
 import { Input } from '~/components/ui/input'
 import { Label } from '~/components/ui/label'
 import {
@@ -99,43 +95,41 @@ import {
 import { Skeleton } from '~/components/ui/skeleton'
 
 const config = useRuntimeConfig()
+const router = useRouter()
 const tenants = ref<TenantConfig[]>([])
 const loading = ref(true)
-const error = ref<string | null>(null)
+const loadError = ref<string | null>(null)
 
 onMounted(async () => {
   try {
     const anonKey = (config.public.supabaseAnonKey as string)?.trim()
     if (!anonKey) {
-      error.value = 'Discovery is not configured. Set NUXT_PUBLIC_SUPABASE_ANON_KEY when building the platform (e.g. in GitHub Actions secrets) and redeploy.'
+      loadError.value =
+        'This app is not configured to load dGuilds. Set NUXT_PUBLIC_SUPABASE_ANON_KEY and redeploy.'
       return
     }
-    const supabase = useSupabase()
+    const supabase = getBrowserClient(
+      config.public.supabaseUrl as string,
+      config.public.supabaseAnonKey as string,
+    )
     const { data, error: dbError } = await supabase
       .from('tenant_config')
       .select('id, slug, name, description, branding, modules')
       .order('id', { ascending: true })
     if (dbError) {
-      const msg = dbError.code === 'PGRST301' || dbError.message?.includes('401')
-        ? 'Invalid or missing Supabase anon key. Set NUXT_PUBLIC_SUPABASE_ANON_KEY to the anon public key from Supabase Dashboard → Settings → API and redeploy.'
-        : dbError.message
+      const msg =
+        dbError.code === 'PGRST301' || dbError.message?.includes('401')
+          ? 'Invalid or missing Supabase configuration. Check NUXT_PUBLIC_SUPABASE_ANON_KEY.'
+          : dbError.message
       throw new Error(msg)
     }
     tenants.value = (data ?? []) as TenantConfig[]
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to load tenants'
+    loadError.value = e instanceof Error ? e.message : 'Failed to load dGuilds'
   } finally {
     loading.value = false
   }
 })
-
-function tenantUrl(idOrSlug: string) {
-  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    return `http://localhost:3002?tenant=${encodeURIComponent(idOrSlug)}`
-  }
-  const tenantAppHost = config.public.tenantAppHost as string
-  return `https://${tenantAppHost}?tenant=${encodeURIComponent(idOrSlug)}`
-}
 
 const {
   searchQuery,
@@ -149,28 +143,52 @@ const {
 
 const moduleFilterModel = computed({
   get: () => moduleFilter.value ?? 'all',
-  set: (v: string) => { moduleFilter.value = v === 'all' ? null : v },
+  set: (v: string) => {
+    moduleFilter.value = v === 'all' ? null : v
+  },
 })
+
+function onSelectTenant(tenantId: string) {
+  void router.replace({ path: '/', query: { tenant: tenantId } })
+}
 </script>
 
 <style scoped>
-.discovery__loading,
-.discovery__error {
+.tenant-chooser {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: max(var(--theme-space-md), env(safe-area-inset-top))
+    max(var(--theme-space-md), env(safe-area-inset-right))
+    max(var(--theme-space-xl), env(safe-area-inset-bottom))
+    max(var(--theme-space-md), env(safe-area-inset-left));
+  background: var(--theme-bg-primary);
+}
+
+.tenant-chooser__loading,
+.tenant-chooser__error {
   padding: var(--theme-space-md);
   text-align: center;
   font-size: var(--theme-font-sm);
   color: var(--theme-text-muted);
 }
 
-.discovery__error {
+.tenant-chooser__error {
   color: var(--theme-error);
 }
 
-.discovery-page {
-  padding: 0 0 var(--theme-space-xl) 0;
+.tenant-chooser__inner {
+  max-width: 56rem;
+  margin: 0 auto;
 }
 
-.discovery__bar {
+.tenant-chooser__title {
+  margin: 0 0 var(--theme-space-md);
+  font-size: var(--theme-font-lg);
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.tenant-chooser__bar {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -179,18 +197,13 @@ const moduleFilterModel = computed({
   margin-bottom: var(--theme-space-md);
 }
 
-.discovery__search {
+.tenant-chooser__search {
   position: relative;
   flex: 1;
   min-width: 0;
 }
 
-.discovery__search .discovery__input {
-  width: 100%;
-  padding-left: 2rem;
-}
-
-.discovery__search-icon {
+.tenant-chooser__search-icon {
   position: absolute;
   left: var(--theme-space-xs);
   top: 50%;
@@ -200,7 +213,7 @@ const moduleFilterModel = computed({
   pointer-events: none;
 }
 
-.discovery__label {
+.tenant-chooser__label {
   display: block;
   font-size: var(--theme-font-xs);
   font-weight: 500;
@@ -208,51 +221,34 @@ const moduleFilterModel = computed({
   margin-bottom: var(--theme-space-xs);
 }
 
-.discovery__input,
-.discovery__select {
-  padding: 0.375rem var(--theme-space-sm);
-  font-size: var(--theme-font-sm);
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-sm);
-  min-height: 32px;
-}
-
-.discovery__input:focus,
-.discovery__select:focus {
-  outline: none;
-  border-color: var(--theme-primary);
-}
-
-.discovery__filters {
+.tenant-chooser__filters {
   display: flex;
   gap: var(--theme-space-sm);
   flex-wrap: wrap;
 }
 
-.discovery__filter {
+.tenant-chooser__filter {
   min-width: 120px;
 }
 
-.discovery__empty {
+.tenant-chooser__empty {
   padding: var(--theme-space-md);
   text-align: center;
   color: var(--theme-text-muted);
 }
 
-.discovery__empty-text {
+.tenant-chooser__empty-text {
   margin: 0 0 0.25rem;
   font-size: var(--theme-font-sm);
 }
 
-.discovery__empty-hint {
+.tenant-chooser__empty-hint {
   margin: 0;
   font-size: var(--theme-font-xs);
   color: var(--theme-text-muted);
 }
 
-.discovery__grid {
+.tenant-chooser__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 320px));
   gap: var(--theme-space-md);

@@ -1,3 +1,7 @@
+# Netlify-only (tenant app on Vercel uses vercel.json rewrites or dashboard — see apps/tenant/.env.example).
+# Same-origin PWA manifest: uncomment and set your Supabase project ref.
+# /manifest.webmanifest https://YOUR_PROJECT_REF.supabase.co/functions/v1/tenant_web_manifest 200
+
 # SPA fallback: serve 200.html for all routes so client-side routing works.
 # Required when tenant app is built as static (nitro preset: static).
 /*    /200.html    200

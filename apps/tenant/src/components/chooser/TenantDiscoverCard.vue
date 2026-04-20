@@ -1,56 +1,46 @@
 <template>
-  <article
-    class="discovery-card"
-    :style="cardStyle"
-  >
-    <div class="discovery-card__overlay" aria-hidden="true" />
-    <div class="discovery-card__content">
+  <article class="tenant-discover-card" :style="cardStyle">
+    <div class="tenant-discover-card__overlay" aria-hidden="true" />
+    <div class="tenant-discover-card__content">
       <span
-        class="discovery-card__gate"
-        :class="{ 'discovery-card__gate--active': hasGate }"
+        class="tenant-discover-card__gate"
+        :class="{ 'tenant-discover-card__gate--active': hasGate }"
         :aria-label="hasGate ? 'Gated' : 'Public'"
       >
-        <Icon icon="mdi:gate" class="discovery-card__gate-icon" />
+        <Icon icon="mdi:gate" class="tenant-discover-card__gate-icon" />
       </span>
 
-      <div class="discovery-card__top">
-        <h3 class="discovery-card__name">{{ tenant.name }}</h3>
-        <p v-if="tenant.description" class="discovery-card__desc">{{ tenant.description }}</p>
+      <div class="tenant-discover-card__top">
+        <h3 class="tenant-discover-card__name">{{ tenant.name }}</h3>
+        <p v-if="tenant.description" class="tenant-discover-card__desc">{{ tenant.description }}</p>
       </div>
 
-      <div class="discovery-card__bottom">
-        <ul v-if="activeModulesWithGate.length" class="discovery-card__modules">
+      <div class="tenant-discover-card__bottom">
+        <ul v-if="activeModulesWithGate.length" class="tenant-discover-card__modules">
           <li
             v-for="(mod, i) in activeModulesWithGate"
             :key="i"
-            class="discovery-card__module-row"
+            class="tenant-discover-card__module-row"
           >
-            <span class="discovery-card__module-name">{{ mod.name }}</span>
+            <span class="tenant-discover-card__module-name">{{ mod.name }}</span>
             <span
               v-if="mod.hasGate"
-              class="discovery-card__module-gate discovery-card__module-gate--active"
+              class="tenant-discover-card__module-gate tenant-discover-card__module-gate--active"
               aria-label="Gated"
             >
-              <Icon icon="mdi:gate" class="discovery-card__module-gate-icon" />
+              <Icon icon="mdi:gate" class="tenant-discover-card__module-gate-icon" />
             </span>
-            <span
-              v-else
-              class="discovery-card__module-gate"
-              aria-label="Public"
-            >
-              <Icon icon="mdi:gate" class="discovery-card__module-gate-icon" />
+            <span v-else class="tenant-discover-card__module-gate" aria-label="Public">
+              <Icon icon="mdi:gate" class="tenant-discover-card__module-gate-icon" />
             </span>
           </li>
         </ul>
 
-        <a
-          :href="tenantUrl(tenant.id)"
-          target="_blank"
-          rel="noopener"
-          class="discovery-card__visit"
-        >
-          <Button>Visit</Button>
-        </a>
+        <div class="tenant-discover-card__actions">
+          <Button type="button" @click="emit('select', tenant.id)">
+            Open
+          </Button>
+        </div>
       </div>
     </div>
   </article>
@@ -65,9 +55,12 @@ import type { ActiveModuleWithGate } from '@decentraguild/discovery'
 
 const props = defineProps<{
   tenant: TenantConfig
-  tenantUrl: (idOrSlug: string) => string
   hasGate: boolean
   activeModulesWithGate: ActiveModuleWithGate[]
+}>()
+
+const emit = defineEmits<{
+  select: [tenantId: string]
 }>()
 
 const cardStyle = computed(() => {
@@ -80,7 +73,7 @@ const cardStyle = computed(() => {
 </script>
 
 <style scoped>
-.discovery-card {
+.tenant-discover-card {
   position: relative;
   height: 392px;
   background-size: auto 100%;
@@ -91,14 +84,14 @@ const cardStyle = computed(() => {
   border: 1px solid var(--theme-border);
 }
 
-.discovery-card__overlay {
+.tenant-discover-card__overlay {
   position: absolute;
   inset: 0;
   background: color-mix(in srgb, var(--theme-bg-secondary) 86%, transparent);
   pointer-events: none;
 }
 
-.discovery-card__content {
+.tenant-discover-card__content {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -107,7 +100,7 @@ const cardStyle = computed(() => {
   min-height: 0;
 }
 
-.discovery-card__gate {
+.tenant-discover-card__gate {
   position: absolute;
   top: var(--theme-space-xs);
   right: var(--theme-space-xs);
@@ -117,25 +110,25 @@ const cardStyle = computed(() => {
   color: var(--theme-text-muted);
 }
 
-.discovery-card__gate--active {
+.tenant-discover-card__gate--active {
   color: var(--theme-primary);
 }
 
-.discovery-card__gate-icon {
+.tenant-discover-card__gate-icon {
   font-size: 1rem;
   color: inherit;
 }
 
-.discovery-card__gate :deep(svg),
-.discovery-card__module-gate :deep(svg) {
+.tenant-discover-card__gate :deep(svg),
+.tenant-discover-card__module-gate :deep(svg) {
   fill: currentColor;
 }
 
-.discovery-card__top {
+.tenant-discover-card__top {
   flex-shrink: 0;
 }
 
-.discovery-card__name {
+.tenant-discover-card__name {
   margin: 0 0 var(--theme-space-xs);
   font-size: var(--theme-font-sm);
   font-weight: 600;
@@ -143,7 +136,7 @@ const cardStyle = computed(() => {
   line-height: 1.25;
 }
 
-.discovery-card__desc {
+.tenant-discover-card__desc {
   margin: 0;
   font-size: var(--theme-font-xs);
   color: var(--theme-text-secondary);
@@ -154,7 +147,7 @@ const cardStyle = computed(() => {
   overflow: hidden;
 }
 
-.discovery-card__modules {
+.tenant-discover-card__modules {
   margin: 0 0 var(--theme-space-sm);
   padding-left: var(--theme-space-md);
   list-style-type: disc;
@@ -163,45 +156,44 @@ const cardStyle = computed(() => {
   line-height: 1.35;
 }
 
-.discovery-card__module-row {
+.tenant-discover-card__module-row {
   display: flex;
   align-items: center;
   gap: var(--theme-space-xs);
   margin-bottom: 0.25rem;
 }
 
-.discovery-card__module-row:last-child {
+.tenant-discover-card__module-row:last-child {
   margin-bottom: 0;
 }
 
-.discovery-card__module-name {
+.tenant-discover-card__module-name {
   flex: 1;
   min-width: 0;
 }
 
-.discovery-card__module-gate {
+.tenant-discover-card__module-gate {
   flex-shrink: 0;
   display: inline-flex;
   color: var(--theme-text-muted);
 }
 
-.discovery-card__module-gate--active {
+.tenant-discover-card__module-gate--active {
   color: var(--theme-primary);
 }
 
-.discovery-card__module-gate-icon {
+.tenant-discover-card__module-gate-icon {
   font-size: 0.875rem;
   color: inherit;
 }
 
-.discovery-card__bottom {
+.tenant-discover-card__bottom {
   margin-top: auto;
 }
 
-.discovery-card__visit {
+.tenant-discover-card__actions {
   flex-shrink: 0;
-  align-self: center;
-  text-decoration: none;
+  display: flex;
+  justify-content: center;
 }
-
 </style>

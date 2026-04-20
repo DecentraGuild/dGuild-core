@@ -141,5 +141,8 @@ verify_jwt = false
 [functions.crafter]
 verify_jwt = false
 
+[functions.tenant_web_manifest]
+verify_jwt = false
+
 [analytics]
 enabled = false

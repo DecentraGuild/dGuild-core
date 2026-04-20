@@ -9,6 +9,7 @@ import { parseCurrencyMintsFromView } from '~/utils/parseTenantCurrencyMints'
 import { getTenantSlugFromHost } from '@decentraguild/core'
 import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr'
 import { useTenantStore } from '~/stores/tenant'
+import { requestHostMatchesTenantSingleHost } from '~/utils/tenantSingleHostMatch'
 
 export default defineNuxtPlugin(async () => {
   const config = useRuntimeConfig()
@@ -24,8 +25,7 @@ export default defineNuxtPlugin(async () => {
   const url = req.url ?? ''
   const parsed = new URL(url.startsWith('/') ? `http://${host}${url}` : url)
   const searchParams = parsed.searchParams
-  const singleHost = ((config.public as { tenantSingleHost?: string }).tenantSingleHost ?? 'dapp.dguild.org').toLowerCase()
-  const isSingleHost = singleHost && host === singleHost
+  const isSingleHost = requestHostMatchesTenantSingleHost(host, config.public.tenantSingleHost)
   const hasTenantInQuery = Boolean(searchParams.get('tenant')?.trim())
 
   if (isSingleHost && !hasTenantInQuery) return
@@ -63,6 +63,7 @@ export default defineNuxtPlugin(async () => {
       .maybeSingle()
 
     if (error || !data) {
+      tenantStore.setSlug(null)
       tenantStore.error = error?.message ?? 'Failed to load tenant'
       return
     }
@@ -140,6 +141,7 @@ export default defineNuxtPlugin(async () => {
       marketplaceSettings,
     })
   } catch {
+    tenantStore.setSlug(null)
     tenantStore.error = 'Failed to load tenant'
   }
 })

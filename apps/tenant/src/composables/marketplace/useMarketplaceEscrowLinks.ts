@@ -3,7 +3,6 @@
  * Centralizes path/query construction and clipboard copy.
  * Only appends ?tenant= when not already on a tenant subdomain (see useTenantInLinks).
  */
-import type { Ref } from 'vue'
 import { useTenantInLinks } from '~/composables/core/useTenantInLinks'
 
 export interface EscrowLinkResult {
@@ -15,21 +14,23 @@ export interface EscrowLinkOptions {
   tab?: string
 }
 
-export function useMarketplaceEscrowLinks(slug: Ref<string | null>) {
-  const { shouldAppendTenantToLinks } = useTenantInLinks()
+export function useMarketplaceEscrowLinks() {
+  const { shouldAppendTenantToLinks, tenantParamForQuery } = useTenantInLinks()
 
   function escrowLink(id: string, options?: EscrowLinkOptions): EscrowLinkResult {
     const query: Record<string, string> = { escrow: id }
-    if (slug.value && shouldAppendTenantToLinks.value) query.tenant = slug.value
+    const t = tenantParamForQuery.value
+    if (t && shouldAppendTenantToLinks.value) query.tenant = t
     if (options?.tab) query.tab = options.tab
     return { path: '/market', query }
   }
 
   function shareUrl(id: string): string {
     const base = typeof window !== 'undefined' ? window.location.origin : ''
+    const t = tenantParamForQuery.value
     const path =
-      slug.value && shouldAppendTenantToLinks.value
-        ? `/market/escrow/${id}?tenant=${slug.value}`
+      t && shouldAppendTenantToLinks.value
+        ? `/market/escrow/${id}?tenant=${encodeURIComponent(t)}`
         : `/market/escrow/${id}`
     return `${base}${path}`
   }

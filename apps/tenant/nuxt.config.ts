@@ -13,7 +13,10 @@ export default defineNuxtConfig({
   app: {
     head: {
       viewport: 'width=device-width, initial-scale=1',
-      link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'manifest', href: '/manifest.webmanifest' },
+      ],
     },
   },
   components: [
@@ -37,6 +40,8 @@ export default defineNuxtConfig({
     '~/plugins/theme-inject.server',
     '~/plugins/buffer.client',
     '~/plugins/tenant.client',
+    '~/plugins/pwa-head.client',
+    '~/plugins/register-sw.client',
     '@decentraguild/auth/plugin.server',
     '@decentraguild/auth/plugin.client',
   ],
@@ -106,7 +111,7 @@ export default defineNuxtConfig({
       platformBaseUrl: process.env.NUXT_PUBLIC_PLATFORM_BASE_URL ?? (process.env.NODE_ENV === 'production' ? 'https://dguild.org' : 'http://localhost:3000'),
       appUrl: process.env.NUXT_PUBLIC_APP_URL ?? '',
       walletConnectProjectId: process.env.NUXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? '',
-      // Single host for ?tenant= entry (e.g. dapp.dguild.org). When on this host and URL has no ?tenant=, we use cached last tenant so refresh keeps the same org.
+      // Single host for ?tenant= entry (e.g. dapp.dguild.org). Without ?tenant=, no tenant is implied (discovery chooser).
       tenantSingleHost: process.env.NUXT_PUBLIC_TENANT_SINGLE_HOST ?? 'dapp.dguild.org',
       internalDevTenantIds: process.env.NUXT_PUBLIC_INTERNAL_DEV_TENANT_IDS ?? '',
     },

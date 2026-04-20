@@ -164,9 +164,7 @@ const txNotifications = useTransactionNotificationsStore()
 const quickCancelLock = useSubmitInFlightLock()
 
 const tenantId = computed(() => tenantStore.tenantId)
-const { escrowLink } = useMarketplaceEscrowLinks(
-  computed(() => tenantStore.slug)
-)
+const { escrowLink } = useMarketplaceEscrowLinks()
 
 const connected = computed(() => auth.connectorState.value?.connected ?? false)
 const walletAddress = computed(() => auth.connectorState.value?.account ?? null)

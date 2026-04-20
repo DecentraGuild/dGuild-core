@@ -49,3 +49,15 @@ export function errorResponse(
   const body = code ? { error: message, code } : { error: message }
   return jsonResponse(body, req, status)
 }
+
+export function manifestResponse(body: string, req: Request): Response {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/manifest+json; charset=utf-8',
+      'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
+      Vary: 'Host',
+      ...getCorsHeaders(req),
+    },
+  })
+}

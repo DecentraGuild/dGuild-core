@@ -139,10 +139,21 @@ export const useTenantStore = defineStore('tenant', () => {
       })
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load tenant'
+      if (import.meta.client) {
+        const msg = error.value ?? ''
+        if (msg.includes('not found') || msg.includes('Tenant not found')) {
+          try {
+            localStorage.removeItem('dg_last_tenant')
+          } catch {
+            /* ignore */
+          }
+        }
+      }
       if (!preserve) {
         tenant.value = null
         marketplaceSettings.value = null
         raffleSettings.value = null
+        slug.value = null
       }
     } finally {
       loading.value = false

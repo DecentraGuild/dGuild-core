@@ -3,6 +3,7 @@ export type {
   TenantTheme,
   TenantThemeColors,
   TenantBranding,
+  TenantBrandingPwa,
   TenantModuleEntry,
   TenantModulesMap,
   ModuleState,

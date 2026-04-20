@@ -157,18 +157,29 @@
     </template>
     <template v-if="!tenantGateConfigured || tenantAccessOk" #nav>
       <div class="layout-nav">
-        <AppNav>
-          <NavLink :to="linkTo('/')" icon="lucide:home">Home</NavLink>
-          <NavLink
-            v-for="mod in navModules"
-            :key="mod.id"
-            :to="linkTo(mod.path)"
-            :icon="mod.icon"
-          >
-            {{ mod.label }}
-          </NavLink>
-        </AppNav>
+        <div class="layout-nav__scroll">
+          <AppNav>
+            <NavLink :to="linkTo('/')" icon="lucide:home">Home</NavLink>
+            <NavLink
+              v-for="mod in navModules"
+              :key="mod.id"
+              :to="linkTo(mod.path)"
+              :icon="mod.icon"
+            >
+              {{ mod.label }}
+            </NavLink>
+          </AppNav>
+        </div>
+        <NuxtLink
+          v-if="isTenantSingleHost"
+          :to="linkTo('/discover')"
+          class="layout-nav__discover"
+        >
+          <Icon icon="lucide:compass" class="layout-nav__discover-icon" />
+          <span>Discover</span>
+        </NuxtLink>
         <a
+          v-else
           :href="discoverUrl"
           target="_blank"
           rel="noopener"
@@ -218,9 +229,11 @@ import { useSupabase } from '~/composables/core/useSupabase'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
 import { useNavModules } from '~/composables/core/useNavModules'
 import { useTenantInLinks } from '~/composables/core/useTenantInLinks'
+import { useTenantSingleHost } from '~/composables/core/useTenantSingleHost'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 
 const config = useRuntimeConfig()
+const isTenantSingleHost = useTenantSingleHost()
 const discoverUrl = (config.public.platformBaseUrl as string)?.replace(/\/$/, '') || (import.meta.env.PROD ? 'https://dguild.org' : 'http://localhost:3000')
 
 const route = useRoute()
@@ -423,17 +436,17 @@ function closeAdminMore() {
   adminMoreOpen.value = false
 }
 
-const { shouldAppendTenantToLinks } = useTenantInLinks()
+const { shouldAppendTenantToLinks, tenantParamForQuery } = useTenantInLinks()
 
 function linkTo(path: string) {
-  const slug = tenantStore.slug
-  return slug && shouldAppendTenantToLinks.value ? { path, query: { tenant: slug } } : path
+  const t = tenantParamForQuery.value
+  return t && shouldAppendTenantToLinks.value ? { path, query: { tenant: t } } : path
 }
 
 function linkToWithTab(path: string, tabId: string) {
-  const slug = tenantStore.slug
+  const t = tenantParamForQuery.value
   const query: Record<string, string> = { tab: tabId }
-  if (slug && shouldAppendTenantToLinks.value) query.tenant = slug
+  if (t && shouldAppendTenantToLinks.value) query.tenant = t
   return { path, query }
 }
 
@@ -658,11 +671,18 @@ button.layout-subnav__tab {
   min-height: 0;
 }
 
+.layout-nav__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .layout-nav__discover {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--theme-space-sm);
-  margin-top: auto;
   padding: var(--theme-space-sm) var(--theme-space-md);
   color: var(--theme-text-secondary);
   text-decoration: none;

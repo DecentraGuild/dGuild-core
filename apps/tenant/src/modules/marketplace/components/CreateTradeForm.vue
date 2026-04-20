@@ -480,9 +480,10 @@ async function create() {
       })
 
       await sendAndConfirmTransaction(connection.value, tx, wallet, wallet.publicKey)
-      const { shouldAppendTenantToLinks } = useTenantInLinks()
+      const { shouldAppendTenantToLinks, tenantParamForQuery } = useTenantInLinks()
       const query: Record<string, string> = { tab: 'open-trades', escrow: escrow.toBase58() }
-      if (tenantStore.slug && shouldAppendTenantToLinks.value) query.tenant = tenantStore.slug
+      const t = tenantParamForQuery.value
+      if (t && shouldAppendTenantToLinks.value) query.tenant = t
       await router.replace({ path: '/market', query })
       emit('success')
     } catch (e) {

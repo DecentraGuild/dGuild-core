@@ -1,4 +1,5 @@
 import type { Ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { TenantConfig, ModuleGateModuleId, StoredGateValue, MarketplaceGateSettings } from '@decentraguild/core'
 import {
   getModuleState,
@@ -37,7 +38,6 @@ export function useDiscoveryFilters(tenants: Ref<TenantConfig[]>) {
       .map(([id]) => id)
   }
 
-  /** Gate for a module: from getModuleGateFromTenant when the module stores gate in settingsjson the canonical way. */
   function getModuleGate(tenant: TenantConfig, moduleId: string): StoredGateValue | undefined {
     const canonical = moduleId === 'whitelist' ? 'gates' : moduleId
     if (
