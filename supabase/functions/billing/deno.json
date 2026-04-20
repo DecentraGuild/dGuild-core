@@ -1,6 +1,7 @@
 {
   "imports": {
     "@decentraguild/billing": "../../../packages/billing/dist/index.js",
-    "@decentraguild/catalog": "../../../catalog/dist/index.js"
+    "@decentraguild/catalog": "../../../catalog/dist/index.js",
+    "@decentraguild/core": "../../../packages/core/dist/browser.js"
   }
 }
