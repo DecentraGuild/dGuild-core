@@ -24,7 +24,12 @@ export {
   coerceProfileFieldValue,
   normalizeProfileFieldConfig,
 } from './types.js'
-export { getTenantSlugFromHost } from './resolver.js'
+export {
+  TENANT_DOMAIN,
+  getTenantSlugFromHost,
+  hasTenantSubdomainSlug,
+  tenantDiscoveryAppUrl,
+} from './resolver.js'
 export {
   BASE_CURRENCY_MINTS,
   BASE_CURRENCY_MINT_ADDRESSES,
