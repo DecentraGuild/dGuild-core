@@ -13,7 +13,10 @@ export default defineNuxtConfig({
   app: {
     head: {
       viewport: 'width=device-width, initial-scale=1',
-      link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+      link: [
+        { key: 'favicon', rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { key: 'apple-touch-icon', rel: 'apple-touch-icon', href: '/favicon.svg' },
+      ],
     },
   },
   components: [
