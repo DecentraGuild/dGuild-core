@@ -1,5 +1,6 @@
 import { computed } from 'vue'
 import { useTenantStore } from '~/stores/tenant'
+import { resolveTenantFavicon } from '~/utils/tenantFavicon'
 
 function primaryHex(branding: { theme?: { colors?: { primary?: { main?: string } } } } | undefined): string {
   const m = branding?.theme?.colors?.primary?.main
@@ -24,6 +25,7 @@ export default defineNuxtPlugin(() => {
     const b = tenantStore.tenant?.branding
     const themeColor = primaryHex(b)
     const shortTitle = (b?.pwa?.shortName ?? b?.shortName ?? tenantStore.tenant?.name ?? 'dGuild').slice(0, 64)
+    const { href: iconHref, type: iconType } = resolveTenantFavicon(b)
     return {
       meta: [
         { name: 'theme-color', content: themeColor },
@@ -32,7 +34,8 @@ export default defineNuxtPlugin(() => {
         { name: 'apple-mobile-web-app-title', content: shortTitle },
       ],
       link: [
-        { rel: 'apple-touch-icon', href: '/favicon.svg' },
+        { key: 'favicon', rel: 'icon', type: iconType, href: iconHref },
+        { key: 'apple-touch-icon', rel: 'apple-touch-icon', href: iconHref },
         { rel: 'manifest', href: manifestHref.value },
       ],
     }
