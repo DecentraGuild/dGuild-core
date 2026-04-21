@@ -65,10 +65,10 @@ Deno.serve(async (req: Request) => {
 
   const singleHost = normalizeHost(Deno.env.get('TENANT_SINGLE_HOST') ?? 'dapp.dguild.org')
 
+  // Do not trust ?host= (spoofable if this function is reached without a stripping reverse proxy).
   const rawHost =
     req.headers.get('x-forwarded-host')?.split(',')[0]?.trim() ||
     req.headers.get('x-nf-client-host')?.trim() ||
-    new URL(req.url).searchParams.get('host')?.trim() ||
     normalizeHost(req.headers.get('host') ?? '')
 
   const host = rawHost || singleHost

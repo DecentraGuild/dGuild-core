@@ -81,8 +81,11 @@ export default defineNuxtPlugin(async () => {
       defaultGate: data.default_gate as TenantConfig['defaultGate'],
       branding: data.branding as TenantConfig['branding'],
       modules: data.modules as TenantConfig['modules'],
-      admins: data.admins as string[],
-      treasury: data.treasury as string | undefined,
+      admins: Array.isArray(data.admins) ? (data.admins as string[]) : [],
+      treasury:
+        typeof data.treasury === 'string' && data.treasury.trim() !== ''
+          ? (data.treasury as string)
+          : undefined,
     }
 
     const rawSettings = data.marketplace_settings as MarketplaceSettings | null

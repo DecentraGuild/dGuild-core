@@ -4,15 +4,13 @@
 import { PublicKey } from 'npm:@solana/web3.js@1'
 import { getAssociatedTokenAddressSync } from 'npm:@solana/spl-token@0.4'
 import { TOKEN_PROGRAM_ID } from 'npm:@solana/spl-token@0.4'
+import { resolveVoucherReceivingWallet } from '@decentraguild/core'
 import { getSolanaConnection } from './solana-connection.ts'
 
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')
 
-const VOUCHER_WALLET_DEFAULT = '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
-
 function getVoucherWallet(): PublicKey {
-  const addr = Deno.env.get('VOUCHER_WALLET') ?? VOUCHER_WALLET_DEFAULT
-  return new PublicKey(addr)
+  return new PublicKey(resolveVoucherReceivingWallet(Deno.env.get('VOUCHER_WALLET')))
 }
 
 export function getVoucherRecipientAta(voucherMint: string): string {

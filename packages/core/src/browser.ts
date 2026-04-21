@@ -42,3 +42,7 @@ export {
   isMintSupportedByMarketplaceEscrow,
   type SplTokenProgramKind,
 } from './marketplace-escrow-mint.js'
+export {
+  VOUCHER_RECEIVING_WALLET_DEFAULT,
+  resolveVoucherReceivingWallet,
+} from './voucher-receiving-wallet.js'

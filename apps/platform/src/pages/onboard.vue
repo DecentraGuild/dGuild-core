@@ -73,7 +73,7 @@ import {
   ensureSigningWalletForSession,
 } from '@decentraguild/web3'
 import { useSupabase, invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
-import { generateRandomNumericTenantId } from '@decentraguild/core'
+import { generateRandomNumericTenantId, resolveVoucherReceivingWallet } from '@decentraguild/core'
 import { useRpc } from '~/composables/useRpc'
 
 /** Individual voucher mint that grants org registration only (see individual_vouchers / individual_voucher_entitlements). */
@@ -279,7 +279,7 @@ async function submitWithVoucher() {
         throw new Error('Invalid voucher quote')
       }
       const tokensRequired = vq.tokensRequired ?? 1
-      const voucherWallet = vq.voucherWallet ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
+      const voucherWallet = resolveVoucherReceivingWallet(vq.voucherWallet)
 
       const payerWallet = wallet.publicKey.toBase58()
       const chargeData = await invokeEdgeFunction<{

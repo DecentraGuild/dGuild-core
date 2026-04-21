@@ -1,5 +1,5 @@
 import { jsonResponse, errorResponse } from '../../_shared/cors.ts'
-import { getWalletFromAuthHeader } from '../../_shared/auth.ts'
+import { getWalletFromAuthHeader, requireTenantAdmin } from '../../_shared/auth.ts'
 import type { getAdminClient } from '../../_shared/supabase-admin.ts'
 import { solanaJsonRpc } from '../../_shared/solana-json-rpc.ts'
 
@@ -86,10 +86,13 @@ export async function handleScopeSync(body: Record<string, unknown>, db: Db, aut
   return jsonResponse({ catalogSynced: catalogUnique.length, scopeSynced: scopeRows.length }, req)
 }
 
-export async function handleScopeExpand(body: Record<string, unknown>, db: Db, _authHeader: string | null, req: Request): Promise<Response> {
+export async function handleScopeExpand(body: Record<string, unknown>, db: Db, authHeader: string | null, req: Request): Promise<Response> {
   const tenantId = body.tenantId as string
   const collectionMint = body.collectionMint as string
   if (!tenantId || !collectionMint) return errorResponse('tenantId and collectionMint required', req)
+
+  const adminCheck = await requireTenantAdmin(authHeader, tenantId, db, req)
+  if (!adminCheck.ok) return adminCheck.response
 
   const rpcUrl = Deno.env.get('HELIUS_RPC_URL') ?? Deno.env.get('SOLANA_RPC_URL')
   if (!rpcUrl) return errorResponse('RPC not configured', req, 500)

@@ -14,6 +14,7 @@ import {
   reconcileUsdcBatch,
 } from '../_shared/billing-reconcile-usdc.ts'
 import { getSolanaConnection } from '../_shared/solana-connection.ts'
+import { resolveVoucherReceivingWallet } from '@decentraguild/core'
 import type { PaymentProvider } from '@decentraguild/billing'
 import {
   resolveQuote,
@@ -195,7 +196,7 @@ Deno.serve(async (req: Request) => {
         const quoteId = (inserted as { id: string }).id
         const memo = `billing:${tenantId}:${quoteId}`
         const voucherRecipientAta = getVoucherRecipientAta(voucherMint)
-        const voucherWallet = Deno.env.get('VOUCHER_WALLET') ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
+        const voucherWallet = resolveVoucherReceivingWallet(Deno.env.get('VOUCHER_WALLET'))
         return jsonResponse({
           quoteId,
           quote: { quoteId, lineItems, priceUsdc: 0, recurringDisplayUsdc: 0, meters: {}, expiresAt },
@@ -255,7 +256,7 @@ Deno.serve(async (req: Request) => {
         const quoteId = (inserted as { id: string }).id
         const memo = `billing:${tenantId}:${quoteId}`
         const voucherRecipientAta = getVoucherRecipientAta(voucherMint)
-        const voucherWallet = Deno.env.get('VOUCHER_WALLET') ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
+        const voucherWallet = resolveVoucherReceivingWallet(Deno.env.get('VOUCHER_WALLET'))
         return jsonResponse({
           quoteId,
           quote: { quoteId, lineItems, priceUsdc: 0, recurringDisplayUsdc: 0, meters: {}, expiresAt },

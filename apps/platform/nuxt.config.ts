@@ -90,6 +90,8 @@ export default defineNuxtConfig({
       explorerTokenUrl: process.env.NUXT_PUBLIC_EXPLORER_TOKEN_URL ?? 'https://solscan.io/token',
       appUrl: process.env.NUXT_PUBLIC_APP_URL ?? '',
       walletConnectProjectId: process.env.NUXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? '',
+      /** Optional override for voucher receiving wallet (minted coupons). Empty = same default as Edge `VOUCHER_WALLET` / `resolveVoucherReceivingWallet` in @decentraguild/core. */
+      voucherWallet: process.env.NUXT_PUBLIC_VOUCHER_WALLET ?? '',
     },
   },
 })

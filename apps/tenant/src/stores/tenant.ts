@@ -73,8 +73,11 @@ export const useTenantStore = defineStore('tenant', () => {
         defaultGate: data.default_gate as MarketplaceGateSettings | undefined,
         branding: data.branding as TenantConfig['branding'],
         modules: data.modules as TenantConfig['modules'],
-        admins: data.admins as string[],
-        treasury: data.treasury as string | undefined,
+        admins: Array.isArray(data.admins) ? (data.admins as string[]) : [],
+        treasury:
+          typeof data.treasury === 'string' && data.treasury.trim() !== ''
+            ? (data.treasury as string)
+            : undefined,
         profileFields: normalizeProfileFieldConfig(data.profile_fields),
       }
 
@@ -127,6 +130,24 @@ export const useTenantStore = defineStore('tenant', () => {
             splAssetMints: enrich(marketplaceSettings.splAssetMints as Array<{ mint: string; name?: string; symbol?: string; image?: string }>),
             collectionMints: enrich(marketplaceSettings.collectionMints as Array<{ mint: string; name?: string; image?: string }>),
           }
+        }
+      }
+
+      const { data: sess } = await supabase.auth.getSession()
+      if (sess.session) {
+        try {
+          const { invokeEdgeFunction } = await import('@decentraguild/nuxt-composables')
+          const sens = await invokeEdgeFunction<{ admins?: string[]; treasury?: string | null }>(
+            supabase,
+            'member-profile',
+            { action: 'tenant-sensitive', tenantId: tenantData.id },
+          )
+          if (Array.isArray(sens?.admins) && sens.admins.length > 0) tenantData.admins = sens.admins
+          if (typeof sens?.treasury === 'string' && sens.treasury.trim() !== '') {
+            tenantData.treasury = sens.treasury
+          }
+        } catch {
+          /* not a tenant admin — keep public context */
         }
       }
 
