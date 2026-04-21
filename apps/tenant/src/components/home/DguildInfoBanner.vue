@@ -1,18 +1,20 @@
 <template>
   <div class="dguild-info-banner">
-    <div class="dguild-info-banner__brand">
-      <img
-        v-if="logo"
-        :src="logo"
-        :alt="name"
-        class="dguild-info-banner__logo"
-      >
-      <span v-else class="dguild-info-banner__logo-placeholder">{{ name.charAt(0) }}</span>
-      <div class="dguild-info-banner__brand-text">
-        <h1 class="dguild-info-banner__name">{{ name }}</h1>
-        <p v-if="welcomeMessage" class="dguild-info-banner__welcome">{{ welcomeMessage }}</p>
-        <p v-if="description" class="dguild-info-banner__desc">{{ description }}</p>
+    <div class="dguild-info-banner__main">
+      <div class="dguild-info-banner__header">
+        <img
+          v-if="logo"
+          :src="logo"
+          :alt="name"
+          class="dguild-info-banner__logo"
+        >
+        <span v-else class="dguild-info-banner__logo-placeholder">{{ name.charAt(0) }}</span>
+        <div class="dguild-info-banner__header-text">
+          <h1 class="dguild-info-banner__name">{{ name }}</h1>
+          <p v-if="welcomeMessage" class="dguild-info-banner__welcome">{{ welcomeMessage }}</p>
+        </div>
       </div>
+      <p v-if="description" class="dguild-info-banner__desc">{{ description }}</p>
     </div>
     <div v-if="hasLinks" class="dguild-info-banner__links">
       <a
@@ -89,9 +91,9 @@ const hasLinks = computed(
 <style scoped>
 .dguild-info-banner {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--theme-space-lg);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--theme-space-md);
   padding: var(--theme-space-lg);
   background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 55%),
     var(--theme-bg-card);
@@ -115,7 +117,15 @@ const hasLinks = computed(
   pointer-events: none;
 }
 
-.dguild-info-banner__brand {
+.dguild-info-banner__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-sm);
+  min-width: 0;
+  width: 100%;
+}
+
+.dguild-info-banner__header {
   display: flex;
   align-items: center;
   gap: var(--theme-space-md);
@@ -146,8 +156,9 @@ const hasLinks = computed(
   font-weight: 600;
 }
 
-.dguild-info-banner__brand-text {
+.dguild-info-banner__header-text {
   min-width: 0;
+  flex: 1;
 }
 
 .dguild-info-banner__name {
@@ -172,14 +183,18 @@ const hasLinks = computed(
 .dguild-info-banner__desc {
   font-size: var(--theme-font-sm);
   color: var(--theme-text-secondary);
-  margin: var(--theme-space-xs) 0 0;
-  line-height: 1.4;
+  margin: 0;
+  line-height: 1.5;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .dguild-info-banner__links {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--theme-space-sm) var(--theme-space-md);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--theme-space-sm);
+  width: 100%;
   flex-shrink: 0;
 }
 
@@ -199,5 +214,26 @@ const hasLinks = computed(
 
 .dguild-info-banner__link-icon {
   font-size: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .dguild-info-banner {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--theme-space-lg);
+  }
+
+  .dguild-info-banner__main {
+    flex: 1;
+  }
+
+  .dguild-info-banner__links {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--theme-space-sm) var(--theme-space-md);
+    width: auto;
+    align-items: stretch;
+  }
 }
 </style>

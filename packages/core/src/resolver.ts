@@ -34,3 +34,31 @@ export function getTenantSlugFromHost(
 
   return getSlugFromHost(host)
 }
+
+const RESERVED_TENANT_SUBDOMAINS = new Set(['', 'www', 'api', 'dapp'])
+
+export function hasTenantSubdomainSlug(slug: string | null | undefined): boolean {
+  const s = (slug ?? '').trim().toLowerCase()
+  if (!s) return false
+  if (RESERVED_TENANT_SUBDOMAINS.has(s)) return false
+  return true
+}
+
+export function tenantDiscoveryAppUrl(opts: {
+  tenantId: string
+  slug: string | null | undefined
+  isLocalhost: boolean
+  localTenantAppOrigin?: string
+  singleTenantAppHost?: string
+}): string {
+  const local = (opts.localTenantAppOrigin ?? 'http://localhost:3002').replace(/\/$/, '')
+  if (opts.isLocalhost) {
+    return `${local}?tenant=${encodeURIComponent(opts.tenantId)}`
+  }
+  const singleHost = (opts.singleTenantAppHost ?? 'dapp.dguild.org').replace(/\/$/, '').toLowerCase()
+  if (hasTenantSubdomainSlug(opts.slug)) {
+    const sub = String(opts.slug).trim().toLowerCase()
+    return `https://${sub}${TENANT_DOMAIN}/`
+  }
+  return `https://${singleHost}/?tenant=${encodeURIComponent(opts.tenantId)}`
+}
