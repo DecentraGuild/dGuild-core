@@ -8,6 +8,7 @@
  *   me                        – Own profile + eligibility (auth required).
  *   upsert-me                 – Create or update own profile (auth + on primary list).
  *   admin-update-profile-fields – Update which fields are enabled (admin).
+ *   tenant-sensitive           – `admins` + `treasury` for tenant admins only (not in public view).
  */
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
@@ -249,6 +250,26 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
 
     return jsonResponse({ profile }, req)
+  }
+
+  if (action === 'tenant-sensitive') {
+    const check = await requireTenantAdmin(authHeader, tenantId, db, req)
+    if (!check.ok) return check.response
+
+    const { data: row, error } = await db
+      .from('tenant_config')
+      .select('admins, treasury')
+      .eq('id', tenantId)
+      .maybeSingle()
+    if (error) return errorResponse(error.message, req, 500)
+    if (!row) return errorResponse('Tenant not found', req, 404)
+
+    const adminsRaw = (row as { admins?: unknown }).admins
+    const admins = Array.isArray(adminsRaw) ? (adminsRaw as string[]) : []
+    const tr = (row as { treasury?: string | null }).treasury
+    const treasury = typeof tr === 'string' && tr.trim() !== '' ? tr : null
+
+    return jsonResponse({ admins, treasury }, req)
   }
 
   if (action === 'admin-update-profile-fields') {

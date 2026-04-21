@@ -1,15 +1,19 @@
 import { jsonResponse, errorResponse } from '../../_shared/cors.ts'
+import { requireTenantAdmin } from '../../_shared/auth.ts'
 import type { getAdminClient } from '../../_shared/supabase-admin.ts'
 import { inferNftCollectionSyncModeFromDasGroupItems } from '../../_shared/mint-metadata.ts'
 import { solanaJsonRpc } from '../../_shared/solana-json-rpc.ts'
 
 type Db = ReturnType<typeof getAdminClient>
 
-export async function handleCatalogAdd(body: Record<string, unknown>, db: Db, _authHeader: string | null, req: Request): Promise<Response> {
+export async function handleCatalogAdd(body: Record<string, unknown>, db: Db, authHeader: string | null, req: Request): Promise<Response> {
   const tenantId = body.tenantId as string
   const mint = body.mint as string
   const kindHint = body.kind as 'SPL' | 'NFT' | 'auto' | undefined
   if (!tenantId || !mint) return errorResponse('tenantId and mint required', req)
+
+  const adminCheck = await requireTenantAdmin(authHeader, tenantId, db, req)
+  if (!adminCheck.ok) return adminCheck.response
 
   const rpcUrl = Deno.env.get('HELIUS_RPC_URL') ?? Deno.env.get('SOLANA_RPC_URL')
   if (!rpcUrl) return errorResponse('RPC not configured', req, 500)
@@ -78,10 +82,13 @@ export async function handleCatalogAdd(body: Record<string, unknown>, db: Db, _a
   }
 }
 
-export async function handleCatalogRefreshTraits(body: Record<string, unknown>, db: Db, _authHeader: string | null, req: Request): Promise<Response> {
+export async function handleCatalogRefreshTraits(body: Record<string, unknown>, db: Db, authHeader: string | null, req: Request): Promise<Response> {
   const tenantId = body.tenantId as string
   const catalogId = body.id as number
   if (!tenantId || !catalogId) return errorResponse('tenantId and id required', req)
+
+  const adminCheck = await requireTenantAdmin(authHeader, tenantId, db, req)
+  if (!adminCheck.ok) return adminCheck.response
 
   const { data: existing } = await db.from('tenant_mint_catalog').select('mint').eq('id', catalogId).eq('tenant_id', tenantId).maybeSingle()
   if (!existing) return errorResponse('Catalog entry not found', req, 404)

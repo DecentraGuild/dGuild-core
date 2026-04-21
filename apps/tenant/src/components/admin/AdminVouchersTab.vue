@@ -102,6 +102,7 @@ import {
 } from '@decentraguild/web3'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 import { formatRawTokenAmount } from '@decentraguild/display'
+import { resolveVoucherReceivingWallet } from '@decentraguild/core'
 
 const tenantStore = useTenantStore()
 const tenantSlug = computed(() => tenantStore.tenant?.slug ?? null)
@@ -283,7 +284,7 @@ async function redeem(v: RedeemableVoucher) {
         throw new Error('Invalid quote response')
       }
       const tokensRequired = quote.tokensRequired ?? v.tokensRequired
-      const voucherWallet = quote.voucherWallet ?? '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
+      const voucherWallet = resolveVoucherReceivingWallet(quote.voucherWallet)
 
       const slugToClaimForCharge =
         hasSlugEntitlement(v) && !tenantSlug.value && slugStatusByMint.value[v.mint] === 'available'

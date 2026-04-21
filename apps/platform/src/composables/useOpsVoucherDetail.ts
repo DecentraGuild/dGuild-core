@@ -20,9 +20,14 @@ import {
 import { useAuth } from '@decentraguild/auth'
 import { useSupabase, invokeEdgeFunction, useSubmitInFlightLock } from '@decentraguild/nuxt-composables'
 import { useRpc } from '~/composables/useRpc'
+import { resolveVoucherReceivingWallet } from '@decentraguild/core'
 import { useTransactionNotificationsStore } from '~/stores/transactionNotifications'
 
-const VOUCHER_WALLET = '89s4gjt2STRy83XQrxmYrWRkQBH3CL228BRVs6Qbed2Q'
+/** Mint destination: platform public override, else canonical voucher vault (separate from ops signer). */
+function voucherWalletPubkey(): PublicKey {
+  const cfg = useRuntimeConfig().public.voucherWallet as string | undefined
+  return new PublicKey(resolveVoucherReceivingWallet(cfg))
+}
 
 interface VoucherDetail {
   type: 'bundle' | 'individual'
@@ -141,7 +146,7 @@ export function useOpsVoucherDetail(mint: Ref<string>, opsAllowed?: Ref<boolean>
       try {
         const connection = createConnection(rpcUrl)
         const mintPk = new PublicKey(mint.value)
-        const destOwner = new PublicKey(VOUCHER_WALLET)
+        const destOwner = voucherWalletPubkey()
         const destAta = getAssociatedTokenAddressSync(mintPk, destOwner)
         const instructions: Parameters<Transaction['add']>[0][] = []
         try { await getAccount(connection, destAta) } catch {

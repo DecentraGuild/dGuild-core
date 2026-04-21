@@ -11,10 +11,13 @@ const ALLOWED_ORIGINS = (
 
 export function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('Origin') ?? ''
+  const localhostOk =
+    /^https?:\/\/localhost(?::\d+)?$/i.test(origin) ||
+    /^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(origin)
   const isAllowed =
     ALLOWED_ORIGINS.includes(origin) ||
     /^https:\/\/[a-z0-9-]+\.dguild\.org$/.test(origin) ||
-    origin.includes('localhost')
+    localhostOk
 
   return {
     'Access-Control-Allow-Origin': isAllowed ? origin : ALLOWED_ORIGINS[0],

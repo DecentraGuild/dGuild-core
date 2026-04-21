@@ -102,6 +102,7 @@ import ShipmentClaimCard from '~/components/shipment/ShipmentClaimCard.vue'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { useAuth } from '@decentraguild/auth'
+import { invokeEdgeFunction } from '@decentraguild/nuxt-composables'
 import { useTenantStore } from '~/stores/tenant'
 import { useSupabase } from '~/composables/core/useSupabase'
 import { useExplorerLinks } from '~/composables/core/useExplorerLinks'
@@ -317,18 +318,19 @@ async function fetchAssets() {
   const supabase = useSupabase()
   let mintsFromShipments: string[] = []
   if (tenantId) {
-    const { data, error } = await supabase
-      .from('shipment_records')
-      .select('mint')
-      .eq('tenant_id', tenantId)
-    if (!error && data?.length) {
+    try {
+      const edge = await invokeEdgeFunction<{ mints?: string[] }>(supabase, 'shipment', {
+        action: 'list-shipment-mints',
+        tenantId,
+      })
+      const list = edge?.mints ?? []
       const s = new Set<string>()
-      for (const row of data as Array<{ mint: string }>) {
-        if (row.mint) s.add(row.mint)
+      for (const m of list) {
+        if (m) s.add(m)
       }
       knownShipmentMints.value = s
       mintsFromShipments = [...s]
-    } else {
+    } catch {
       knownShipmentMints.value = new Set()
     }
   } else {

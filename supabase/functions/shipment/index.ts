@@ -4,6 +4,7 @@
  *
  * Actions:
  *   record-shipment – Persist shipment after successful compress tx (admin).
+ *   list-shipment-mints – Distinct mints from shipment_records for a tenant (public; mint list only).
  */
 
 import { handlePreflight, jsonResponse, errorResponse } from '../_shared/cors.ts'
@@ -24,6 +25,21 @@ Deno.serve(async (req: Request) => {
 
   const action = body.action as string
   const db = getAdminClient()
+
+  if (action === 'list-shipment-mints') {
+    const tenantId = (body.tenantId as string)?.trim()
+    if (!tenantId) return errorResponse('tenantId required', req)
+
+    const { data: rows, error } = await db
+      .from('shipment_records')
+      .select('mint')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(500)
+    if (error) return errorResponse(error.message, req, 500)
+    const mints = [...new Set((rows ?? []).map((r) => (r as { mint: string }).mint).filter(Boolean))]
+    return jsonResponse({ mints }, req)
+  }
 
   if (action === 'record-shipment') {
     const tenantId = body.tenantId as string

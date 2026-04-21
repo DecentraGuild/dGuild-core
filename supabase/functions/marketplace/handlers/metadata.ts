@@ -97,11 +97,14 @@ export async function handleMetadata(body: Record<string, unknown>, db: Db, _aut
   const meta = await fetchMintMetadataFromChain(connection, mint)
   if (!meta) return errorResponse('Mint not found', req, 404)
 
-  await db.from('mint_metadata').upsert(mergeMintMetadataUpsert(undefined, meta), { onConflict: 'mint' })
+  // Do not persist on cache miss: unauthenticated callers could poison global mint_metadata.
   return jsonResponse(meta, req)
 }
 
-export async function handleMetadataRefresh(body: Record<string, unknown>, db: Db, _authHeader: string | null, req: Request): Promise<Response> {
+export async function handleMetadataRefresh(body: Record<string, unknown>, db: Db, authHeader: string | null, req: Request): Promise<Response> {
+  const check = await requirePlatformAdmin(authHeader, req)
+  if (!check.ok) return check.response
+
   const mints = body.mints as string[]
   if (!Array.isArray(mints)) return errorResponse('mints array required', req)
 
