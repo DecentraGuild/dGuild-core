@@ -1,62 +1,65 @@
 <template>
-  <div class="dguild-info-banner">
-    <div class="dguild-info-banner__main">
-      <div class="dguild-info-banner__header">
-        <img
-          v-if="logo"
-          :src="logo"
-          :alt="name"
-          class="dguild-info-banner__logo"
-        >
-        <span v-else class="dguild-info-banner__logo-placeholder">{{ name.charAt(0) }}</span>
-        <div class="dguild-info-banner__header-text">
-          <h1 class="dguild-info-banner__name">{{ name }}</h1>
-          <p v-if="welcomeMessage" class="dguild-info-banner__welcome">{{ welcomeMessage }}</p>
+  <!-- Size container: layout follows card width, not viewport (sidebar narrows main from 768px up). -->
+  <div class="dguild-info-banner-cq">
+    <div class="dguild-info-banner">
+      <div class="dguild-info-banner__main">
+        <div class="dguild-info-banner__header">
+          <img
+            v-if="logo"
+            :src="logo"
+            :alt="name"
+            class="dguild-info-banner__logo"
+          >
+          <span v-else class="dguild-info-banner__logo-placeholder">{{ name.charAt(0) }}</span>
+          <div class="dguild-info-banner__header-text">
+            <h1 class="dguild-info-banner__name">{{ name }}</h1>
+            <p v-if="welcomeMessage" class="dguild-info-banner__welcome">{{ welcomeMessage }}</p>
+          </div>
         </div>
+        <p v-if="description" class="dguild-info-banner__desc">{{ description }}</p>
       </div>
-      <p v-if="description" class="dguild-info-banner__desc">{{ description }}</p>
-    </div>
-    <div v-if="hasLinks" class="dguild-info-banner__links">
-      <a
-        v-if="homepage"
-        :href="homepage"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="dguild-info-banner__link"
-      >
-        <Icon icon="lucide:globe" class="dguild-info-banner__link-icon" />
-        Homepage
-      </a>
-      <a
-        v-if="xLink"
-        :href="xLink"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="dguild-info-banner__link"
-      >
-        <Icon icon="simple-icons:x" class="dguild-info-banner__link-icon" />
-        X
-      </a>
-      <a
-        v-if="discord"
-        :href="discord"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="dguild-info-banner__link"
-      >
-        <Icon icon="simple-icons:discord" class="dguild-info-banner__link-icon" />
-        Discord
-      </a>
-      <a
-        v-if="telegram"
-        :href="telegram"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="dguild-info-banner__link"
-      >
-        <Icon icon="simple-icons:telegram" class="dguild-info-banner__link-icon" />
-        Telegram
-      </a>
+      <div v-if="hasLinks" class="dguild-info-banner__links">
+        <a
+          v-if="homepage"
+          :href="homepage"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="dguild-info-banner__link"
+        >
+          <Icon icon="lucide:globe" class="dguild-info-banner__link-icon" />
+          Homepage
+        </a>
+        <a
+          v-if="xLink"
+          :href="xLink"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="dguild-info-banner__link"
+        >
+          <Icon icon="simple-icons:x" class="dguild-info-banner__link-icon" />
+          X
+        </a>
+        <a
+          v-if="discord"
+          :href="discord"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="dguild-info-banner__link"
+        >
+          <Icon icon="simple-icons:discord" class="dguild-info-banner__link-icon" />
+          Discord
+        </a>
+        <a
+          v-if="telegram"
+          :href="telegram"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="dguild-info-banner__link"
+        >
+          <Icon icon="simple-icons:telegram" class="dguild-info-banner__link-icon" />
+          Telegram
+        </a>
+      </div>
     </div>
   </div>
 </template>
@@ -89,6 +92,13 @@ const hasLinks = computed(
 </script>
 
 <style scoped>
+.dguild-info-banner-cq {
+  container-type: inline-size;
+  container-name: tenant-home-banner;
+  width: 100%;
+  margin-bottom: var(--theme-space-lg);
+}
+
 .dguild-info-banner {
   display: flex;
   flex-direction: column;
@@ -100,7 +110,6 @@ const hasLinks = computed(
   border: var(--theme-border-thin) solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
   box-shadow: var(--theme-shadow-card, 0 10px 30px rgba(0, 0, 0, 0.25));
-  margin-bottom: var(--theme-space-lg);
   position: relative;
   overflow: hidden;
 }
@@ -216,7 +225,8 @@ const hasLinks = computed(
   font-size: 1.25rem;
 }
 
-@media (min-width: 768px) {
+/* Only when the card itself is wide enough — avoids row layout beside a narrow main column. */
+@container tenant-home-banner (min-width: 42rem) {
   .dguild-info-banner {
     flex-direction: row;
     align-items: flex-start;
@@ -226,6 +236,7 @@ const hasLinks = computed(
 
   .dguild-info-banner__main {
     flex: 1;
+    min-width: 0;
   }
 
   .dguild-info-banner__links {
