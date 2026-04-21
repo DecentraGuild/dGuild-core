@@ -44,7 +44,7 @@
         </ul>
 
         <a
-          :href="tenantUrl(tenant.id)"
+          :href="tenantUrl(tenant)"
           target="_blank"
           rel="noopener"
           class="discovery-card__visit"
@@ -65,7 +65,7 @@ import type { ActiveModuleWithGate } from '@decentraguild/discovery'
 
 const props = defineProps<{
   tenant: TenantConfig
-  tenantUrl: (idOrSlug: string) => string
+  tenantUrl: (tenant: TenantConfig) => string
   hasGate: boolean
   activeModulesWithGate: ActiveModuleWithGate[]
 }>()

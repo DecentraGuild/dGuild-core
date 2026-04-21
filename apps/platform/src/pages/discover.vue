@@ -83,7 +83,7 @@
 <script setup lang="ts">
 definePageMeta({ title: 'Discover' })
 import { Icon } from '@iconify/vue'
-import type { TenantConfig } from '@decentraguild/core'
+import { tenantDiscoveryAppUrl, type TenantConfig } from '@decentraguild/core'
 import DiscoveryCard from '~/components/DiscoveryCard.vue'
 import { useDiscoveryFilters } from '@decentraguild/discovery'
 import { useSupabase } from '~/composables/useSupabase'
@@ -129,12 +129,17 @@ onMounted(async () => {
   }
 })
 
-function tenantUrl(idOrSlug: string) {
-  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    return `http://localhost:3002?tenant=${encodeURIComponent(idOrSlug)}`
-  }
-  const tenantAppHost = config.public.tenantAppHost as string
-  return `https://${tenantAppHost}?tenant=${encodeURIComponent(idOrSlug)}`
+function tenantUrl(tenant: TenantConfig) {
+  const isLocalhost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  return tenantDiscoveryAppUrl({
+    tenantId: tenant.id,
+    slug: tenant.slug,
+    isLocalhost,
+    localTenantAppOrigin: 'http://localhost:3002',
+    singleTenantAppHost: (config.public.tenantAppHost as string) || 'dapp.dguild.org',
+  })
 }
 
 const {

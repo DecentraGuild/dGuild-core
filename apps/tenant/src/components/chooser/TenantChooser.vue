@@ -79,7 +79,7 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import type { TenantConfig } from '@decentraguild/core'
+import { tenantDiscoveryAppUrl, type TenantConfig } from '@decentraguild/core'
 import { getBrowserClient } from '@decentraguild/auth'
 import { useDiscoveryFilters } from '@decentraguild/discovery'
 import TenantDiscoverCard from '~/components/chooser/TenantDiscoverCard.vue'
@@ -148,8 +148,33 @@ const moduleFilterModel = computed({
   },
 })
 
-function onSelectTenant(tenantId: string) {
-  void router.replace({ path: '/', query: { tenant: tenantId } })
+function onSelectTenant(t: TenantConfig) {
+  const isLocalhost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  const url = tenantDiscoveryAppUrl({
+    tenantId: t.id,
+    slug: t.slug,
+    isLocalhost,
+    localTenantAppOrigin: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3002',
+    singleTenantAppHost: (config.public.tenantSingleHost as string) || 'dapp.dguild.org',
+  })
+  if (typeof window === 'undefined') return
+  try {
+    const next = new URL(url)
+    if (next.origin === window.location.origin) {
+      const q: Record<string, string> = {}
+      next.searchParams.forEach((v, k) => {
+        q[k] = v
+      })
+      const path = next.pathname || '/'
+      void router.replace(Object.keys(q).length ? { path, query: q } : { path })
+      return
+    }
+  } catch {
+    /* invalid url */
+  }
+  void navigateTo(url, { external: true })
 }
 </script>
 

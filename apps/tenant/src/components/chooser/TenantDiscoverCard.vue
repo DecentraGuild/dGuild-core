@@ -37,7 +37,7 @@
         </ul>
 
         <div class="tenant-discover-card__actions">
-          <Button type="button" @click="emit('select', tenant.id)">
+          <Button type="button" @click="emit('select', tenant)">
             Open
           </Button>
         </div>
@@ -60,7 +60,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  select: [tenantId: string]
+  select: [tenant: TenantConfig]
 }>()
 
 const cardStyle = computed(() => {

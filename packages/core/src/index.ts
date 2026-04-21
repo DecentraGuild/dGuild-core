@@ -33,7 +33,12 @@ export {
   resolveGateForTransaction,
 } from './types.js'
 export type { EffectiveGateResult, StoredGateValue, TransactionGateOverride } from './types.js'
-export { TENANT_DOMAIN, getTenantSlugFromHost } from './resolver.js'
+export {
+  TENANT_DOMAIN,
+  getTenantSlugFromHost,
+  hasTenantSubdomainSlug,
+  tenantDiscoveryAppUrl,
+} from './resolver.js'
 export { loadTenantConfig } from './loader.js'
 export {
   BASE_CURRENCY_MINTS,
